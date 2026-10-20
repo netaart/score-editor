@@ -33,3 +33,13 @@ window.harness = {
     editor.destroy();
   },
 };
+
+// `?demo` mounts on load, for looking at the page by hand: `&lang=zh`, `&readonly`, `&big` (a 128-bar score).
+const params = new URLSearchParams(location.search);
+if (params.has("demo")) {
+  window.harness.mount({
+    language: params.get("lang") === "zh" ? "zh" : "en",
+    editable: !params.has("readonly"),
+    score: params.has("big") ? { bars: 128, notes: 1500 } : "sample",
+  });
+}
