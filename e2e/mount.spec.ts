@@ -142,6 +142,8 @@ test("repeated update and destroy leave no listeners and no nodes behind", async
   const countGlobals = () => Promise.all(globals.map(listenerCount));
   const before = await countGlobals();
   const htmlBefore = await page.evaluate(() => document.documentElement.outerHTML);
+  const adoptedSheets = () => page.evaluate(() => document.adoptedStyleSheets.length);
+  const sheetsBefore = await adoptedSheets();
 
   for (let cycle = 0; cycle < 4; cycle++) {
     await harness.mount();
@@ -155,8 +157,10 @@ test("repeated update and destroy leave no listeners and no nodes behind", async
   }
   expect(await countGlobals()).toEqual(before);
   expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
+  expect(await adoptedSheets()).toBe(sheetsBefore);
 
   await harness.mount();
+  expect(await adoptedSheets()).toBe(sheetsBefore + 1);
   await page.getByRole("button", { name: /^Grid/ }).click();
   await expect(page.getByRole("menuitemradio", { name: "Eighth note (1/8)" })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Grid/ })).toHaveAttribute("aria-expanded", "true");
@@ -184,6 +188,7 @@ test("repeated update and destroy leave no listeners and no nodes behind", async
   expect(await keptListeners()).toBe(0);
   expect(await page.evaluate(() => document.querySelectorAll(":popover-open").length)).toBe(0);
   expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
+  expect(await adoptedSheets()).toBe(sheetsBefore);
   await expect(page.getByRole("menuitemradio")).toHaveCount(0);
   await cdp.detach();
 
