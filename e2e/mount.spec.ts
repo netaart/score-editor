@@ -26,3 +26,34 @@ test.describe("with a mouse", () => {
     await expect(note).toHaveCount(0);
   });
 });
+
+test.describe("with a finger", () => {
+  test.skip(({ isMobile }) => !isMobile, "touch gestures run on the phone project");
+
+  test("dragging a note moves it and does not scroll, swiping empty space scrolls and moves nothing", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount();
+    const roll = page.getByRole("region", { name: "Piano roll" });
+    const lane = page.getByRole("group", { name: "Vocal" });
+    const note = page.getByRole("button", { name: "C5, bar 1 beat 3, length 2 beats" });
+    const laneBox = await lane.boundingBox();
+    const noteBox = await note.boundingBox();
+    if (!laneBox || !noteBox) throw new Error("the 8-bar Vocal roll did not render");
+    const beat = laneBox.width / 32;
+    const row = noteBox.height;
+
+    const grab = { x: noteBox.x + 10, y: noteBox.y + row / 2 };
+    await harness.swipe(grab, { x: grab.x + beat, y: grab.y - row });
+    await expect(page.getByRole("button", { name: "C#5, bar 1 beat 4, length 2 beats" })).toBeVisible();
+    expect(await roll.evaluate((el) => el.scrollLeft)).toBe(0);
+
+    const rollBox = await roll.boundingBox();
+    if (!rollBox) throw new Error("the roll has no box");
+    const blank = { x: rollBox.x + rollBox.width * 0.75, y: rollBox.y + rollBox.height - 10 };
+    await harness.swipe(blank, { x: blank.x - 200, y: blank.y });
+    await expect.poll(() => roll.evaluate((el) => el.scrollLeft)).toBeGreaterThan(100);
+    await expect(page.getByRole("button", { name: "C#5, bar 1 beat 4, length 2 beats" })).toHaveCount(1);
+  });
+});

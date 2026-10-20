@@ -2,6 +2,11 @@
 // ABOUTME: Tests talk to the page only through window.harness and through what a user can see and do.
 import { test as base, type Page } from "@playwright/test";
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
 export interface RecordedNotice {
   code: string;
   level: string;
@@ -39,6 +44,22 @@ export class Harness {
 
   notices() {
     return this.page.evaluate(() => window.harness.notices);
+  }
+
+  /** A one-finger gesture from `from` to `to`, sent as real touch input so the browser decides scroll or not. */
+  async swipe(from: Point, to: Point, steps = 10) {
+    const cdp = await this.page.context().newCDPSession(this.page);
+    const touch = (type: string, point?: Point) =>
+      cdp.send("Input.dispatchTouchEvent", { type, touchPoints: point ? [{ x: point.x, y: point.y, id: 1 }] : [] });
+    await touch("touchStart", from);
+    for (let step = 1; step <= steps; step++) {
+      await touch("touchMove", {
+        x: from.x + ((to.x - from.x) * step) / steps,
+        y: from.y + ((to.y - from.y) * step) / steps,
+      });
+    }
+    await touch("touchEnd");
+    await cdp.detach();
   }
 }
 
