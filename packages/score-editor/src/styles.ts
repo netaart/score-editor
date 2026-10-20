@@ -113,7 +113,7 @@ const css = `
 }
 .sce-root .sce-button-value {
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .sce-root .sce-button::after {
   content: "";
@@ -155,7 +155,7 @@ const css = `
 .sce-root .sce-ruler {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 5;
   display: flex;
   height: 24px;
   background: var(--sce-_surface);
@@ -182,19 +182,26 @@ const css = `
   left: calc(var(--i) * 4 * var(--sce-_beat) + 5px);
   color: var(--sce-_muted);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
+.sce-root .sce-track-group {
+  position: relative;
+}
 .sce-root .sce-track-head {
+  position: sticky;
+  top: 24px;
+  z-index: 4;
   display: flex;
   align-items: center;
   height: 22px;
+  background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
 }
 .sce-root .sce-track-name {
   position: sticky;
   left: 0;
-  z-index: 3;
+  z-index: 1;
   padding: 0 10px;
   background: var(--sce-_surface);
   font-size: 12px;
@@ -222,7 +229,7 @@ const css = `
   border-top: 1px solid var(--sce-_line);
   color: var(--sce-_muted);
   font-size: 10px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .sce-root .sce-octave:first-child {
   border-top: 0;
@@ -277,7 +284,7 @@ const css = `
   outline-offset: 1px;
 }
 .sce-root .sce-note[data-dragging] {
-  z-index: 3;
+  z-index: 2;
   cursor: grabbing;
   box-shadow: 0 3px 8px color-mix(in srgb, var(--sce-_text) 28%, transparent);
 }
@@ -299,7 +306,7 @@ const css = `
   background: var(--sce-_text);
   color: var(--sce-_bg);
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
   pointer-events: none;
 }
@@ -330,7 +337,9 @@ const css = `
   width: 100%;
   min-height: 30px;
   padding: 0 10px 0 8px;
+  border: 0;
   border-radius: var(--sce-_radius);
+  background: transparent;
   color: inherit;
   font: inherit;
   text-align: start;

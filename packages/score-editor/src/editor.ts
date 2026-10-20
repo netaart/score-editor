@@ -206,6 +206,8 @@ export class Editor implements MountedEditor {
   private applyEditable(): void {
     this.root.toggleAttribute("data-readonly", !this.editable);
     this.badge.hidden = this.editable;
+    this.gridButton.hidden = !this.editable;
+    if (!this.editable && this.menu.matches(":popover-open")) this.menu.hidePopover();
   }
 
   private applyGrid(): void {
@@ -246,9 +248,10 @@ export class Editor implements MountedEditor {
     for (const voice of voicesOf(this.notes)) {
       const range = pitchRangeOf(this.notes, voice);
       const rows = range.hi - range.lo;
-      const head = create(doc, "div", "sce-track-head", canvas);
+      const group = create(doc, "div", "sce-track-group", canvas);
+      const head = create(doc, "div", "sce-track-head", group);
       create(doc, "span", "sce-track-name", head).textContent = voice;
-      const track = create(doc, "div", "sce-track", canvas);
+      const track = create(doc, "div", "sce-track", group);
       const keys = create(doc, "div", "sce-keys", track);
       for (let octave = range.hi - 12; octave >= range.lo; octave -= 12) {
         create(doc, "div", "sce-octave", keys).textContent = pitchName(octave);
