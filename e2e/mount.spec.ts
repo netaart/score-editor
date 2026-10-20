@@ -26,12 +26,59 @@ test.describe("with a mouse", () => {
     await expect(page.getByRole("button", { name: "D5, bar 4 beat 4, length 3 beats" })).toBeVisible();
     await expect(note).toHaveCount(0);
   });
+
+  test("Escape cancels a drag in progress and the readout stays inside the editor", async ({ page, harness }) => {
+    await harness.mount();
+    const roll = page.getByRole("region", { name: "Piano roll" });
+    const note = page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" });
+    const rollBox = await roll.boundingBox();
+    const noteBox = await note.boundingBox();
+    if (!rollBox || !noteBox) throw new Error("the roll did not render");
+
+    await page.mouse.move(noteBox.x + 6, noteBox.y + noteBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(rollBox.x + rollBox.width - 60, noteBox.y - 28, { steps: 8 });
+    const readout = page.getByText(/ · bar \d/);
+    await expect(readout).toBeVisible();
+    const readoutBox = await readout.boundingBox();
+    expect(readoutBox ? readoutBox.x + readoutBox.width : Infinity).toBeLessThanOrEqual(rollBox.x + rollBox.width);
+
+    await page.keyboard.press("Escape");
+    await expect(readout).toBeHidden();
+    await page.mouse.up();
+    await expect(note).toBeVisible();
+    expect(await harness.notices()).toEqual([]);
+  });
+
+  test("holding a dragged note near the edge scrolls the roll, so a note can travel further than the screen shows", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount({ score: { bars: 32, notes: 64 } });
+    const roll = page.getByRole("region", { name: "Piano roll" });
+    const first = page.getByRole("group", { name: "Vocal" }).getByRole("button").first();
+    const before = (await first.getAttribute("aria-label")) ?? "";
+    const rollBox = await roll.boundingBox();
+    const noteBox = await first.boundingBox();
+    if (!rollBox || !noteBox) throw new Error("the roll did not render");
+
+    await page.mouse.move(noteBox.x + 4, noteBox.y + noteBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(rollBox.x + rollBox.width - 10, noteBox.y + noteBox.height / 2, { steps: 12 });
+    await page.waitForTimeout(1000);
+    expect(await roll.evaluate((el) => el.scrollLeft)).toBeGreaterThan(300);
+    await page.mouse.up();
+
+    const moved = (await page.getByRole("button", { pressed: true }).getAttribute("aria-label")) ?? "";
+    const bar = (label: string) => Number(/bar (\d+)/.exec(label)?.[1]);
+    expect(bar(moved) - bar(before)).toBeGreaterThan(6);
+  });
 });
 
 test.describe("with a finger", () => {
   test.skip(({ isMobile }) => !isMobile, "touch gestures run on the phone project");
 
-  test("dragging a note moves it and does not scroll, swiping empty space scrolls and moves nothing", async ({
+  test("a coarse pointer gets tall rows, dragging a note moves it and does not scroll, swiping empty space scrolls and moves nothing", async ({
     page,
     harness,
   }) => {
@@ -44,6 +91,7 @@ test.describe("with a finger", () => {
     if (!laneBox || !noteBox) throw new Error("the 8-bar Vocal roll did not render");
     const beat = laneBox.width / 32;
     const row = noteBox.height;
+    expect(row).toBeGreaterThanOrEqual(24);
 
     const grab = { x: noteBox.x + 10, y: noteBox.y + row / 2 };
     await harness.swipe(grab, { x: grab.x + beat, y: grab.y - row });
@@ -200,6 +248,58 @@ test.describe("host callbacks", () => {
     await page.keyboard.press("Shift+ArrowUp");
     await expect(page.getByRole("button", { name: "B5, bar 4 beat 1.25, length 3 beats" })).toBeFocused();
   });
+
+  test("a drop onto another note's start is refused, the note stays and the host is told", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount();
+    await dragNote(page, "G4, bar 1 beat 2, length 1 beat", 1, 0);
+    await expect(page.getByRole("button", { name: "G4, bar 1 beat 2, length 1 beat" })).toBeVisible();
+    expect(await harness.notices()).toEqual([
+      {
+        code: "move-blocked",
+        level: "info",
+        message: "Another note already starts there, so this note stayed where it was.",
+      },
+    ]);
+    await expect(page.getByRole("status")).toHaveText(
+      "Another note already starts there, so this note stayed where it was.",
+    );
+  });
+
+  test("key moves are announced and kept in view, a refused one says so, Space toggles the selection", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount();
+    const status = page.getByRole("status");
+    const note = page.getByRole("button", { name: "G4, bar 1 beat 2, length 1 beat" });
+    await note.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(status).toHaveText("G4, bar 1 beat 2.25, length 1 beat");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("Space");
+    await expect(note).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Space");
+    await expect(note).toHaveAttribute("aria-pressed", "false");
+
+    for (let press = 0; press < 4; press++) await page.keyboard.press("ArrowRight");
+    await expect(status).toHaveText("Another note already starts there, so this note stayed where it was.");
+    expect((await harness.notices()).map((notice) => notice.code)).toEqual(["move-blocked"]);
+  });
+
+  test("key moves past the visible edge scroll the roll to keep the note in view", async ({ page, harness }) => {
+    await harness.mount({ score: { bars: 32, notes: 64 } });
+    const roll = page.getByRole("region", { name: "Piano roll" });
+    const note = page.getByRole("group", { name: "Vocal" }).getByRole("button").nth(7);
+    await note.focus();
+    for (let press = 0; press < 12; press++) await page.keyboard.press("ArrowRight");
+    const rollBox = await roll.boundingBox();
+    const box = await note.boundingBox();
+    if (!rollBox || !box) throw new Error("the roll did not render");
+    expect(box.x + box.width).toBeLessThanOrEqual(rollBox.x + rollBox.width);
+  });
 });
 
 test.describe("host styling", () => {
@@ -237,6 +337,41 @@ test.describe("host styling", () => {
     expect(await colour(note, "backgroundColor")).toBe("rgb(255, 0, 128)");
     expect(await colour(roll, "backgroundColor")).toBe("rgb(10, 20, 30)");
     expect(await colour(page.getByText("Piano roll", { exact: true }), "fontFamily")).toContain("Courier New");
+  });
+
+  test("a host that maps only the background and text colours still gets readable text", async ({ page, harness }) => {
+    await harness.mount();
+    await page.evaluate(() => {
+      const { style } = window.harness.stage;
+      style.setProperty("--sce-color-bg", "rgb(18, 19, 22)");
+      style.setProperty("--sce-color-text", "rgb(232, 233, 237)");
+    });
+    const contrastOf = (target: Locator) =>
+      target.evaluate((el) => {
+        const canvas = document.createElement("canvas").getContext("2d");
+        if (!canvas) throw new Error("no canvas");
+        const rgb = (css: string) => {
+          canvas.clearRect(0, 0, 1, 1);
+          canvas.fillStyle = css;
+          canvas.fillRect(0, 0, 1, 1);
+          return Array.from(canvas.getImageData(0, 0, 1, 1).data.slice(0, 4));
+        };
+        const luminance = ([r = 0, g = 0, b = 0]: number[]) => {
+          const [lr = 0, lg = 0, lb = 0] = [r, g, b].map((c) => {
+            const v = c / 255;
+            return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+        };
+        let backdrop: Element | null = el;
+        while (backdrop && rgb(getComputedStyle(backdrop).backgroundColor)[3] === 0) backdrop = backdrop.parentElement;
+        const a = luminance(rgb(getComputedStyle(el).color));
+        const b = luminance(rgb(backdrop ? getComputedStyle(backdrop).backgroundColor : "white"));
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      });
+    for (const text of ["Piano roll", "Grid", "2", "C4"]) {
+      expect(await contrastOf(page.getByText(text, { exact: true })), `contrast of ${text}`).toBeGreaterThan(4.5);
+    }
   });
 
   test("the host's global styles do not change the editor, and the editor does not change the host", async ({
@@ -403,6 +538,24 @@ test.describe("popovers", () => {
       await gridButton.click();
       await quarter.click();
       await expect(page.getByRole("button", { name: /^Grid 1\/4$/ })).toBeVisible();
+    });
+
+    test("the open menu is walked with the arrow keys and a choice is made with Enter", async ({ page, harness }) => {
+      await harness.mount();
+      await page.getByRole("button", { name: /^Grid/ }).click();
+      const item = (name: string) => page.getByRole("menuitemradio", { name });
+      await expect(item("Sixteenth note (1/16)")).toBeFocused();
+      await page.keyboard.press("ArrowUp");
+      await expect(item("Eighth note (1/8)")).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await expect(item("Quarter note (1/4)")).toBeFocused();
+      await page.keyboard.press("End");
+      await expect(item("Sixteenth note (1/16)")).toBeFocused();
+      await page.keyboard.press("Home");
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("button", { name: /^Grid 1\/4$/ })).toBeVisible();
+      await expect(page.getByRole("menu", { name: "Grid" })).toBeHidden();
     });
   });
 });
