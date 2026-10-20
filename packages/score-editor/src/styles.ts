@@ -15,7 +15,9 @@ function octaveStripes(): string {
 }
 
 const css = `
-.sce-root {
+/* The doubled class lifts specificity above the typical host rule such as ".page div". */
+.sce-root.sce-root {
+  all: initial;
   --sce-_bg: var(--sce-color-bg, light-dark(#ffffff, #1b1c1f));
   --sce-_surface: var(--sce-color-surface, light-dark(#f4f4f5, #25262a));
   --sce-_text: var(--sce-color-text, light-dark(#18181b, #ececee));
@@ -54,9 +56,9 @@ const css = `
 }
 
 /* Hard reset: a host's element selectors must not reach inside. Revert rolls back to browser defaults. */
-.sce-root *,
-.sce-root *::before,
-.sce-root *::after {
+.sce-root.sce-root *,
+.sce-root.sce-root *::before,
+.sce-root.sce-root *::after {
   all: revert;
   box-sizing: border-box;
 }

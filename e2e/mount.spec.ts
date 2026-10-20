@@ -1,6 +1,6 @@
 // ABOUTME: Seam 5, the first test: the mounted editor driven in real Chromium through a bare test page.
 // ABOUTME: Covers dragging with mouse and touch, scrolling, language switching and what destroy leaves behind.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 test.describe("with a mouse", () => {
@@ -199,5 +199,136 @@ test.describe("host callbacks", () => {
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Shift+ArrowUp");
     await expect(page.getByRole("button", { name: "B5, bar 4 beat 1.25, length 3 beats" })).toBeFocused();
+  });
+});
+
+test.describe("host styling", () => {
+  test.skip(({ isMobile }) => isMobile, "styling is checked once, on the desktop project");
+
+  test("host theme variables restyle the editor, with neutral defaults and the host's colour scheme when unmapped", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount();
+    const note = page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" });
+    const roll = page.getByRole("region", { name: "Piano roll" });
+    const colour = (target: Locator, property: "backgroundColor" | "fontFamily") =>
+      target.evaluate((el, name) => getComputedStyle(el)[name], property);
+    const lightness = async () => {
+      const [r = 0, g = 0, b = 0] = (await colour(roll, "backgroundColor")).match(/\d+/g)?.map(Number) ?? [];
+      return (r + g + b) / 3;
+    };
+
+    expect(await lightness()).toBeGreaterThan(200);
+    await page.evaluate(() => {
+      document.documentElement.style.colorScheme = "dark";
+    });
+    expect(await lightness()).toBeLessThan(60);
+    await page.evaluate(() => {
+      document.documentElement.style.colorScheme = "";
+    });
+
+    await page.evaluate(() => {
+      const { style } = window.harness.stage;
+      style.setProperty("--sce-color-note", "rgb(255, 0, 128)");
+      style.setProperty("--sce-color-bg", "rgb(10, 20, 30)");
+      style.setProperty("--sce-font-family", "'Courier New', monospace");
+    });
+    expect(await colour(note, "backgroundColor")).toBe("rgb(255, 0, 128)");
+    expect(await colour(roll, "backgroundColor")).toBe("rgb(10, 20, 30)");
+    expect(await colour(page.getByText("Piano roll", { exact: true }), "fontFamily")).toContain("Courier New");
+  });
+
+  test("the host's global styles do not change the editor, and the editor does not change the host", async ({
+    page,
+    harness,
+  }) => {
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        '<div id="probe"><button id="probe-button">Host button</button><span>Host text</span></div>',
+      );
+    });
+    const probe = () =>
+      page.evaluate(() =>
+        ["#probe", "#probe-button", "#probe span", "body", "h1"].map((selector) => {
+          const el = document.querySelector(selector);
+          if (!el) return null;
+          const style = getComputedStyle(el);
+          return [
+            "color",
+            "font-family",
+            "font-size",
+            "font-weight",
+            "line-height",
+            "margin-top",
+            "padding-top",
+            "border-top-width",
+            "border-radius",
+            "background-color",
+            "display",
+            "box-sizing",
+            "text-transform",
+            "letter-spacing",
+          ].map((name) => style.getPropertyValue(name));
+        }),
+      );
+
+    await page.addStyleTag({
+      content: `
+        div, span, button { margin: 7px; padding: 9px; border: 3px solid red; border-radius: 0; background: yellow;
+          color: red; font: italic 28px/3 cursive; letter-spacing: 4px; text-transform: uppercase;
+          box-shadow: 0 0 0 5px green; position: static; width: auto; height: auto; }
+        main div, main span, main button { opacity: 0.9; text-decoration: underline; }
+      `,
+    });
+    const hostBefore = await probe();
+    await harness.mount();
+    const note = page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" });
+    const title = page.getByText("Piano roll", { exact: true });
+    const styleOf = (target: Locator, names: string[]) =>
+      target.evaluate(
+        (el, list) => Object.fromEntries(list.map((name) => [name, getComputedStyle(el).getPropertyValue(name)])),
+        names,
+      );
+
+    expect(
+      await styleOf(note, ["height", "border-top-width", "margin-top", "padding-top", "box-shadow", "text-transform"]),
+    ).toEqual({
+      height: "14px",
+      "border-top-width": "1px",
+      "margin-top": "0px",
+      "padding-top": "0px",
+      "box-shadow": "none",
+      "text-transform": "none",
+    });
+    expect(
+      await styleOf(title, [
+        "font-size",
+        "font-style",
+        "letter-spacing",
+        "color",
+        "padding-top",
+        "text-decoration-line",
+      ]),
+    ).toMatchObject({
+      "font-size": "13px",
+      "font-style": "normal",
+      "letter-spacing": "normal",
+      "padding-top": "0px",
+      "text-decoration-line": "none",
+    });
+    const gridButton = page.getByRole("button", { name: /^Grid/ });
+    expect(
+      await styleOf(gridButton, ["font-size", "border-top-width", "background-color", "padding-top"]),
+    ).toMatchObject({
+      "font-size": "13px",
+      "border-top-width": "1px",
+      "padding-top": "0px",
+    });
+
+    expect(await probe()).toEqual(hostBefore);
+    await harness.destroy();
+    expect(await probe()).toEqual(hostBefore);
   });
 });
