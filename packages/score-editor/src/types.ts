@@ -55,9 +55,27 @@ export interface MountedEditor {
   destroy(): void;
 }
 
+/** The durations a dialect writes, as the numbers it puts after a note under its written unit. */
+export type DurationSet = ReadonlyArray<number>;
+
+/** How a dialect writes meters. A symbolic meter (such as `C`) is either allowed or not. */
+export interface MeterRule {
+  readonly form: "fraction";
+  readonly numerator: { readonly min: number; readonly max: number };
+  readonly denominator: { readonly min: number; readonly max: number; readonly powerOfTwo: boolean };
+  readonly symbolic: boolean;
+}
+
+/** The chord names a dialect accepts: root spellings, quality suffixes and whether a slash bass is allowed. */
+export interface ChordVocabulary {
+  readonly roots: ReadonlyArray<string>;
+  /** Suffixes after the root. The empty string is a major triad. */
+  readonly qualities: ReadonlyArray<string>;
+  readonly slashBass: boolean;
+}
+
 /**
  * What a score dialect declares about itself. The editor narrows its interface by these.
- * The chord vocabulary, usable durations and meter rules join when the dialect parser lands.
  */
 export interface DialectConstraints {
   /** The voices of a score, in display order. */
@@ -70,4 +88,10 @@ export interface DialectConstraints {
   sectionMarker: string;
   /** Whether lyrics may appear inside the score text. */
   lyricsInScore: boolean;
+  /** The durations the dialect can write. */
+  durations: DurationSet;
+  /** The meter rule the dialect enforces. */
+  meter: MeterRule;
+  /** The chord vocabulary the dialect accepts. */
+  chords: ChordVocabulary;
 }
