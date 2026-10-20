@@ -1,5 +1,6 @@
 // ABOUTME: Seam 5, the first test: the mounted editor driven in real Chromium through a bare test page.
 // ABOUTME: Covers dragging with mouse and touch, scrolling, language switching and what destroy leaves behind.
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 test.describe("with a mouse", () => {
@@ -141,4 +142,62 @@ test("repeated update and destroy leave no listeners and no nodes behind", async
   await harness.mount();
   await expect(page.evaluate(() => window.harness.mount())).rejects.toThrow(/already holds an editor/);
   await harness.destroy();
+});
+
+test.describe("host callbacks", () => {
+  test.skip(({ isMobile }) => isMobile, "mouse gestures run on the desktop project");
+
+  async function dragNote(page: Page, name: string, beats: number, rows: number) {
+    const lane = page.getByRole("group", { name: "Vocal" });
+    const note = page.getByRole("button", { name });
+    const laneBox = await lane.boundingBox();
+    const noteBox = await note.boundingBox();
+    if (!laneBox || !noteBox) throw new Error(`no box for ${name}`);
+    const beat = laneBox.width / 32;
+    const grab = { x: noteBox.x + 6, y: noteBox.y + noteBox.height / 2 };
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    await page.mouse.move(grab.x + (beats * beat) / 2, grab.y - (rows * noteBox.height) / 2, { steps: 5 });
+    await page.mouse.move(grab.x + beats * beat, grab.y - rows * noteBox.height, { steps: 5 });
+    await page.mouse.up();
+  }
+
+  test("a read-only score refuses the drag and tells the host once, in the current language", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount({ editable: false, language: "en" });
+    await expect(page.getByText("Read only")).toBeVisible();
+    await dragNote(page, "C5, bar 4 beat 1, length 3 beats", 3, 2);
+    await expect(page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" })).toBeVisible();
+    expect(await harness.notices()).toEqual([
+      { code: "read-only", level: "info", message: "This score is read only, so notes can't be moved." },
+    ]);
+
+    await harness.update({ language: "zh", editable: true });
+    await expect(page.getByText("只读")).toBeHidden();
+    await dragNote(page, "C5，第 4 小节第 1 拍，长 3 拍", 3, 2);
+    await expect(page.getByRole("button", { name: "D5，第 4 小节第 4 拍，长 3 拍" })).toBeVisible();
+    expect(await harness.notices()).toHaveLength(1);
+  });
+
+  test("a note pulled past the pitch range stops at its edge and the host is told", async ({ page, harness }) => {
+    await harness.mount();
+    await dragNote(page, "E5, bar 5 beat 3, length 1 beat", 0, 8);
+    await expect(page.getByRole("button", { name: "B5, bar 5 beat 3, length 1 beat" })).toBeVisible();
+    expect(await harness.notices()).toEqual([
+      { code: "pitch-out-of-range", level: "info", message: "Notes can't go beyond the pitch range shown." },
+    ]);
+  });
+
+  test("arrow keys nudge the focused note by the grid, a semitone and an octave", async ({ page, harness }) => {
+    await harness.mount();
+    const note = page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" });
+    await note.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("button", { name: "C5, bar 4 beat 1.25, length 3 beats" })).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Shift+ArrowUp");
+    await expect(page.getByRole("button", { name: "B5, bar 4 beat 1.25, length 3 beats" })).toBeFocused();
+  });
 });
