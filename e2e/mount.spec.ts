@@ -332,3 +332,77 @@ test.describe("host styling", () => {
     expect(await probe()).toEqual(hostBefore);
   });
 });
+
+test.describe("popovers", () => {
+  test("the grid popover works above a host's layers and past the clip of its container", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
+    await page.evaluate(() => {
+      const { stage } = window.harness;
+      const layer = document.createElement("div");
+      layer.style.cssText =
+        "position:fixed;left:0;top:0;width:100vw;height:110px;z-index:1000;overflow:hidden;transform:translateZ(0);background:#ddd";
+      document.body.append(layer);
+      layer.append(stage);
+      stage.style.height = "110px";
+      const toast = document.createElement("div");
+      toast.style.cssText =
+        "position:fixed;left:0;top:70px;width:100vw;height:300px;z-index:2147483647;background:rgba(255,0,0,.4)";
+      document.body.append(toast);
+    });
+    await harness.mount();
+
+    const gridButton = page.getByRole("button", { name: /^Grid 1\/16$/ });
+    await press(gridButton);
+    const eighth = page.getByRole("menuitemradio", { name: "Eighth note (1/8)" });
+    await expect(eighth).toBeVisible();
+    const layerBottom = await page.evaluate(() => window.harness.stage.getBoundingClientRect().bottom);
+    const menuBox = await page.getByRole("menu", { name: "Grid" }).boundingBox();
+    expect(menuBox ? menuBox.y + menuBox.height : 0).toBeGreaterThan(layerBottom);
+
+    await press(eighth);
+    await expect(page.getByRole("button", { name: /^Grid 1\/8$/ })).toBeVisible();
+    await expect(page.getByRole("menu", { name: "Grid" })).toBeHidden();
+
+    await page.getByRole("button", { name: "C5, bar 1 beat 3, length 2 beats" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("button", { name: "C5, bar 1 beat 3.5, length 2 beats" })).toBeVisible();
+  });
+
+  test.describe("on a desktop", () => {
+    test.skip(({ isMobile }) => isMobile, "keyboard and modal dialogs are checked on the desktop project");
+
+    test("it opens inside a host's modal dialog and closes with Escape, returning focus to its button", async ({
+      page,
+      harness,
+    }) => {
+      await page.evaluate(() => {
+        const { stage } = window.harness;
+        const dialog = document.createElement("dialog");
+        dialog.style.cssText = "width:640px;height:120px;padding:0;overflow:hidden";
+        document.body.append(dialog);
+        dialog.append(stage);
+        stage.style.height = "120px";
+        dialog.showModal();
+      });
+      await harness.mount();
+      const gridButton = page.getByRole("button", { name: /^Grid/ });
+      await gridButton.click();
+      const quarter = page.getByRole("menuitemradio", { name: "Quarter note (1/4)" });
+      await expect(quarter).toBeVisible();
+      await expect(page.getByRole("menuitemradio", { name: "Sixteenth note (1/16)" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+      await page.keyboard.press("Escape");
+      await expect(quarter).toBeHidden();
+      await expect(gridButton).toBeFocused();
+      await gridButton.click();
+      await quarter.click();
+      await expect(page.getByRole("button", { name: /^Grid 1\/4$/ })).toBeVisible();
+    });
+  });
+});
