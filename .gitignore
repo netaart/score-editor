@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.port/
+.pnpm-store/
+.corepack/
+test-results/
+playwright-report/
