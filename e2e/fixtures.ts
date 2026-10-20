@@ -49,7 +49,7 @@ export class Harness {
   /** A one-finger gesture from `from` to `to`, sent as real touch input so the browser decides scroll or not. */
   async swipe(from: Point, to: Point, steps = 10) {
     const cdp = await this.page.context().newCDPSession(this.page);
-    const touch = (type: string, point?: Point) =>
+    const touch = (type: "touchStart" | "touchMove" | "touchEnd", point?: Point) =>
       cdp.send("Input.dispatchTouchEvent", { type, touchPoints: point ? [{ x: point.x, y: point.y, id: 1 }] : [] });
     await touch("touchStart", from);
     for (let step = 1; step <= steps; step++) {
