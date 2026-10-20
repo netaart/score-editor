@@ -16,6 +16,7 @@ export interface RecordedNotice {
 interface PageHarness {
   stage: HTMLElement;
   notices: RecordedNotice[];
+  shadowRoot: ShadowRoot | null;
   mount(options?: Record<string, unknown>): void;
   update(options: Record<string, unknown>): void;
   destroy(): void;

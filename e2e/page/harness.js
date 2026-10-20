@@ -17,9 +17,23 @@ function scoreFor(request) {
 window.harness = {
   stage,
   notices,
-  /** Mounts on the stage. `score` is "sample" (default) or the arguments of syntheticScore. */
-  mount({ score, ...options } = {}) {
-    editor = mount(stage, {
+  shadowRoot: null,
+  /**
+   * Mounts on the stage. `score` is "sample" (default) or the arguments of syntheticScore;
+   * `shadow` mounts inside an open shadow root of a host element instead of straight on the stage.
+   */
+  mount({ score, shadow, ...options } = {}) {
+    let target = stage;
+    if (shadow) {
+      const host = document.createElement("div");
+      host.id = "shadow-host";
+      stage.append(host);
+      window.harness.shadowRoot = host.attachShadow({ mode: "open" });
+      target = document.createElement("div");
+      target.style.height = "420px";
+      window.harness.shadowRoot.append(target);
+    }
+    editor = mount(target, {
       language: "en",
       notify: (notice) => notices.push(notice),
       spikeScore: scoreFor(score),

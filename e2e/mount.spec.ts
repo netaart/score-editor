@@ -470,6 +470,68 @@ test.describe("host styling", () => {
   });
 });
 
+test.describe("style delivery", () => {
+  test.skip(({ isMobile }) => isMobile, "style delivery is checked once, on the desktop project");
+
+  test("the editor is styled under a strict style policy, where an injected style element would be blocked", async ({
+    page,
+    harness,
+  }) => {
+    await page.route("**/", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), "content-security-policy": "style-src 'self'" },
+      });
+    });
+    await page.goto("/");
+    await harness.mount();
+    const note = page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" });
+    expect((await note.boundingBox())?.height).toBe(14);
+    await harness.destroy();
+  });
+
+  test("inside a host's shadow root it is styled there, works, and is out of reach of rules even !important ones", async ({
+    page,
+    harness,
+  }) => {
+    await page.addStyleTag({
+      content: "#shadow-host span, #shadow-host div { padding: 9px !important; color: red !important; }",
+    });
+    await harness.mount({ shadow: true });
+    const result = await page.evaluate(() => ({
+      sheets: window.harness.shadowRoot?.adoptedStyleSheets.length,
+      documentSheets: document.adoptedStyleSheets.length,
+    }));
+    expect(result).toEqual({ sheets: 1, documentSheets: 0 });
+
+    const title = page.getByText("Piano roll", { exact: true });
+    expect(await title.evaluate((el) => [getComputedStyle(el).paddingTop, getComputedStyle(el).color])).toEqual([
+      "0px",
+      "rgb(24, 24, 27)",
+    ]);
+    const note = page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" });
+    const noteBox = await note.boundingBox();
+    if (!noteBox) throw new Error("the editor did not render inside the shadow root");
+    expect(noteBox.height).toBe(14);
+    await page.mouse.move(noteBox.x + 6, noteBox.y + 7);
+    await page.mouse.down();
+    await page.mouse.move(noteBox.x + 6 + 60, noteBox.y + 7 - 14, { steps: 6 });
+    await page.mouse.up();
+    await expect(page.getByRole("button", { name: "C#5, bar 4 beat 2.5, length 3 beats" })).toBeVisible();
+    await page.getByRole("button", { name: /^Grid/ }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Eighth note (1/8)" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await harness.destroy();
+    const after = await page.evaluate(() => ({
+      sheets: window.harness.shadowRoot?.adoptedStyleSheets.length,
+      children: window.harness.shadowRoot?.firstElementChild?.childElementCount,
+    }));
+    expect(after).toEqual({ sheets: 0, children: 0 });
+  });
+});
+
 test.describe("popovers", () => {
   test("the grid popover works above a host's layers and past the clip of its container", async ({
     page,
