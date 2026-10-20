@@ -57,3 +57,88 @@ test.describe("with a finger", () => {
     await expect(page.getByRole("button", { name: "C#5, bar 1 beat 4, length 2 beats" })).toHaveCount(1);
   });
 });
+
+test("update switches the interface language and back", async ({ page, harness }) => {
+  await harness.mount({ language: "en" });
+  await expect(page.getByRole("region", { name: "Piano roll" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Grid 1\/16$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" })).toBeVisible();
+
+  await harness.update({ language: "zh" });
+  await expect(page.getByRole("region", { name: "钢琴卷帘" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^网格 1\/16$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "C5，第 4 小节第 1 拍，长 3 拍" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" })).toHaveCount(0);
+
+  await harness.update({ language: "en" });
+  await expect(page.getByRole("region", { name: "Piano roll" })).toBeVisible();
+});
+
+test("repeated update and destroy leave no listeners and no nodes behind", async ({ page, harness }) => {
+  const cdp = await page.context().newCDPSession(page);
+  const listenerCount = async (expression: string) => {
+    const { result } = await cdp.send("Runtime.evaluate", { expression });
+    if (!result.objectId) throw new Error(`no object for ${expression}`);
+    const { listeners } = await cdp.send("DOMDebugger.getEventListeners", { objectId: result.objectId });
+    return listeners.length;
+  };
+  const globals = [
+    "window",
+    "document",
+    "document.documentElement",
+    "document.body",
+    "document.head",
+    "window.harness.stage",
+  ];
+  const countGlobals = () => Promise.all(globals.map(listenerCount));
+  const before = await countGlobals();
+  const htmlBefore = await page.evaluate(() => document.documentElement.outerHTML);
+
+  for (let cycle = 0; cycle < 4; cycle++) {
+    await harness.mount();
+    await harness.update({ language: "zh" });
+    await harness.update({ editable: false });
+    await harness.update({ score: "sample" });
+    await harness.update({ language: "en", editable: true });
+    await harness.destroy();
+    await harness.destroy();
+    await harness.update({ language: "zh" });
+  }
+  expect(await countGlobals()).toEqual(before);
+  expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
+
+  await harness.mount();
+  await page.getByRole("button", { name: /^Grid/ }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Eighth note (1/8)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Grid/ })).toHaveAttribute("aria-expanded", "true");
+  expect(await page.evaluate(() => window.harness.stage.firstElementChild?.nodeName)).toBe("DIV");
+  await page.evaluate(() => {
+    const kept = [window.harness.stage.firstElementChild as Element];
+    kept.push(...(kept[0] as Element).querySelectorAll("*"));
+    Object.assign(window, { kept });
+  });
+  const keptListeners = async () => {
+    const { result } = await cdp.send("Runtime.evaluate", { expression: "window.kept" });
+    const { result: length } = await cdp.send("Runtime.evaluate", { expression: "window.kept.length" });
+    if (!result.objectId) throw new Error("kept nodes missing");
+    let total = 0;
+    for (let index = 0; index < Number(length.value); index++) {
+      const { result: node } = await cdp.send("Runtime.evaluate", { expression: `window.kept[${index}]` });
+      if (!node.objectId) continue;
+      const { listeners } = await cdp.send("DOMDebugger.getEventListeners", { objectId: node.objectId });
+      total += listeners.length;
+    }
+    return total;
+  };
+  expect(await keptListeners()).toBeGreaterThan(0);
+  await harness.destroy();
+  expect(await keptListeners()).toBe(0);
+  expect(await page.evaluate(() => document.querySelectorAll(":popover-open").length)).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0);
+  await cdp.detach();
+
+  await harness.mount();
+  await expect(page.evaluate(() => window.harness.mount())).rejects.toThrow(/already holds an editor/);
+  await harness.destroy();
+});
