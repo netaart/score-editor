@@ -1,0 +1,3296 @@
+{
+  "version": 1,
+  "vectors": [
+    {
+      "id": "text-crlf",
+      "rules": ["T1"],
+      "text": "X:1\r\nT:\r\nM:4/4\r\nL:1/16\r\nQ:1/4=100\r\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\r\nK:C\r\n% a\r\nV: Vocal\r\nC16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "text-trailing-whitespace",
+      "rules": ["T2"],
+      "text": "X:1  \t\nT:  \t\nM:4/4  \t\nL:1/16  \t\nQ:1/4=100  \t\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"  \t\nK:C  \t\n% a  \t\nV: Vocal  \t\nC16|  \t",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "text-trailing-blank-lines",
+      "rules": ["T3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\n\n\n",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-blank-line-inside",
+      "rules": ["T4", "B7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\nC16|",
+      "expect": "reject",
+      "code": "empty-line"
+    },
+    {
+      "id": "reject-leading-space-header",
+      "rules": ["T5", "H1"],
+      "text": " X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "reject-empty-text",
+      "rules": ["T6", "H1"],
+      "text": "",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "reject-wrong-version",
+      "rules": ["H1"],
+      "text": "X:2\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "reject-missing-title",
+      "rules": ["H2"],
+      "text": "X:1\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-meter-three-four",
+      "rules": ["H3", "D4"],
+      "text": "X:1\nT:\nM:3/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC12|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "3",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "3",
+            "meter": "3/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-symbolic-meter",
+      "rules": ["H3"],
+      "text": "X:1\nT:\nM:C\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-unit-eighth",
+      "rules": ["H4", "D3"],
+      "text": "X:1\nT:\nM:6/8\nL:1/8\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC6|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "3",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "3",
+            "meter": "6/8"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-unit-third",
+      "rules": ["H4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/3\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-tempo-above-product-range",
+      "rules": ["H5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=500\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-tempo-zero",
+      "rules": ["H5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=0\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "reject-wrong-vocal-definition",
+      "rules": ["H6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-vocal-only",
+      "rules": ["H7", "V1", "V6", "X16"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-wrong-ins-definition",
+      "rules": ["H7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Ins\"\nK:C\n% a\nV: Vocal\nC16|\nV: Ins\nZ|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-key-cb",
+      "rules": ["H8", "H9", "P3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:Cb\n% a\nV: Vocal\nC16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 59,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "Cb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "accept-key-c-sharp",
+      "rules": ["H8", "H9", "P3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C#\n% a\nV: Vocal\nC16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 61,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C#"
+          }
+        ]
+      }
+    },
+    {
+      "id": "accept-key-f-sharp-minor",
+      "rules": ["H8", "H9", "P3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:F#m\n% a\nV: Vocal\nF16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "F#m"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-key-mode",
+      "rules": ["H8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:Dorian\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "reject-extra-header-field",
+      "rules": ["H10"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nC:demo\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "reject-no-music",
+      "rules": ["B1", "B4", "X12"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C",
+      "expect": "reject",
+      "code": "bar-count"
+    },
+    {
+      "id": "reject-ins-before-vocal",
+      "rules": ["B2", "V1"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Ins\nZ|\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "voice-order"
+    },
+    {
+      "id": "accept-block-meter-key",
+      "rules": ["B3", "V3", "V4", "D9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nM:3/4\nK:G\nG12|\nV: Ins\nM:3/4\nK:G\nZ|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "3",
+            "pitch": 67,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "3",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "3",
+            "meter": "3/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          },
+          {
+            "at": "0",
+            "key": "G"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-duplicate-block-field",
+      "rules": ["B3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nK:G\nK:D\nC16|\nV: Ins\nK:G\nK:D\nZ|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-max-four-measures",
+      "rules": ["B5", "M3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|C16|C16|C16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "8",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "12",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "8",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "12",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-five-measures",
+      "rules": ["B5", "M3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|C16|C16|C16|C16|",
+      "expect": "reject",
+      "code": "bar-count"
+    },
+    {
+      "id": "accept-sections",
+      "rules": ["B6", "S1", "S3", "S4", "S5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% intro\nV: Vocal\nC16|\n% verse\n% verse 2\nV: Vocal\nD16|\n% chorus\nV: Vocal\nE16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 62,
+            "tie": false
+          },
+          {
+            "start": "8",
+            "duration": "4",
+            "pitch": 64,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "8",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-comment-inside-group",
+      "rules": ["B6", "S2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|\n% b\nV: Ins\nZ|",
+      "expect": "reject",
+      "code": "comment-position"
+    },
+    {
+      "id": "reject-extra-body-field",
+      "rules": ["B8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\nC:demo\n% b\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "voice-order"
+    },
+    {
+      "id": "accept-z4",
+      "rules": ["M4", "D8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nZ4|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          },
+          {
+            "start": "8",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          },
+          {
+            "start": "12",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "8",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "12",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-z-five",
+      "rules": ["M4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nZ5|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "reject-z-with-chord",
+      "rules": ["M4", "C6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"C\"Z|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "accept-whole-rest-z2",
+      "rules": ["M4", "D8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nZ2|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "accept-all-durations",
+      "rules": ["D1", "D3", "D4", "D9", "D10", "M6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC1C2C3C4C6|\n% b\nV: Vocal\nM:6/8\nC8C4|\n% c\nV: Vocal\nM:3/4\nC12|\n% d\nV: Vocal\nM:6/4\nC24|\n% e\nV: Vocal\nM:8/4\nC32|\n% f\nV: Vocal\nM:12/4\nC48|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "1/4",
+            "duration": "1/2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "3/4",
+            "duration": "3/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "3/2",
+            "duration": "1",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "5/2",
+            "duration": "3/2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "6",
+            "duration": "1",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "7",
+            "duration": "3",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "10",
+            "duration": "6",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "16",
+            "duration": "8",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "24",
+            "duration": "12",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "3",
+            "meter": "6/8"
+          },
+          {
+            "start": "7",
+            "length": "3",
+            "meter": "3/4"
+          },
+          {
+            "start": "10",
+            "length": "6",
+            "meter": "6/4"
+          },
+          {
+            "start": "16",
+            "length": "8",
+            "meter": "8/4"
+          },
+          {
+            "start": "24",
+            "length": "12",
+            "meter": "12/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-duration-five",
+      "rules": ["D1"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC5z11|",
+      "expect": "reject",
+      "code": "duration"
+    },
+    {
+      "id": "accept-leading-zero-duration",
+      "rules": ["D2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC08C08|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-three-digit-duration",
+      "rules": ["D2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC016|",
+      "expect": "reject",
+      "code": "duration"
+    },
+    {
+      "id": "reject-short-measure",
+      "rules": ["D5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC12|",
+      "expect": "reject",
+      "code": "bar-length"
+    },
+    {
+      "id": "reject-overflow-measure",
+      "rules": ["D6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC12C8|",
+      "expect": "reject",
+      "code": "bar-length"
+    },
+    {
+      "id": "reject-token-after-full",
+      "rules": ["D7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16z|",
+      "expect": "reject",
+      "code": "bar-length"
+    },
+    {
+      "id": "reject-empty-measure",
+      "rules": ["M2", "M10"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16||C16|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "reject-unknown-token",
+      "rules": ["M5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC4$12|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "reject-mixed-octave",
+      "rules": ["P2", "M6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC,'16|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "reject-decorated-rest",
+      "rules": ["P15", "M7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^z16|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "reject-unsupported-barline",
+      "rules": ["M10"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|]",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "accept-inline-key",
+      "rules": ["M9", "P7", "M11"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC8[K:G]F8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          },
+          {
+            "at": "2",
+            "key": "G"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-inline-key-bad",
+      "rules": ["M9", "H9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC8[K:H]C8|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "reject-inline-key-empty",
+      "rules": ["M9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC8[K:]C8|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "pitch-middle-c",
+      "rules": ["P1"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-lowercase-and-octave-marks",
+      "rules": ["P1", "P2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC,8c'8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 48,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 84,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-sharp-accidental",
+      "rules": ["P5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^C16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 61,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-flat-accidental",
+      "rules": ["P5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n_C16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 59,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-double-accidentals",
+      "rules": ["P5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^^C8__D8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 62,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-natural-in-key",
+      "rules": ["P3", "P5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:D\n% a\nV: Vocal\n=C8F8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "D"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-accidental-holds-across-octaves",
+      "rules": ["P1", "P4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F4F4f4F4|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "1",
+            "pitch": 66,
+            "tie": false
+          },
+          {
+            "start": "1",
+            "duration": "1",
+            "pitch": 66,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "1",
+            "pitch": 78,
+            "tie": false
+          },
+          {
+            "start": "3",
+            "duration": "1",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-accidental-resets-at-barline",
+      "rules": ["P6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F16|F16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 66,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 65,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-key-signature-sharps",
+      "rules": ["P3", "H9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:E\n% a\nV: Vocal\nF8G8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 66,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 68,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "E"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-key-signature-flats",
+      "rules": ["P3", "H9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:Bb\n% a\nV: Vocal\nB8E8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 70,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 63,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "Bb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-key-change-mid-score",
+      "rules": ["P3", "P7", "B3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\n% b\nV: Vocal\nK:G\nF16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          },
+          {
+            "at": "4",
+            "key": "G"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-inline-key-resets-accidental",
+      "rules": ["P7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F8[K:F]F8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 66,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 65,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          },
+          {
+            "at": "2",
+            "key": "F"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-midi-low",
+      "rules": ["P8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC,,,,,,16|",
+      "expect": "reject",
+      "code": "pitch-range"
+    },
+    {
+      "id": "pitch-midi-high",
+      "rules": ["P8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nc''''''16|",
+      "expect": "reject",
+      "code": "pitch-range"
+    },
+    {
+      "id": "pitch-tie-across-barline",
+      "rules": ["P9", "P10", "P11"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F16-|F16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 66,
+            "tie": true
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-tie-across-barline-explicit",
+      "rules": ["P5", "P9", "P10"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F16-|^F16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 66,
+            "tie": true
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-tie-inherits-without-setting-state",
+      "rules": ["P11"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F16-|F8F8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 66,
+            "tie": true
+          },
+          {
+            "start": "4",
+            "duration": "2",
+            "pitch": 66,
+            "tie": false
+          },
+          {
+            "start": "6",
+            "duration": "2",
+            "pitch": 65,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-tie-across-lines",
+      "rules": ["P9", "P10"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nF16-|\n% b\nV: Vocal\nF16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 65,
+            "tie": true
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 65,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-tie-across-lines-explicit",
+      "rules": ["P5", "P9", "P10", "P16"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F16-|\n% b\nV: Vocal\nK:G\n^F16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 66,
+            "tie": true
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          },
+          {
+            "at": "4",
+            "key": "G"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-tie-pitch-mismatch",
+      "rules": ["P10"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16-|D16|",
+      "expect": "reject",
+      "code": "tie"
+    },
+    {
+      "id": "pitch-tie-into-rest",
+      "rules": ["P12"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC8-z8|",
+      "expect": "reject",
+      "code": "tie"
+    },
+    {
+      "id": "pitch-tie-into-z",
+      "rules": ["P12"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC8C8-|Z|",
+      "expect": "reject",
+      "code": "tie"
+    },
+    {
+      "id": "pitch-dangling-tie",
+      "rules": ["P13", "X15"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16-|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": true
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-tie-across-key-change",
+      "rules": ["P16", "P7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^F8-[K:G]F8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 66,
+            "tie": true
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 66,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          },
+          {
+            "at": "2",
+            "key": "G"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pitch-tie-across-key-change-mismatch",
+      "rules": ["P16", "P10"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nF8-[K:G]f8|",
+      "expect": "reject",
+      "code": "tie"
+    },
+    {
+      "id": "chord-on-note-full-measure",
+      "rules": ["C5", "C6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"C\"C16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "chord-on-rest",
+      "rules": ["C5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"Am7\"z16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "chord-slash-double-accidental",
+      "rules": ["C1", "C3"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"F#m7/C#\"z8\"Dbb/Ab\"z8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": null,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "chord-all-qualities",
+      "rules": ["C1", "C2", "C4", "C5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"C\"C1\"Cm\"C1\"Cdim\"C1\"Caug\"C1\"C7\"C1\"Cmaj7\"C1\"Cm7\"C1\"Cdim7\"C1\"Cm7b5\"C1\"Csus4\"C1\"Csus2\"C1\"C6\"C1\"Cm6\"C1\"C7sus4\"C1\"Cm(maj7)\"C1C1|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "1/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "1/2",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "3/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "1",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "5/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "3/2",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "7/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "9/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "5/2",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "11/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "3",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "13/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "7/2",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "15/4",
+            "duration": "1/4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-chord-outside-table",
+      "rules": ["C2", "C4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"C13\"C16|",
+      "expect": "reject",
+      "code": "chord"
+    },
+    {
+      "id": "reject-chord-empty",
+      "rules": ["M8", "C4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"\"C16|",
+      "expect": "reject",
+      "code": "chord"
+    },
+    {
+      "id": "reject-chord-in-ins",
+      "rules": ["C7", "V5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|\nV: Ins\n\"C\"z16|",
+      "expect": "reject",
+      "code": "chord"
+    },
+    {
+      "id": "reject-chord-after-full",
+      "rules": ["C6", "D7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"C\"C16\"C\"|",
+      "expect": "reject",
+      "code": "bar-length"
+    },
+    {
+      "id": "chord-position-on-weak-beat",
+      "rules": ["C5", "M11"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC4\"C\"D4E8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "1",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "1",
+            "duration": "1",
+            "pitch": 62,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 64,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "voices-agree",
+      "rules": ["V1", "V7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|\nV: Ins\nE16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 64,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-voice-bar-count",
+      "rules": ["V2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|C16|\nV: Ins\nZ|\n% b\nV: Vocal\nC16|\nV: Ins\nZ|",
+      "expect": "reject",
+      "code": "bar-count"
+    },
+    {
+      "id": "reject-voice-meter-mismatch",
+      "rules": ["V3", "D9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nM:3/4\nC12|\nV: Ins\nZ|",
+      "expect": "reject",
+      "code": "bar-length"
+    },
+    {
+      "id": "reject-voice-key-position",
+      "rules": ["V4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC8[K:G]C8|\nV: Ins\nC16|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-voice-key-matching",
+      "rules": ["V4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC8[K:G]C8|\nV: Ins\nC8[K:G]C8|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          },
+          {
+            "at": "2",
+            "key": "G"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-voice-redundant-key-one-voice",
+      "rules": ["V4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nK:C\nC16|\nV: Ins\nZ|",
+      "expect": "reject",
+      "code": "header"
+    },
+    {
+      "id": "accept-vocal-only-chords",
+      "rules": ["V6", "C5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"C\"C16|",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-missing-closing-barline-complete",
+      "rules": ["X2", "X3", "X10", "X14"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-partial-measure",
+      "rules": ["X2", "X10", "X14"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC8",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 1,
+        "short": true
+      },
+      "bars": {
+        "Vocal": []
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-unfinished-chord",
+      "rules": ["X4", "C8", "X17"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n\"Cm",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": []
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 1,
+        "short": true
+      },
+      "bars": {
+        "Vocal": []
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-lone-accidental",
+      "rules": ["X4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n^",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": []
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 1,
+        "short": true
+      },
+      "bars": {
+        "Vocal": []
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-unfinished-key",
+      "rules": ["X4"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n[K:C",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": []
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 1,
+        "short": true
+      },
+      "bars": {
+        "Vocal": []
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-inside-v-line",
+      "rules": ["X2", "X3", "X7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\nV: Voc",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-missing-ins-block",
+      "rules": ["X3", "X8", "X9", "V8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|\nV: Ins\nZ|\n% b\nV: Vocal\nD16|",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 62,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Ins",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-after-field-line",
+      "rules": ["X3", "X6", "X8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\nV: Vocal\nM:9/9",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-lone-k",
+      "rules": ["X3", "X6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\nV: Vocal\nK",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-after-comment",
+      "rules": ["X3", "X11", "S6"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\n% outro",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-lone-percent",
+      "rules": ["X3", "X11", "S7"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\n%",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-short-ins-block",
+      "rules": ["X3", "X9", "V8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|C16|\nV: Ins\nZ|",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Ins",
+        "measure": 2,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-partial-ins",
+      "rules": ["X2", "X9", "X14", "V8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|C16|\nV: Ins\nC8",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 60,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Ins",
+        "measure": 1,
+        "short": true
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-tie-mismatch-final",
+      "rules": ["X5", "P14", "X2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16-|B",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": true
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 2,
+        "short": true
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "truncate-final-z-no-barline",
+      "rules": ["X10", "X18"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nZ2",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "truncation": {
+        "voice": "Vocal",
+        "measure": 3,
+        "short": false
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reject-cut-not-at-end-unfinished-chord",
+      "rules": ["X1", "X13"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\"C|\n% b\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "reject-missing-barline-nonfinal",
+      "rules": ["X1", "M1", "X13"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16\n% b\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "reject-partial-v-not-last",
+      "rules": ["X1", "X7", "X13"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\nV: Voc\n% b\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "voice-order"
+    },
+    {
+      "id": "reject-no-music-after-comment",
+      "rules": ["X11", "X12", "B1"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a",
+      "expect": "reject",
+      "code": "bar-count"
+    },
+    {
+      "id": "reject-ins-more-bars",
+      "rules": ["X9", "V2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|\nV: Ins\nZ|Z|",
+      "expect": "reject",
+      "code": "bar-count"
+    },
+    {
+      "id": "reject-percent-no-space",
+      "rules": ["S8"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\n%verse\n% b\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "comment-position"
+    },
+    {
+      "id": "reject-lone-percent-not-last",
+      "rules": ["S9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\nC16|\n%\n% b\nV: Vocal\nC16|",
+      "expect": "reject",
+      "code": "comment-position"
+    },
+    {
+      "id": "reject-lone-percent-where-music",
+      "rules": ["S9"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nK:C\n% a\nV: Vocal\n%",
+      "expect": "reject",
+      "code": "token"
+    },
+    {
+      "id": "accept-two-voices-meter-and-key-changes",
+      "rules": ["B3", "M9", "P3", "P7", "D9", "V3", "V4", "C5"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:D\n% verse\nV: Vocal\n\"D\"F4A4d8|\"G\"B8 [K:Bb]B8|\nV: Ins\nD,8F,8|G,8 [K:Bb]B,8|\n% bridge\nV: Vocal\nM:3/4\nK:Eb\n\"Eb\"e4g4b4|\nV: Ins\nM:3/4\nK:Eb\nE,12|\n",
+      "expect": "accept",
+      "truncated": false,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": true,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "1",
+            "pitch": 66,
+            "tie": false
+          },
+          {
+            "start": "1",
+            "duration": "1",
+            "pitch": 69,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 74,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "2",
+            "pitch": 71,
+            "tie": false
+          },
+          {
+            "start": "6",
+            "duration": "2",
+            "pitch": 70,
+            "tie": false
+          },
+          {
+            "start": "8",
+            "duration": "1",
+            "pitch": 75,
+            "tie": false
+          },
+          {
+            "start": "9",
+            "duration": "1",
+            "pitch": 79,
+            "tie": false
+          },
+          {
+            "start": "10",
+            "duration": "1",
+            "pitch": 82,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "2",
+            "pitch": 50,
+            "tie": false
+          },
+          {
+            "start": "2",
+            "duration": "2",
+            "pitch": 54,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "2",
+            "pitch": 55,
+            "tie": false
+          },
+          {
+            "start": "6",
+            "duration": "2",
+            "pitch": 58,
+            "tie": false
+          },
+          {
+            "start": "8",
+            "duration": "3",
+            "pitch": 51,
+            "tie": false
+          }
+        ]
+      },
+      "chords": {
+        "Vocal": [
+          {
+            "at": "0",
+            "name": "D"
+          },
+          {
+            "at": "4",
+            "name": "G"
+          },
+          {
+            "at": "8",
+            "name": "Eb"
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "8",
+            "length": "3",
+            "meter": "3/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "D"
+          },
+          {
+            "at": "6",
+            "key": "Bb"
+          },
+          {
+            "at": "8",
+            "key": "Eb"
+          }
+        ]
+      }
+    }
+  ]
+}

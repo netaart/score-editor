@@ -1,0 +1,56 @@
+[
+  {
+    "file": "chords-cut-tail.abc",
+    "truncated": true,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
+    "file": "chords-eight-sections.abc",
+    "truncated": false,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
+    "file": "chords-long.abc",
+    "truncated": false,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
+    "file": "compact-three-sections.abc",
+    "truncated": false,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
+    "file": "dense-accidentals.abc",
+    "truncated": false,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
+    "file": "melody-cut-tail.abc",
+    "truncated": true,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": false
+  },
+  {
+    "file": "short-three-sections.abc",
+    "truncated": false,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
+    "file": "short-two-sections.abc",
+    "truncated": false,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
+    "file": "vocal-only-melody.abc",
+    "truncated": false,
+    "voices": ["Vocal"],
+    "hasChords": false
+  }
+]
