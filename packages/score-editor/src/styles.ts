@@ -55,10 +55,14 @@ const css = `
   }
 }
 
-/* Hard reset: a host's element selectors must not reach inside. Revert rolls back to browser defaults. */
-.sce-root.sce-root *,
-.sce-root.sce-root *::before,
-.sce-root.sce-root *::after {
+/*
+ * Hard reset: a host's element selectors must not reach inside. Revert rolls back to browser defaults.
+ * Notes are left out on purpose: all: revert on each of a few thousand nodes made first render
+ * three times slower (style recalculation), so a note resets the few properties it needs by hand.
+ */
+.sce-root.sce-root :where(:not(.sce-note)),
+.sce-root.sce-root :where(:not(.sce-note))::before,
+.sce-root.sce-root :where(:not(.sce-note))::after {
   all: revert;
   box-sizing: border-box;
 }
@@ -253,6 +257,13 @@ const css = `
 }
 
 .sce-root .sce-note {
+  box-sizing: border-box;
+  display: block;
+  margin: 0;
+  padding: 0;
+  opacity: 1;
+  box-shadow: none;
+  filter: none;
   position: absolute;
   z-index: 1;
   left: calc(var(--t) * var(--sce-_beat) / 480);
@@ -267,13 +278,10 @@ const css = `
   touch-action: none;
   -webkit-touch-callout: none;
 }
-.sce-root .sce-note::before {
-  content: "";
-  position: absolute;
-  inset: -2px;
-}
 @media (pointer: coarse) {
   .sce-root .sce-note::before {
+    content: "";
+    position: absolute;
     inset: -4px -6px;
   }
 }

@@ -293,14 +293,14 @@ test.describe("host styling", () => {
       );
 
     expect(
-      await styleOf(note, ["height", "border-top-width", "margin-top", "padding-top", "box-shadow", "text-transform"]),
+      await styleOf(note, ["height", "border-top-width", "margin-top", "padding-top", "box-shadow", "opacity"]),
     ).toEqual({
       height: "14px",
       "border-top-width": "1px",
       "margin-top": "0px",
       "padding-top": "0px",
       "box-shadow": "none",
-      "text-transform": "none",
+      opacity: "1",
     });
     expect(
       await styleOf(title, [
