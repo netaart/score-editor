@@ -39,7 +39,7 @@ const css = `
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 18rem;
+  min-height: 288px;
   overflow: hidden;
   background: var(--sce-_bg);
   color: var(--sce-_text);
@@ -68,7 +68,7 @@ const css = `
   all: revert;
   box-sizing: border-box;
 }
-.sce-root [hidden] {
+.sce-root.sce-root [hidden] {
   display: none;
 }
 
