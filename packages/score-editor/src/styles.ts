@@ -420,6 +420,9 @@ type StyleScope = Document | ShadowRoot;
 
 const injections = new WeakMap<StyleScope, Injection>();
 
+/** One parsed sheet per document, adopted again on every mount: re-parsing the sheet made a re-mount about twice as slow. */
+const sheets = new WeakMap<Document, CSSStyleSheet>();
+
 /** Where the stylesheet must live for elements living in `el`'s tree: a shadow root itself, else the document. */
 function scopeFor(el: HTMLElement): StyleScope {
   const root = el.getRootNode();
@@ -434,11 +437,16 @@ function scopeFor(el: HTMLElement): StyleScope {
 function addSheet(scope: StyleScope, doc: Document): () => void {
   const view = doc.defaultView;
   if (view && typeof view.CSSStyleSheet?.prototype.replaceSync === "function" && "adoptedStyleSheets" in scope) {
-    const sheet = new view.CSSStyleSheet();
-    sheet.replaceSync(css);
-    scope.adoptedStyleSheets = [...scope.adoptedStyleSheets, sheet];
+    let sheet = sheets.get(doc);
+    if (!sheet) {
+      sheet = new view.CSSStyleSheet();
+      sheet.replaceSync(css);
+      sheets.set(doc, sheet);
+    }
+    const adopted = sheet;
+    scope.adoptedStyleSheets = [...scope.adoptedStyleSheets, adopted];
     return () => {
-      scope.adoptedStyleSheets = scope.adoptedStyleSheets.filter((candidate) => candidate !== sheet);
+      scope.adoptedStyleSheets = scope.adoptedStyleSheets.filter((candidate) => candidate !== adopted);
     };
   }
   const style = doc.createElement("style");
