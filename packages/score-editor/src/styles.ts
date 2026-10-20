@@ -19,11 +19,12 @@ const css = `
 .sce-root.sce-root {
   all: initial;
   --sce-_bg: var(--sce-color-bg, light-dark(#ffffff, #1b1c1f));
-  --sce-_surface: var(--sce-color-surface, light-dark(#f4f4f5, #25262a));
   --sce-_text: var(--sce-color-text, light-dark(#18181b, #ececee));
-  --sce-_muted: var(--sce-color-muted, light-dark(#5b5b64, #a3a3ad));
-  --sce-_line: var(--sce-color-line, light-dark(#e2e2e6, #35363c));
-  --sce-_line-strong: var(--sce-color-line-strong, light-dark(#b9b9c3, #54555d));
+  /* Unmapped greys are derived from the two that are mapped, so a host that maps only these stays readable. */
+  --sce-_surface: var(--sce-color-surface, color-mix(in srgb, var(--sce-_text) 5%, var(--sce-_bg)));
+  --sce-_muted: var(--sce-color-muted, color-mix(in srgb, var(--sce-_text) 66%, var(--sce-_bg)));
+  --sce-_line: var(--sce-color-line, color-mix(in srgb, var(--sce-_text) 13%, var(--sce-_bg)));
+  --sce-_line-strong: var(--sce-color-line-strong, color-mix(in srgb, var(--sce-_text) 28%, var(--sce-_bg)));
   --sce-_accent: var(--sce-color-accent, light-dark(#2457d6, #7da3ff));
   --sce-_note: var(--sce-color-note, var(--sce-_accent));
   --sce-_radius: var(--sce-radius, 4px);
@@ -43,14 +44,15 @@ const css = `
   background: var(--sce-_bg);
   color: var(--sce-_text);
   font-family: var(--sce-font-family, inherit);
-  font-size: 13px;
+  /* A keyword, so the user's browser font size applies and the host's rem tricks do not; the rest is in em. */
+  font-size: small;
   line-height: 1.3;
   text-align: start;
   direction: inherit;
   color-scheme: inherit;
 }
 @media (pointer: coarse) {
-  .sce-root {
+  .sce-root.sce-root {
     --sce-_row: var(--sce-row-height, 24px);
   }
 }
@@ -92,7 +94,7 @@ const css = `
   border: 1px solid var(--sce-_line-strong);
   border-radius: 999px;
   color: var(--sce-_muted);
-  font-size: 12px;
+  font-size: 0.92em;
   white-space: nowrap;
 }
 .sce-root .sce-button {
@@ -137,8 +139,24 @@ const css = `
   outline: 2px solid var(--sce-_accent);
   outline-offset: 2px;
 }
+/* The scroller's own outline would be hidden behind the sticky ruler and keys, so a ring is drawn over its box. */
 .sce-root .sce-scroller:focus-visible {
-  outline-offset: -2px;
+  outline: none;
+}
+.sce-root .sce-body {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.sce-root .sce-body:has(> .sce-scroller:focus-visible)::after {
+  content: "";
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  border: 2px solid var(--sce-_accent);
+  pointer-events: none;
 }
 
 .sce-root .sce-scroller {
@@ -146,6 +164,8 @@ const css = `
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  /* Time runs left to right on a score whatever the page's writing direction. */
+  direction: ltr;
   background: var(--sce-_bg);
   touch-action: pan-x pan-y pinch-zoom;
   -webkit-user-select: none;
@@ -185,7 +205,7 @@ const css = `
   top: 4px;
   left: calc(var(--i) * 4 * var(--sce-_beat) + 5px);
   color: var(--sce-_muted);
-  font-size: 11px;
+  font-size: 0.92em;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
@@ -208,7 +228,7 @@ const css = `
   z-index: 1;
   padding: 0 10px;
   background: var(--sce-_surface);
-  font-size: 12px;
+  font-size: 0.92em;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -232,7 +252,7 @@ const css = `
   padding: 0 6px 1px;
   border-top: 1px solid var(--sce-_line);
   color: var(--sce-_muted);
-  font-size: 10px;
+  font-size: 0.85em;
   font-variant-numeric: lining-nums tabular-nums;
 }
 .sce-root .sce-octave:first-child {
@@ -291,10 +311,13 @@ const css = `
   outline: 2px solid var(--sce-_text);
   outline-offset: 1px;
 }
+.sce-root .sce-note[aria-pressed="true"]:focus-visible {
+  box-shadow: 0 0 0 5px var(--sce-_accent);
+}
 .sce-root .sce-note[data-dragging] {
   z-index: 2;
   cursor: grabbing;
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--sce-_text) 28%, transparent);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--sce-_text) 40%, transparent);
 }
 .sce-root .sce-note[data-blocked] {
   opacity: 0.45;
@@ -313,7 +336,7 @@ const css = `
   border-radius: var(--sce-_radius);
   background: var(--sce-_text);
   color: var(--sce-_bg);
-  font-size: 12px;
+  font-size: 0.92em;
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
   pointer-events: none;

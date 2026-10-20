@@ -11,6 +11,7 @@ interface Messages {
   readOnly: string;
   noticeReadOnly: string;
   noticePitchRange: string;
+  noticeMoveBlocked: string;
   position(midi: number, start: number): string;
   noteLabel(note: Note): string;
 }
@@ -21,12 +22,13 @@ function beats(length: number): string {
 
 const en: Messages = {
   title: "Piano roll",
-  hint: "Drag a note to change its time and pitch. Swipe empty space to scroll.",
+  hint: "Drag a note to change its time and pitch, or focus it and use the arrow keys, with Shift for an octave. Swipe empty space to scroll.",
   grid: "Grid",
   gridChoices: { "1/4": "Quarter note (1/4)", "1/8": "Eighth note (1/8)", "1/16": "Sixteenth note (1/16)" },
   readOnly: "Read only",
   noticeReadOnly: "This score is read only, so notes can't be moved.",
   noticePitchRange: "Notes can't go beyond the pitch range shown.",
+  noticeMoveBlocked: "Another note already starts there, so this note stayed where it was.",
   position(midi, start) {
     const { bar, beat } = barAndBeat(start);
     return `${pitchName(midi)} · bar ${bar} beat ${beat}`;
@@ -40,12 +42,13 @@ const en: Messages = {
 
 const zh: Messages = {
   title: "钢琴卷帘",
-  hint: "拖动音符来改变它的时间和音高。在空白处滑动来滚动。",
+  hint: "拖动音符来改变它的时间和音高，也可以聚焦音符后用方向键移动，按住 Shift 为一个八度。在空白处滑动来滚动。",
   grid: "网格",
   gridChoices: { "1/4": "四分音符 (1/4)", "1/8": "八分音符 (1/8)", "1/16": "十六分音符 (1/16)" },
   readOnly: "只读",
   noticeReadOnly: "乐谱是只读的，不能移动音符。",
   noticePitchRange: "音符不能超出当前显示的音高范围。",
+  noticeMoveBlocked: "那个位置已经有另一个音符开始了，所以这个音符留在了原处。",
   position(midi, start) {
     const { bar, beat } = barAndBeat(start);
     return `${pitchName(midi)} · 第 ${bar} 小节第 ${beat} 拍`;

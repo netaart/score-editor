@@ -23,7 +23,21 @@ interface Lane {
   range: PitchRange;
   rows: number;
   el: HTMLElement;
+  /** The sticky pitch column and track head, which cover the edges of the scroller. */
+  keys: HTMLElement;
+  head: HTMLElement;
 }
+
+/** Where a dragged pointer is "at the edge": the part of the scroller not covered by sticky parts, in screen pixels. */
+interface View {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** Pixels the roll scrolls per frame at full speed while a dragged note is held at its edge. */
+const EDGE_SPEED = 18;
 
 /** The state of one drag gesture. Distances are in screen pixels unless named css*. */
 interface Drag {
@@ -31,11 +45,20 @@ interface Drag {
   el: HTMLElement;
   lane: Lane;
   pointerId: number;
+  /** A finger or pen: needs a larger drag threshold and a readout held clear of the hand. */
+  touch: boolean;
   threshold: number;
   startX: number;
   startY: number;
   startScrollLeft: number;
   startScrollTop: number;
+  /** The latest pointer position, so the edge scroll can recompute the target without a pointer event. */
+  x: number;
+  y: number;
+  view: View;
+  /** Width of the band along the scroller's edges in which holding the pointer scrolls. */
+  zone: number;
+  raf: number;
   /** Screen pixels per CSS pixel: 1 unless the host scales the editor. */
   scale: number;
   pxPerTick: number;
@@ -80,8 +103,10 @@ export class Editor implements MountedEditor {
   private readonly menuItems = new Map<GridChoice["id"], HTMLButtonElement>();
   private readonly scroller: HTMLElement;
   private readonly readout: HTMLElement;
+  private readonly live: HTMLElement;
 
   private canvas: HTMLElement | null = null;
+  private ruler: HTMLElement | null = null;
   private notes: Note[] = [];
   private bars = 0;
   private lanes = new Map<string, Lane>();
@@ -119,11 +144,14 @@ export class Editor implements MountedEditor {
 
     this.hint = create(doc, "div", "sce-sr-only", this.root);
     this.hint.id = `sce-hint-${n}`;
-    this.scroller = create(doc, "div", "sce-scroller", this.root);
+    const body = create(doc, "div", "sce-body", this.root);
+    this.scroller = create(doc, "div", "sce-scroller", body);
     this.scroller.tabIndex = 0;
     this.scroller.setAttribute("role", "region");
     this.scroller.setAttribute("aria-describedby", this.hint.id);
 
+    this.live = create(doc, "div", "sce-sr-only", this.root);
+    this.live.setAttribute("role", "status");
     this.readout = create(doc, "div", "sce-readout", this.root);
     this.readout.hidden = true;
     this.readout.setAttribute("aria-hidden", "true");
@@ -234,6 +262,7 @@ export class Editor implements MountedEditor {
     canvas.style.setProperty("--sce-bars", String(this.bars));
 
     const ruler = create(doc, "div", "sce-ruler", canvas);
+    this.ruler = ruler;
     create(doc, "div", "sce-corner", ruler);
     const bars = create(doc, "div", "sce-bars", ruler);
     const numbers = doc.createDocumentFragment();
@@ -260,7 +289,7 @@ export class Editor implements MountedEditor {
       laneEl.setAttribute("role", "group");
       laneEl.setAttribute("aria-label", voice);
       laneEl.style.setProperty("--sce-rows", String(rows));
-      this.lanes.set(voice, { voice, range, rows, el: laneEl });
+      this.lanes.set(voice, { voice, range, rows, el: laneEl, keys, head });
     }
 
     const fragments = new Map<string, DocumentFragment>();
@@ -365,11 +394,17 @@ export class Editor implements MountedEditor {
       el,
       lane,
       pointerId: event.pointerId,
+      touch: event.pointerType !== "mouse",
       threshold: event.pointerType === "mouse" ? 3 : 6,
       startX: event.clientX,
       startY: event.clientY,
       startScrollLeft: this.scroller.scrollLeft,
       startScrollTop: this.scroller.scrollTop,
+      x: event.clientX,
+      y: event.clientY,
+      view: this.visibleView(lane, scale),
+      zone: event.pointerType === "mouse" ? 32 : 48,
+      raf: 0,
       scale,
       pxPerTick: laneRect.width / total,
       rowPx: laneRect.height / lane.rows,
@@ -393,9 +428,10 @@ export class Editor implements MountedEditor {
   private readonly onPointerMove = (event: PointerEvent): void => {
     const drag = this.drag;
     if (!drag || event.pointerId !== drag.pointerId) return;
-    const dx = event.clientX - drag.startX + (this.scroller.scrollLeft - drag.startScrollLeft) * drag.scale;
-    const dy = event.clientY - drag.startY + (this.scroller.scrollTop - drag.startScrollTop) * drag.scale;
+    drag.x = event.clientX;
+    drag.y = event.clientY;
     if (!drag.moved) {
+      const { dx, dy } = this.dragOffset(drag);
       if (Math.hypot(dx, dy) < drag.threshold) return;
       drag.moved = true;
       if (!this.editable) {
@@ -404,12 +440,25 @@ export class Editor implements MountedEditor {
       }
       drag.el.dataset.dragging = "";
       this.readout.hidden = false;
-      drag.readoutWidth = this.readout.offsetWidth;
     }
     if (!this.editable) return;
+    this.updateDrag(drag);
+    this.scrollAtEdge(drag);
+  };
 
+  /** How far the pointer is from where it went down, counting what the roll has scrolled since. Screen pixels. */
+  private dragOffset(drag: Drag): { dx: number; dy: number } {
+    return {
+      dx: drag.x - drag.startX + (this.scroller.scrollLeft - drag.startScrollLeft) * drag.scale,
+      dy: drag.y - drag.startY + (this.scroller.scrollTop - drag.startScrollTop) * drag.scale,
+    };
+  }
+
+  /** Shows where the drag would drop the note: the snapped ghost position, the blocked cue and the readout. */
+  private updateDrag(drag: Drag): void {
     const note = this.notes.find((candidate) => candidate.id === drag.noteId);
     if (!note) return;
+    const { dx, dy } = this.dragOffset(drag);
     drag.dTicks = Math.round(dx / drag.pxPerTick / this.grid.ticks) * this.grid.ticks;
     drag.dMidi = -Math.round(dy / drag.rowPx);
     const target = resolveMove(note, drag.dTicks, drag.dMidi, this.boundsOf(drag.lane));
@@ -418,11 +467,53 @@ export class Editor implements MountedEditor {
     drag.el.toggleAttribute("data-blocked", takenBy !== note.id && this.noteEls.has(takenBy));
 
     this.readout.textContent = messagesFor(this.options.language).position(target.midi, target.start);
-    const x = event.clientX - drag.rootRect.left + 14;
-    const y = event.clientY - drag.rootRect.top - (event.pointerType === "mouse" ? 34 : 56);
+    // Measured once, with real text; the slack covers a bar number gaining a digit.
+    if (drag.readoutWidth === 0) drag.readoutWidth = this.readout.offsetWidth + 16;
+    const x = drag.x - drag.rootRect.left + 14;
+    const y = drag.y - drag.rootRect.top - (drag.touch ? 56 : 34);
     const maxX = Math.max(0, drag.rootRect.width - drag.readoutWidth - 8);
     this.readout.style.translate = `${Math.min(Math.max(0, x), maxX)}px ${Math.max(0, y)}px`;
-  };
+  }
+
+  /** The part of the scroller a note can be seen in: what the sticky ruler, track head and pitch column leave free. */
+  private visibleView(lane: Lane, scale: number): View {
+    const box = this.scroller.getBoundingClientRect();
+    const covered = Math.max(this.ruler?.getBoundingClientRect().bottom ?? 0, lane.head.getBoundingClientRect().bottom);
+    return {
+      left: lane.keys.getBoundingClientRect().right,
+      right: box.left + this.scroller.clientWidth * scale,
+      top: covered,
+      bottom: box.top + this.scroller.clientHeight * scale,
+    };
+  }
+
+  /** While a dragged note is held near the edge of the roll, scrolls it, so a note can travel further than the screen. */
+  private scrollAtEdge(drag: Drag): void {
+    if (drag.raf !== 0) return;
+    const win = this.doc.defaultView;
+    if (!win) return;
+    const speed = (at: number, low: number, high: number): number => {
+      if (at < low + drag.zone) return -EDGE_SPEED * Math.min(1, (low + drag.zone - at) / drag.zone) ** 2;
+      if (at > high - drag.zone) return EDGE_SPEED * Math.min(1, (at - (high - drag.zone)) / drag.zone) ** 2;
+      return 0;
+    };
+    const step = (): void => {
+      drag.raf = 0;
+      if (this.drag !== drag) return;
+      const vx = speed(drag.x, drag.view.left, drag.view.right);
+      const vy = speed(drag.y, drag.view.top, drag.view.bottom);
+      const { scrollLeft, scrollTop } = this.scroller;
+      this.scroller.scrollLeft = scrollLeft + vx;
+      this.scroller.scrollTop = scrollTop + vy;
+      // At the end of the roll nothing moves: stop until the next pointer move asks again.
+      if (this.scroller.scrollLeft === scrollLeft && this.scroller.scrollTop === scrollTop) return;
+      this.updateDrag(drag);
+      drag.raf = win.requestAnimationFrame(step);
+    };
+    if (speed(drag.x, drag.view.left, drag.view.right) !== 0 || speed(drag.y, drag.view.top, drag.view.bottom) !== 0) {
+      drag.raf = win.requestAnimationFrame(step);
+    }
+  }
 
   private readonly onPointerUp = (event: PointerEvent): void => {
     if (!this.drag || event.pointerId !== this.drag.pointerId) return;
@@ -439,12 +530,13 @@ export class Editor implements MountedEditor {
     if (!drag) return;
     this.drag = null;
     drag.abort.abort();
+    if (drag.raf !== 0) this.doc.defaultView?.cancelAnimationFrame(drag.raf);
     if (drag.el.hasPointerCapture(drag.pointerId)) drag.el.releasePointerCapture(drag.pointerId);
     drag.el.style.removeProperty("translate");
     delete drag.el.dataset.dragging;
     drag.el.removeAttribute("data-blocked");
     this.readout.hidden = true;
-    if (commit && drag.moved && this.editable) this.commitMove(drag.noteId, drag.dTicks, drag.dMidi);
+    if (commit && drag.moved && this.editable) this.commitMove(drag.noteId, drag.dTicks, drag.dMidi, false);
   }
 
   // --- the one edit ------------------------------------------------------------------------------
@@ -454,13 +546,18 @@ export class Editor implements MountedEditor {
   }
 
   /** Applies a move from a drag or a key press; both go through the same command. */
-  private commitMove(id: string, dTicks: number, dMidi: number): void {
+  private commitMove(id: string, dTicks: number, dMidi: number, reveal: boolean): void {
     const note = this.notes.find((candidate) => candidate.id === id);
     const lane = note ? this.lanes.get(note.voice) : undefined;
     const el = this.noteEls.get(id);
     if (!note || !lane || !el) return;
+    const t = messagesFor(this.options.language);
     const result = moveNote(this.notes, id, dTicks, dMidi, this.boundsOf(lane));
-    if (!result.ok) return;
+    if (!result.ok) {
+      this.notify("move-blocked", "info", t.noticeMoveBlocked);
+      this.announce(t.noticeMoveBlocked);
+      return;
+    }
     this.notes = result.notes;
     const moved = result.notes.find((candidate) => candidate.id === result.id);
     if (!moved) return;
@@ -468,17 +565,58 @@ export class Editor implements MountedEditor {
     this.noteEls.set(result.id, el);
     el.dataset.sceId = result.id;
     this.placeNote(el, moved, lane);
-    el.setAttribute("aria-label", messagesFor(this.options.language).noteLabel(moved));
+    el.setAttribute("aria-label", t.noteLabel(moved));
     if (this.selectedId === id) this.selectedId = result.id;
-    if (result.clampedPitch) {
-      this.notify("pitch-out-of-range", "info", messagesFor(this.options.language).noticePitchRange);
-    }
+    this.announce(t.noteLabel(moved));
+    if (result.clampedPitch) this.notify("pitch-out-of-range", "info", t.noticePitchRange);
+    if (reveal) this.reveal(el, lane);
+  }
+
+  /**
+   * Tells assistive technology what a move did: the new label of a note is not read out again by itself.
+   * A fresh text node each time, so the same sentence twice in a row is still announced.
+   */
+  private announce(text: string): void {
+    this.live.replaceChildren(this.doc.createTextNode(text));
+  }
+
+  /** Scrolls the roll just enough that a note moved by key stays clear of the edges and of the sticky parts. */
+  private reveal(el: HTMLElement, lane: Lane): void {
+    const box = this.scroller.getBoundingClientRect();
+    const note = el.getBoundingClientRect();
+    const margin = 6;
+    const left = lane.keys.getBoundingClientRect().right + margin;
+    const right = box.left + this.scroller.clientWidth - margin;
+    const top =
+      Math.max(this.ruler?.getBoundingClientRect().bottom ?? 0, lane.head.getBoundingClientRect().bottom) + margin;
+    const bottom = box.top + this.scroller.clientHeight - margin;
+    // The start edge wins when a note is wider than the view, so the right-hand rule goes first.
+    if (note.right > right) this.scroller.scrollLeft += note.right - right;
+    if (note.left < left) this.scroller.scrollLeft -= left - note.left;
+    if (note.bottom > bottom) this.scroller.scrollTop += note.bottom - bottom;
+    if (note.top < top) this.scroller.scrollTop -= top - note.top;
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && this.drag) {
+      // Cancelling a drag must not also close a host dialog that listens for the same key.
+      event.preventDefault();
+      event.stopPropagation();
+      this.finishDrag(false);
+      return;
+    }
+    if (event.target instanceof Element && event.target.closest(".sce-menu-item")) {
+      this.walkMenu(event);
+      return;
+    }
     const el = this.noteElementOf(event.target);
     const id = el?.dataset.sceId;
     if (!el || !id || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      this.select(this.selectedId === id ? null : id);
+      return;
+    }
     let dTicks = 0;
     let dMidi = 0;
     if (event.key === "ArrowLeft") dTicks = -this.grid.ticks;
@@ -491,8 +629,22 @@ export class Editor implements MountedEditor {
       this.notify("read-only", "info", messagesFor(this.options.language).noticeReadOnly);
       return;
     }
-    this.commitMove(id, dTicks, dMidi);
+    this.commitMove(id, dTicks, dMidi, true);
   };
+
+  /** Arrow, Home and End keys move between the items of the open menu, as a menu is expected to behave. */
+  private walkMenu(event: KeyboardEvent): void {
+    const items = [...this.menuItems.values()];
+    const at = event.target instanceof HTMLButtonElement ? items.indexOf(event.target) : -1;
+    let next = -1;
+    if (event.key === "ArrowDown") next = (at + 1) % items.length;
+    else if (event.key === "ArrowUp") next = (at - 1 + items.length) % items.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    items[next]?.focus();
+  }
 
   // --- the grid popover --------------------------------------------------------------------------
 

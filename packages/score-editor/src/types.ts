@@ -5,7 +5,7 @@
 export type Language = "zh" | "en";
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */
-export type NoticeCode = "read-only" | "pitch-out-of-range";
+export type NoticeCode = "read-only" | "pitch-out-of-range" | "move-blocked";
 
 /**
  * A one-time message the editor wants the user to see. The editor never renders it itself:
