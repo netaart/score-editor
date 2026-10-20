@@ -216,6 +216,7 @@ test.describe("host callbacks", () => {
   }) => {
     await harness.mount({ editable: false, language: "en" });
     await expect(page.getByText("Read only")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Grid/ })).toBeHidden();
     await dragNote(page, "C5, bar 4 beat 1, length 3 beats", 3, 2);
     await expect(page.getByRole("button", { name: "C5, bar 4 beat 1, length 3 beats" })).toBeVisible();
     expect(await harness.notices()).toEqual([
@@ -224,6 +225,7 @@ test.describe("host callbacks", () => {
 
     await harness.update({ language: "zh", editable: true });
     await expect(page.getByText("只读")).toBeHidden();
+    await expect(page.getByRole("button", { name: /^网格/ })).toBeVisible();
     await dragNote(page, "C5，第 4 小节第 1 拍，长 3 拍", 3, 2);
     await expect(page.getByRole("button", { name: "D5，第 4 小节第 4 拍，长 3 拍" })).toBeVisible();
     expect(await harness.notices()).toHaveLength(1);
