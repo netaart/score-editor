@@ -412,29 +412,48 @@ const css = `
 `;
 
 interface Injection {
-  style: HTMLStyleElement;
+  remove(): void;
   count: number;
 }
 
-const injections = new WeakMap<Node, Injection>();
+type StyleScope = Document | ShadowRoot;
 
-/** The node that should hold the stylesheet for elements living in `scope`: a shadow root itself, else the head. */
-function containerFor(el: HTMLElement): Node {
-  const scope = el.getRootNode();
-  if (scope.nodeType === Node.DOCUMENT_FRAGMENT_NODE) return scope;
-  return el.ownerDocument.head;
+const injections = new WeakMap<StyleScope, Injection>();
+
+/** Where the stylesheet must live for elements living in `el`'s tree: a shadow root itself, else the document. */
+function scopeFor(el: HTMLElement): StyleScope {
+  const root = el.getRootNode();
+  return root.nodeType === Node.DOCUMENT_FRAGMENT_NODE ? (root as ShadowRoot) : el.ownerDocument;
 }
 
-/** Adds the stylesheet where `el` lives, once per container however many editors share it. Returns the release. */
+/**
+ * Adds the sheet to the scope. A constructed stylesheet is preferred: a page whose Content-Security-Policy
+ * forbids inline style elements blocks an injected <style> and leaves the editor unstyled, while the
+ * stylesheet object model is not governed by that policy. The <style> element is the fallback.
+ */
+function addSheet(scope: StyleScope, doc: Document): () => void {
+  const view = doc.defaultView;
+  if (view && typeof view.CSSStyleSheet?.prototype.replaceSync === "function" && "adoptedStyleSheets" in scope) {
+    const sheet = new view.CSSStyleSheet();
+    sheet.replaceSync(css);
+    scope.adoptedStyleSheets = [...scope.adoptedStyleSheets, sheet];
+    return () => {
+      scope.adoptedStyleSheets = scope.adoptedStyleSheets.filter((candidate) => candidate !== sheet);
+    };
+  }
+  const style = doc.createElement("style");
+  style.textContent = css;
+  (scope instanceof Document ? scope.head : scope).appendChild(style);
+  return () => style.remove();
+}
+
+/** Adds the stylesheet where `el` lives, once per scope however many editors share it. Returns the release. */
 export function acquireStyles(el: HTMLElement): () => void {
-  const container = containerFor(el);
-  let injection = injections.get(container);
+  const scope = scopeFor(el);
+  let injection = injections.get(scope);
   if (!injection) {
-    const style = el.ownerDocument.createElement("style");
-    style.textContent = css;
-    container.appendChild(style);
-    injection = { style, count: 0 };
-    injections.set(container, injection);
+    injection = { remove: addSheet(scope, el.ownerDocument), count: 0 };
+    injections.set(scope, injection);
   }
   injection.count += 1;
   const held = injection;
@@ -444,8 +463,8 @@ export function acquireStyles(el: HTMLElement): () => void {
     released = true;
     held.count -= 1;
     if (held.count === 0) {
-      held.style.remove();
-      injections.delete(container);
+      held.remove();
+      injections.delete(scope);
     }
   };
 }
