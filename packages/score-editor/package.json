@@ -1,0 +1,41 @@
+{
+  "name": "@neta-art/score-editor",
+  "version": "0.1.0",
+  "description": "A browser score editor for song projects. The host mounts it onto an element and maps its theme through CSS variables.",
+  "keywords": [
+    "score-editor",
+    "piano-roll",
+    "music",
+    "song"
+  ],
+  "homepage": "https://github.com/netaart/score-editor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/netaart/score-editor.git",
+    "directory": "packages/score-editor"
+  },
+  "bugs": {
+    "url": "https://github.com/netaart/score-editor/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

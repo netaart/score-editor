@@ -1,0 +1,46 @@
+{
+  "name": "@neta-art/score-dialect-song2",
+  "version": "0.1.0",
+  "description": "The song2 score dialect for @neta-art/score-editor.",
+  "keywords": [
+    "score-editor",
+    "score-dialect",
+    "song2"
+  ],
+  "homepage": "https://github.com/netaart/score-editor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/netaart/score-editor.git",
+    "directory": "packages/score-dialect-song2"
+  },
+  "bugs": {
+    "url": "https://github.com/netaart/score-editor/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@neta-art/score-editor": "workspace:^"
+  },
+  "devDependencies": {
+    "@neta-art/score-editor": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
