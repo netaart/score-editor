@@ -1,6 +1,48 @@
-// ABOUTME: Pure edit commands over the note list. The spike has one: move a note in time and pitch.
+// ABOUTME: Pure edit commands. Score commands change a Score and leave writing to the dialect; the spike's move commands work on the note view.
 // ABOUTME: Pointer drags and keyboard nudges both end here, so there is one place that decides what a move means.
+import type { Diagnostic } from "./diagnostics";
 import { type Note, noteId } from "./model";
+import type { Score, Note as ScoreNote } from "./score";
+
+/** A dialect-agnostic edit of a Score. More commands join this union in later tickets. */
+export type ScoreCommand = { readonly type: "toRest"; readonly noteId: string };
+
+export type ScoreCommandResult =
+  | { readonly ok: true; readonly score: Score }
+  | { readonly ok: false; readonly diagnostic: Diagnostic };
+
+function commandFailure(code: "note-not-found" | "not-a-note", id: string): ScoreCommandResult {
+  return { ok: false, diagnostic: { code, params: { noteId: id }, at: { noteId: id } } };
+}
+
+/** The whole tie chain around a note: every note tied into it and every note it ties into. */
+function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): ScoreNote[] {
+  const voiceNotes = notes.filter((note) => note.voice === target.voice).sort((a, b) => a.start - b.start);
+  const index = voiceNotes.findIndex((note) => note.id === target.id);
+  let first = index;
+  while (first > 0 && (voiceNotes[first - 1] as ScoreNote).tie) first -= 1;
+  let last = index;
+  while (last < voiceNotes.length - 1 && (voiceNotes[last] as ScoreNote).tie) last += 1;
+  return voiceNotes.slice(first, last + 1);
+}
+
+function toRest(score: Score, id: string): ScoreCommandResult {
+  const target = score.notes.find((note) => note.id === id);
+  if (target === undefined) return commandFailure("note-not-found", id);
+  if (target.midi === null) return commandFailure("not-a-note", id);
+
+  const chain = new Set(tieChain(score.notes, target).map((note) => note.id));
+  const notes = score.notes.map((note) => (chain.has(note.id) ? { ...note, midi: null, tie: false } : note));
+  return { ok: true, score: { ...score, notes } };
+}
+
+/** Applies one score command to a model. It never writes text and never touches a DOM. */
+export function runScoreCommand(score: Score, command: ScoreCommand): ScoreCommandResult {
+  switch (command.type) {
+    case "toRest":
+      return toRest(score, command.noteId);
+  }
+}
 
 export interface MoveBounds {
   /** Length of the score in ticks. */

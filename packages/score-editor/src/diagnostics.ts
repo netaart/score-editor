@@ -19,8 +19,8 @@ export const READING_DIAGNOSTIC_CODES = [
 
 export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
 
-/** The command set starts empty; a later ticket adds its codes to this one list. */
-export const COMMAND_DIAGNOSTIC_CODES = [] as const;
+/** The codes the dialect-agnostic edit layer reports when a command cannot be applied or checked. */
+export const COMMAND_DIAGNOSTIC_CODES = ["note-not-found", "not-a-note", "write-mismatch"] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
 
@@ -56,6 +56,9 @@ interface Catalog {
   readonly pitchRange: Text;
   readonly commentPosition: Text;
   readonly emptyLine: Text;
+  readonly noteNotFound: Text;
+  readonly notANote: Text;
+  readonly writeMismatch: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -273,6 +276,30 @@ function chineseEmptyLine(): string {
   return "这里不能有空行。";
 }
 
+function englishNoteNotFound(params: DiagnosticParams): string {
+  return `The note${quoted(value(params, "noteId"))} is not in this score.`;
+}
+
+function chineseNoteNotFound(params: DiagnosticParams): string {
+  return `乐谱里找不到音符${quoted(value(params, "noteId"))}。`;
+}
+
+function englishNotANote(params: DiagnosticParams): string {
+  return `The event${quoted(value(params, "noteId"))} is a rest, not a note.`;
+}
+
+function chineseNotANote(params: DiagnosticParams): string {
+  return `这个事件${quoted(value(params, "noteId"))}是休止符，不是音符。`;
+}
+
+function englishWriteMismatch(): string {
+  return "The written score does not read back the same.";
+}
+
+function chineseWriteMismatch(): string {
+  return "写回后的乐谱读回来和改动后的乐谱不一致。";
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -285,6 +312,9 @@ const en: Catalog = {
   pitchRange: englishPitchRange,
   commentPosition: englishCommentPosition,
   emptyLine: englishEmptyLine,
+  noteNotFound: englishNoteNotFound,
+  notANote: englishNotANote,
+  writeMismatch: englishWriteMismatch,
 };
 
 const zh: Catalog = {
@@ -299,6 +329,9 @@ const zh: Catalog = {
   pitchRange: chinesePitchRange,
   commentPosition: chineseCommentPosition,
   emptyLine: chineseEmptyLine,
+  noteNotFound: chineseNoteNotFound,
+  notANote: chineseNotANote,
+  writeMismatch: chineseWriteMismatch,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -328,6 +361,12 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.commentPosition(diagnostic.params);
     case "empty-line":
       return catalog.emptyLine(diagnostic.params);
+    case "note-not-found":
+      return catalog.noteNotFound(diagnostic.params);
+    case "not-a-note":
+      return catalog.notANote(diagnostic.params);
+    case "write-mismatch":
+      return catalog.writeMismatch(diagnostic.params);
     default:
       return "";
   }
