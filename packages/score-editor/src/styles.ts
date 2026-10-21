@@ -98,6 +98,12 @@ const css = `
   font-size: 0.92em;
   white-space: nowrap;
 }
+.sce-root .sce-notice {
+  flex: none;
+  padding: 6px 12px;
+  background: var(--sce-_surface);
+  border-bottom: 1px solid var(--sce-_line);
+}
 .sce-root .sce-body {
   position: relative;
   display: flex;
@@ -170,6 +176,14 @@ const css = `
   font-size: 0.92em;
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
+}
+.sce-root .sce-mark[data-edge="end"] {
+  right: 0;
+  left: auto;
+  max-width: none;
+  padding: 3px 5px 0 0;
+  border-right: 1px solid var(--sce-_line-strong);
+  border-left: 0;
 }
 .sce-root .sce-chords {
   height: 26px;
@@ -298,6 +312,16 @@ const css = `
   height: calc(var(--sce-rows) * var(--sce-_row));
   background-image: ${octaveStripes()};
   background-size: 100% calc(12 * var(--sce-_row));
+}
+/* The part of a cut voice that the text never reached: hatched, so a gap is not mistaken for a rest. */
+.sce-root .sce-cut {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  background: repeating-linear-gradient(135deg, var(--sce-_line-strong) 0 1px, transparent 1px 7px);
+  border-left: 1px dashed var(--sce-_line-strong);
 }
 .sce-root .sce-notes {
   position: absolute;

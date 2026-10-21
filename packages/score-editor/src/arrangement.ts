@@ -81,11 +81,46 @@ export function tieJoins(notes: ReadonlyArray<Note>): Set<string> {
   return joined;
 }
 
-/** What takes effect at one position: a new meter, a new key, or both. */
+/** Length of the shared bar grid, in ticks. */
+export function gridTicks(score: Score): number {
+  const last = score.bars[score.bars.length - 1];
+  return last ? last.start + last.length : 0;
+}
+
+/** Where a cut score stops, in the voice that was cut. */
+export interface Cut {
+  readonly voice: string;
+  /** 1-based number of the incomplete bar when `short`; otherwise the number of complete bars before the cut. */
+  readonly bar: number;
+  /** True when the cut is inside a bar, so that bar is incomplete. */
+  readonly short: boolean;
+  /** Where the bar of the cut begins, or the end of the grid when the cut is at a bar line past the last bar. */
+  readonly at: number;
+  /** From here to the end of the grid the cut voice has nothing. */
+  readonly missingFrom: number;
+}
+
+export function cutOf(score: Score): Cut | null {
+  const cut = score.truncation;
+  if (!cut) return null;
+  const at = score.bars[cut.bar]?.start ?? gridTicks(score);
+  let missingFrom = at;
+  if (cut.short) {
+    for (const note of score.notes) {
+      if (note.voice === cut.voice && note.bar === cut.bar) {
+        missingFrom = Math.max(missingFrom, note.start + note.duration);
+      }
+    }
+  }
+  return { voice: cut.voice, bar: cut.short ? cut.bar + 1 : cut.bar, short: cut.short, at, missingFrom };
+}
+
+/** What takes effect at one position: a new meter, a new key, the cut of the score, or several at once. */
 export interface Mark {
   readonly at: number;
   readonly meter: Meter | null;
   readonly key: string | null;
+  readonly cut: Cut | null;
 }
 
 /**
@@ -93,11 +128,11 @@ export interface Mark {
  * A key that the text states again without changing it, and a meter that stays the same, are not changes.
  */
 export function marksOf(score: Score): Mark[] {
-  const byPosition = new Map<number, { meter: Meter | null; key: string | null }>();
+  const byPosition = new Map<number, { meter: Meter | null; key: string | null; cut: Cut | null }>();
   const at = (position: number) => {
     let entry = byPosition.get(position);
     if (!entry) {
-      entry = { meter: null, key: null };
+      entry = { meter: null, key: null, cut: null };
       byPosition.set(position, entry);
     }
     return entry;
@@ -114,5 +149,7 @@ export function marksOf(score: Score): Mark[] {
     key = change.key;
     at(change.at).key = key;
   }
+  const cut = cutOf(score);
+  if (cut) at(cut.at).cut = cut;
   return [...byPosition].sort(([a], [b]) => a - b).map(([position, entry]) => ({ at: position, ...entry }));
 }

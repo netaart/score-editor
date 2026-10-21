@@ -177,4 +177,41 @@ test.describe("the arrangement of a song2 score", () => {
     await expect(marks).toContainText("4/4");
     await expect(marks).toContainText("Key C");
   });
+
+  test("a score cut inside its last bar marks that bar as incomplete and says what that means", async ({
+    page,
+    harness,
+  }) => {
+    // The text stops after C8, half of a 4/4 bar.
+    await harness.mount({ score: { vector: "truncate-partial-measure" } });
+    await expect(page.getByRole("note")).toHaveText("This score is cut off: bar 1 of Vocal is incomplete.");
+    await expect(page.getByRole("list", { name: "Marks" }).getByText("Incomplete bar")).toBeVisible();
+  });
+
+  test("a cut in the Ins voice of a long score is marked at the bar where Ins stops", async ({ page, harness }) => {
+    // Vocal has 235 bars; its last line starts at bar 232, and the Ins line there stops after e6f6g (bar 232 of Ins).
+    await harness.mount({ score: { sample: "melody-cut-tail" } });
+    await expect(page.getByRole("note")).toHaveText("This score is cut off: bar 232 of Ins is incomplete.");
+    const flag = page.getByRole("list", { name: "Marks" }).getByRole("listitem").filter({ hasText: "Incomplete bar" });
+    const bar = page.getByRole("list", { name: "Bars" }).getByText("232", { exact: true });
+    expect((await box(flag)).x).toBeCloseTo((await box(bar)).x, 0);
+  });
+
+  test("a cut at a bar line is marked at the end of the score", async ({ page, harness }) => {
+    // One complete bar, then a section marker and nothing else.
+    await harness.mount({ score: { vector: "truncate-after-comment" } });
+    await expect(page.getByRole("note")).toHaveText("This score is cut off after bar 1 of Vocal.");
+    const flag = page.getByRole("list", { name: "Marks" }).getByRole("listitem").filter({ hasText: "Cut off" });
+    await expect(flag).toBeVisible();
+    const lane = await box(page.getByRole("list", { name: "Vocal" }));
+    const end = (await box(flag)).x + (await box(flag)).width;
+    expect(end).toBeCloseTo(lane.x + lane.width, 0);
+  });
+
+  test("a complete score shows no cut message", async ({ page, harness }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    await expect(page.getByRole("list", { name: "Vocal" })).toBeVisible();
+    await expect(page.getByRole("note")).toHaveCount(0);
+    await expect(page.getByText("Incomplete bar")).toHaveCount(0);
+  });
 });

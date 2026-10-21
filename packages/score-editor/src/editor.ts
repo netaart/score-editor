@@ -1,6 +1,16 @@
 // ABOUTME: The mounted editor: reads the song project's score with its dialect and builds the read-only arrangement view.
 // ABOUTME: Every listener is registered with one AbortSignal, so destroy() removes them all and leaves no node behind.
-import { lengthInBeats, marksOf, notesByVoice, pitchName, pitchRangeOf, positionOf, tieJoins } from "./arrangement";
+import {
+  cutOf,
+  gridTicks,
+  lengthInBeats,
+  marksOf,
+  notesByVoice,
+  pitchName,
+  pitchRangeOf,
+  positionOf,
+  tieJoins,
+} from "./arrangement";
 import { messagesFor } from "./i18n";
 import type { Note, Score } from "./score";
 import { acquireStyles } from "./styles";
@@ -20,12 +30,6 @@ function create<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-/** Length of the shared bar grid, in ticks. */
-function gridTicks(score: Score): number {
-  const last = score.bars[score.bars.length - 1];
-  return last ? last.start + last.length : 0;
-}
-
 export class Editor implements MountedEditor {
   private options: MountOptions;
   private readonly doc: Document;
@@ -35,6 +39,7 @@ export class Editor implements MountedEditor {
   private readonly title: HTMLElement;
   private readonly hint: HTMLElement;
   private readonly badge: HTMLElement;
+  private readonly notice: HTMLElement;
   private readonly body: HTMLElement;
   private destroyed = false;
 
@@ -56,6 +61,8 @@ export class Editor implements MountedEditor {
     create(doc, "span", "sce-spacer", toolbar);
     this.badge = create(doc, "span", "sce-badge", toolbar);
 
+    this.notice = create(doc, "div", "sce-notice", this.root);
+    this.notice.setAttribute("role", "note");
     this.hint = create(doc, "div", "sce-sr-only", this.root);
     this.hint.id = `sce-hint-${n}`;
     this.body = create(doc, "div", "sce-body", this.root);
@@ -110,6 +117,9 @@ export class Editor implements MountedEditor {
     const dialect = dialects.find(project.modelId);
     const score = dialect?.parse(project.score).score;
     this.body.replaceChildren();
+    const cut = score ? cutOf(score) : null;
+    this.notice.hidden = !cut;
+    this.notice.textContent = cut ? messagesFor(this.options.language).cutNotice(cut) : "";
     if (score) this.body.appendChild(this.buildArrangement(score));
   }
 
@@ -217,6 +227,12 @@ export class Editor implements MountedEditor {
     }
     const lane = create(doc, "div", "sce-lane", track);
     lane.style.setProperty("--sce-rows", String(range.hi - range.lo));
+    const cut = cutOf(score);
+    if (cut && cut.voice === voice && gridTicks(score) > cut.missingFrom) {
+      const tail = create(doc, "div", "sce-cut", lane);
+      tail.setAttribute("aria-hidden", "true");
+      tail.style.cssText = `--t:${cut.missingFrom};--d:${gridTicks(score) - cut.missingFrom}`;
+    }
     const list = create(doc, "div", "sce-notes", lane);
     list.setAttribute("role", "list");
     list.setAttribute("aria-label", voice);
@@ -261,6 +277,12 @@ export class Editor implements MountedEditor {
       if (mark.key) {
         create(this.doc, "span", "sce-mark-item", flag).textContent = t.keyText(mark.key);
         names.push(t.keyText(mark.key));
+      }
+      if (mark.cut) {
+        const text = mark.cut.short ? t.incompleteBar : t.cutOff;
+        create(this.doc, "span", "sce-mark-item", flag).textContent = text;
+        names.push(text);
+        if (!mark.cut.short) flag.dataset.edge = "end";
       }
       flag.setAttribute("aria-label", names.join(", "));
       flags.appendChild(flag);
