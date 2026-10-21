@@ -507,8 +507,9 @@ export class Editor implements MountedEditor {
   // --- zoom --------------------------------------------------------------------------------------
 
   /**
-   * Sets the zoom variable, the readout, the menu and the bar numbers that still have room. `timelineWidth` is the
-   * width of the time axis at this zoom, when the caller knows it; reading it back would lay the page out again.
+   * Sets the width of the time axis, the readout, the menu, the grid and the bar numbers that still have room.
+   * `timelineWidth` is the width of the time axis at this zoom, when the caller knows it; reading it back would
+   * lay the page out again.
    */
   private applyZoom(timelineWidth?: number): void {
     const view = this.view;

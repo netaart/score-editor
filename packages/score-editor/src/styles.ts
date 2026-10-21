@@ -44,7 +44,11 @@ const css = `
   --sce-_beat: var(--sce-beat-width, 40px);
   --sce-_keys: var(--sce-keys-width, 44px);
   --sce-_shade: color-mix(in srgb, var(--sce-_text) 5%, transparent);
-  --sce-_top: 94px;
+  /* Row heights follow the text size, which the user's browser sets; round() keeps the 1px rules on whole pixels. */
+  --sce-_ruler: round(1.85em, 1px);
+  --sce-_band: round(1.7em, 1px);
+  --sce-_chords: round(2em, 1px);
+  --sce-_top: calc(var(--sce-_ruler) + 2 * var(--sce-_band) + var(--sce-_chords));
 
   position: relative;
   isolation: isolate;
@@ -281,13 +285,13 @@ const css = `
   z-index: 5;
 }
 .sce-root .sce-ruler {
-  height: 24px;
+  height: var(--sce-_ruler);
 }
 .sce-root .sce-sections {
-  height: 22px;
+  height: var(--sce-_band);
 }
 .sce-root .sce-marks {
-  height: 22px;
+  height: var(--sce-_band);
 }
 .sce-root .sce-mark {
   position: absolute;
@@ -329,7 +333,7 @@ const css = `
   border-left: 0;
 }
 .sce-root .sce-chords {
-  height: 26px;
+  height: var(--sce-_chords);
 }
 .sce-root .sce-chords .sce-corner {
   display: flex;
@@ -411,7 +415,7 @@ ${labelThinning()}
   z-index: 4;
   display: flex;
   align-items: center;
-  height: 22px;
+  height: var(--sce-_band);
   background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
 }
@@ -581,11 +585,6 @@ ${labelThinning()}
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .sce-root .sce-note {
-    transition: opacity 120ms ease-out;
-  }
 }
 `;
 

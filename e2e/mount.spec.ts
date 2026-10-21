@@ -15,6 +15,25 @@ function vocalOnly(...music: string[]): string {
   return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
 }
 
+/** Per item: its text drawn whole inside its cell, left out (pushed out of sight), or cut off, which is a misreading. */
+function textFit(items: Locator) {
+  return items.evaluateAll((elements) =>
+    elements.map((element) => {
+      const cell = (element.closest('[role="listitem"]') ?? element).getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const text = range.getBoundingClientRect();
+      if (text.top >= cell.bottom - 1) return "left out";
+      const inside =
+        text.left >= cell.left - 0.5 &&
+        text.right <= cell.right + 0.5 &&
+        text.top >= cell.top - 0.5 &&
+        text.bottom <= cell.bottom + 0.5;
+      return inside ? "whole" : "cut off";
+    }),
+  );
+}
+
 // Expected counts below are hand-counted from the score files (bar lines of the Vocal music lines), not read back from the reader.
 
 test.describe("the arrangement of a song2 score", () => {
@@ -283,24 +302,6 @@ test.describe("zoom on the time axis", () => {
     expect(fitted.content).toBeLessThanOrEqual(fitted.shown);
     expect(await roll.evaluate((el) => el.scrollLeft)).toBe(0);
   });
-
-  /** Per item: its text drawn whole inside its cell, left out (pushed out of sight), or cut off, which is a misreading. */
-  const textFit = (items: Locator) =>
-    items.evaluateAll((elements) =>
-      elements.map((element) => {
-        const cell = (element.closest('[role="listitem"]') ?? element).getBoundingClientRect();
-        const range = document.createRange();
-        range.selectNodeContents(element);
-        const text = range.getBoundingClientRect();
-        if (text.top >= cell.bottom - 1) return "left out";
-        const inside =
-          text.left >= cell.left - 0.5 &&
-          text.right <= cell.right + 0.5 &&
-          text.top >= cell.top - 0.5 &&
-          text.bottom <= cell.bottom + 0.5;
-        return inside ? "whole" : "cut off";
-      }),
-    );
 
   test("a chord name that does not fit its bar is left out, never shown cut off", async ({ page, harness }) => {
     await harness.mount({ score: { sample: "compact-three-sections" } });
@@ -1054,5 +1055,36 @@ test.describe("the grid in the lanes", () => {
     for (const beat of [20, 40, 60, 80, 100]) expect(await darker(beat), `beat line at ${beat}`).toBeGreaterThan(12);
     expect(await darker(120), "the next bar line").toBeGreaterThan(40);
     expect(await darker(10), "nothing between beats").toBeLessThan(4);
+  });
+});
+
+test.describe("a larger default text size", () => {
+  test.skip(({ isMobile }) => isMobile, "the text size is set once, on the desktop project");
+
+  test("the header rows still hold their text and the track heads stay pinned right under them", async ({
+    page,
+    harness,
+  }) => {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Page.setFontSizes", { fontSizes: { standard: 24, fixed: 20 } });
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const title = page.getByText("Arrangement", { exact: true });
+    expect(await title.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThan(18);
+
+    const rows = ["Bars", "Sections", "Marks", "Chords"];
+    for (const name of rows) {
+      const fits = await textFit(page.getByRole("list", { name }).getByRole("listitem"));
+      expect(fits, `the ${name} row`).not.toContain("cut off");
+    }
+
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    await roll.evaluate((el) => el.scrollTo(0, 200));
+    const headerBottom =
+      (await box(page.getByRole("list", { name: "Chords" }))).y +
+      (await box(page.getByRole("list", { name: "Chords" }))).height;
+    const head = await box(page.getByText("Vocal", { exact: true }));
+    expect(head.y).toBeGreaterThanOrEqual(headerBottom - 0.5);
+    expect(head.y).toBeLessThan(headerBottom + 8);
+    await cdp.detach();
   });
 });
