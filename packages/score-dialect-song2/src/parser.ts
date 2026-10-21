@@ -410,9 +410,15 @@ class Song2Parser {
         });
         return;
       }
+      const insCount = this.ins.measures.length - insStart;
+      // RULES.md X9: a short Ins block is a cut only when its music line is the last line of the text.
+      if (this.index < this.lines.length && insCount !== vocalCount) {
+        const bar = insCount > vocalCount ? insStart + vocalCount + 1 : insStart + insCount + 1;
+        fail("bar-count", { vocal: vocalCount, ins: insCount, reason: "voices" }, { bar });
+      }
       this.groups.push({
         vocal: vocalCount,
-        ins: this.ins.measures.length - insStart,
+        ins: insCount,
         insPartial: false,
         insStart,
       });
