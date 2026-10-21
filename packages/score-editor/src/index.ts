@@ -43,6 +43,5 @@ export type {
   MountOptions,
   Notice,
   NoticeCode,
-  SpikeNote,
-  SpikeScore,
 } from "./types";
+export { NOTICE_CODES } from "./types";

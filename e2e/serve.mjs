@@ -1,4 +1,4 @@
-// ABOUTME: Static server for the test page: serves e2e/page and the built package files, nothing else.
+// ABOUTME: Static server for the test page: serves e2e/page, the built package files and the song2 test scores, nothing else.
 // ABOUTME: Playwright starts it as its web server; run it by hand with E2E_PORT to look at the page.
 
 import { readFile } from "node:fs/promises";
@@ -13,8 +13,14 @@ const types = {
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".map": "application/json",
+  ".json": "application/json",
+  ".abc": "text/plain; charset=utf-8",
 };
-const served = [/^\/e2e\/page\/[\w.-]+$/, /^\/packages\/[\w-]+\/dist\/[\w.-]+$/];
+const served = [
+  /^\/e2e\/page\/[\w.-]+$/,
+  /^\/packages\/[\w-]+\/dist\/[\w.-]+$/,
+  /^\/packages\/score-dialect-song2\/tests\/(samples\/[\w-]+\.abc|vectors\.json)$/,
+];
 
 const server = createServer(async (req, res) => {
   const path = new URL(req.url ?? "/", "http://localhost").pathname;

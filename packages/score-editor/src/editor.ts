@@ -1,77 +1,32 @@
-// ABOUTME: The mounted editor: builds the piano-roll DOM, owns its state and handles pointer, keyboard and popover events.
+// ABOUTME: The mounted editor: reads the song project's score with its dialect and builds the read-only arrangement view.
 // ABOUTME: Every listener is registered with one AbortSignal, so destroy() removes them all and leaves no node behind.
-import { type MoveBounds, moveNote, resolveMove } from "./commands";
-import { messagesFor } from "./i18n";
 import {
-  DEFAULT_GRID,
-  GRID_CHOICES,
-  type GridChoice,
-  type Note,
-  noteId,
-  notesFromScore,
-  type PitchRange,
+  barLabelStep,
+  cutOf,
+  type GridRun,
+  gridRunsOf,
+  gridTicks,
+  labelRank,
+  lengthInBeats,
+  MIN_BAR_LINE_PIXELS,
+  MIN_BEAT_LINE_PIXELS,
+  marksOf,
+  notesByVoice,
   pitchName,
   pitchRangeOf,
-  TICKS_PER_BAR,
-  voicesOf,
-} from "./model";
+  positionOf,
+  stepZoom,
+  tieJoins,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  ZOOM_PRESETS,
+} from "./arrangement";
+import type { Diagnostic } from "./diagnostics";
+import { formatDiagnostic } from "./diagnostics";
+import { messagesFor } from "./i18n";
+import { type Note, type Score, TICKS_PER_QUARTER } from "./score";
 import { acquireStyles } from "./styles";
-import type { MountedEditor, MountOptions, NoticeCode } from "./types";
-
-interface Lane {
-  voice: string;
-  range: PitchRange;
-  rows: number;
-  el: HTMLElement;
-  /** The sticky pitch column and track head, which cover the edges of the scroller. */
-  keys: HTMLElement;
-  head: HTMLElement;
-}
-
-/** Where a dragged pointer is "at the edge": the part of the scroller not covered by sticky parts, in screen pixels. */
-interface View {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-}
-
-/** Pixels the roll scrolls per frame at full speed while a dragged note is held at its edge. */
-const EDGE_SPEED = 18;
-
-/** The state of one drag gesture. Distances are in screen pixels unless named css*. */
-interface Drag {
-  noteId: string;
-  el: HTMLElement;
-  lane: Lane;
-  pointerId: number;
-  /** A finger or pen: needs a larger drag threshold and a readout held clear of the hand. */
-  touch: boolean;
-  threshold: number;
-  startX: number;
-  startY: number;
-  startScrollLeft: number;
-  startScrollTop: number;
-  /** The latest pointer position, so the edge scroll can recompute the target without a pointer event. */
-  x: number;
-  y: number;
-  view: View;
-  /** Width of the band along the scroller's edges in which holding the pointer scrolls. */
-  zone: number;
-  raf: number;
-  /** Screen pixels per CSS pixel: 1 unless the host scales the editor. */
-  scale: number;
-  pxPerTick: number;
-  rowPx: number;
-  cssPerTick: number;
-  cssRow: number;
-  rootRect: DOMRect;
-  readoutWidth: number;
-  moved: boolean;
-  dTicks: number;
-  dMidi: number;
-  abort: AbortController;
-}
+import type { MountedEditor, MountOptions } from "./types";
 
 let instanceCount = 0;
 
@@ -87,6 +42,49 @@ function create<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+/** What reading the project's score came to: a score to show, or the reason there is none. */
+type Reading =
+  | { kind: "score"; score: Score }
+  | { kind: "unreadable"; diagnostics: ReadonlyArray<Diagnostic> }
+  | { kind: "no-dialect"; modelId: string };
+
+/** The most diagnostics listed; a score that fails everywhere should not fill the screen with it. */
+const MAX_LISTED_DIAGNOSTICS = 20;
+
+/** The first voice's lane, which the first scroll opens on the middle of. */
+interface FirstLane {
+  lane: HTMLElement;
+  head: HTMLElement;
+  hi: number;
+  rows: number;
+  middle: number;
+}
+
+/** The parts of a built arrangement that zooming and the first scroll need to find again. */
+interface Grid {
+  element: HTMLElement;
+  run: GridRun;
+}
+
+interface View {
+  scroller: HTMLElement;
+  /** Holds the pitch column and the time axis. */
+  canvas: HTMLElement;
+  /** The elements that each carry the time axis: the timeline rows and the lanes. */
+  axes: HTMLElement[];
+  /** The grid lines of every lane, one element for each stretch of bars in one meter. */
+  grids: Grid[];
+  /** The pinned header block. */
+  top: HTMLElement;
+  /** The pinned corner of the ruler: its width is the pitch column's. */
+  corner: HTMLElement;
+  /** The ruler's timeline: as wide as the whole score. */
+  timeline: HTMLElement;
+  ticks: number;
+  barCount: number;
+  first: FirstLane | null;
+}
+
 export class Editor implements MountedEditor {
   private options: MountOptions;
   private readonly doc: Document;
@@ -96,25 +94,22 @@ export class Editor implements MountedEditor {
   private readonly title: HTMLElement;
   private readonly hint: HTMLElement;
   private readonly badge: HTMLElement;
-  private readonly gridLabel: HTMLElement;
-  private readonly gridValue: HTMLElement;
-  private readonly gridButton: HTMLButtonElement;
+  private readonly notice: HTMLElement;
+  private readonly body: HTMLElement;
+  private readonly zoomGroup: HTMLElement;
+  private readonly zoomOut: HTMLButtonElement;
+  private readonly zoomIn: HTMLButtonElement;
+  private readonly zoomButton: HTMLButtonElement;
+  private readonly zoomLabel: HTMLElement;
+  private readonly zoomValue: HTMLElement;
   private readonly menu: HTMLElement;
-  private readonly menuItems = new Map<GridChoice["id"], HTMLButtonElement>();
-  private readonly scroller: HTMLElement;
-  private readonly readout: HTMLElement;
-  private readonly live: HTMLElement;
-
-  private canvas: HTMLElement | null = null;
-  private ruler: HTMLElement | null = null;
-  private notes: Note[] = [];
-  private bars = 0;
-  private lanes = new Map<string, Lane>();
-  private noteEls = new Map<string, HTMLElement>();
-  private selectedId: string | null = null;
-  private tabStop: HTMLElement | null = null;
-  private grid: GridChoice = DEFAULT_GRID;
-  private drag: Drag | null = null;
+  private readonly menuItems = new Map<number, HTMLButtonElement>();
+  private readonly fitItem: HTMLButtonElement;
+  private zoom = 1;
+  private axes: HTMLElement[] = [];
+  private grids: Grid[] = [];
+  private reading: Reading;
+  private view: View | null = null;
   private destroyed = false;
 
   constructor(
@@ -133,54 +128,52 @@ export class Editor implements MountedEditor {
 
     const toolbar = create(doc, "div", "sce-toolbar", this.root);
     this.title = create(doc, "span", "sce-title", toolbar);
-    this.gridButton = create(doc, "button", "sce-button", toolbar);
-    this.gridButton.type = "button";
-    this.gridButton.setAttribute("aria-haspopup", "menu");
-    this.gridButton.setAttribute("aria-expanded", "false");
-    this.gridLabel = create(doc, "span", "sce-button-label", this.gridButton);
-    this.gridValue = create(doc, "span", "sce-button-value", this.gridButton);
+    this.zoomGroup = create(doc, "div", "sce-zoom", toolbar);
+    this.zoomGroup.setAttribute("role", "group");
+    this.zoomOut = this.stepButton("out");
+    this.zoomButton = create(doc, "button", "sce-button sce-zoom-value", this.zoomGroup);
+    this.zoomButton.type = "button";
+    this.zoomButton.setAttribute("aria-haspopup", "menu");
+    this.zoomButton.setAttribute("aria-expanded", "false");
+    this.zoomLabel = create(doc, "span", "sce-sr-only", this.zoomButton);
+    this.zoomValue = create(doc, "span", "sce-button-value", this.zoomButton);
+    this.zoomIn = this.stepButton("in");
     create(doc, "span", "sce-spacer", toolbar);
     this.badge = create(doc, "span", "sce-badge", toolbar);
 
+    this.notice = create(doc, "div", "sce-notice", this.root);
+    this.notice.setAttribute("role", "note");
     this.hint = create(doc, "div", "sce-sr-only", this.root);
     this.hint.id = `sce-hint-${n}`;
-    const body = create(doc, "div", "sce-body", this.root);
-    this.scroller = create(doc, "div", "sce-scroller", body);
-    this.scroller.tabIndex = 0;
-    this.scroller.setAttribute("role", "region");
-    this.scroller.setAttribute("aria-describedby", this.hint.id);
-
-    this.live = create(doc, "div", "sce-sr-only", this.root);
-    this.live.setAttribute("role", "status");
-    this.readout = create(doc, "div", "sce-readout", this.root);
-    this.readout.hidden = true;
-    this.readout.setAttribute("aria-hidden", "true");
+    this.body = create(doc, "div", "sce-body", this.root);
 
     this.menu = create(doc, "div", "sce-popover", this.root);
     this.menu.setAttribute("popover", "auto");
     this.menu.setAttribute("role", "menu");
-    for (const choice of GRID_CHOICES) {
-      const item = create(doc, "button", "sce-menu-item", this.menu);
-      item.type = "button";
-      item.setAttribute("role", "menuitemradio");
-      item.addEventListener("click", () => this.chooseGrid(choice), { signal });
-      this.menuItems.set(choice.id, item);
+    for (const preset of ZOOM_PRESETS) {
+      const item = this.menuItem("menuitemradio");
+      item.addEventListener("click", () => this.chooseZoom(preset), { signal });
+      this.menuItems.set(preset, item);
     }
-    this.gridButton.popoverTargetElement = this.menu;
-    this.gridButton.popoverTargetAction = "toggle";
+    create(doc, "div", "sce-menu-rule", this.menu).setAttribute("role", "separator");
+    this.fitItem = this.menuItem("menuitem");
+    this.fitItem.addEventListener("click", () => this.chooseFit(), { signal });
+    this.zoomButton.popoverTargetElement = this.menu;
+    this.zoomButton.popoverTargetAction = "toggle";
     this.menu.addEventListener("beforetoggle", (event) => this.placeMenu(event as ToggleEvent), { signal });
     this.menu.addEventListener("toggle", (event) => this.menuToggled(event as ToggleEvent), { signal });
 
-    this.root.addEventListener("pointerdown", this.onPointerDown, { signal });
-    this.root.addEventListener("click", this.onClick, { signal });
+    this.zoomOut.addEventListener("click", () => this.step("out"), { signal });
+    this.zoomIn.addEventListener("click", () => this.step("in"), { signal });
     this.root.addEventListener("keydown", this.onKeyDown, { signal });
+    this.body.addEventListener("wheel", this.onWheel, { signal, passive: false });
 
+    this.reading = this.read();
     this.applyLanguage();
     this.applyEditable();
-    this.applyGrid();
-    this.loadScore();
+    this.render();
     host.appendChild(this.root);
-    this.centerOnFirstLane();
+    this.afterRender();
   }
 
   update(patch: Partial<MountOptions>): void {
@@ -189,16 +182,22 @@ export class Editor implements MountedEditor {
     this.options = { ...before, ...patch };
     if (this.options.language !== before.language) this.applyLanguage();
     if (this.options.editable !== before.editable) this.applyEditable();
-    if (this.options.spikeScore !== before.spikeScore) {
-      this.loadScore();
-      this.centerOnFirstLane();
-    }
+    const sameScore =
+      this.options.project.modelId === before.project.modelId &&
+      this.options.project.score === before.project.score &&
+      this.options.dialects === before.dialects;
+    if (sameScore && this.options.language === before.language) return;
+    const kept = sameScore ? this.view?.scroller : null;
+    const offset = kept ? { left: kept.scrollLeft, top: kept.scrollTop } : null;
+    if (!sameScore) this.reading = this.read();
+    this.render();
+    this.afterRender();
+    if (offset && this.view) this.view.scroller.scrollTo(offset.left, offset.top);
   }
 
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.finishDrag(false);
     this.abort.abort();
     this.root.remove();
     this.releaseStyles();
@@ -209,8 +208,18 @@ export class Editor implements MountedEditor {
     return this.options.editable !== false;
   }
 
-  private notify(code: NoticeCode, level: "info" | "warning" | "error", message: string): void {
-    this.options.notify?.({ code, level, message });
+  private stepButton(direction: "in" | "out"): HTMLButtonElement {
+    const button = create(this.doc, "button", "sce-button sce-step", this.zoomGroup);
+    button.type = "button";
+    button.dataset.step = direction;
+    return button;
+  }
+
+  private menuItem(role: "menuitem" | "menuitemradio"): HTMLButtonElement {
+    const item = create(this.doc, "button", "sce-menu-item", this.menu);
+    item.type = "button";
+    item.setAttribute("role", role);
+    return item;
   }
 
   // --- texts and flags ---------------------------------------------------------------------------
@@ -220,421 +229,408 @@ export class Editor implements MountedEditor {
     this.root.lang = this.options.language;
     this.title.textContent = t.title;
     this.hint.textContent = t.hint;
-    this.scroller.setAttribute("aria-label", t.title);
-    this.gridLabel.textContent = t.grid;
-    this.menu.setAttribute("aria-label", t.grid);
-    for (const [id, item] of this.menuItems) item.textContent = t.gridChoices[id];
     this.badge.textContent = t.readOnly;
-    for (const [id, el] of this.noteEls) {
-      const note = this.notes.find((candidate) => candidate.id === id);
-      if (note) el.setAttribute("aria-label", t.noteLabel(note));
-    }
+    this.zoomGroup.setAttribute("aria-label", t.zoom);
+    this.zoomOut.setAttribute("aria-label", t.zoomOut);
+    this.zoomIn.setAttribute("aria-label", t.zoomIn);
+    this.zoomLabel.textContent = t.zoom;
+    this.menu.setAttribute("aria-label", t.zoom);
+    for (const [preset, item] of this.menuItems) item.textContent = `${Math.round(preset * 100)}%`;
+    this.fitItem.textContent = t.zoomFit;
   }
 
   private applyEditable(): void {
     this.root.toggleAttribute("data-readonly", !this.editable);
     this.badge.hidden = this.editable;
-    this.gridButton.hidden = !this.editable;
-    if (!this.editable && this.menu.matches(":popover-open")) this.menu.hidePopover();
   }
 
-  private applyGrid(): void {
-    this.gridValue.textContent = this.grid.id;
-    this.root.style.setProperty("--sce-grid-div", String(this.grid.perBeat));
-    for (const [id, item] of this.menuItems) item.setAttribute("aria-checked", String(id === this.grid.id));
+  // --- building the view -------------------------------------------------------------------------
+
+  private read(): Reading {
+    const { project, dialects } = this.options;
+    const dialect = dialects.find(project.modelId);
+    if (!dialect) return { kind: "no-dialect", modelId: project.modelId };
+    const { score, diagnostics } = dialect.parse(project.score);
+    return score ? { kind: "score", score } : { kind: "unreadable", diagnostics };
   }
 
-  // --- building the roll -------------------------------------------------------------------------
+  private render(): void {
+    const reading = this.reading;
+    const score = reading.kind === "score" ? reading.score : null;
+    this.body.replaceChildren();
+    this.view = null;
+    const cut = score ? cutOf(score) : null;
+    this.notice.hidden = !cut;
+    this.notice.textContent = cut ? messagesFor(this.options.language).cutNotice(cut) : "";
+    if (reading.kind === "score") this.body.appendChild(this.buildArrangement(reading.score));
+    else this.body.appendChild(this.buildProblem(reading));
+  }
 
-  private loadScore(): void {
-    this.finishDrag(false);
-    const score = this.options.spikeScore ?? { bars: 8, notes: [] };
-    this.notes = notesFromScore(score);
-    this.bars = Math.max(1, score.bars);
-    this.lanes = new Map();
-    this.noteEls = new Map();
-    this.selectedId = null;
-    this.tabStop = null;
+  /** Instead of the arrangement: why there is none, in the interface language. */
+  private buildProblem(reading: Exclude<Reading, { kind: "score" }>): HTMLElement {
+    const t = messagesFor(this.options.language);
+    const panel = create(this.doc, "div", "sce-problem");
+    panel.setAttribute("role", "alert");
+    if (reading.kind === "no-dialect") {
+      create(this.doc, "p", "sce-problem-title", panel).textContent = t.noDialect(reading.modelId);
+      return panel;
+    }
+    create(this.doc, "p", "sce-problem-title", panel).textContent = t.unreadable;
+    const list = create(this.doc, "ul", "sce-problem-list", panel);
+    for (const diagnostic of reading.diagnostics.slice(0, MAX_LISTED_DIAGNOSTICS)) {
+      create(this.doc, "li", "sce-problem-item", list).textContent = formatDiagnostic(
+        diagnostic,
+        this.options.language,
+      );
+    }
+    const more = reading.diagnostics.length - MAX_LISTED_DIAGNOSTICS;
+    if (more > 0) create(this.doc, "p", "sce-problem-more", panel).textContent = t.moreProblems(more);
+    return panel;
+  }
 
+  /** What needs the built view to be in the page: the zoom variable and bar numbers, then the first scroll. */
+  private afterRender(): void {
+    this.applyZoom();
+    const view = this.view;
+    const first = view?.first;
+    if (!view || !first || view.scroller.scrollHeight <= view.scroller.clientHeight) return;
+    const { scroller } = view;
+    const lane = first.lane.getBoundingClientRect();
+    const frame = scroller.getBoundingClientRect();
+    const rowPixels = lane.height / first.rows;
+    const middle = lane.top - frame.top + scroller.scrollTop + (first.hi - 1 - first.middle + 0.5) * rowPixels;
+    const pinned = view.top.offsetHeight + first.head.offsetHeight;
+    scroller.scrollTop = Math.max(0, middle - pinned - (scroller.clientHeight - pinned) / 2);
+  }
+
+  private buildArrangement(score: Score): HTMLElement {
     const doc = this.doc;
     const t = messagesFor(this.options.language);
-    const canvas = create(doc, "div", "sce-canvas");
-    canvas.style.setProperty("--sce-bars", String(this.bars));
+    const scroller = create(doc, "div", "sce-scroller");
+    scroller.tabIndex = 0;
+    scroller.setAttribute("role", "region");
+    scroller.setAttribute("aria-label", t.title);
+    scroller.setAttribute("aria-describedby", this.hint.id);
 
-    const ruler = create(doc, "div", "sce-ruler", canvas);
-    this.ruler = ruler;
-    create(doc, "div", "sce-corner", ruler);
-    const bars = create(doc, "div", "sce-bars", ruler);
-    const numbers = doc.createDocumentFragment();
-    for (let bar = 0; bar < this.bars; bar++) {
-      const label = create(doc, "span", "sce-bar-number");
-      label.style.setProperty("--i", String(bar));
-      label.textContent = String(bar + 1);
+    const ticks = gridTicks(score);
+    this.axes = [];
+    this.grids = [];
+    const canvas = create(doc, "div", "sce-canvas", scroller);
+    canvas.style.setProperty("--sce-ticks", String(ticks));
+
+    const top = create(doc, "div", "sce-top", canvas);
+    const ruler = this.buildRuler(top, score);
+    this.buildSections(top, score);
+    this.buildMarks(top, score);
+    this.buildChords(top, score);
+
+    const notes = notesByVoice(score);
+    let first: FirstLane | null = null;
+    for (const voice of score.voices) {
+      const built = this.buildTrack(canvas, score, voice, notes.get(voice) ?? []);
+      first ??= built;
+    }
+    this.view = {
+      scroller,
+      canvas,
+      axes: this.axes,
+      grids: this.grids,
+      top,
+      corner: ruler.corner,
+      timeline: ruler.timeline,
+      ticks,
+      barCount: score.bars.length,
+      first,
+    };
+    return scroller;
+  }
+
+  /** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
+  private headerRow(
+    top: HTMLElement,
+    className: string,
+    label: string,
+  ): { corner: HTMLElement; timeline: HTMLElement } {
+    const row = create(this.doc, "div", `sce-row ${className}`, top);
+    const corner = create(this.doc, "div", "sce-corner", row);
+    const timeline = create(this.doc, "div", "sce-timeline", row);
+    this.axes.push(timeline);
+    timeline.setAttribute("role", "list");
+    timeline.setAttribute("aria-label", label);
+    return { corner, timeline };
+  }
+
+  private buildRuler(top: HTMLElement, score: Score): { corner: HTMLElement; timeline: HTMLElement } {
+    const row = this.headerRow(top, "sce-ruler", messagesFor(this.options.language).bars);
+    const numbers = this.doc.createDocumentFragment();
+    for (const bar of score.bars) {
+      const label = create(this.doc, "span", "sce-bar-number");
+      label.setAttribute("role", "listitem");
+      label.dataset.rank = String(labelRank(bar.index));
+      label.style.setProperty("--t", String(bar.start));
+      label.textContent = String(bar.index + 1);
       numbers.appendChild(label);
     }
-    bars.appendChild(numbers);
-
-    for (const voice of voicesOf(this.notes)) {
-      const range = pitchRangeOf(this.notes, voice);
-      const rows = range.hi - range.lo;
-      const group = create(doc, "div", "sce-track-group", canvas);
-      const head = create(doc, "div", "sce-track-head", group);
-      create(doc, "span", "sce-track-name", head).textContent = voice;
-      const track = create(doc, "div", "sce-track", group);
-      const keys = create(doc, "div", "sce-keys", track);
-      for (let octave = range.hi - 12; octave >= range.lo; octave -= 12) {
-        create(doc, "div", "sce-octave", keys).textContent = pitchName(octave);
-      }
-      const laneEl = create(doc, "div", "sce-lane", track);
-      laneEl.setAttribute("role", "group");
-      laneEl.setAttribute("aria-label", voice);
-      laneEl.style.setProperty("--sce-rows", String(rows));
-      this.lanes.set(voice, { voice, range, rows, el: laneEl, keys, head });
-    }
-
-    const fragments = new Map<string, DocumentFragment>();
-    for (const note of this.notes) {
-      const lane = this.lanes.get(note.voice);
-      if (!lane) continue;
-      const el = create(doc, "div", "sce-note");
-      el.setAttribute("role", "button");
-      el.setAttribute("aria-pressed", "false");
-      el.tabIndex = -1;
-      el.dataset.sceId = note.id;
-      this.placeNote(el, note, lane);
-      el.setAttribute("aria-label", t.noteLabel(note));
-      this.noteEls.set(note.id, el);
-      let fragment = fragments.get(note.voice);
-      if (!fragment) {
-        fragment = doc.createDocumentFragment();
-        fragments.set(note.voice, fragment);
-      }
-      fragment.appendChild(el);
-    }
-    for (const [voice, fragment] of fragments) this.lanes.get(voice)?.el.appendChild(fragment);
-
-    const first = this.notes[0] ? this.noteEls.get(this.notes[0].id) : undefined;
-    if (first) this.setTabStop(first);
-
-    if (this.canvas) this.canvas.replaceWith(canvas);
-    else this.scroller.appendChild(canvas);
-    this.canvas = canvas;
+    row.timeline.appendChild(numbers);
+    return row;
   }
 
-  private placeNote(el: HTMLElement, note: Note, lane: Lane): void {
-    el.style.cssText = `--t:${note.start};--d:${note.duration};--r:${lane.range.hi - 1 - note.midi}`;
-  }
-
-  /** Scrolls the roll so the middle of the first voice's pitch range is in view. Layout is read once. */
-  private centerOnFirstLane(): void {
-    const lane = this.lanes.values().next().value as Lane | undefined;
-    if (!lane || this.scroller.scrollHeight <= this.scroller.clientHeight) return;
-    const pitches = this.notes.filter((note) => note.voice === lane.voice).map((note) => note.midi);
-    if (pitches.length === 0) return;
-    const middle = (Math.min(...pitches) + Math.max(...pitches)) / 2;
-    const laneRect = lane.el.getBoundingClientRect();
-    const scrollerRect = this.scroller.getBoundingClientRect();
-    const rowPx = laneRect.height / lane.rows;
-    const y = laneRect.top - scrollerRect.top + this.scroller.scrollTop + (lane.range.hi - 1 - middle) * rowPx;
-    this.scroller.scrollTop = Math.max(0, y - this.scroller.clientHeight / 2);
-  }
-
-  // --- selection ---------------------------------------------------------------------------------
-
-  private select(id: string | null): void {
-    if (this.selectedId) this.noteEls.get(this.selectedId)?.setAttribute("aria-pressed", "false");
-    this.selectedId = id;
-    const el = id ? this.noteEls.get(id) : undefined;
-    if (el) {
-      el.setAttribute("aria-pressed", "true");
-      this.setTabStop(el);
-    }
-  }
-
-  private setTabStop(el: HTMLElement): void {
-    if (this.tabStop && this.tabStop !== el) this.tabStop.tabIndex = -1;
-    el.tabIndex = 0;
-    this.tabStop = el;
-  }
-
-  private noteElementOf(target: EventTarget | null): HTMLElement | null {
-    if (!(target instanceof Element)) return null;
-    const el = target.closest<HTMLElement>(".sce-note");
-    return el && this.root.contains(el) ? el : null;
-  }
-
-  private readonly onClick = (event: MouseEvent): void => {
-    if (this.noteElementOf(event.target)) return;
-    if (event.target instanceof Element && event.target.closest(".sce-toolbar, .sce-popover")) return;
-    this.select(null);
-  };
-
-  // --- pointer gestures --------------------------------------------------------------------------
-
-  private readonly onPointerDown = (event: PointerEvent): void => {
-    if (this.drag || !event.isPrimary) return;
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-    const el = this.noteElementOf(event.target);
-    if (!el) return;
-    const id = el.dataset.sceId;
-    const note = id ? this.notes.find((candidate) => candidate.id === id) : undefined;
-    const lane = note ? this.lanes.get(note.voice) : undefined;
-    if (!id || !note || !lane) return;
-
-    event.preventDefault();
-    this.select(id);
-    el.focus({ preventScroll: true });
-
-    const laneRect = lane.el.getBoundingClientRect();
-    const total = this.bars * TICKS_PER_BAR;
-    const scale = laneRect.width / lane.el.offsetWidth || 1;
-    const abort = new AbortController();
-    this.drag = {
-      noteId: id,
-      el,
-      lane,
-      pointerId: event.pointerId,
-      touch: event.pointerType !== "mouse",
-      threshold: event.pointerType === "mouse" ? 3 : 6,
-      startX: event.clientX,
-      startY: event.clientY,
-      startScrollLeft: this.scroller.scrollLeft,
-      startScrollTop: this.scroller.scrollTop,
-      x: event.clientX,
-      y: event.clientY,
-      view: this.visibleView(lane, scale),
-      zone: event.pointerType === "mouse" ? 32 : 48,
-      raf: 0,
-      scale,
-      pxPerTick: laneRect.width / total,
-      rowPx: laneRect.height / lane.rows,
-      cssPerTick: lane.el.offsetWidth / total,
-      cssRow: lane.el.offsetHeight / lane.rows,
-      rootRect: this.root.getBoundingClientRect(),
-      readoutWidth: 0,
-      moved: false,
-      dTicks: 0,
-      dMidi: 0,
-      abort,
-    };
-    el.setPointerCapture(event.pointerId);
-    const options = { signal: abort.signal };
-    el.addEventListener("pointermove", this.onPointerMove, options);
-    el.addEventListener("pointerup", this.onPointerUp, options);
-    el.addEventListener("pointercancel", this.onPointerCancel, options);
-    el.addEventListener("lostpointercapture", this.onPointerCancel, options);
-  };
-
-  private readonly onPointerMove = (event: PointerEvent): void => {
-    const drag = this.drag;
-    if (!drag || event.pointerId !== drag.pointerId) return;
-    drag.x = event.clientX;
-    drag.y = event.clientY;
-    if (!drag.moved) {
-      const { dx, dy } = this.dragOffset(drag);
-      if (Math.hypot(dx, dy) < drag.threshold) return;
-      drag.moved = true;
-      if (!this.editable) {
-        this.notify("read-only", "info", messagesFor(this.options.language).noticeReadOnly);
-        return;
-      }
-      drag.el.dataset.dragging = "";
-      this.readout.hidden = false;
-    }
-    if (!this.editable) return;
-    this.updateDrag(drag);
-    this.scrollAtEdge(drag);
-  };
-
-  /** How far the pointer is from where it went down, counting what the roll has scrolled since. Screen pixels. */
-  private dragOffset(drag: Drag): { dx: number; dy: number } {
-    return {
-      dx: drag.x - drag.startX + (this.scroller.scrollLeft - drag.startScrollLeft) * drag.scale,
-      dy: drag.y - drag.startY + (this.scroller.scrollTop - drag.startScrollTop) * drag.scale,
-    };
-  }
-
-  /** Shows where the drag would drop the note: the snapped ghost position, the blocked cue and the readout. */
-  private updateDrag(drag: Drag): void {
-    const note = this.notes.find((candidate) => candidate.id === drag.noteId);
-    if (!note) return;
-    const { dx, dy } = this.dragOffset(drag);
-    drag.dTicks = Math.round(dx / drag.pxPerTick / this.grid.ticks) * this.grid.ticks;
-    drag.dMidi = -Math.round(dy / drag.rowPx);
-    const target = resolveMove(note, drag.dTicks, drag.dMidi, this.boundsOf(drag.lane));
-    drag.el.style.translate = `${(target.start - note.start) * drag.cssPerTick}px ${(note.midi - target.midi) * drag.cssRow}px`;
-    const takenBy = noteId(note.voice, target.start);
-    drag.el.toggleAttribute("data-blocked", takenBy !== note.id && this.noteEls.has(takenBy));
-
-    this.readout.textContent = messagesFor(this.options.language).position(target.midi, target.start);
-    // Measured once, with real text; the slack covers a bar number gaining a digit.
-    if (drag.readoutWidth === 0) drag.readoutWidth = this.readout.offsetWidth + 16;
-    const x = drag.x - drag.rootRect.left + 14;
-    const y = drag.y - drag.rootRect.top - (drag.touch ? 56 : 34);
-    const maxX = Math.max(0, drag.rootRect.width - drag.readoutWidth - 8);
-    this.readout.style.translate = `${Math.min(Math.max(0, x), maxX)}px ${Math.max(0, y)}px`;
-  }
-
-  /** The part of the scroller a note can be seen in: what the sticky ruler, track head and pitch column leave free. */
-  private visibleView(lane: Lane, scale: number): View {
-    const box = this.scroller.getBoundingClientRect();
-    const covered = Math.max(this.ruler?.getBoundingClientRect().bottom ?? 0, lane.head.getBoundingClientRect().bottom);
-    return {
-      left: lane.keys.getBoundingClientRect().right,
-      right: box.left + this.scroller.clientWidth * scale,
-      top: covered,
-      bottom: box.top + this.scroller.clientHeight * scale,
-    };
-  }
-
-  /** While a dragged note is held near the edge of the roll, scrolls it, so a note can travel further than the screen. */
-  private scrollAtEdge(drag: Drag): void {
-    if (drag.raf !== 0) return;
-    const win = this.doc.defaultView;
-    if (!win) return;
-    const speed = (at: number, low: number, high: number): number => {
-      if (at < low + drag.zone) return -EDGE_SPEED * Math.min(1, (low + drag.zone - at) / drag.zone) ** 2;
-      if (at > high - drag.zone) return EDGE_SPEED * Math.min(1, (at - (high - drag.zone)) / drag.zone) ** 2;
-      return 0;
-    };
-    const step = (): void => {
-      drag.raf = 0;
-      if (this.drag !== drag) return;
-      const vx = speed(drag.x, drag.view.left, drag.view.right);
-      const vy = speed(drag.y, drag.view.top, drag.view.bottom);
-      const { scrollLeft, scrollTop } = this.scroller;
-      this.scroller.scrollLeft = scrollLeft + vx;
-      this.scroller.scrollTop = scrollTop + vy;
-      // At the end of the roll nothing moves: stop until the next pointer move asks again.
-      if (this.scroller.scrollLeft === scrollLeft && this.scroller.scrollTop === scrollTop) return;
-      this.updateDrag(drag);
-      drag.raf = win.requestAnimationFrame(step);
-    };
-    if (speed(drag.x, drag.view.left, drag.view.right) !== 0 || speed(drag.y, drag.view.top, drag.view.bottom) !== 0) {
-      drag.raf = win.requestAnimationFrame(step);
-    }
-  }
-
-  private readonly onPointerUp = (event: PointerEvent): void => {
-    if (!this.drag || event.pointerId !== this.drag.pointerId) return;
-    this.finishDrag(true);
-  };
-
-  private readonly onPointerCancel = (event: PointerEvent): void => {
-    if (!this.drag || event.pointerId !== this.drag.pointerId) return;
-    this.finishDrag(false);
-  };
-
-  private finishDrag(commit: boolean): void {
-    const drag = this.drag;
-    if (!drag) return;
-    this.drag = null;
-    drag.abort.abort();
-    if (drag.raf !== 0) this.doc.defaultView?.cancelAnimationFrame(drag.raf);
-    if (drag.el.hasPointerCapture(drag.pointerId)) drag.el.releasePointerCapture(drag.pointerId);
-    drag.el.style.removeProperty("translate");
-    delete drag.el.dataset.dragging;
-    drag.el.removeAttribute("data-blocked");
-    this.readout.hidden = true;
-    if (commit && drag.moved && this.editable) this.commitMove(drag.noteId, drag.dTicks, drag.dMidi, false);
-  }
-
-  // --- the one edit ------------------------------------------------------------------------------
-
-  private boundsOf(lane: Lane): MoveBounds {
-    return { totalTicks: this.bars * TICKS_PER_BAR, lo: lane.range.lo, hi: lane.range.hi };
-  }
-
-  /** Applies a move from a drag or a key press; both go through the same command. */
-  private commitMove(id: string, dTicks: number, dMidi: number, reveal: boolean): void {
-    const note = this.notes.find((candidate) => candidate.id === id);
-    const lane = note ? this.lanes.get(note.voice) : undefined;
-    const el = this.noteEls.get(id);
-    if (!note || !lane || !el) return;
+  /** One band per section that has bars; a marker with no bars after it has nothing to cover. */
+  private buildSections(top: HTMLElement, score: Score): void {
     const t = messagesFor(this.options.language);
-    const result = moveNote(this.notes, id, dTicks, dMidi, this.boundsOf(lane));
-    if (!result.ok) {
-      this.notify("move-blocked", "info", t.noticeMoveBlocked);
-      this.announce(t.noticeMoveBlocked);
+    const { timeline } = this.headerRow(top, "sce-sections", t.sections);
+    for (const section of score.sections) {
+      const first = score.bars[section.firstBar];
+      const last = score.bars[section.firstBar + section.barCount - 1];
+      if (section.barCount < 1 || !first || !last) continue;
+      const band = create(this.doc, "div", "sce-section", timeline);
+      band.setAttribute("role", "listitem");
+      band.style.cssText = `--t:${first.start};--d:${last.start + last.length - first.start}`;
+      create(this.doc, "span", "sce-section-name", band).textContent = section.name ?? t.unnamedSection;
+    }
+  }
+
+  /** The chord track: each chord's name at its position, or one line saying the score has none. */
+  private buildChords(top: HTMLElement, score: Score): void {
+    const t = messagesFor(this.options.language);
+    const { corner, timeline } = this.headerRow(top, "sce-chords", t.chords);
+    corner.textContent = t.chords;
+    if (score.chords.length === 0) {
+      timeline.removeAttribute("role");
+      timeline.removeAttribute("aria-label");
+      create(this.doc, "span", "sce-empty", timeline).textContent = t.noChords;
       return;
     }
-    this.notes = result.notes;
-    const moved = result.notes.find((candidate) => candidate.id === result.id);
-    if (!moved) return;
-    this.noteEls.delete(id);
-    this.noteEls.set(result.id, el);
-    el.dataset.sceId = result.id;
-    this.placeNote(el, moved, lane);
-    el.setAttribute("aria-label", t.noteLabel(moved));
-    if (this.selectedId === id) this.selectedId = result.id;
-    this.announce(t.noteLabel(moved));
-    if (result.clampedPitch) this.notify("pitch-out-of-range", "info", t.noticePitchRange);
-    if (reveal) this.reveal(el, lane);
+    const end = gridTicks(score);
+    const chords = this.doc.createDocumentFragment();
+    score.chords.forEach((chord, index) => {
+      const next = score.chords[index + 1]?.start ?? end;
+      const item = create(this.doc, "div", "sce-chord");
+      item.setAttribute("role", "listitem");
+      item.style.cssText = `--t:${chord.start};--w:${next - chord.start}`;
+      item.textContent = chord.name;
+      chords.appendChild(item);
+    });
+    timeline.appendChild(chords);
+  }
+
+  /** The key and meter flags: what is in force at the start, then each change at the position it takes effect. */
+  private buildMarks(top: HTMLElement, score: Score): void {
+    const t = messagesFor(this.options.language);
+    const { timeline } = this.headerRow(top, "sce-marks", t.marks);
+    const end = gridTicks(score);
+    const marks = marksOf(score);
+    const flags = this.doc.createDocumentFragment();
+    marks.forEach((mark, index) => {
+      const next = marks[index + 1]?.at ?? end;
+      const flag = create(this.doc, "div", "sce-mark");
+      flag.setAttribute("role", "listitem");
+      flag.style.cssText = `--t:${mark.at};--w:${Math.max(0, next - mark.at)}`;
+      const items = create(this.doc, "div", "sce-mark-items", flag);
+      const names: string[] = [];
+      if (mark.meter) {
+        create(this.doc, "span", "sce-mark-item", items).textContent = t.meterText(mark.meter);
+        names.push(t.meterName(mark.meter));
+      }
+      if (mark.key) {
+        create(this.doc, "span", "sce-mark-item", items).textContent = t.keyText(mark.key);
+        names.push(t.keyText(mark.key));
+      }
+      if (mark.cut) {
+        const text = mark.cut.short ? t.incompleteBar : t.cutOff;
+        create(this.doc, "span", "sce-mark-item", items).textContent = text;
+        names.push(text);
+        if (!mark.cut.short) flag.dataset.edge = "end";
+      }
+      flag.setAttribute("aria-label", names.join(", "));
+      flags.appendChild(flag);
+    });
+    timeline.appendChild(flags);
+  }
+
+  /** One piano-roll track: its head, the pitch column and the lane with a block for every pitched note. */
+  private buildTrack(canvas: HTMLElement, score: Score, voice: string, notes: ReadonlyArray<Note>): FirstLane {
+    const doc = this.doc;
+    const t = messagesFor(this.options.language);
+    const range = pitchRangeOf(notes);
+    const group = create(doc, "div", "sce-track-group", canvas);
+    const head = create(doc, "div", "sce-track-head", group);
+    create(doc, "span", "sce-track-name", head).textContent = voice;
+    const track = create(doc, "div", "sce-track", group);
+    const keys = create(doc, "div", "sce-keys", track);
+    for (let octave = range.hi - 12; octave >= range.lo; octave -= 12) {
+      create(doc, "div", "sce-octave", keys).textContent = pitchName(octave);
+    }
+    const lane = create(doc, "div", "sce-lane", track);
+    this.axes.push(lane);
+    for (const run of gridRunsOf(score)) {
+      const element = create(doc, "div", "sce-grid", lane);
+      element.setAttribute("aria-hidden", "true");
+      element.style.cssText = `--t:${run.start};--d:${run.end - run.start}`;
+      this.grids.push({ element, run });
+    }
+    lane.style.setProperty("--sce-rows", String(range.hi - range.lo));
+    const cut = cutOf(score);
+    if (cut && cut.voice === voice && gridTicks(score) > cut.missingFrom) {
+      const tail = create(doc, "div", "sce-cut", lane);
+      tail.setAttribute("aria-hidden", "true");
+      tail.style.cssText = `--t:${cut.missingFrom};--d:${gridTicks(score) - cut.missingFrom}`;
+    }
+    const list = create(doc, "div", "sce-notes", lane);
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", voice);
+
+    const joins = tieJoins(notes);
+    const blocks = doc.createDocumentFragment();
+    let lowest = 127;
+    let highest = 0;
+    for (const [index, note] of notes.entries()) {
+      if (note.midi === null) continue;
+      lowest = Math.min(lowest, note.midi);
+      highest = Math.max(highest, note.midi);
+      const block = create(doc, "div", "sce-note");
+      block.setAttribute("role", "listitem");
+      block.style.cssText = `--t:${note.start};--d:${note.duration};--r:${range.hi - 1 - note.midi}`;
+      const tiedToNext = joins.has(note.id);
+      if (tiedToNext) block.dataset.tieNext = "";
+      if (index > 0 && joins.has(notes[index - 1]?.id ?? "")) block.dataset.tiePrev = "";
+      const position = positionOf(score.bars, note.bar, note.start);
+      block.setAttribute(
+        "aria-label",
+        t.noteLabel(pitchName(note.midi), position, lengthInBeats(note.duration, position.beatTicks), tiedToNext),
+      );
+      blocks.appendChild(block);
+    }
+    list.appendChild(blocks);
+    const middle = highest >= lowest ? (lowest + highest) / 2 : (range.lo + range.hi) / 2;
+    return { lane, head, hi: range.hi, rows: range.hi - range.lo, middle };
+  }
+
+  // --- zoom --------------------------------------------------------------------------------------
+
+  /**
+   * Sets the width of the time axis, the readout, the menu, the grid and the bar numbers that still have room.
+   * `timelineWidth` is the width of the time axis at this zoom, when the caller knows it; reading it back would
+   * lay the page out again.
+   */
+  private applyZoom(timelineWidth?: number): void {
+    const view = this.view;
+    if (view) this.widen(view);
+    const width = timelineWidth ?? view?.timeline.offsetWidth ?? 0;
+    this.zoomValue.textContent = `${Math.round(this.zoom * 100)}%`;
+    for (const [preset, item] of this.menuItems) {
+      item.setAttribute("aria-checked", String(Math.abs(preset - this.zoom) < 1e-6));
+    }
+    this.zoomOut.setAttribute("aria-disabled", String(stepZoom(this.zoom, "out") === null));
+    this.zoomIn.setAttribute("aria-disabled", String(stepZoom(this.zoom, "in") === null));
+    this.zoomGroup.hidden = !view;
+    if (view && view.barCount > 0 && width > 0) {
+      this.root.dataset.labelStep = String(barLabelStep(width / view.barCount));
+    } else {
+      delete this.root.dataset.labelStep;
+    }
+    if (view && view.ticks > 0) this.drawGrid(view, width / view.ticks);
+  }
+
+  /** Sets the width of the elements that carry the time axis to the score's length at the current zoom. */
+  private widen({ canvas, axes }: View): void {
+    const span = `var(--sce-ticks) * var(--sce-_beat) * ${this.zoom} / ${TICKS_PER_QUARTER}`;
+    canvas.style.width = `calc(var(--sce-_keys) + ${span})`;
+    for (const axis of axes) axis.style.width = `calc(${span})`;
   }
 
   /**
-   * Tells assistive technology what a move did: the new label of a note is not read out again by itself.
-   * A fresh text node each time, so the same sentence twice in a row is still announced.
+   * Draws the bar and beat lines: a strong line at every bar start and a light one at every beat of the bar's meter,
+   * from the position the stretch of bars starts at. They are gradients, so they cost no nodes per line.
    */
-  private announce(text: string): void {
-    this.live.replaceChildren(this.doc.createTextNode(text));
+  private drawGrid({ grids }: View, pixelsPerTick: number): void {
+    for (const { element, run } of grids) {
+      const line = (color: string, ticks: number) => {
+        const period = `calc(var(--sce-_beat) * ${(this.zoom * ticks) / TICKS_PER_QUARTER})`;
+        return `repeating-linear-gradient(to right, ${color} 0 1px, transparent 1px ${period})`;
+      };
+      const layers: string[] = [];
+      if (run.barTicks * pixelsPerTick >= MIN_BAR_LINE_PIXELS)
+        layers.push(line("var(--sce-_line-strong)", run.barTicks));
+      if (run.beatTicks * pixelsPerTick >= MIN_BEAT_LINE_PIXELS) layers.push(line("var(--sce-_line)", run.beatTicks));
+      element.style.backgroundImage = layers.join(", ");
+    }
   }
 
-  /** Scrolls the roll just enough that a note moved by key stays clear of the edges and of the sticky parts. */
-  private reveal(el: HTMLElement, lane: Lane): void {
-    const box = this.scroller.getBoundingClientRect();
-    const note = el.getBoundingClientRect();
-    const margin = 6;
-    const left = lane.keys.getBoundingClientRect().right + margin;
-    const right = box.left + this.scroller.clientWidth - margin;
-    const top =
-      Math.max(this.ruler?.getBoundingClientRect().bottom ?? 0, lane.head.getBoundingClientRect().bottom) + margin;
-    const bottom = box.top + this.scroller.clientHeight - margin;
-    // The start edge wins when a note is wider than the view, so the right-hand rule goes first.
-    if (note.right > right) this.scroller.scrollLeft += note.right - right;
-    if (note.left < left) this.scroller.scrollLeft -= left - note.left;
-    if (note.bottom > bottom) this.scroller.scrollTop += note.bottom - bottom;
-    if (note.top < top) this.scroller.scrollTop -= top - note.top;
+  /**
+   * Changes the zoom and keeps the instant under `anchorClientX` where it was on screen; without an anchor,
+   * the middle of what the roll shows. Layout is read once, before the change.
+   */
+  private setZoom(next: number, anchorClientX?: number): void {
+    const view = this.view;
+    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+    if (!view || Math.abs(zoom - this.zoom) < 1e-9) return;
+    const { scroller } = view;
+    const frame = scroller.getBoundingClientRect();
+    const scale = frame.width / scroller.offsetWidth || 1;
+    const keys = view.corner.offsetWidth;
+    const anchor =
+      anchorClientX === undefined ? keys + (scroller.clientWidth - keys) / 2 : (anchorClientX - frame.left) / scale;
+    const width = view.timeline.offsetWidth;
+    const pixelsPerTick = view.ticks > 0 ? width / view.ticks : 0;
+    const tick = pixelsPerTick > 0 ? (scroller.scrollLeft + anchor - keys) / pixelsPerTick : 0;
+    const before = this.zoom;
+    this.zoom = zoom;
+    this.applyZoom((width * zoom) / before);
+    scroller.scrollLeft = tick * pixelsPerTick * (zoom / before) + keys - anchor;
   }
+
+  private step(direction: "in" | "out"): void {
+    const next = stepZoom(this.zoom, direction);
+    if (next !== null) this.setZoom(next);
+  }
+
+  private chooseZoom(preset: number): void {
+    this.menu.hidePopover();
+    this.setZoom(preset);
+  }
+
+  /** The zoom at which the whole score is exactly as wide as the roll shows. */
+  private chooseFit(): void {
+    this.menu.hidePopover();
+    const view = this.view;
+    if (!view || view.ticks <= 0) return;
+    const { scroller } = view;
+    const wholeScore = view.timeline.offsetWidth / this.zoom;
+    this.setZoom(Math.floor(((scroller.clientWidth - view.corner.offsetWidth) / wholeScore) * 1000) / 1000);
+    scroller.scrollLeft = 0;
+  }
+
+  private readonly onWheel = (event: WheelEvent): void => {
+    const view = this.view;
+    if (!event.ctrlKey || !view || !(event.target instanceof Element) || !view.scroller.contains(event.target)) return;
+    // A trackpad pinch arrives as a control-wheel too. Without this the page itself would zoom.
+    event.preventDefault();
+    const lines = event.deltaMode === 1 ? 16 : 1;
+    const delta = Math.max(-100, Math.min(100, event.deltaY * lines));
+    this.setZoom(this.zoom * Math.exp(-delta * 0.0025), event.clientX);
+  };
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && this.drag) {
-      // Cancelling a drag must not also close a host dialog that listens for the same key.
-      event.preventDefault();
-      event.stopPropagation();
-      this.finishDrag(false);
-      return;
-    }
     if (event.target instanceof Element && event.target.closest(".sce-menu-item")) {
       this.walkMenu(event);
       return;
     }
-    const el = this.noteElementOf(event.target);
-    const id = el?.dataset.sceId;
-    if (!el || !id || event.altKey || event.ctrlKey || event.metaKey) return;
-    if (event.key === "Enter" || event.key === " ") {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "+" || event.key === "=") {
       event.preventDefault();
-      this.select(this.selectedId === id ? null : id);
-      return;
+      this.step("in");
+    } else if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      this.step("out");
     }
-    let dTicks = 0;
-    let dMidi = 0;
-    if (event.key === "ArrowLeft") dTicks = -this.grid.ticks;
-    else if (event.key === "ArrowRight") dTicks = this.grid.ticks;
-    else if (event.key === "ArrowUp") dMidi = event.shiftKey ? 12 : 1;
-    else if (event.key === "ArrowDown") dMidi = event.shiftKey ? -12 : -1;
-    else return;
-    event.preventDefault();
-    if (!this.editable) {
-      this.notify("read-only", "info", messagesFor(this.options.language).noticeReadOnly);
-      return;
-    }
-    this.commitMove(id, dTicks, dMidi, true);
   };
+
+  // --- the zoom popover --------------------------------------------------------------------------
 
   /** Arrow, Home and End keys move between the items of the open menu, as a menu is expected to behave. */
   private walkMenu(event: KeyboardEvent): void {
-    const items = [...this.menuItems.values()];
+    const items = [...this.menuItems.values(), this.fitItem];
     const at = event.target instanceof HTMLButtonElement ? items.indexOf(event.target) : -1;
     let next = -1;
     if (event.key === "ArrowDown") next = (at + 1) % items.length;
@@ -646,25 +642,17 @@ export class Editor implements MountedEditor {
     items[next]?.focus();
   }
 
-  // --- the grid popover --------------------------------------------------------------------------
-
-  private chooseGrid(choice: GridChoice): void {
-    this.grid = choice;
-    this.applyGrid();
-    this.menu.hidePopover();
-  }
-
   /** Puts the menu under its button. A popover lives in the top layer, so its position is viewport based. */
   private placeMenu(event: ToggleEvent): void {
     if (event.newState !== "open") return;
-    const rect = this.gridButton.getBoundingClientRect();
+    const rect = this.zoomButton.getBoundingClientRect();
     this.menu.style.left = `${rect.left}px`;
     this.menu.style.top = `${rect.bottom + 4}px`;
   }
 
   private menuToggled(event: ToggleEvent): void {
     const open = event.newState === "open";
-    this.gridButton.setAttribute("aria-expanded", String(open));
+    this.zoomButton.setAttribute("aria-expanded", String(open));
     if (!open) return;
     const view = this.doc.defaultView;
     if (view) {
@@ -672,6 +660,7 @@ export class Editor implements MountedEditor {
       const overflow = rect.right - (view.innerWidth - 8);
       if (overflow > 0) this.menu.style.left = `${Math.max(8, rect.left - overflow)}px`;
     }
-    this.menuItems.get(this.grid.id)?.focus();
+    const checked = [...this.menuItems.values()].find((item) => item.getAttribute("aria-checked") === "true");
+    (checked ?? this.fitItem).focus();
   }
 }

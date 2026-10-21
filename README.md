@@ -1,15 +1,15 @@
 # score-editor
 
-A browser score editor for song projects, shared by its host apps. Work in progress: the first piece is an eight-bar piano-roll spike.
+A browser score editor for song projects, shared by its host apps. Work in progress: today it shows a song's score as a read-only arrangement view.
 
 Two packages, versioned and published together:
 
 | Package | What it is |
 | --- | --- |
-| [`@neta-art/score-editor`](packages/score-editor) | The editor core: `mount(el, options)` returns `{ update(options), destroy() }`. |
-| [`@neta-art/score-dialect-song2`](packages/score-dialect-song2) | The `song2` score dialect: identity and declarative constraints. Depends on the core for types only. |
+| [`@neta-art/score-editor`](packages/score-editor) | The editor core: `mount(el, { language, project, dialects })` returns `{ update(options), destroy() }`. |
+| [`@neta-art/score-dialect-song2`](packages/score-dialect-song2) | The `song2` score dialect: identity, declarative constraints, `parse` and `serialize`. Depends on the core for types only. |
 
-More: [PRODUCT.md](PRODUCT.md) (who it is for and what it must do), [DESIGN.md](DESIGN.md) (the theme variable contract and the look of the neutral defaults), [docs/spike.md](docs/spike.md) (what the spike decided about rendering, events, style isolation and popovers, with what was and was not verified).
+More: [PRODUCT.md](PRODUCT.md) (who it is for and what it must do), [DESIGN.md](DESIGN.md) (the theme variable contract and the look of the neutral defaults), [docs/spike.md](docs/spike.md) (what the first spike decided about rendering, events, style isolation and popovers, with what was and was not verified, and the scale numbers).
 
 ## Develop
 

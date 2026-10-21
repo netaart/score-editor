@@ -1,4 +1,4 @@
-// ABOUTME: Playwright fixtures of the mount seam: a harness that drives the test page and records the host's fake callbacks.
+// ABOUTME: Playwright fixtures of the mount seam: a harness that drives the test page, plus real touch input.
 // ABOUTME: Tests talk to the page only through window.harness and through what a user can see and do.
 import { test as base, type Page } from "@playwright/test";
 
@@ -7,18 +7,11 @@ export interface Point {
   y: number;
 }
 
-export interface RecordedNotice {
-  code: string;
-  level: string;
-  message: string;
-}
-
 interface PageHarness {
   stage: HTMLElement;
-  notices: RecordedNotice[];
   shadowRoot: ShadowRoot | null;
-  mount(options?: Record<string, unknown>): void;
-  update(options: Record<string, unknown>): void;
+  mount(options?: Record<string, unknown>): Promise<void>;
+  update(options: Record<string, unknown>): Promise<void>;
   destroy(): void;
 }
 
@@ -41,10 +34,6 @@ export class Harness {
 
   destroy() {
     return this.page.evaluate(() => window.harness.destroy());
-  }
-
-  notices() {
-    return this.page.evaluate(() => window.harness.notices);
   }
 
   /** A one-finger gesture from `from` to `to`, sent as real touch input so the browser decides scroll or not. */

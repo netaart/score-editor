@@ -1,61 +1,100 @@
 // ABOUTME: The editor's own texts in Chinese and English, chosen by the host's language option.
 // ABOUTME: The host maps nothing here: it passes "zh" or "en" and the package speaks for itself.
-import { barAndBeat, type Note, pitchName, TICKS_PER_BEAT } from "./model";
+import type { BarPosition, Cut } from "./arrangement";
+import type { Meter } from "./score";
 import type { Language } from "./types";
 
 interface Messages {
   title: string;
   hint: string;
-  grid: string;
-  gridChoices: Record<"1/4" | "1/8" | "1/16", string>;
+  zoom: string;
+  zoomIn: string;
+  zoomOut: string;
+  zoomFit: string;
   readOnly: string;
-  noticeReadOnly: string;
-  noticePitchRange: string;
-  noticeMoveBlocked: string;
-  position(midi: number, start: number): string;
-  noteLabel(note: Note): string;
-}
-
-function beats(length: number): string {
-  return String(Math.round(length * 100) / 100);
+  bars: string;
+  sections: string;
+  unnamedSection: string;
+  chords: string;
+  noChords: string;
+  unreadable: string;
+  moreProblems(count: number): string;
+  noDialect(modelId: string): string;
+  marks: string;
+  incompleteBar: string;
+  cutOff: string;
+  cutNotice(cut: Cut): string;
+  meterText(meter: Meter): string;
+  meterName(meter: Meter): string;
+  keyText(key: string): string;
+  noteLabel(pitch: string, position: BarPosition, length: number, tiedToNext: boolean): string;
 }
 
 const en: Messages = {
-  title: "Piano roll",
-  hint: "Drag a note to change its time and pitch, or focus it and use the arrow keys, with Shift for an octave. Swipe empty space to scroll.",
-  grid: "Grid",
-  gridChoices: { "1/4": "Quarter note (1/4)", "1/8": "Eighth note (1/8)", "1/16": "Sixteenth note (1/16)" },
+  title: "Arrangement",
+  hint: "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel.",
+  zoom: "Zoom",
+  zoomIn: "Zoom in",
+  zoomOut: "Zoom out",
+  zoomFit: "Fit whole song",
   readOnly: "Read only",
-  noticeReadOnly: "This score is read only, so notes can't be moved.",
-  noticePitchRange: "Notes can't go beyond the pitch range shown.",
-  noticeMoveBlocked: "Another note already starts there, so this note stayed where it was.",
-  position(midi, start) {
-    const { bar, beat } = barAndBeat(start);
-    return `${pitchName(midi)} · bar ${bar} beat ${beat}`;
+  bars: "Bars",
+  sections: "Sections",
+  unnamedSection: "Unnamed",
+  chords: "Chords",
+  noChords: "No chords in this score",
+  unreadable: "This score can't be shown because it can't be read.",
+  moreProblems: (count) => `and ${count} more`,
+  noDialect: (modelId) =>
+    `The score format of “${modelId}” isn't supported by this editor, so the score can't be shown.`,
+  marks: "Marks",
+  incompleteBar: "Incomplete bar",
+  cutOff: "Cut off",
+  cutNotice({ voice, bar, short }) {
+    if (short) return `This score is cut off: bar ${bar} of ${voice} is incomplete.`;
+    return bar === 0
+      ? `This score is cut off before the first bar of ${voice}.`
+      : `This score is cut off after bar ${bar} of ${voice}.`;
   },
-  noteLabel(note) {
-    const { bar, beat } = barAndBeat(note.start);
-    const length = note.duration / TICKS_PER_BEAT;
-    return `${pitchName(note.midi)}, bar ${bar} beat ${beat}, length ${beats(length)} ${length === 1 ? "beat" : "beats"}`;
+  meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
+  meterName: ({ numerator, denominator }) => `Meter ${numerator}/${denominator}`,
+  keyText: (key) => `Key ${key}`,
+  noteLabel(pitch, { bar, beat }, length, tiedToNext) {
+    const tie = tiedToNext ? ", tied to the next note" : "";
+    return `${pitch}, bar ${bar} beat ${beat}, length ${length} ${length === 1 ? "beat" : "beats"}${tie}`;
   },
 };
 
 const zh: Messages = {
-  title: "钢琴卷帘",
-  hint: "拖动音符来改变它的时间和音高，也可以聚焦音符后用方向键移动，按住 Shift 为一个八度。在空白处滑动来滚动。",
-  grid: "网格",
-  gridChoices: { "1/4": "四分音符 (1/4)", "1/8": "八分音符 (1/8)", "1/16": "十六分音符 (1/16)" },
+  title: "编曲视图",
+  hint: "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。",
+  zoom: "缩放",
+  zoomIn: "放大",
+  zoomOut: "缩小",
+  zoomFit: "适合整首歌",
   readOnly: "只读",
-  noticeReadOnly: "乐谱是只读的，不能移动音符。",
-  noticePitchRange: "音符不能超出当前显示的音高范围。",
-  noticeMoveBlocked: "那个位置已经有另一个音符开始了，所以这个音符留在了原处。",
-  position(midi, start) {
-    const { bar, beat } = barAndBeat(start);
-    return `${pitchName(midi)} · 第 ${bar} 小节第 ${beat} 拍`;
+  bars: "小节",
+  sections: "段落",
+  unnamedSection: "未命名",
+  chords: "和弦",
+  noChords: "这份乐谱里没有和弦",
+  unreadable: "这份乐谱读不通，所以无法显示。",
+  moreProblems: (count) => `还有 ${count} 条`,
+  noDialect: (modelId) => `这个编辑器不支持“${modelId}”的乐谱格式，所以无法显示这份乐谱。`,
+  marks: "标记",
+  incompleteBar: "不完整的小节",
+  cutOff: "在此截断",
+  cutNotice({ voice, bar, short }) {
+    if (short) return `这份乐谱在末尾被截断：${voice} 的第 ${bar} 小节不完整。`;
+    return bar === 0
+      ? `这份乐谱在末尾被截断：${voice} 连第一个小节都还没有写完。`
+      : `这份乐谱在末尾被截断：${voice} 写到第 ${bar} 小节为止。`;
   },
-  noteLabel(note) {
-    const { bar, beat } = barAndBeat(note.start);
-    return `${pitchName(note.midi)}，第 ${bar} 小节第 ${beat} 拍，长 ${beats(note.duration / TICKS_PER_BEAT)} 拍`;
+  meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
+  meterName: ({ numerator, denominator }) => `拍号 ${numerator}/${denominator}`,
+  keyText: (key) => `调号 ${key}`,
+  noteLabel(pitch, { bar, beat }, length, tiedToNext) {
+    return `${pitch}，第 ${bar} 小节第 ${beat} 拍，长 ${length} 拍${tiedToNext ? "，连到下一个音" : ""}`;
   },
 };
 

@@ -1,6 +1,13 @@
 # Spike findings: the 8-bar piano roll
 
-The first piece of the editor is a piano roll with one track (`Vocal`), eight bars, and notes you can move in time and pitch with a mouse, a finger or the keyboard. It exists to settle four decisions that every later piece builds on: how the roll is rendered, how input events are handled, how styles are isolated from the host, and how popovers are layered. This note records each decision, what was verified and how, and what was not.
+The first piece of the editor was a piano roll with one track (`Vocal`), eight bars, and notes you could move in time and pitch with a mouse, a finger or the keyboard. It existed to settle four decisions that every later piece builds on: how the roll is rendered, how input events are handled, how styles are isolated from the host, and how popovers are layered. This note records each decision, what was verified and how, and what was not.
+
+**Status.** The editor now shows a song project's score as a read-only arrangement view (a ruler, section bands, key and meter marks, a chord track, one piano-roll track per voice, zoom and scrolling), and the spike's editing is gone: the drag, the nudges, the grid choice, the readout chip and the notices. The sections below are the spike's record and are kept because editing returns. Where the shipped code now differs, a **Now** note says how; the main differences are:
+
+- A note is a `div` with `role="listitem"` (not a button), and everything on the time axis is placed in percent of the element that carries the axis, so a zoom step only sets the width of a few elements (see Rendering).
+- The grid popover is gone. The same native-popover pattern now serves the zoom menu (see Popovers).
+- `spikeScore` is gone: `mount` takes a `project` and a `dialects` registry, and reads the score through the dialect.
+- The tests named below for drag, nudges, the grid menu and host callbacks were removed with those behaviours; the guarantees that outlive them (style isolation, style delivery, popover layering, update and destroy leaving nothing behind) are covered by tests with the same intent in `e2e/mount.spec.ts`, now through the zoom menu.
 
 Verification labels used below:
 
@@ -12,8 +19,8 @@ All browser results are from Chromium 156 (Playwright 1.64), on an x86 server in
 
 ## What exists
 
-- `@neta-art/score-editor` exports `mount(el, options)`, which returns `{ update(options), destroy() }`. Options: `language` (`"zh"` or `"en"`), `editable`, `notify` (the host callback for one-time messages), and `spikeScore` (spike only: the score to show, standing in for the song project until the dialect parser exists).
-- `@neta-art/score-dialect-song2` exports the dialect's identity and its declarative constraints, and depends on the core package for types only. Parse, serialize and check are not part of the spike.
+- `@neta-art/score-editor` exports `mount(el, options)`, which returns `{ update(options), destroy() }`. Options: `language` (`"zh"` or `"en"`), `editable`, `notify` (the host callback for one-time messages), and `spikeScore` (spike only: the score to show, standing in for the song project until the dialect parser exists). **Now:** `language`, `editable` (no effect yet), `notify` (never called yet), `project` and `dialects`; there is no `spikeScore`.
+- `@neta-art/score-dialect-song2` exports the dialect's identity and its declarative constraints, and depends on the core package for types only. Parse, serialize and check are not part of the spike. **Now:** it also exports `parse` and `serialize`, and the editor reads scores through them.
 - Importing either package runs no code that touches the DOM or a browser global. Direct: `tests/entries.test.ts` imports both entries in a node environment.
 - `mount` on a server throws a clear error ("needs a browser DOM; call it from client-side code only") instead of a reference error. Direct: a bare Worker running in the Workers runtime (workerd, started locally) imported the built entry, saw `mount` as a function, and got that error when it called it.
 
@@ -23,10 +30,12 @@ All browser results are from Chromium 156 (Playwright 1.64), on an x86 server in
 
 **Why.** Native scrolling gives inertia, scroll anchoring and accessibility for free. A `div` per note is focusable, labelled (`C5, bar 4 beat 1, length 3 beats`), and reachable by pointer, keyboard and screen reader without any parallel structure. Geometry in custom properties means moving a note is one style write.
 
+**Now.** The read-only view keeps one `div` per pitched note with its labelled position, as a `role="listitem"` in a list named for its voice. Its geometry is still `--t`, `--d` and `--r`, but `left` and `width` are percent of the lane (`--t` over the score's length in ticks), and zooming sets the width of the lanes and timeline rows instead of a zoom factor held in a variable on the root. A zoom factor in an inherited variable restyled every note on each step (about 70 ms per step at 1500 notes, first time at each new value); this way a step is about 3 ms and no long task occurs (see the table below).
+
 **Verified.**
 
 - Direct: an 8-bar score renders and is usable on desktop and phone profiles (every test in `e2e/mount.spec.ts`).
-- Direct: scale. `scripts/measure-scale.mjs` mounts a synthetic score on the test page and records, with `performance.now()` around `mount()` and until the second animation frame, plus a frame recorder and a `longtask` observer during a 90-move mouse drag and during scrolling (90 wheel events, and a script moving `scrollLeft` every frame). Garbage is collected before each gesture. Numbers on this machine, Chromium headless, viewport 1280 by 800:
+- Direct: scale, for the spike's piano roll. `scripts/measure-scale.mjs` mounted a synthetic score on the test page and recorded, with `performance.now()` around `mount()` and until the second animation frame, plus a frame recorder and a `longtask` observer during a 90-move mouse drag and during scrolling (90 wheel events, and a script moving `scrollLeft` every frame). Garbage is collected before each gesture. Numbers on this machine, Chromium headless, viewport 1280 by 800:
 
 | Score | CPU | First frame after mount | Re-mount | DOM nodes | Long tasks in drag and scrolling | Worst frame |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -40,6 +49,19 @@ All browser results are from Chromium 156 (Playwright 1.64), on an x86 server in
   The slowdown rows use the browser's CPU throttle, a rough stand-in for a mid-range phone. At 128 bars and 1500 notes, input-to-frame latency during a drag had a 95th percentile of about 15 ms. In a headed run, frames were 31 ms apart without a long task, which is the display's refresh limit on this remote session rather than the editor's cost (one earlier run, not repeated on the final build).
 - Direct: holding a dragged note at the edge of the 128-bar roll (edge scrolling running for 1.5 s) kept every frame at 16.7 ms with no long task, at 1x and at 4x (scratch script; the roll moved about 650 px).
 
+**Scale of the arrangement view (the read-only slice).** `scripts/measure-scale.mjs` now mounts a synthetic song2 project (128 bars, 1,500 pitched notes in two voices, 128 chords, 8 sections) through the dialect, so a first frame includes reading the score text. Direct, the same machine, headless Chromium 156, viewport 1280 by 800, two runs per row (the first of the five mounts is the cold one; the warm figure is the median of the other four):
+
+| Score | CPU | Cold first frame after mount (limit: 2x the spike's) | Cold mount() alone | Warm first frame | Parse alone | DOM nodes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Spike's piano roll, run today for a baseline | 1x | 112 ms (limit 166) | 106 ms | 32 ms | not applicable | 1677 |
+| 128 bars, 1500 notes, arrangement view | 1x | 109 ms and 104 ms | 103 ms and 99 ms | 30 ms and 27 ms | 1 ms | 1848 |
+| Spike's piano roll, run today for a baseline | 4x slowdown | 429 ms (limit 926) | 402 ms | 103 ms | not applicable | 1677 |
+| 128 bars, 1500 notes, arrangement view | 4x slowdown | 562 ms and 662 ms | 534 ms and 626 ms | 120 ms and 159 ms | 4 to 5 ms | 1848 |
+
+Against the numbers in the table above (83 ms at 1x, 463 ms at 4x) the first frame is 1.3 times and 1.2 to 1.4 times as long, inside the limit of twice. The view has about 170 more nodes than the spike's roll (chords, bar numbers, bands, flags, grid runs) and reads the score text first; the parse is 1 ms at 1x and 4 to 5 ms at 4x.
+
+Zooming and scrolling at that size, 1x: no long task and a worst frame of 16.8 ms (one 33 ms frame in one run's wheel scroll) in eight button zoom steps (three runs), 60 control-plus-wheel zoom events, wheel scrolling in time (90 events) and in pitch (60 events), and a script moving `scrollLeft` every frame. At 4x: scrolling the same way has no long task; a button zoom step takes 50 to 66 ms (long tasks of 50 to 69 ms in none to seven of eight steps, by run); 60 control-plus-wheel zoom events each cost about 55 ms, so 25 to 40 of them are long tasks of up to 115 ms. A zoom step before the change to axis widths (see Now, above) was 70 to 85 ms at 1x. Not measured: 256 bars and 6000 notes, the 6x slowdown, a real phone.
+
 **What the measurement says.** The approach meets the targets at the size of a real song (128 bars, 1500 notes): first render well under a second even at 6x slowdown, no long task above 50 ms in drag or scroll. It does not at 6000 notes on a slow CPU: first render near two seconds and long tasks of 70 ms or more. Cost grows linearly with node count (first frame 83 ms at 1677 nodes, 253 ms at 6305 nodes, both at 1x).
 
 **What later work must do.**
@@ -51,6 +73,8 @@ All browser results are from Chromium 156 (Playwright 1.64), on an x86 server in
 **Not verified.** Windowing. Firefox and WebKit scroll and sticky behaviour. Real phone hardware. A host that scales the editor with a CSS transform (the code reads layout once per gesture to tolerate this; no test applies a transform).
 
 ## Event model: pointer events, one gesture at a time
+
+**Now.** This section records the editing spike. Nothing in the read-only view drags, nudges or selects, so none of it is shipped; it is kept as the starting point for editing. What the view does have: one `keydown` listener (zoom keys, menu walking), a non-passive `wheel` listener (control plus wheel zooms around the pointer and stops the page's own zoom), the popover's `beforetoggle` and `toggle` listeners and the buttons' clicks, all registered through the one `AbortController` that `destroy` aborts. Panning is the browser's: `touch-action: pan-x pan-y pinch-zoom` on the scroller, tested with real touch input on the phone profile; a pinch does not zoom the time axis (not built).
 
 **Decision.**
 
@@ -101,6 +125,8 @@ All browser results are from Chromium 156 (Playwright 1.64), on an x86 server in
 
 ## Popovers: the native top layer
 
+**Now.** The grid choice no longer exists. The zoom menu (10%, 25%, 50%, 100%, 150%, 200%, 400% and "Fit whole song") is the one popover and follows this decision unchanged: the same native popover, the same placement, the same keys, and tests of the same guarantees (above a host layer, inside a modal dialog, arrow keys and Enter).
+
 **Decision.** The grid choice is a native popover (`popover="auto"`) opened by a `popovertarget` button, positioned with `position: fixed` from the button's rectangle when it opens, and nudged left if it would leave the viewport. Items are `menuitemradio` buttons; arrow keys, Home and End walk them; Enter or Space picks. Light dismiss and Escape come from the platform, and focus returns to the button.
 
 **Why.** A popover in the top layer is above every `z-index` and outside every clipping ancestor, so the package does not have to know the host's stacking. The requirement is that the editor's popovers stack above a host's full-screen layer.
@@ -118,6 +144,8 @@ All browser results are from Chromium 156 (Playwright 1.64), on an x86 server in
 
 Direct: every note is a labelled button; the roll is a labelled region described by a hint that names the drag and key gestures; moves and refusals are announced through a polite status region; the grid choice is a menu with checked state; focus shows on the buttons, notes and, as a ring over the whole body, on the scroller; selected-and-focused is distinguishable from selected. Reduced motion: the only transition (note opacity, 120 ms) is off. The design tooling's detector reported no findings on the build after the review fixes.
 
+**Now.** The view has no transitions or animation at all (the note opacity transition is removed). Every note is a labelled list item in a list named for its voice; the roll is a labelled region whose hint names the scroll and zoom keys; the zoom menu has checked state; the header rows and the pinned track heads size by the browser's text size.
+
 Not verified: any real screen reader. Target size: fine-pointer notes are 14 px tall (below the 24 px target size), accepted for a dense editor; coarse pointers get 24 px rows.
 
 ## Hosts
@@ -133,5 +161,6 @@ The spike was mounted by a temporary page in the local development environment o
 
 - One command per edit, shared by pointer and keyboard; the host is told about every refusal.
 - Cheap per-node CSS; window the notes before the song size or the target device forces it.
+- Place everything on the time axis in percent of the axis element and zoom by setting the widths of the few axis elements; a zoom step then costs a few milliseconds at 1,500 notes, where a zoom variable inherited by every note cost 70 to 85.
 - The variable contract in `DESIGN.md` as the only public styling surface; mount inside a shadow root when a host's CSS is hostile.
 - Direct tests through `window.harness` on the test page; add a measurement run (`scripts/measure-scale.mjs`) whenever the note's DOM or CSS changes.
