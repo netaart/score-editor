@@ -1,5 +1,6 @@
 // ABOUTME: The editor's stylesheet as a string, injected by mount() and removed again by destroy().
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
+import { MAX_LABEL_STEP } from "./arrangement";
 import { TICKS_PER_QUARTER } from "./score";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
@@ -13,6 +14,16 @@ function octaveStripes(): string {
     stops.push(`${color} calc(var(--sce-_row) * ${row})`, `${color} calc(var(--sce-_row) * ${row + 1})`);
   }
   return `linear-gradient(to bottom, ${stops.join(", ")})`;
+}
+
+/** Bar numbers thin out as bars get narrow: at step 2^e the numbers of rank below e are hidden. */
+function labelThinning(): string {
+  const rules: string[] = [];
+  for (let e = 1; 2 ** e <= MAX_LABEL_STEP; e++) {
+    const ranks = Array.from({ length: e }, (_, rank) => `[data-rank="${rank}"]`).join(", ");
+    rules.push(`.sce-root[data-label-step="${2 ** e}"] .sce-bar-number:is(${ranks}) { display: none; }`);
+  }
+  return rules.join("\n");
 }
 
 const css = `
@@ -30,7 +41,7 @@ const css = `
   --sce-_note: var(--sce-color-note, var(--sce-_accent));
   --sce-_radius: var(--sce-radius, 4px);
   --sce-_row: var(--sce-row-height, 14px);
-  --sce-_beat: var(--sce-beat-width, 40px);
+  --sce-_beat: calc(var(--sce-beat-width, 40px) * var(--sce-zoom, 1));
   --sce-_keys: var(--sce-keys-width, 44px);
   --sce-_shade: color-mix(in srgb, var(--sce-_text) 5%, transparent);
   --sce-_top: 94px;
@@ -103,6 +114,95 @@ const css = `
   padding: 6px 12px;
   background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
+}
+.sce-root .sce-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.sce-root .sce-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--sce-_line-strong);
+  border-radius: var(--sce-_radius);
+  background: var(--sce-_bg);
+  color: var(--sce-_text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.sce-root .sce-button:hover {
+  background: color-mix(in srgb, var(--sce-_text) 6%, var(--sce-_bg));
+}
+.sce-root .sce-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--sce-_text) 10%, var(--sce-_bg));
+}
+.sce-root .sce-button[aria-disabled="true"] {
+  background: var(--sce-_bg);
+  color: var(--sce-_muted);
+  cursor: default;
+}
+.sce-root .sce-button-value {
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.sce-root .sce-zoom-value::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+/* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
+.sce-root .sce-step {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+}
+.sce-root .sce-step::before,
+.sce-root .sce-step[data-step="in"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+.sce-root .sce-step[data-step="in"]::after {
+  width: 2px;
+  height: 10px;
+}
+@media (pointer: coarse) {
+  .sce-root .sce-button {
+    min-height: 36px;
+  }
+  .sce-root .sce-step {
+    width: 36px;
+  }
+}
+.sce-root :is(.sce-button, .sce-menu-item, .sce-scroller):focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: 2px;
+}
+/* The scroller's own outline would be hidden behind the sticky ruler and keys, so a ring is drawn over its box. */
+.sce-root .sce-scroller:focus-visible {
+  outline: none;
+}
+.sce-root .sce-body:has(> .sce-scroller:focus-visible)::after {
+  content: "";
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  border: 2px solid var(--sce-_accent);
+  pointer-events: none;
 }
 .sce-root .sce-body {
   position: relative;
@@ -255,6 +355,8 @@ const css = `
   font-variant-numeric: lining-nums tabular-nums;
 }
 
+${labelThinning()}
+
 .sce-root .sce-track-group {
   position: relative;
 }
@@ -358,6 +460,65 @@ const css = `
   border-left-width: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+}
+
+.sce-root .sce-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  min-width: 190px;
+  max-height: calc(100vh - 16px);
+  padding: 4px;
+  overflow: auto;
+  border: 1px solid var(--sce-_line-strong);
+  border-radius: calc(var(--sce-_radius) + 2px);
+  background: var(--sce-_surface);
+  color: var(--sce-_text);
+  font: inherit;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--sce-_text) 22%, transparent);
+}
+.sce-root .sce-popover:not(:popover-open) {
+  display: none;
+}
+.sce-root .sce-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: var(--sce-_radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: lining-nums tabular-nums;
+  text-align: start;
+  cursor: pointer;
+}
+.sce-root .sce-menu-item::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+.sce-root .sce-menu-item[aria-checked="true"]::before {
+  background: var(--sce-_accent);
+}
+.sce-root .sce-menu-item:hover {
+  background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
+}
+.sce-root .sce-menu-rule {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--sce-_line);
+}
+@media (pointer: coarse) {
+  .sce-root .sce-menu-item {
+    min-height: 40px;
+  }
 }
 
 .sce-root .sce-sr-only {

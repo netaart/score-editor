@@ -7,6 +7,10 @@ import type { Language } from "./types";
 interface Messages {
   title: string;
   hint: string;
+  zoom: string;
+  zoomIn: string;
+  zoomOut: string;
+  zoomFit: string;
   readOnly: string;
   bars: string;
   sections: string;
@@ -25,7 +29,11 @@ interface Messages {
 
 const en: Messages = {
   title: "Arrangement",
-  hint: "Scroll with the arrow keys or a swipe.",
+  hint: "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel.",
+  zoom: "Zoom",
+  zoomIn: "Zoom in",
+  zoomOut: "Zoom out",
+  zoomFit: "Fit whole song",
   readOnly: "Read only",
   bars: "Bars",
   sections: "Sections",
@@ -52,7 +60,11 @@ const en: Messages = {
 
 const zh: Messages = {
   title: "编曲视图",
-  hint: "用方向键或滑动来滚动。",
+  hint: "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。",
+  zoom: "缩放",
+  zoomIn: "放大",
+  zoomOut: "缩小",
+  zoomFit: "适合整首歌",
   readOnly: "只读",
   bars: "小节",
   sections: "段落",

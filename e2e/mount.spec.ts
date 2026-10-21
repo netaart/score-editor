@@ -1,6 +1,6 @@
 // ABOUTME: Seam 5: the mounted editor driven in real Chromium through a bare test page.
 // ABOUTME: Covers the read-only arrangement of real song2 scores, zoom and scroll, and what update and destroy leave behind.
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 async function box(target: Locator) {
@@ -85,6 +85,7 @@ test.describe("the arrangement of a song2 score", () => {
       ...["F", "F", "Dm", "Dm", "Bb", "Bb", "C", "C"],
       ...["F", "C/E", "Dm", "Dm", "F", "C/E", "Dm", "Dm", "Bb", "C", "Bb", "C", "F", "F", "F", "F"],
     ]);
+    await page.getByRole("region", { name: "Arrangement" }).evaluate((el) => el.scrollTo(0, 0));
     const above = await box(chords);
     const vocal = await box(page.getByRole("list", { name: "Vocal" }));
     expect(above.y + above.height).toBeLessThanOrEqual(vocal.y);
@@ -213,5 +214,109 @@ test.describe("the arrangement of a song2 score", () => {
     await expect(page.getByRole("list", { name: "Vocal" })).toBeVisible();
     await expect(page.getByRole("note")).toHaveCount(0);
     await expect(page.getByText("Incomplete bar")).toHaveCount(0);
+  });
+});
+
+test.describe("zoom on the time axis", () => {
+  const barWidth = async (page: Page) => {
+    const bar = (number: string) => page.getByRole("list", { name: "Bars" }).getByText(number, { exact: true });
+    return (await box(bar("2"))).x - (await box(bar("1"))).x;
+  };
+
+  test("zooming in and out changes how wide a bar is, by button, by menu and with the keyboard", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
+    const readout = (value: string) => page.getByRole("button", { name: `Zoom ${value}`, exact: true });
+    await expect(readout("100%")).toBeVisible();
+    const normal = await barWidth(page);
+    // A 2/4 bar at 40 pixels a beat.
+    expect(normal).toBeCloseTo(80, 0);
+
+    await press(page.getByRole("button", { name: "Zoom in", exact: true }));
+    await expect(readout("150%")).toBeVisible();
+    expect(await barWidth(page)).toBeCloseTo(normal * 1.5, 0);
+
+    await press(page.getByRole("button", { name: "Zoom out", exact: true }));
+    await press(page.getByRole("button", { name: "Zoom out", exact: true }));
+    await expect(readout("50%")).toBeVisible();
+    expect(await barWidth(page)).toBeCloseTo(normal / 2, 0);
+
+    await press(readout("50%"));
+    await press(page.getByRole("menuitemradio", { name: "200%" }));
+    await expect(readout("200%")).toBeVisible();
+    expect(await barWidth(page)).toBeCloseTo(normal * 2, 0);
+
+    if (!isMobile) {
+      await page.getByRole("region", { name: "Arrangement" }).focus();
+      await page.keyboard.press("-");
+      await expect(readout("150%")).toBeVisible();
+      await page.keyboard.press("-");
+      await page.keyboard.press("-");
+      await expect(readout("50%")).toBeVisible();
+      await page.keyboard.press("+");
+      await expect(readout("100%")).toBeVisible();
+      expect(await barWidth(page)).toBeCloseTo(normal, 0);
+    }
+  });
+
+  test("the zoom controls are tall enough for a finger on a coarse pointer", async ({ page, harness, isMobile }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const height = (await box(page.getByRole("button", { name: "Zoom in", exact: true }))).height;
+    if (isMobile) expect(height).toBeGreaterThanOrEqual(36);
+    else expect(height).toBeLessThan(36);
+  });
+
+  test("fitting the song shows all of it at once", async ({ page, harness, isMobile }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    const widths = () => roll.evaluate((el) => ({ content: el.scrollWidth, shown: el.clientWidth }));
+    expect((await widths()).content).toBeGreaterThan((await widths()).shown);
+
+    await press(page.getByRole("button", { name: /^Zoom \d+%$/ }));
+    await press(page.getByRole("menuitem", { name: "Fit whole song" }));
+    const fitted = await widths();
+    expect(fitted.content).toBeLessThanOrEqual(fitted.shown);
+    expect(await roll.evaluate((el) => el.scrollLeft)).toBe(0);
+  });
+
+  test("bar numbers thin out when bars get too narrow to carry them", async ({ page, harness, isMobile }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
+    const bars = page.getByRole("list", { name: "Bars" }).getByRole("listitem");
+    await expect(bars).toHaveCount(28);
+
+    await press(page.getByRole("button", { name: "Zoom 100%", exact: true }));
+    await press(page.getByRole("menuitemradio", { name: "10%" }));
+    await expect(bars.first()).toHaveText("1");
+    const shown = await bars.count();
+    expect(shown).toBeLessThan(28);
+    expect(shown).toBeGreaterThan(3);
+    const [first, second] = [await box(bars.nth(0)), await box(bars.nth(1))];
+    expect(second.x - first.x).toBeGreaterThanOrEqual(32);
+  });
+});
+
+test.describe("zoom with the wheel", () => {
+  test.skip(({ isMobile }) => isMobile, "the wheel is a mouse gesture, checked on the desktop project");
+
+  test("control and the wheel zoom around the pointer", async ({ page, harness }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const bar = (number: string) => page.getByRole("list", { name: "Bars" }).getByText(number, { exact: true });
+    const before = await box(bar("3"));
+    await page.mouse.move(before.x, before.y + 30);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -100);
+    await page.keyboard.up("Control");
+    await expect(page.getByRole("button", { name: /^Zoom (?!100%)\d+%$/ })).toBeVisible();
+    const after = await box(bar("3"));
+    expect(after.x).toBeCloseTo(before.x, -1);
+    const spacing = (await box(bar("4"))).x - after.x;
+    // The 2/4 bars were 80 pixels wide; one notch of the wheel zooms in by about a quarter.
+    expect(spacing).toBeGreaterThan(90);
   });
 });

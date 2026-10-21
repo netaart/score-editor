@@ -1,15 +1,21 @@
 // ABOUTME: The mounted editor: reads the song project's score with its dialect and builds the read-only arrangement view.
 // ABOUTME: Every listener is registered with one AbortSignal, so destroy() removes them all and leaves no node behind.
 import {
+  barLabelStep,
   cutOf,
   gridTicks,
+  labelRank,
   lengthInBeats,
   marksOf,
   notesByVoice,
   pitchName,
   pitchRangeOf,
   positionOf,
+  stepZoom,
   tieJoins,
+  ZOOM_MAX,
+  ZOOM_MIN,
+  ZOOM_PRESETS,
 } from "./arrangement";
 import { messagesFor } from "./i18n";
 import type { Note, Score } from "./score";
@@ -30,6 +36,29 @@ function create<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+/** The first voice's lane, which the first scroll opens on the middle of. */
+interface FirstLane {
+  lane: HTMLElement;
+  head: HTMLElement;
+  hi: number;
+  rows: number;
+  middle: number;
+}
+
+/** The parts of a built arrangement that zooming and the first scroll need to find again. */
+interface View {
+  scroller: HTMLElement;
+  /** The pinned header block. */
+  top: HTMLElement;
+  /** The pinned corner of the ruler: its width is the pitch column's. */
+  corner: HTMLElement;
+  /** The ruler's timeline: as wide as the whole score. */
+  timeline: HTMLElement;
+  ticks: number;
+  barCount: number;
+  first: FirstLane | null;
+}
+
 export class Editor implements MountedEditor {
   private options: MountOptions;
   private readonly doc: Document;
@@ -41,6 +70,17 @@ export class Editor implements MountedEditor {
   private readonly badge: HTMLElement;
   private readonly notice: HTMLElement;
   private readonly body: HTMLElement;
+  private readonly zoomGroup: HTMLElement;
+  private readonly zoomOut: HTMLButtonElement;
+  private readonly zoomIn: HTMLButtonElement;
+  private readonly zoomButton: HTMLButtonElement;
+  private readonly zoomLabel: HTMLElement;
+  private readonly zoomValue: HTMLElement;
+  private readonly menu: HTMLElement;
+  private readonly menuItems = new Map<number, HTMLButtonElement>();
+  private readonly fitItem: HTMLButtonElement;
+  private zoom = 1;
+  private view: View | null = null;
   private destroyed = false;
 
   constructor(
@@ -51,6 +91,7 @@ export class Editor implements MountedEditor {
     this.options = { ...options };
     this.doc = host.ownerDocument;
     const doc = this.doc;
+    const signal = this.abort.signal;
     const n = ++instanceCount;
 
     this.releaseStyles = acquireStyles(host);
@@ -58,6 +99,16 @@ export class Editor implements MountedEditor {
 
     const toolbar = create(doc, "div", "sce-toolbar", this.root);
     this.title = create(doc, "span", "sce-title", toolbar);
+    this.zoomGroup = create(doc, "div", "sce-zoom", toolbar);
+    this.zoomGroup.setAttribute("role", "group");
+    this.zoomOut = this.stepButton("out");
+    this.zoomButton = create(doc, "button", "sce-button sce-zoom-value", this.zoomGroup);
+    this.zoomButton.type = "button";
+    this.zoomButton.setAttribute("aria-haspopup", "menu");
+    this.zoomButton.setAttribute("aria-expanded", "false");
+    this.zoomLabel = create(doc, "span", "sce-sr-only", this.zoomButton);
+    this.zoomValue = create(doc, "span", "sce-button-value", this.zoomButton);
+    this.zoomIn = this.stepButton("in");
     create(doc, "span", "sce-spacer", toolbar);
     this.badge = create(doc, "span", "sce-badge", toolbar);
 
@@ -67,10 +118,32 @@ export class Editor implements MountedEditor {
     this.hint.id = `sce-hint-${n}`;
     this.body = create(doc, "div", "sce-body", this.root);
 
+    this.menu = create(doc, "div", "sce-popover", this.root);
+    this.menu.setAttribute("popover", "auto");
+    this.menu.setAttribute("role", "menu");
+    for (const preset of ZOOM_PRESETS) {
+      const item = this.menuItem("menuitemradio");
+      item.addEventListener("click", () => this.chooseZoom(preset), { signal });
+      this.menuItems.set(preset, item);
+    }
+    create(doc, "div", "sce-menu-rule", this.menu).setAttribute("role", "separator");
+    this.fitItem = this.menuItem("menuitem");
+    this.fitItem.addEventListener("click", () => this.chooseFit(), { signal });
+    this.zoomButton.popoverTargetElement = this.menu;
+    this.zoomButton.popoverTargetAction = "toggle";
+    this.menu.addEventListener("beforetoggle", (event) => this.placeMenu(event as ToggleEvent), { signal });
+    this.menu.addEventListener("toggle", (event) => this.menuToggled(event as ToggleEvent), { signal });
+
+    this.zoomOut.addEventListener("click", () => this.step("out"), { signal });
+    this.zoomIn.addEventListener("click", () => this.step("in"), { signal });
+    this.root.addEventListener("keydown", this.onKeyDown, { signal });
+    this.body.addEventListener("wheel", this.onWheel, { signal, passive: false });
+
     this.applyLanguage();
     this.applyEditable();
     this.render();
     host.appendChild(this.root);
+    this.afterRender();
   }
 
   update(patch: Partial<MountOptions>): void {
@@ -79,7 +152,10 @@ export class Editor implements MountedEditor {
     this.options = { ...before, ...patch };
     if (this.options.language !== before.language) this.applyLanguage();
     if (this.options.editable !== before.editable) this.applyEditable();
-    if (this.options.language !== before.language || this.options.project !== before.project) this.render();
+    if (this.options.language !== before.language || this.options.project !== before.project) {
+      this.render();
+      this.afterRender();
+    }
   }
 
   destroy(): void {
@@ -95,6 +171,20 @@ export class Editor implements MountedEditor {
     return this.options.editable !== false;
   }
 
+  private stepButton(direction: "in" | "out"): HTMLButtonElement {
+    const button = create(this.doc, "button", "sce-button sce-step", this.zoomGroup);
+    button.type = "button";
+    button.dataset.step = direction;
+    return button;
+  }
+
+  private menuItem(role: "menuitem" | "menuitemradio"): HTMLButtonElement {
+    const item = create(this.doc, "button", "sce-menu-item", this.menu);
+    item.type = "button";
+    item.setAttribute("role", role);
+    return item;
+  }
+
   // --- texts and flags ---------------------------------------------------------------------------
 
   private applyLanguage(): void {
@@ -103,6 +193,13 @@ export class Editor implements MountedEditor {
     this.title.textContent = t.title;
     this.hint.textContent = t.hint;
     this.badge.textContent = t.readOnly;
+    this.zoomGroup.setAttribute("aria-label", t.zoom);
+    this.zoomOut.setAttribute("aria-label", t.zoomOut);
+    this.zoomIn.setAttribute("aria-label", t.zoomIn);
+    this.zoomLabel.textContent = t.zoom;
+    this.menu.setAttribute("aria-label", t.zoom);
+    for (const [preset, item] of this.menuItems) item.textContent = `${Math.round(preset * 100)}%`;
+    this.fitItem.textContent = t.zoomFit;
   }
 
   private applyEditable(): void {
@@ -117,10 +214,26 @@ export class Editor implements MountedEditor {
     const dialect = dialects.find(project.modelId);
     const score = dialect?.parse(project.score).score;
     this.body.replaceChildren();
+    this.view = null;
     const cut = score ? cutOf(score) : null;
     this.notice.hidden = !cut;
     this.notice.textContent = cut ? messagesFor(this.options.language).cutNotice(cut) : "";
     if (score) this.body.appendChild(this.buildArrangement(score));
+  }
+
+  /** What needs the built view to be in the page: the zoom variable and bar numbers, then the first scroll. */
+  private afterRender(): void {
+    this.applyZoom();
+    const view = this.view;
+    const first = view?.first;
+    if (!view || !first || view.scroller.scrollHeight <= view.scroller.clientHeight) return;
+    const { scroller } = view;
+    const lane = first.lane.getBoundingClientRect();
+    const frame = scroller.getBoundingClientRect();
+    const rowPixels = lane.height / first.rows;
+    const middle = lane.top - frame.top + scroller.scrollTop + (first.hi - 1 - first.middle + 0.5) * rowPixels;
+    const pinned = view.top.offsetHeight + first.head.offsetHeight;
+    scroller.scrollTop = Math.max(0, middle - pinned - (scroller.clientHeight - pinned) / 2);
   }
 
   private buildArrangement(score: Score): HTMLElement {
@@ -132,17 +245,31 @@ export class Editor implements MountedEditor {
     scroller.setAttribute("aria-label", t.title);
     scroller.setAttribute("aria-describedby", this.hint.id);
 
+    const ticks = gridTicks(score);
     const canvas = create(doc, "div", "sce-canvas", scroller);
-    canvas.style.setProperty("--sce-ticks", String(gridTicks(score)));
+    canvas.style.setProperty("--sce-ticks", String(ticks));
 
     const top = create(doc, "div", "sce-top", canvas);
-    this.buildRuler(top, score);
+    const ruler = this.buildRuler(top, score);
     this.buildSections(top, score);
     this.buildMarks(top, score);
     this.buildChords(top, score);
 
     const notes = notesByVoice(score);
-    for (const voice of score.voices) this.buildTrack(canvas, score, voice, notes.get(voice) ?? []);
+    let first: FirstLane | null = null;
+    for (const voice of score.voices) {
+      const built = this.buildTrack(canvas, score, voice, notes.get(voice) ?? []);
+      first ??= built;
+    }
+    this.view = {
+      scroller,
+      top,
+      corner: ruler.corner,
+      timeline: ruler.timeline,
+      ticks,
+      barCount: score.bars.length,
+      first,
+    };
     return scroller;
   }
 
@@ -160,17 +287,19 @@ export class Editor implements MountedEditor {
     return { corner, timeline };
   }
 
-  private buildRuler(top: HTMLElement, score: Score): void {
-    const { timeline } = this.headerRow(top, "sce-ruler", messagesFor(this.options.language).bars);
+  private buildRuler(top: HTMLElement, score: Score): { corner: HTMLElement; timeline: HTMLElement } {
+    const row = this.headerRow(top, "sce-ruler", messagesFor(this.options.language).bars);
     const numbers = this.doc.createDocumentFragment();
     for (const bar of score.bars) {
       const label = create(this.doc, "span", "sce-bar-number");
       label.setAttribute("role", "listitem");
+      label.dataset.rank = String(labelRank(bar.index));
       label.style.setProperty("--t", String(bar.start));
       label.textContent = String(bar.index + 1);
       numbers.appendChild(label);
     }
-    timeline.appendChild(numbers);
+    row.timeline.appendChild(numbers);
+    return row;
   }
 
   /** One band per section that has bars; a marker with no bars after it has nothing to cover. */
@@ -212,51 +341,6 @@ export class Editor implements MountedEditor {
     timeline.appendChild(chords);
   }
 
-  /** One piano-roll track: its head, the pitch column and the lane with a block for every pitched note. */
-  private buildTrack(canvas: HTMLElement, score: Score, voice: string, notes: ReadonlyArray<Note>): void {
-    const doc = this.doc;
-    const t = messagesFor(this.options.language);
-    const range = pitchRangeOf(notes);
-    const group = create(doc, "div", "sce-track-group", canvas);
-    const head = create(doc, "div", "sce-track-head", group);
-    create(doc, "span", "sce-track-name", head).textContent = voice;
-    const track = create(doc, "div", "sce-track", group);
-    const keys = create(doc, "div", "sce-keys", track);
-    for (let octave = range.hi - 12; octave >= range.lo; octave -= 12) {
-      create(doc, "div", "sce-octave", keys).textContent = pitchName(octave);
-    }
-    const lane = create(doc, "div", "sce-lane", track);
-    lane.style.setProperty("--sce-rows", String(range.hi - range.lo));
-    const cut = cutOf(score);
-    if (cut && cut.voice === voice && gridTicks(score) > cut.missingFrom) {
-      const tail = create(doc, "div", "sce-cut", lane);
-      tail.setAttribute("aria-hidden", "true");
-      tail.style.cssText = `--t:${cut.missingFrom};--d:${gridTicks(score) - cut.missingFrom}`;
-    }
-    const list = create(doc, "div", "sce-notes", lane);
-    list.setAttribute("role", "list");
-    list.setAttribute("aria-label", voice);
-
-    const joins = tieJoins(notes);
-    const blocks = doc.createDocumentFragment();
-    for (const [index, note] of notes.entries()) {
-      if (note.midi === null) continue;
-      const block = create(doc, "div", "sce-note");
-      block.setAttribute("role", "listitem");
-      block.style.cssText = `--t:${note.start};--d:${note.duration};--r:${range.hi - 1 - note.midi}`;
-      const tiedToNext = joins.has(note.id);
-      if (tiedToNext) block.dataset.tieNext = "";
-      if (index > 0 && joins.has(notes[index - 1]?.id ?? "")) block.dataset.tiePrev = "";
-      const position = positionOf(score.bars, note.bar, note.start);
-      block.setAttribute(
-        "aria-label",
-        t.noteLabel(pitchName(note.midi), position, lengthInBeats(note.duration, position.beatTicks), tiedToNext),
-      );
-      blocks.appendChild(block);
-    }
-    list.appendChild(blocks);
-  }
-
   /** The key and meter flags: what is in force at the start, then each change at the position it takes effect. */
   private buildMarks(top: HTMLElement, score: Score): void {
     const t = messagesFor(this.options.language);
@@ -288,5 +372,182 @@ export class Editor implements MountedEditor {
       flags.appendChild(flag);
     });
     timeline.appendChild(flags);
+  }
+
+  /** One piano-roll track: its head, the pitch column and the lane with a block for every pitched note. */
+  private buildTrack(canvas: HTMLElement, score: Score, voice: string, notes: ReadonlyArray<Note>): FirstLane {
+    const doc = this.doc;
+    const t = messagesFor(this.options.language);
+    const range = pitchRangeOf(notes);
+    const group = create(doc, "div", "sce-track-group", canvas);
+    const head = create(doc, "div", "sce-track-head", group);
+    create(doc, "span", "sce-track-name", head).textContent = voice;
+    const track = create(doc, "div", "sce-track", group);
+    const keys = create(doc, "div", "sce-keys", track);
+    for (let octave = range.hi - 12; octave >= range.lo; octave -= 12) {
+      create(doc, "div", "sce-octave", keys).textContent = pitchName(octave);
+    }
+    const lane = create(doc, "div", "sce-lane", track);
+    lane.style.setProperty("--sce-rows", String(range.hi - range.lo));
+    const cut = cutOf(score);
+    if (cut && cut.voice === voice && gridTicks(score) > cut.missingFrom) {
+      const tail = create(doc, "div", "sce-cut", lane);
+      tail.setAttribute("aria-hidden", "true");
+      tail.style.cssText = `--t:${cut.missingFrom};--d:${gridTicks(score) - cut.missingFrom}`;
+    }
+    const list = create(doc, "div", "sce-notes", lane);
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", voice);
+
+    const joins = tieJoins(notes);
+    const blocks = doc.createDocumentFragment();
+    let lowest = 127;
+    let highest = 0;
+    for (const [index, note] of notes.entries()) {
+      if (note.midi === null) continue;
+      lowest = Math.min(lowest, note.midi);
+      highest = Math.max(highest, note.midi);
+      const block = create(doc, "div", "sce-note");
+      block.setAttribute("role", "listitem");
+      block.style.cssText = `--t:${note.start};--d:${note.duration};--r:${range.hi - 1 - note.midi}`;
+      const tiedToNext = joins.has(note.id);
+      if (tiedToNext) block.dataset.tieNext = "";
+      if (index > 0 && joins.has(notes[index - 1]?.id ?? "")) block.dataset.tiePrev = "";
+      const position = positionOf(score.bars, note.bar, note.start);
+      block.setAttribute(
+        "aria-label",
+        t.noteLabel(pitchName(note.midi), position, lengthInBeats(note.duration, position.beatTicks), tiedToNext),
+      );
+      blocks.appendChild(block);
+    }
+    list.appendChild(blocks);
+    const middle = highest >= lowest ? (lowest + highest) / 2 : (range.lo + range.hi) / 2;
+    return { lane, head, hi: range.hi, rows: range.hi - range.lo, middle };
+  }
+
+  // --- zoom --------------------------------------------------------------------------------------
+
+  /** Sets the zoom variable, the readout, the menu and the bar numbers that still have room. */
+  private applyZoom(): void {
+    const view = this.view;
+    this.root.style.setProperty("--sce-zoom", String(this.zoom));
+    this.zoomValue.textContent = `${Math.round(this.zoom * 100)}%`;
+    for (const [preset, item] of this.menuItems) {
+      item.setAttribute("aria-checked", String(Math.abs(preset - this.zoom) < 1e-6));
+    }
+    this.zoomOut.setAttribute("aria-disabled", String(stepZoom(this.zoom, "out") === null));
+    this.zoomIn.setAttribute("aria-disabled", String(stepZoom(this.zoom, "in") === null));
+    this.zoomGroup.hidden = !view;
+    if (view && view.barCount > 0 && view.timeline.offsetWidth > 0) {
+      this.root.dataset.labelStep = String(barLabelStep(view.timeline.offsetWidth / view.barCount));
+    } else {
+      delete this.root.dataset.labelStep;
+    }
+  }
+
+  /**
+   * Changes the zoom and keeps the instant under `anchorClientX` where it was on screen; without an anchor,
+   * the middle of what the roll shows. Layout is read once, before the change.
+   */
+  private setZoom(next: number, anchorClientX?: number): void {
+    const view = this.view;
+    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+    if (!view || Math.abs(zoom - this.zoom) < 1e-9) return;
+    const { scroller } = view;
+    const frame = scroller.getBoundingClientRect();
+    const scale = frame.width / scroller.offsetWidth || 1;
+    const keys = view.corner.offsetWidth;
+    const anchor =
+      anchorClientX === undefined ? keys + (scroller.clientWidth - keys) / 2 : (anchorClientX - frame.left) / scale;
+    const pixelsPerTick = view.ticks > 0 ? view.timeline.offsetWidth / view.ticks : 0;
+    const tick = pixelsPerTick > 0 ? (scroller.scrollLeft + anchor - keys) / pixelsPerTick : 0;
+    const before = this.zoom;
+    this.zoom = zoom;
+    this.applyZoom();
+    scroller.scrollLeft = tick * pixelsPerTick * (zoom / before) + keys - anchor;
+  }
+
+  private step(direction: "in" | "out"): void {
+    const next = stepZoom(this.zoom, direction);
+    if (next !== null) this.setZoom(next);
+  }
+
+  private chooseZoom(preset: number): void {
+    this.menu.hidePopover();
+    this.setZoom(preset);
+  }
+
+  /** The zoom at which the whole score is exactly as wide as the roll shows. */
+  private chooseFit(): void {
+    this.menu.hidePopover();
+    const view = this.view;
+    if (!view || view.ticks <= 0) return;
+    const { scroller } = view;
+    const wholeScore = view.timeline.offsetWidth / this.zoom;
+    this.setZoom(Math.floor(((scroller.clientWidth - view.corner.offsetWidth) / wholeScore) * 1000) / 1000);
+    scroller.scrollLeft = 0;
+  }
+
+  private readonly onWheel = (event: WheelEvent): void => {
+    const view = this.view;
+    if (!event.ctrlKey || !view || !(event.target instanceof Element) || !view.scroller.contains(event.target)) return;
+    // A trackpad pinch arrives as a control-wheel too. Without this the page itself would zoom.
+    event.preventDefault();
+    const lines = event.deltaMode === 1 ? 16 : 1;
+    const delta = Math.max(-100, Math.min(100, event.deltaY * lines));
+    this.setZoom(this.zoom * Math.exp(-delta * 0.0025), event.clientX);
+  };
+
+  private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (event.target instanceof Element && event.target.closest(".sce-menu-item")) {
+      this.walkMenu(event);
+      return;
+    }
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      this.step("in");
+    } else if (event.key === "-" || event.key === "_") {
+      event.preventDefault();
+      this.step("out");
+    }
+  };
+
+  // --- the zoom popover --------------------------------------------------------------------------
+
+  /** Arrow, Home and End keys move between the items of the open menu, as a menu is expected to behave. */
+  private walkMenu(event: KeyboardEvent): void {
+    const items = [...this.menuItems.values(), this.fitItem];
+    const at = event.target instanceof HTMLButtonElement ? items.indexOf(event.target) : -1;
+    let next = -1;
+    if (event.key === "ArrowDown") next = (at + 1) % items.length;
+    else if (event.key === "ArrowUp") next = (at - 1 + items.length) % items.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    items[next]?.focus();
+  }
+
+  /** Puts the menu under its button. A popover lives in the top layer, so its position is viewport based. */
+  private placeMenu(event: ToggleEvent): void {
+    if (event.newState !== "open") return;
+    const rect = this.zoomButton.getBoundingClientRect();
+    this.menu.style.left = `${rect.left}px`;
+    this.menu.style.top = `${rect.bottom + 4}px`;
+  }
+
+  private menuToggled(event: ToggleEvent): void {
+    const open = event.newState === "open";
+    this.zoomButton.setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    const view = this.doc.defaultView;
+    if (view) {
+      const rect = this.menu.getBoundingClientRect();
+      const overflow = rect.right - (view.innerWidth - 8);
+      if (overflow > 0) this.menu.style.left = `${Math.max(8, rect.left - overflow)}px`;
+    }
+    const checked = [...this.menuItems.values()].find((item) => item.getAttribute("aria-checked") === "true");
+    (checked ?? this.fitItem).focus();
   }
 }

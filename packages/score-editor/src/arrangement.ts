@@ -153,3 +153,32 @@ export function marksOf(score: Score): Mark[] {
   if (cut) at(cut.at).cut = cut;
   return [...byPosition].sort(([a], [b]) => a - b).map(([position, entry]) => ({ at: position, ...entry }));
 }
+
+/** The zoom levels of the menu; the buttons and keys step through them. 1 is the host's beat width. */
+export const ZOOM_PRESETS: ReadonlyArray<number> = [0.1, 0.25, 0.5, 1, 1.5, 2, 4];
+export const ZOOM_MIN = 0.01;
+export const ZOOM_MAX = 4;
+
+/** The next preset above or below `zoom`, or `null` at the end of the list. */
+export function stepZoom(zoom: number, direction: "in" | "out"): number | null {
+  const epsilon = 1e-6;
+  if (direction === "in") return ZOOM_PRESETS.find((preset) => preset > zoom + epsilon) ?? null;
+  return [...ZOOM_PRESETS].reverse().find((preset) => preset < zoom - epsilon) ?? null;
+}
+
+/** The labelled bars shown are every `step`-th, the smallest power of two that leaves room for a number. */
+export const MAX_LABEL_STEP = 32;
+const LABEL_ROOM = 32;
+
+export function barLabelStep(barPixels: number): number {
+  let step = 1;
+  while (step < MAX_LABEL_STEP && step * barPixels < LABEL_ROOM) step *= 2;
+  return step;
+}
+
+/** How many times 2 divides `index`, up to the largest label step: which label steps keep this bar's number. */
+export function labelRank(index: number): number {
+  let rank = 0;
+  while (rank < Math.log2(MAX_LABEL_STEP) && index % 2 ** (rank + 1) === 0) rank += 1;
+  return rank;
+}
