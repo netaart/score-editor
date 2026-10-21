@@ -237,18 +237,22 @@ export function serializeSong2(score: Score): string {
   const lines = source.text.split("\n");
   const dropped = new Set<number>();
   for (const musicLine of source.musicLines) {
-    // X5: the cut token was only unfinished because a tie continued into it. Once that tie is gone
-    // the token would read as a finished note, so a changed score must drop it with the rest of the
-    // unfinished tail (or the whole line when no finished token remains).
+    const tail = musicLine.cutTail;
     const last = lastNoteOf(score, musicLine.voice);
-    const force = musicLine.unfinishedTie && (last === undefined || !last.tie);
+    // RULES.md X17: an X4 remainder is kept byte for byte. An X5 remainder is kept only while the note
+    // before it still ties into it; once that tie is gone it would read as a finished note.
+    const keepTail = tail !== null && (tail.kind === "x4" || (last?.tie ?? false));
+    const force = tail !== null && tail.kind === "x5" && !keepTail;
     let changed = force;
-    const pieces = musicLine.segments.map((segment) => {
+    const pieces = musicLine.segments.map((segment, index) => {
+      const partial = !musicLine.endsWithBarline && index === musicLine.segments.length - 1;
       const unchanged =
         !force && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
       if (unchanged) return segment.raw;
       changed = true;
-      return segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator)).join("|");
+      const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator)).join("|");
+      // A rewritten partial measure keeps its finished tokens and its cut remainder at their end.
+      return partial && keepTail ? `${rendered}${tail.raw}` : rendered;
     });
     if (!changed) continue;
     const rendered = `${pieces.join("|")}${musicLine.endsWithBarline ? "|" : ""}`;
@@ -261,73 +265,41 @@ export function serializeSong2(score: Score): string {
   return lines.filter((_line, index) => !dropped.has(index)).join("\n");
 }
 
-function sameNotes(left: ReadonlyArray<Note>, right: ReadonlyArray<Note>): boolean {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index += 1) {
-    const a = left[index] as Note;
-    const b = right[index] as Note;
-    if (
-      a.voice !== b.voice ||
-      a.start !== b.start ||
-      a.duration !== b.duration ||
-      a.midi !== b.midi ||
-      a.tie !== b.tie
-    ) {
-      return false;
-    }
+/** Deep equality over plain data. It walks whatever fields the model has, so a new field needs no new case. */
+function sameValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (typeof left !== "object" || typeof right !== "object" || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => sameValue(value, right[index]));
   }
-  return true;
+  const leftFields = Object.keys(left);
+  const rightFields = Object.keys(right);
+  if (leftFields.length !== rightFields.length) return false;
+  return leftFields.every(
+    (field) =>
+      Object.hasOwn(right, field) &&
+      sameValue((left as Record<string, unknown>)[field], (right as Record<string, unknown>)[field]),
+  );
 }
 
-function sameChords(left: ReadonlyArray<Score["chords"][number]>, right: ReadonlyArray<Score["chords"][number]>) {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index += 1) {
-    const a = left[index] as Score["chords"][number];
-    const b = right[index] as Score["chords"][number];
-    if (a.name !== b.name || a.start !== b.start || a.noteId !== b.noteId) return false;
+/** The first top-level field of the score that differs from its reading, or null when everything agrees. */
+function firstDifferentField(score: Score, reread: Score): string | null {
+  const before = score as unknown as Record<string, unknown>;
+  const after = reread as unknown as Record<string, unknown>;
+  const fields = new Set([...Object.keys(before), ...Object.keys(after)]);
+  fields.delete("source");
+  for (const field of fields) {
+    if (!sameValue(before[field], after[field])) return field;
   }
-  return true;
+  return null;
 }
 
-function sameBars(left: ReadonlyArray<Score["bars"][number]>, right: ReadonlyArray<Score["bars"][number]>) {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index += 1) {
-    const a = left[index] as Score["bars"][number];
-    const b = right[index] as Score["bars"][number];
-    if (
-      a.index !== b.index ||
-      a.start !== b.start ||
-      a.length !== b.length ||
-      a.meter.numerator !== b.meter.numerator ||
-      a.meter.denominator !== b.meter.denominator ||
-      a.key !== b.key ||
-      a.incomplete !== b.incomplete ||
-      a.keyChanges.length !== b.keyChanges.length
-    ) {
-      return false;
-    }
-    for (let change = 0; change < a.keyChanges.length; change += 1) {
-      const x = a.keyChanges[change] as KeyChange;
-      const y = b.keyChanges[change] as KeyChange;
-      if (x.at !== y.at || x.key !== y.key) return false;
-    }
-  }
-  return true;
+function writeMismatch(field?: string): Diagnostic {
+  return { code: "write-mismatch", params: field === undefined ? {} : { field }, at: {} };
 }
 
-function sameKeys(left: ReadonlyArray<KeyChange>, right: ReadonlyArray<KeyChange>): boolean {
-  if (left.length !== right.length) return false;
-  return left.every((key, index) => {
-    const other = right[index] as KeyChange;
-    return key.at === other.at && key.key === other.key;
-  });
-}
-
-function writeMismatch(): Diagnostic {
-  return { code: "write-mismatch", params: {}, at: {} };
-}
-
-/** RULES.md writing check: write, read back, and compare notes, chords, bars and keys with the model. */
+/** RULES.md writing check: write, read back, and compare every field of the model except its private source. */
 export function checkSong2(score: Score): ReadonlyArray<Diagnostic> {
   let written: string;
   try {
@@ -339,13 +311,7 @@ export function checkSong2(score: Score): ReadonlyArray<Diagnostic> {
   if (read.diagnostics.length > 0) return read.diagnostics;
   const reread = read.score;
   if (reread === null) return [writeMismatch()];
-  if (
-    !sameNotes(score.notes, reread.notes) ||
-    !sameChords(score.chords, reread.chords) ||
-    !sameBars(score.bars, reread.bars) ||
-    !sameKeys(score.keys, reread.keys)
-  ) {
-    return [writeMismatch()];
-  }
+  const field = firstDifferentField(score, reread);
+  if (field !== null) return [writeMismatch(field)];
   return [];
 }

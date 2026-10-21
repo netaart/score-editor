@@ -145,6 +145,7 @@ class MeasureCut extends Error {
   constructor(
     readonly offset: number,
     readonly reason: "tie" | "unfinished" = "unfinished",
+    readonly raw = "",
   ) {
     super("cut");
   }
@@ -186,6 +187,12 @@ export interface Song2SourceSegment {
   readonly bars: ReadonlyArray<Song2SourceBar>;
 }
 
+/** The unfinished bytes at the end of a cut measure and the X rule that kept them. */
+export interface Song2CutTail {
+  readonly kind: "x4" | "x5";
+  readonly raw: string;
+}
+
 export interface Song2SourceLine {
   /** 0-based line index in the normalized text. */
   readonly line: number;
@@ -194,6 +201,8 @@ export interface Song2SourceLine {
   readonly segments: ReadonlyArray<Song2SourceSegment>;
   /** X5: the reader dropped a final tie continuation whose pitch did not match. */
   readonly unfinishedTie: boolean;
+  /** The unfinished remainder of this line's partial measure, if it has one. */
+  readonly cutTail: Song2CutTail | null;
 }
 
 export interface Song2Source {
@@ -221,6 +230,8 @@ interface PendingLine {
   readonly segments: ReadonlyArray<PendingSegment>;
   /** X5: the last token is a tie continuation that the reader dropped as unfinished. */
   unfinishedTie: boolean;
+  /** X4 or X5: the unfinished bytes that end this line's partial measure. */
+  cutTail: Song2CutTail | null;
 }
 
 type BarContentSource = Pick<Score, "bars" | "notes" | "chords">;
@@ -353,6 +364,7 @@ class Song2Parser {
   private musicLines = 0;
   private readonly sourceLines: PendingLine[] = [];
   private lastCutReason: "tie" | "unfinished" = "unfinished";
+  private cutTail: Song2CutTail | null = null;
   private hasChords = false;
   private truncation: Truncation | null = null;
 
@@ -716,12 +728,14 @@ class Song2Parser {
       endsWithBarline: endsWithBar,
       segments,
       unfinishedTie: false,
+      cutTail: null,
     };
     this.sourceLines.push(sourceLine);
 
     this.musicLines += 1;
     let outcome: "none" | "partial" | "next" = "none";
     for (let bodyIndex = 0; bodyIndex < bodies.length; bodyIndex += 1) {
+      this.cutTail = null;
       const body = trimBody(bodies[bodyIndex] as string);
       const partialBody = !endsWithBar && bodyIndex === bodies.length - 1;
       const rests = wholeRestCount(body);
@@ -733,6 +747,7 @@ class Song2Parser {
       const result = this.readMeasureBody(voice, body, partialBody, lineNumber);
       if (result !== "complete") {
         outcome = result === "cut" ? "partial" : result;
+        sourceLine.cutTail = this.cutTail;
         break;
       }
     }
@@ -752,6 +767,7 @@ class Song2Parser {
     const bar = voice.measures.length;
     voice.accidental = {};
     this.lastCutReason = "unfinished";
+    this.cutTail = null;
 
     let offset = 0;
     let cut = false;
@@ -762,6 +778,7 @@ class Song2Parser {
       cut = true;
       offset = error.offset;
       this.lastCutReason = error.reason;
+      this.cutTail = { kind: error.reason === "tie" ? "x5" : "x4", raw: error.raw };
     }
 
     if (!cut && offset === length) {
@@ -808,6 +825,7 @@ class Song2Parser {
       while (isSpace(body[pos])) pos += 1;
       if (pos >= body.length) return offset;
 
+      const tokenStart = pos;
       const char = body[pos] as string;
       if (char === '"') {
         const end = body.indexOf('"', pos + 1);
@@ -816,7 +834,7 @@ class Song2Parser {
           if (voice.name === "Ins") {
             fail("chord", { voice: "Ins", bar: bar + 1 }, this.at(voice, lineNumber, bar + 1));
           }
-          if (partialBody) throw new MeasureCut(offset);
+          if (partialBody) throw new MeasureCut(offset, "unfinished", body.slice(pos));
           fail(
             "token",
             { reason: "unrecognized", token: body.slice(pos), bar: bar + 1 },
@@ -841,7 +859,7 @@ class Song2Parser {
         if (end < 0) {
           const rest = body.slice(pos);
           if (partialBody && (rest === "[" || rest === "[K" || rest.startsWith("[K:"))) {
-            throw new MeasureCut(offset);
+            throw new MeasureCut(offset, "unfinished", rest);
           }
           fail("token", { reason: "unrecognized", token: rest, bar: bar + 1 }, this.at(voice, lineNumber, bar + 1));
         }
@@ -915,6 +933,7 @@ class Song2Parser {
           length,
           bar,
           partialBody,
+          tokenStart,
           lineNumber,
         );
         pos = note.end;
@@ -922,7 +941,7 @@ class Song2Parser {
         continue;
       }
       if (accidental !== null && pos >= body.length && partialBody) {
-        throw new MeasureCut(offset);
+        throw new MeasureCut(offset, "unfinished", body.slice(tokenStart));
       }
       fail(
         "token",
@@ -1008,6 +1027,7 @@ class Song2Parser {
     length: number,
     bar: number,
     partialBody: boolean,
+    tokenStart: number,
     lineNumber: number,
   ): { end: number; offset: number } {
     let pos = startPos;
@@ -1049,7 +1069,7 @@ class Song2Parser {
       const alteration = accidental ?? voice.accidental[letter] ?? voice.signature[letter] ?? 0;
       pitch = written + alteration;
       if (voice.pendingTie !== null && pitch !== voice.pendingTie.pitch) {
-        if (partialBody && pos >= body.length) throw new MeasureCut(offset, "tie");
+        if (partialBody && pos >= body.length) throw new MeasureCut(offset, "tie", body.slice(tokenStart));
         fail("tie", { reason: "pitch", bar: bar + 1 }, this.at(voice, lineNumber, bar + 1));
       }
     }
@@ -1255,6 +1275,7 @@ class Song2Parser {
         voice: line.voice,
         endsWithBarline: line.endsWithBarline,
         unfinishedTie: line.unfinishedTie,
+        cutTail: line.cutTail,
         segments: line.segments.map((segment) => ({
           raw: segment.raw,
           bars: segment.bars
