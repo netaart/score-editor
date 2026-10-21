@@ -30,7 +30,7 @@ Both packages always carry the same version and are published together, from a m
 2. Set the same `version` in both `packages/*/package.json`, and commit it.
 3. `pnpm build`, then `pnpm check:pack`: each tarball must hold only its build output, `LICENSE`, `README.md` and `package.json`.
 4. Publish the core first, then the dialect: `pnpm publish --no-git-checks` inside `packages/score-editor`, then inside `packages/score-dialect-song2`, with `NPM_ACCESS_TOKEN` supplied to npm through a user config file kept outside the repository (`//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}`, selected with `npm_config_userconfig`). pnpm rewrites the dialect's `workspace:` dependency on the core to the released version.
-5. In an empty directory outside the repository, install both packages from npm and import each entry in Node; both imports must succeed.
+5. In an empty directory outside the repository, install both packages from `https://registry.npmjs.org/` itself (mirrors lag behind it) and import each entry in Node; both imports must succeed. Right after publishing, the version can already be fetched while the package document still answers 404 for a few minutes; wait until it does not.
 6. Tag the commit `v<version>` and push the tag.
 
 Two rules hold for every release:
@@ -38,7 +38,7 @@ Two rules hold for every release:
 - A third-party dependency of either package is pinned to a version published at least 7 days earlier. Consumers that install with pnpm's `minimumReleaseAge` apply it to transitive dependencies as well.
 - Before every push, the maintainer checks that no internal names have entered the repository; the word list is kept outside it.
 
-Step 3 and the rewrite of the `workspace:` dependency have been checked with a dry run and `pnpm pack`; no step that writes to the registry has been run yet.
+Version 0.1.0 was the first release made with these steps (tag `v0.1.0`).
 
 ## License
 
