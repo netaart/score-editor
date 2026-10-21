@@ -320,3 +320,66 @@ test.describe("zoom with the wheel", () => {
     expect(spacing).toBeGreaterThan(90);
   });
 });
+
+test.describe("scrolling in time and in pitch", () => {
+  // Vocal sings E4 in the middle of a score that also reaches C2 at the bottom and C7 at the top.
+  const wideRange = vocalOnly("C,,4E4c''4z4|E16|E16|E16|", "E16|E16|E16|E16|", "E16|E16|E16|E16|", "E16|E16|E16|E16|");
+
+  /** Whether a note is inside the roll and clear of the pinned header and the track head above it. */
+  const visibleNote = async (page: Page, name: string) => {
+    const roll = await box(page.getByRole("region", { name: "Arrangement" }));
+    const head = await box(page.getByText("Vocal", { exact: true }));
+    const note = await box(page.getByRole("listitem", { name }));
+    return note.y >= head.y + head.height && note.y + note.height <= roll.y + roll.height;
+  };
+
+  test("the roll opens on the middle of Vocal's notes, and the wheel scrolls it in pitch and in time", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the wheel is a mouse gesture, checked on the desktop project");
+    await harness.mount({ score: { text: wideRange } });
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    expect(await visibleNote(page, "E4, bar 1 beat 2, length 1 beat")).toBe(true);
+    expect(await visibleNote(page, "C2, bar 1 beat 1, length 1 beat")).toBe(false);
+
+    const frame = await box(roll);
+    await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+    await page.mouse.wheel(0, 3000);
+    await expect.poll(() => visibleNote(page, "C2, bar 1 beat 1, length 1 beat")).toBe(true);
+
+    await page.mouse.wheel(600, 0);
+    await expect.poll(() => roll.evaluate((el) => el.scrollLeft)).toBeGreaterThan(300);
+  });
+
+  test("the arrow keys scroll the focused roll in time and in pitch", async ({ page, harness, isMobile }) => {
+    test.skip(isMobile, "keys are checked on the desktop project");
+    await harness.mount({ score: { text: wideRange } });
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    await roll.focus();
+    const offset = () => roll.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+    const start = await offset();
+    for (let press = 0; press < 5; press++) await page.keyboard.press("ArrowRight");
+    await expect.poll(async () => (await offset()).left).toBeGreaterThan(start.left);
+    await page.keyboard.press("PageDown");
+    await expect.poll(async () => (await offset()).top).toBeGreaterThan(start.top);
+  });
+
+  test("a finger on the roll scrolls it in time and in pitch", async ({ page, harness, isMobile }) => {
+    test.skip(!isMobile, "touch gestures run on the phone project");
+    await harness.mount({ score: { text: wideRange } });
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    const frame = await box(roll);
+    const offset = () => roll.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+    const start = await offset();
+
+    const from = { x: frame.x + frame.width * 0.75, y: frame.y + frame.height - 20 };
+    await harness.swipe(from, { x: from.x - 200, y: from.y });
+    await expect.poll(async () => (await offset()).left).toBeGreaterThan(start.left + 100);
+
+    const middle = { x: frame.x + frame.width * 0.75, y: frame.y + frame.height - 20 };
+    await harness.swipe(middle, { x: middle.x, y: middle.y - 150 });
+    await expect.poll(async () => (await offset()).top).toBeGreaterThan(start.top + 50);
+  });
+});
