@@ -8,6 +8,7 @@ import {
   gridTicks,
   labelRank,
   lengthInBeats,
+  MIN_BAR_LINE_PIXELS,
   MIN_BEAT_LINE_PIXELS,
   marksOf,
   notesByVoice,
@@ -425,18 +426,19 @@ export class Editor implements MountedEditor {
       const flag = create(this.doc, "div", "sce-mark");
       flag.setAttribute("role", "listitem");
       flag.style.cssText = `--t:${mark.at};--w:${Math.max(0, next - mark.at)}`;
+      const items = create(this.doc, "div", "sce-mark-items", flag);
       const names: string[] = [];
       if (mark.meter) {
-        create(this.doc, "span", "sce-mark-item", flag).textContent = t.meterText(mark.meter);
+        create(this.doc, "span", "sce-mark-item", items).textContent = t.meterText(mark.meter);
         names.push(t.meterName(mark.meter));
       }
       if (mark.key) {
-        create(this.doc, "span", "sce-mark-item", flag).textContent = t.keyText(mark.key);
+        create(this.doc, "span", "sce-mark-item", items).textContent = t.keyText(mark.key);
         names.push(t.keyText(mark.key));
       }
       if (mark.cut) {
         const text = mark.cut.short ? t.incompleteBar : t.cutOff;
-        create(this.doc, "span", "sce-mark-item", flag).textContent = text;
+        create(this.doc, "span", "sce-mark-item", items).textContent = text;
         names.push(text);
         if (!mark.cut.short) flag.dataset.edge = "end";
       }
@@ -547,7 +549,9 @@ export class Editor implements MountedEditor {
         const period = `calc(var(--sce-_beat) * ${(this.zoom * ticks) / TICKS_PER_QUARTER})`;
         return `repeating-linear-gradient(to right, ${color} 0 1px, transparent 1px ${period})`;
       };
-      const layers = [line("var(--sce-_line-strong)", run.barTicks)];
+      const layers: string[] = [];
+      if (run.barTicks * pixelsPerTick >= MIN_BAR_LINE_PIXELS)
+        layers.push(line("var(--sce-_line-strong)", run.barTicks));
       if (run.beatTicks * pixelsPerTick >= MIN_BEAT_LINE_PIXELS) layers.push(line("var(--sce-_line)", run.beatTicks));
       element.style.backgroundImage = layers.join(", ");
     }

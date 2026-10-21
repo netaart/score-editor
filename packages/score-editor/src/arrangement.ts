@@ -180,6 +180,8 @@ export function gridRunsOf(score: Score): GridRun[] {
 
 /** Beat lines closer than this, in pixels, read as noise rather than as a grid, so only bar lines are drawn. */
 export const MIN_BEAT_LINE_PIXELS = 12;
+/** Bar lines closer than this make a comb over the notes; the lanes then draw none and the ruler carries the bars. */
+export const MIN_BAR_LINE_PIXELS = 10;
 
 /** The zoom levels of the menu; the buttons and keys step through them. 1 is the host's beat width. */
 export const ZOOM_PRESETS: ReadonlyArray<number> = [0.1, 0.25, 0.5, 1, 1.5, 2, 4];

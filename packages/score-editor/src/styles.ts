@@ -99,13 +99,16 @@ const css = `
   border-bottom: 1px solid var(--sce-_line);
 }
 .sce-root .sce-title {
+  overflow: hidden;
   font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sce-root .sce-spacer {
   flex: 1 1 auto;
 }
 .sce-root .sce-badge {
+  flex: none;
   padding: 2px 8px;
   border: 1px solid var(--sce-_line-strong);
   border-radius: 999px;
@@ -118,6 +121,17 @@ const css = `
   padding: 6px 12px;
   background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
+}
+/* A swatch of the cut's hatch ties the sentence to the hatched tail it explains. */
+.sce-root .sce-notice::before {
+  content: "";
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.6em;
+  border: 1px dashed var(--sce-_line-strong);
+  background: repeating-linear-gradient(135deg, var(--sce-_line-strong) 0 1px, transparent 1px 7px);
+  vertical-align: -0.2em;
 }
 .sce-root .sce-problem {
   flex: 1 1 auto;
@@ -143,6 +157,7 @@ const css = `
 }
 .sce-root .sce-zoom {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 4px;
 }
@@ -298,14 +313,22 @@ const css = `
   top: 0;
   bottom: 0;
   left: calc(var(--t) / var(--sce-ticks) * 100%);
+  width: calc(var(--w) / var(--sce-ticks) * 100%);
+  border-left: 1px solid var(--sce-_line-strong);
+}
+/* The items stay at the pitch column's edge while their stretch is scrolled past, so the key in force is always readable. */
+.sce-root .sce-mark-items {
+  position: sticky;
+  left: var(--sce-_keys);
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
   column-gap: 8px;
-  max-width: calc(var(--w) / var(--sce-ticks) * 100%);
+  width: fit-content;
+  max-width: 100%;
+  height: 100%;
   padding: 3px 0 0 5px;
   overflow: hidden;
-  border-left: 1px solid var(--sce-_line-strong);
   font-size: 0.92em;
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
@@ -314,23 +337,25 @@ const css = `
  * Text that does not fit its stretch is left out whole instead of cut mid-word: a full-height empty first item
  * makes any item that is too wide wrap to a second line, which the clip hides. A cut "Dm" would read as "D".
  */
-.sce-root .sce-mark::before,
+.sce-root .sce-mark-items::before,
 .sce-root .sce-chord::before {
   content: "";
   flex: none;
   width: 0;
   height: 100%;
 }
-.sce-root .sce-mark::before {
+.sce-root .sce-mark-items::before {
   margin-right: -8px;
 }
 .sce-root .sce-mark[data-edge="end"] {
   right: 0;
   left: auto;
-  max-width: none;
-  padding: 3px 5px 0 0;
+  width: auto;
   border-right: 1px solid var(--sce-_line-strong);
   border-left: 0;
+}
+.sce-root .sce-mark[data-edge="end"] .sce-mark-items {
+  padding: 3px 5px 0 0;
 }
 .sce-root .sce-chords {
   height: var(--sce-_chords);

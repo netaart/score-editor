@@ -190,6 +190,22 @@ test.describe("the arrangement of a song2 score", () => {
     expect((await box(marks.nth(2))).x).toBeCloseTo(three, 0);
   });
 
+  test("the key and meter in force stay readable while the view is scrolled past where they were set", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount({ score: { text: vocalOnly("C16|C16|C16|C16|", "C16|C16|C16|C16|") } });
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    await page.getByRole("button", { name: "Zoom 100%", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "400%", exact: true }).click();
+    await roll.evaluate((el) => el.scrollTo(1000, 0));
+    // The flag starts at bar 1, 1000 pixels to the left of what is shown; its text stays at the pitch column's edge.
+    const keys = (await box(roll)).x + 44;
+    const text = await box(page.getByRole("list", { name: "Marks" }).getByText("Key C"));
+    expect(text.x).toBeGreaterThanOrEqual(keys);
+    expect(text.x).toBeLessThan(keys + 60);
+  });
+
   test("a score that never changes key or meter has one mark, at the start", async ({ page, harness }) => {
     await harness.mount({ score: { vector: "accept-vocal-only" } });
     const marks = page.getByRole("list", { name: "Marks" }).getByRole("listitem");
@@ -1039,6 +1055,35 @@ test.describe("the grid in the lanes", () => {
     expect(await darker(10), "no beat line").toBeLessThan(4);
   });
 
+  test("when bars are too narrow to carry lines, the lanes draw none, so the notes read clean", async ({
+    page,
+    harness,
+  }) => {
+    // 235 bars fitted to the width are about 5 pixels each.
+    await harness.mount({ score: { sample: "vocal-only-melody" } });
+    await page.getByRole("button", { name: /^Zoom \d+%$/ }).click();
+    await page.getByRole("menuitem", { name: "Fit whole song" }).click();
+    const darker = await laneDarkness(page, 400);
+    let strongest = 0;
+    for (let offset = 2; offset < 395; offset++) strongest = Math.max(strongest, await darker(offset));
+    expect(strongest).toBeLessThan(4);
+  });
+
+  test("a legend of the cut's hatch stands before the sentence that explains the cut", async ({ page, harness }) => {
+    await harness.mount({ score: { vector: "truncate-partial-measure" } });
+    const notice = page.getByRole("note");
+    const strip = await box(notice);
+    // The padding is 12 pixels; the legend takes the next 14, so the sentence starts after them.
+    const sentence = await notice.evaluate((el) => {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().left;
+    });
+    expect(sentence).toBeGreaterThanOrEqual(strip.x + 12 + 14);
+    const pixels = await brightness(page, strip.x + 12, strip.y + strip.height / 2, 14);
+    expect(Math.max(...pixels) - Math.min(...pixels)).toBeGreaterThan(20);
+  });
+
   test("a beat is the unit of the bar's meter: an eighth note in 6/8", async ({ page, harness }) => {
     const header = [
       "X:1",
@@ -1086,5 +1131,18 @@ test.describe("a larger default text size", () => {
     expect(head.y).toBeGreaterThanOrEqual(headerBottom - 0.5);
     expect(head.y).toBeLessThan(headerBottom + 8);
     await cdp.detach();
+  });
+});
+
+test.describe("a narrow host", () => {
+  test.skip(({ isMobile }) => isMobile, "the width is set once, on the desktop project");
+
+  test("the read-only badge is not clipped when the toolbar has only 320 pixels", async ({ page, harness }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await harness.mount({ editable: false });
+    const badge = await box(page.getByText("Read only", { exact: true }));
+    const view = await box(page.getByRole("region", { name: "Arrangement" }));
+    expect(badge.x).toBeGreaterThanOrEqual(view.x);
+    expect(badge.x + badge.width).toBeLessThanOrEqual(view.x + view.width + 0.5);
   });
 });
