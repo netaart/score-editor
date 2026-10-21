@@ -27,9 +27,9 @@ Three seams, and no others:
 
 New behaviour gets a failing test at one of these seams first. After a change that makes a test pass, break the change on purpose once and see the test fail.
 
-Measurement is evidence, not a test: `node scripts/measure-scale.mjs [--bars=128 --notes=1500 --throttle=4 --headed --runs=5]` (after `pnpm build`) mounts a synthetic score and prints first-render time, frame times and long tasks during a drag and scrolling as JSON. Rerun it when a note's DOM or CSS changes and compare with the table in `docs/spike.md`.
+Measurement is evidence, not a test: `node scripts/measure-scale.mjs [--bars=128 --notes=1500 --throttle=4 --headed --runs=5]` (after `pnpm build`) mounts a synthetic song2 project and prints first-render time (with the parse alone timed separately), and frame times and long tasks during zoom steps, wheel zoom and scrolling, as JSON. Rerun it when the view's DOM or CSS changes and compare with the table in `docs/spike.md`.
 
-To look at the page by hand: `node e2e/serve.mjs`, then open `/?demo` (add `&lang=zh`, `&readonly`, `&big`).
+To look at the page by hand: `node e2e/serve.mjs`, then open `/?demo` (add `&lang=zh`, `&readonly`, `&big`, `&sample=<name>` for a file under `packages/score-dialect-song2/tests/samples`, or `&vector=<id>` for a vector in `vectors.json`).
 
 ## Conventions
 
