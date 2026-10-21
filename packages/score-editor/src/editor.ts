@@ -3,9 +3,12 @@
 import {
   barLabelStep,
   cutOf,
+  type GridRun,
+  gridRunsOf,
   gridTicks,
   labelRank,
   lengthInBeats,
+  MIN_BEAT_LINE_PIXELS,
   marksOf,
   notesByVoice,
   pitchName,
@@ -57,12 +60,19 @@ interface FirstLane {
 }
 
 /** The parts of a built arrangement that zooming and the first scroll need to find again. */
+interface Grid {
+  element: HTMLElement;
+  run: GridRun;
+}
+
 interface View {
   scroller: HTMLElement;
   /** Holds the pitch column and the time axis. */
   canvas: HTMLElement;
   /** The elements that each carry the time axis: the timeline rows and the lanes. */
   axes: HTMLElement[];
+  /** The grid lines of every lane, one element for each stretch of bars in one meter. */
+  grids: Grid[];
   /** The pinned header block. */
   top: HTMLElement;
   /** The pinned corner of the ruler: its width is the pitch column's. */
@@ -96,6 +106,7 @@ export class Editor implements MountedEditor {
   private readonly fitItem: HTMLButtonElement;
   private zoom = 1;
   private axes: HTMLElement[] = [];
+  private grids: Grid[] = [];
   private reading: Reading;
   private view: View | null = null;
   private destroyed = false;
@@ -302,6 +313,7 @@ export class Editor implements MountedEditor {
 
     const ticks = gridTicks(score);
     this.axes = [];
+    this.grids = [];
     const canvas = create(doc, "div", "sce-canvas", scroller);
     canvas.style.setProperty("--sce-ticks", String(ticks));
 
@@ -321,6 +333,7 @@ export class Editor implements MountedEditor {
       scroller,
       canvas,
       axes: this.axes,
+      grids: this.grids,
       top,
       corner: ruler.corner,
       timeline: ruler.timeline,
@@ -448,6 +461,12 @@ export class Editor implements MountedEditor {
     }
     const lane = create(doc, "div", "sce-lane", track);
     this.axes.push(lane);
+    for (const run of gridRunsOf(score)) {
+      const element = create(doc, "div", "sce-grid", lane);
+      element.setAttribute("aria-hidden", "true");
+      element.style.cssText = `--t:${run.start};--d:${run.end - run.start}`;
+      this.grids.push({ element, run });
+    }
     lane.style.setProperty("--sce-rows", String(range.hi - range.lo));
     const cut = cutOf(score);
     if (cut && cut.voice === voice && gridTicks(score) > cut.missingFrom) {
@@ -491,9 +510,10 @@ export class Editor implements MountedEditor {
    * Sets the zoom variable, the readout, the menu and the bar numbers that still have room. `timelineWidth` is the
    * width of the time axis at this zoom, when the caller knows it; reading it back would lay the page out again.
    */
-  private applyZoom(timelineWidth = this.view?.timeline.offsetWidth ?? 0): void {
+  private applyZoom(timelineWidth?: number): void {
     const view = this.view;
     if (view) this.widen(view);
+    const width = timelineWidth ?? view?.timeline.offsetWidth ?? 0;
     this.zoomValue.textContent = `${Math.round(this.zoom * 100)}%`;
     for (const [preset, item] of this.menuItems) {
       item.setAttribute("aria-checked", String(Math.abs(preset - this.zoom) < 1e-6));
@@ -501,11 +521,12 @@ export class Editor implements MountedEditor {
     this.zoomOut.setAttribute("aria-disabled", String(stepZoom(this.zoom, "out") === null));
     this.zoomIn.setAttribute("aria-disabled", String(stepZoom(this.zoom, "in") === null));
     this.zoomGroup.hidden = !view;
-    if (view && view.barCount > 0 && timelineWidth > 0) {
-      this.root.dataset.labelStep = String(barLabelStep(timelineWidth / view.barCount));
+    if (view && view.barCount > 0 && width > 0) {
+      this.root.dataset.labelStep = String(barLabelStep(width / view.barCount));
     } else {
       delete this.root.dataset.labelStep;
     }
+    if (view && view.ticks > 0) this.drawGrid(view, width / view.ticks);
   }
 
   /** Sets the width of the elements that carry the time axis to the score's length at the current zoom. */
@@ -513,6 +534,22 @@ export class Editor implements MountedEditor {
     const span = `var(--sce-ticks) * var(--sce-_beat) * ${this.zoom} / ${TICKS_PER_QUARTER}`;
     canvas.style.width = `calc(var(--sce-_keys) + ${span})`;
     for (const axis of axes) axis.style.width = `calc(${span})`;
+  }
+
+  /**
+   * Draws the bar and beat lines: a strong line at every bar start and a light one at every beat of the bar's meter,
+   * from the position the stretch of bars starts at. They are gradients, so they cost no nodes per line.
+   */
+  private drawGrid({ grids }: View, pixelsPerTick: number): void {
+    for (const { element, run } of grids) {
+      const line = (color: string, ticks: number) => {
+        const period = `calc(var(--sce-_beat) * ${(this.zoom * ticks) / TICKS_PER_QUARTER})`;
+        return `repeating-linear-gradient(to right, ${color} 0 1px, transparent 1px ${period})`;
+      };
+      const layers = [line("var(--sce-_line-strong)", run.barTicks)];
+      if (run.beatTicks * pixelsPerTick >= MIN_BEAT_LINE_PIXELS) layers.push(line("var(--sce-_line)", run.beatTicks));
+      element.style.backgroundImage = layers.join(", ");
+    }
   }
 
   /**

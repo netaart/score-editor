@@ -154,6 +154,33 @@ export function marksOf(score: Score): Mark[] {
   return [...byPosition].sort(([a], [b]) => a - b).map(([position, entry]) => ({ at: position, ...entry }));
 }
 
+/** A stretch of bars in one meter: where the grid draws a bar line every `barTicks` and a beat line every `beatTicks`. */
+export interface GridRun {
+  readonly start: number;
+  readonly end: number;
+  readonly barTicks: number;
+  readonly beatTicks: number;
+}
+
+export function gridRunsOf(score: Score): GridRun[] {
+  const runs: { start: number; end: number; meter: Meter }[] = [];
+  for (const bar of score.bars) {
+    const run = runs.at(-1);
+    if (run && run.meter.numerator === bar.meter.numerator && run.meter.denominator === bar.meter.denominator) {
+      run.end = bar.start + bar.length;
+    } else {
+      runs.push({ start: bar.start, end: bar.start + bar.length, meter: bar.meter });
+    }
+  }
+  return runs.map(({ start, end, meter }) => {
+    const beatTicks = WHOLE_NOTE_TICKS / meter.denominator;
+    return { start, end, barTicks: beatTicks * meter.numerator, beatTicks };
+  });
+}
+
+/** Beat lines closer than this, in pixels, read as noise rather than as a grid, so only bar lines are drawn. */
+export const MIN_BEAT_LINE_PIXELS = 12;
+
 /** The zoom levels of the menu; the buttons and keys step through them. 1 is the host's beat width. */
 export const ZOOM_PRESETS: ReadonlyArray<number> = [0.1, 0.25, 0.5, 1, 1.5, 2, 4];
 export const ZOOM_MIN = 0.01;

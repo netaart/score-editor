@@ -440,6 +440,22 @@ test.describe("a score that cannot be shown", () => {
     await harness.update({ language: "zh" });
     expect(await page.getByRole("region", { name: "编曲视图" }).evaluate((el) => el.scrollLeft)).toBe(300);
   });
+
+  test("the zoom, and the bar numbers it thins out, survive an update that draws the view again", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    await page.getByRole("button", { name: "Zoom 100%", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "10%", exact: true }).click();
+    const numbers = (name: string) => page.getByRole("list", { name }).getByRole("listitem").filter({ visible: true });
+    const before = await numbers("Bars").count();
+    expect(before).toBeLessThan(28);
+
+    await harness.update({ language: "zh" });
+    await expect(page.getByRole("button", { name: "缩放 10%", exact: true })).toBeVisible();
+    expect(await numbers("小节").count()).toBe(before);
+  });
 });
 
 test("update switches the interface language and back", async ({ page, harness }) => {
@@ -912,5 +928,91 @@ test.describe("popovers", () => {
       await expect(page.getByRole("button", { name: "Zoom 10%", exact: true })).toBeVisible();
       await expect(page.getByRole("menu", { name: "Zoom" })).toBeHidden();
     });
+  });
+});
+
+/** The brightness, 0 to 255, of each pixel in a one pixel high strip of the page: what the user sees there. */
+async function brightness(page: Page, x: number, y: number, width: number): Promise<number[]> {
+  const png = await page.screenshot({ clip: { x, y, width, height: 1 } });
+  return page.evaluate(async (base64) => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+    const canvas = new OffscreenCanvas(bitmap.width, 1);
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("no canvas");
+    context.drawImage(bitmap, 0, 0);
+    const { data } = context.getImageData(0, 0, bitmap.width, 1);
+    return Array.from(
+      { length: bitmap.width },
+      (_, i) => 0.299 * (data[4 * i] ?? 0) + 0.587 * (data[4 * i + 1] ?? 0) + 0.114 * (data[4 * i + 2] ?? 0),
+    );
+  }, png.toString("base64"));
+}
+
+test.describe("the grid in the lanes", () => {
+  test.skip(({ isMobile }) => isMobile, "pixels are read once, on the desktop project at a device scale of 1");
+
+  /** How much darker than the empty lane the pixel `offset` pixels into the lane is, looking one pixel either side. */
+  async function laneDarkness(page: Page, width: number) {
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    await roll.evaluate((el) => el.scrollTo(0, 0));
+    // The lane's top row is a white key above every note, so only the grid can be drawn there.
+    const lane = await box(page.getByRole("list", { name: "Vocal" }));
+    const start = Math.floor(lane.x);
+    const pixels = await brightness(page, start, lane.y + 3, width);
+    const at = (offset: number) => pixels[offset + Math.round(lane.x) - start] ?? 255;
+    const blank = at(3);
+    return (offset: number) => blank - Math.min(at(offset - 1), at(offset), at(offset + 1));
+  }
+
+  test("a strong line starts every bar and a light one every beat, and the beat lines follow the zoom", async ({
+    page,
+    harness,
+  }) => {
+    // Two 4/4 bars of four 40 pixel beats, then a 3/4 bar of three.
+    await harness.mount({ score: { vector: "accept-two-voices-meter-and-key-changes" } });
+    let darker = await laneDarkness(page, 450);
+    for (const bar of [0, 160, 320]) expect(await darker(bar), `bar line at ${bar}`).toBeGreaterThan(40);
+    for (const beat of [40, 80, 120, 200, 240, 280, 360, 400]) {
+      const strength = await darker(beat);
+      expect(strength, `beat line at ${beat}`).toBeGreaterThan(12);
+      expect(strength, `beat line at ${beat} is lighter than a bar line`).toBeLessThan(await darker(0));
+    }
+    for (const between of [20, 100, 180, 260, 340])
+      expect(await darker(between), `nothing at ${between}`).toBeLessThan(4);
+
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Zoom 200%", exact: true })).toBeVisible();
+    // A beat is 80 pixels now and a 4/4 bar 320.
+    darker = await laneDarkness(page, 450);
+    expect(await darker(320), "bar line at 320").toBeGreaterThan(40);
+    expect(await darker(80), "beat line at 80").toBeGreaterThan(12);
+    expect(await darker(40), "nothing where a beat used to end").toBeLessThan(4);
+
+    await page.getByRole("button", { name: "Zoom 200%", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "25%", exact: true }).click();
+    // Bars are 40 pixels now and beats 10: too close to read as lines, so only the bars are drawn.
+    darker = await laneDarkness(page, 130);
+    expect(await darker(40), "bar line at 40").toBeGreaterThan(40);
+    expect(await darker(80), "bar line at 80").toBeGreaterThan(40);
+    expect(await darker(10), "no beat line").toBeLessThan(4);
+  });
+
+  test("a beat is the unit of the bar's meter: an eighth note in 6/8", async ({ page, harness }) => {
+    const header = [
+      "X:1",
+      "T:",
+      "M:6/8",
+      "L:1/16",
+      "Q:1/4=100",
+      'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"',
+    ];
+    await harness.mount({ score: { text: [...header, "K:C", "% a", "V: Vocal", "C12|C12|", ""].join("\n") } });
+    // A 6/8 bar is six eighths of 20 pixels.
+    const darker = await laneDarkness(page, 250);
+    expect(await darker(0), "bar line").toBeGreaterThan(40);
+    for (const beat of [20, 40, 60, 80, 100]) expect(await darker(beat), `beat line at ${beat}`).toBeGreaterThan(12);
+    expect(await darker(120), "the next bar line").toBeGreaterThan(40);
+    expect(await darker(10), "nothing between beats").toBeLessThan(4);
   });
 });

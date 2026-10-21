@@ -442,6 +442,14 @@ ${labelThinning()}
   background-image: ${octaveStripes()};
   background-size: 100% calc(12 * var(--sce-_row));
 }
+.sce-root .sce-grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
+  width: calc(var(--d) / var(--sce-ticks) * 100%);
+  pointer-events: none;
+}
 /* The part of a cut voice that the text never reached: hatched, so a gap is not mistaken for a rest. */
 .sce-root .sce-cut {
   position: absolute;
