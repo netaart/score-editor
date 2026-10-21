@@ -1,11 +1,16 @@
 // ABOUTME: The public types of @neta-art/score-editor: mount options, host callbacks and the dialect constraints.
-// ABOUTME: Type-only, so importing it costs nothing at runtime and dialect packages can depend on it safely.
+// ABOUTME: Almost type-only, so importing it costs nothing at runtime and dialect packages can depend on it safely.
+import type { DialectRegistry } from "./dialect";
+import type { SongProject } from "./score";
 
 /** Interface languages the package ships text for. The host picks one. */
 export type Language = "zh" | "en";
 
+/** The reasons of the one-time messages the editor sends to the host. The set is closed and starts empty: a later ticket adds its codes here. */
+export const NOTICE_CODES = [] as const;
+
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */
-export type NoticeCode = "read-only" | "pitch-out-of-range" | "move-blocked";
+export type NoticeCode = (typeof NOTICE_CODES)[number];
 
 /**
  * A one-time message the editor wants the user to see. The editor never renders it itself:
@@ -17,35 +22,20 @@ export interface Notice {
   message: string;
 }
 
-/** A note in the spike's score. Positions and lengths are in ticks, 480 per quarter note. */
-export interface SpikeNote {
-  voice: string;
-  /** MIDI pitch, 0-127. */
-  midi: number;
-  /** Start in ticks from the beginning of the score. */
-  start: number;
-  /** Length in ticks. */
-  duration: number;
-}
-
-/** The spike's whole score: a bar count in 4/4 and the notes of each voice. */
-export interface SpikeScore {
-  bars: number;
-  notes: SpikeNote[];
-}
-
 export interface MountOptions {
   /** Interface language. */
   language: Language;
-  /** Whether the user may change the score. Defaults to true. */
-  editable?: boolean;
-  /** Receives every one-time message the editor wants shown. */
-  notify?: (notice: Notice) => void;
   /**
-   * Spike only: the score to show. It stands in for the song project (score text, lyrics, style,
-   * mode, seed) until the dialect parser exists.
+   * Whether the user may change the score. Defaults to true. This version shows the score read-only whatever
+   * the value; `false` additionally shows the read-only badge. Editing arrives in a later version.
    */
-  spikeScore?: SpikeScore;
+  editable?: boolean;
+  /** Receives every one-time message the editor wants shown. No message exists yet, so it is never called. */
+  notify?: (notice: Notice) => void;
+  /** The song project to show. Only its score text and model ID are read in this version. */
+  project: SongProject;
+  /** The score dialects this editor can read, built by the host with `createDialectRegistry`. */
+  dialects: DialectRegistry;
 }
 
 export interface MountedEditor {

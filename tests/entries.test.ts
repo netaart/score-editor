@@ -19,7 +19,17 @@ describe("package entries in a node environment", () => {
   });
 
   it("refuses to mount without a DOM instead of failing obscurely", async () => {
-    const { mount } = await import("@neta-art/score-editor");
-    expect(() => mount({} as HTMLElement, { language: "en" })).toThrow(/browser/i);
+    const { createDialectRegistry, mount } = await import("@neta-art/score-editor");
+    const project = {
+      style: "",
+      lyrics: "",
+      score: "",
+      scoreMode: "full",
+      seed: null,
+      modelId: "song2",
+      sourceKey: "node-test",
+    } as const;
+    const options = { language: "en", project, dialects: createDialectRegistry([]) } as const;
+    expect(() => mount({} as HTMLElement, options)).toThrow(/browser/i);
   });
 });

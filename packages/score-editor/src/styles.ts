@@ -1,5 +1,6 @@
 // ABOUTME: The editor's stylesheet as a string, injected by mount() and removed again by destroy().
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
+import { TICKS_PER_QUARTER } from "./score";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
 const BLACK_KEY_ROWS = [1, 3, 5, 8, 10];
@@ -97,66 +98,12 @@ const css = `
   font-size: 0.92em;
   white-space: nowrap;
 }
-.sce-root .sce-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--sce-_line-strong);
-  border-radius: var(--sce-_radius);
-  background: var(--sce-_bg);
-  color: var(--sce-_text);
-  font: inherit;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.sce-root .sce-button:hover {
-  background: color-mix(in srgb, var(--sce-_text) 6%, var(--sce-_bg));
-}
-.sce-root .sce-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--sce-_text) 10%, var(--sce-_bg));
-}
-.sce-root .sce-button-value {
-  font-weight: 600;
-  font-variant-numeric: lining-nums tabular-nums;
-}
-.sce-root .sce-button::after {
-  content: "";
-  width: 5px;
-  height: 5px;
-  margin-top: -3px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg);
-}
-@media (pointer: coarse) {
-  .sce-root .sce-button {
-    min-height: 36px;
-  }
-}
-.sce-root :is(.sce-button, .sce-menu-item, .sce-scroller, .sce-note):focus-visible {
-  outline: 2px solid var(--sce-_accent);
-  outline-offset: 2px;
-}
-/* The scroller's own outline would be hidden behind the sticky ruler and keys, so a ring is drawn over its box. */
-.sce-root .sce-scroller:focus-visible {
-  outline: none;
-}
 .sce-root .sce-body {
   position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-}
-.sce-root .sce-body:has(> .sce-scroller:focus-visible)::after {
-  content: "";
-  position: absolute;
-  z-index: 8;
-  inset: 0;
-  border: 2px solid var(--sce-_accent);
-  pointer-events: none;
 }
 
 .sce-root .sce-scroller {
@@ -173,37 +120,41 @@ const css = `
 }
 .sce-root .sce-canvas {
   position: relative;
-  width: calc(var(--sce-_keys) + var(--sce-bars) * 4 * var(--sce-_beat));
+  width: calc(var(--sce-_keys) + var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
 }
 
-.sce-root .sce-ruler {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+.sce-root .sce-row {
   display: flex;
-  height: 24px;
-  background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
+  background: var(--sce-_surface);
 }
 .sce-root .sce-corner {
   position: sticky;
   left: 0;
-  z-index: 1;
+  z-index: 3;
   flex: none;
   width: var(--sce-_keys);
   background: var(--sce-_surface);
   border-right: 1px solid var(--sce-_line);
 }
-.sce-root .sce-bars {
+.sce-root .sce-timeline {
   position: relative;
   flex: none;
-  width: calc(var(--sce-bars) * 4 * var(--sce-_beat));
-  background: linear-gradient(90deg, var(--sce-_line-strong) 0 1px, transparent 1px) 0 0 / calc(4 * var(--sce-_beat)) 100%;
+  width: calc(var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+}
+.sce-root .sce-ruler {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 24px;
 }
 .sce-root .sce-bar-number {
   position: absolute;
-  top: 4px;
-  left: calc(var(--i) * 4 * var(--sce-_beat) + 5px);
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  padding: 4px 0 0 5px;
+  border-left: 1px solid var(--sce-_line-strong);
   color: var(--sce-_muted);
   font-size: 0.92em;
   font-variant-numeric: lining-nums tabular-nums;
@@ -236,164 +187,13 @@ const css = `
   display: flex;
   border-bottom: 1px solid var(--sce-_line);
 }
-.sce-root .sce-keys {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  flex: none;
-  width: var(--sce-_keys);
-  background: var(--sce-_surface);
-  border-right: 1px solid var(--sce-_line);
-}
-.sce-root .sce-octave {
-  display: flex;
-  align-items: flex-end;
-  height: calc(12 * var(--sce-_row));
-  padding: 0 6px 1px;
-  border-top: 1px solid var(--sce-_line);
-  color: var(--sce-_muted);
-  font-size: 0.85em;
-  font-variant-numeric: lining-nums tabular-nums;
-}
-.sce-root .sce-octave:first-child {
-  border-top: 0;
-}
-
 .sce-root .sce-lane {
   position: relative;
   flex: none;
-  width: calc(var(--sce-bars) * 4 * var(--sce-_beat));
-  height: calc(var(--sce-rows) * var(--sce-_row));
-  background-image:
-    linear-gradient(90deg, var(--sce-_line-strong) 0 1px, transparent 1px),
-    linear-gradient(90deg, var(--sce-_line) 0 1px, transparent 1px),
-    linear-gradient(90deg, var(--sce-_sub) 0 1px, transparent 1px),
-    ${octaveStripes()};
-  background-size:
-    calc(4 * var(--sce-_beat)) 100%,
-    var(--sce-_beat) 100%,
-    calc(var(--sce-_beat) / var(--sce-grid-div, 4)) 100%,
-    100% calc(12 * var(--sce-_row));
-}
-
-.sce-root .sce-note {
-  box-sizing: border-box;
-  display: block;
-  margin: 0;
-  padding: 0;
-  opacity: 1;
-  box-shadow: none;
-  filter: none;
-  position: absolute;
-  z-index: 1;
-  left: calc(var(--t) * var(--sce-_beat) / 480);
-  top: calc(var(--r) * var(--sce-_row));
-  width: calc(var(--d) * var(--sce-_beat) / 480 - 1px);
-  min-width: 5px;
-  height: var(--sce-_row);
-  border: 1px solid color-mix(in srgb, var(--sce-_text) 30%, var(--sce-_note));
-  border-radius: min(var(--sce-_radius), 3px);
-  background: var(--sce-_note);
-  cursor: grab;
-  touch-action: none;
-  -webkit-touch-callout: none;
-}
-@media (pointer: coarse) {
-  .sce-root .sce-note::before {
-    content: "";
-    position: absolute;
-    inset: -4px -6px;
-  }
-}
-.sce-root .sce-note[aria-pressed="true"] {
-  z-index: 2;
-  background: color-mix(in srgb, var(--sce-_note) 72%, var(--sce-_text));
-  outline: 2px solid var(--sce-_text);
-  outline-offset: 1px;
-}
-.sce-root .sce-note[aria-pressed="true"]:focus-visible {
-  box-shadow: 0 0 0 5px var(--sce-_accent);
-}
-.sce-root .sce-note[data-dragging] {
-  z-index: 2;
-  cursor: grabbing;
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--sce-_text) 40%, transparent);
-}
-.sce-root .sce-note[data-blocked] {
-  opacity: 0.45;
-  outline: 2px dashed var(--sce-_text);
-}
-.sce-root[data-readonly] .sce-note {
-  cursor: default;
-}
-
-.sce-root .sce-readout {
-  position: absolute;
-  z-index: 6;
-  top: 0;
-  left: 0;
-  padding: 3px 8px;
-  border-radius: var(--sce-_radius);
-  background: var(--sce-_text);
-  color: var(--sce-_bg);
-  font-size: 0.92em;
-  font-variant-numeric: lining-nums tabular-nums;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.sce-root .sce-readout[hidden] {
-  display: none;
-}
-
-.sce-root .sce-popover {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  min-width: 190px;
-  padding: 4px;
-  border: 1px solid var(--sce-_line-strong);
-  border-radius: calc(var(--sce-_radius) + 2px);
-  background: var(--sce-_surface);
-  color: var(--sce-_text);
-  font: inherit;
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--sce-_text) 22%, transparent);
-}
-.sce-root .sce-popover:not(:popover-open) {
-  display: none;
-}
-.sce-root .sce-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 30px;
-  padding: 0 10px 0 8px;
-  border: 0;
-  border-radius: var(--sce-_radius);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-.sce-root .sce-menu-item::before {
-  content: "";
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: transparent;
-}
-.sce-root .sce-menu-item[aria-checked="true"]::before {
-  background: var(--sce-_accent);
-}
-.sce-root .sce-menu-item:hover {
-  background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
-}
-@media (pointer: coarse) {
-  .sce-root .sce-menu-item {
-    min-height: 40px;
-  }
+  width: calc(var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  height: calc(12 * var(--sce-_row));
+  background-image: ${octaveStripes()};
+  background-size: 100% calc(12 * var(--sce-_row));
 }
 
 .sce-root .sce-sr-only {
