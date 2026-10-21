@@ -1235,15 +1235,7 @@ class Song2Parser {
     const chords = this.vocal.chords.map((chord: InternalChord): Chord => ({ ...chord }));
 
     const partial = this.vocal.partial ?? this.ins?.partial ?? null;
-    const partialVoice = this.vocal.partial !== null ? this.vocal : this.ins;
-    const partialHasContent =
-      partial !== null &&
-      (notes.some((note) => note.voice === partialVoice?.name && note.bar === partial.bar) ||
-        chords.some((chord) => chord.start >= partial.start && chord.start < partial.start + partial.length) ||
-        (partialVoice?.timeline ?? []).some(
-          (change) => change.at >= partial.start && change.at < partial.start + partial.length,
-        ));
-    if (partial !== null && partial.bar >= bars.length && partialHasContent) {
+    if (partial !== null && partial.bar >= bars.length) {
       bars.push({
         index: bars.length,
         start: partial.start,
