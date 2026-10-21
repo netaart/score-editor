@@ -233,6 +233,17 @@ test.describe("the arrangement of a song2 score", () => {
     expect((await box(flag)).x).toBeCloseTo((await box(bar)).x, 0);
   });
 
+  test("a cut bar with nothing finished in it is still drawn and marked where it is", async ({ page, harness }) => {
+    // Bar 1 is a whole C tied into a B that the cut left unfinished, so bar 2 holds no finished note.
+    await harness.mount({ score: { vector: "truncate-tie-mismatch-final" } });
+    await expect(page.getByRole("note")).toHaveText("This score is cut off: bar 2 of Vocal is incomplete.");
+    const flag = page.getByRole("list", { name: "Marks" }).getByRole("listitem").filter({ hasText: "Incomplete bar" });
+    const bar = page.getByRole("list", { name: "Bars" }).getByText("2", { exact: true });
+    await expect(flag).toBeVisible();
+    await expect(bar).toBeVisible();
+    expect((await box(flag)).x).toBeCloseTo((await box(bar)).x, 0);
+  });
+
   test("a cut at a bar line is marked at the end of the score", async ({ page, harness }) => {
     // One complete bar, then a section marker and nothing else.
     await harness.mount({ score: { vector: "truncate-after-comment" } });
