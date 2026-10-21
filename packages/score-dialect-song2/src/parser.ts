@@ -1220,10 +1220,9 @@ class Song2Parser {
       partial !== null &&
       (notes.some((note) => note.voice === partialVoice?.name && note.bar === partial.bar) ||
         chords.some((chord) => chord.start >= partial.start && chord.start < partial.start + partial.length) ||
-        (partialVoice?.timeline.some(
+        (partialVoice?.timeline ?? []).some(
           (change) => change.at >= partial.start && change.at < partial.start + partial.length,
-        ) ??
-          false));
+        ));
     if (partial !== null && partial.bar >= bars.length && partialHasContent) {
       bars.push({
         index: bars.length,
