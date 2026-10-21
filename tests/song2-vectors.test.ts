@@ -49,6 +49,13 @@ const vectors = (
   }
 ).vectors;
 
+const unfinishedCuts = [
+  "truncate-unfinished-chord",
+  "truncate-lone-accidental",
+  "truncate-unfinished-key",
+  "truncate-tie-mismatch-final",
+] as const;
+
 function ticks(fraction: string): number {
   const [numerator = "0", denominator = "1"] = fraction.split("/");
   return (Number(numerator) / Number(denominator)) * TICKS_PER_QUARTER;
@@ -130,6 +137,30 @@ describe("song2 vectors", () => {
       }
 
       expect(song2Dialect.serialize(score)).toBe(lf(vector.text));
+    });
+  }
+});
+
+describe("song2 cut measures", () => {
+  for (const id of unfinishedCuts) {
+    it(`${id} ends in an incomplete bar with its meter's length`, () => {
+      const vector = vectors.find((candidate) => candidate.id === id);
+      expect(vector, id).toBeDefined();
+      if (vector === undefined) return;
+      const { score, diagnostics } = song2Dialect.parse(vector.text);
+
+      expect(diagnostics).toEqual([]);
+      expect(score).not.toBeNull();
+      if (score === null) return;
+      expect(score.truncation).not.toBeNull();
+      if (score.truncation === null) return;
+
+      const last = score.bars[score.bars.length - 1];
+      expect(last).toBeDefined();
+      if (last === undefined) return;
+      expect(last.incomplete).toBe(true);
+      expect(last.index).toBe(score.truncation.bar);
+      expect(last.length).toBe((last.meter.numerator * 4 * TICKS_PER_QUARTER) / last.meter.denominator);
     });
   }
 });

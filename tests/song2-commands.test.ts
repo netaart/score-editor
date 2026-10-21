@@ -225,7 +225,51 @@ describe("toRest and cut tails", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.diagnostic.code).toBe("write-mismatch");
-    expect(result.diagnostic.params.field).toBe("truncation");
+    expect(result.diagnostic.params.field).toBe("bars");
+  });
+
+  it("keeps an X4-only cut measure and its incomplete bar when a note before it becomes a rest", () => {
+    const text = `${HEADER}
+K:C
+V: Vocal
+C16|"Cm`;
+    const input = parse(text);
+    const result = applyScoreCommand(song2Dialect, text, { type: "toRest", noteId: "Vocal:0" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${HEADER}
+K:C
+V: Vocal
+z16|"Cm`);
+    const output = parse(result.text);
+    const bar = output.bars[output.bars.length - 1];
+    expect(bar?.index).toBe(input.truncation?.bar);
+    expect(bar?.incomplete).toBe(true);
+    expect(output.truncation).toEqual(input.truncation);
+    check(output);
+  });
+
+  it("keeps an X5-only cut measure and its incomplete bar when a note outside the tie becomes a rest", () => {
+    const text = `${HEADER}
+K:C
+V: Vocal
+C8D8-|B`;
+    const input = parse(text);
+    const result = applyScoreCommand(song2Dialect, text, { type: "toRest", noteId: "Vocal:0" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${HEADER}
+K:C
+V: Vocal
+z8D8-|B`);
+    const output = parse(result.text);
+    const bar = output.bars[output.bars.length - 1];
+    expect(bar?.index).toBe(input.truncation?.bar);
+    expect(bar?.incomplete).toBe(true);
+    expect(output.truncation).toEqual(input.truncation);
+    check(output);
   });
 
   it("keeps the X5 tail inside a partial measure that still has a finished token", () => {
@@ -365,7 +409,7 @@ C16|`,
 
     expect(result.project).toBe(cutProject);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["write-mismatch"]);
-    expect(result.diagnostics[0]?.params.field).toBe("truncation");
+    expect(result.diagnostics[0]?.params.field).toBe("bars");
   });
 });
 
