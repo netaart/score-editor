@@ -9,6 +9,12 @@ async function box(target: Locator) {
   return found;
 }
 
+/** A Vocal-only song2 score in C major, 4/4, with the given music lines under one section. */
+function vocalOnly(...music: string[]): string {
+  const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
+  return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
+}
+
 // Expected counts below are hand-counted from the score files (bar lines of the Vocal music lines), not read back from the reader.
 
 test.describe("the arrangement of a song2 score", () => {
@@ -98,5 +104,47 @@ test.describe("the arrangement of a song2 score", () => {
     await harness.mount({ score: { vector: "accept-vocal-only" } });
     await expect(page.getByText("No chords in this score")).toBeVisible();
     await expect(page.getByRole("list", { name: "Chords" })).toHaveCount(0);
+  });
+
+  test("notes are drawn on their pitch row and a rest is a gap, not a block", async ({ page, harness }) => {
+    // Bar 1: a quarter C4, a quarter rest, a half D4. Bar 2: a whole C4.
+    await harness.mount({ score: { text: vocalOnly("C4z4D8|C16|") } });
+    const notes = page.getByRole("list", { name: "Vocal" }).getByRole("listitem");
+    await expect(notes).toHaveCount(3);
+    const c4 = page.getByRole("listitem", { name: "C4, bar 1 beat 1, length 1 beat" });
+    const d4 = page.getByRole("listitem", { name: "D4, bar 1 beat 3, length 2 beats" });
+    await expect(c4).toBeVisible();
+    const [first, second] = [await box(c4), await box(d4)];
+    const barLeft = async (number: string) =>
+      (await box(page.getByRole("list", { name: "Bars" }).getByText(number, { exact: true }))).x;
+    const beat = ((await barLeft("2")) - (await barLeft("1"))) / 4;
+    // The rest between them is exactly one beat wide; the notes keep a one pixel gap so neighbours read apart.
+    expect(second.x - (first.x + first.width)).toBeCloseTo(beat + 1, 0);
+    // D4 is two semitones above C4, and a pitch row is one note high.
+    expect(first.y - second.y).toBeCloseTo(2 * first.height, 0);
+  });
+
+  test("tied notes read as one connected bar, untied neighbours keep a gap", async ({ page, harness }) => {
+    await harness.mount({ score: { text: vocalOnly("^F16-|F16|C16|") } });
+    const tied = page.getByRole("listitem", { name: "F#4, bar 1 beat 1, length 4 beats, tied to the next note" });
+    await expect(tied).toBeVisible();
+    const continued = page.getByRole("listitem", { name: "F#4, bar 2 beat 1, length 4 beats" });
+    const [head, tail] = [await box(tied), await box(continued)];
+    expect(tail.x - (head.x + head.width)).toBeCloseTo(0, 0);
+    const apart = [await box(continued), await box(page.getByRole("listitem", { name: /^C4, bar 3/ }))];
+    expect(
+      (apart[1] as { x: number }).x -
+        ((apart[0] as { x: number; width: number }).x + (apart[0] as { width: number }).width),
+    ).toBeCloseTo(1, 0);
+  });
+
+  test("each track labels its octaves in a pitch column that lines up with the notes", async ({ page, harness }) => {
+    await harness.mount({ score: { text: vocalOnly("C4D4E4F4|c16|") } });
+    const c4 = await box(page.getByRole("listitem", { name: /^C4, bar 1 beat 1/ }));
+    const label = await box(page.getByText("C4", { exact: true }));
+    const c5 = await box(page.getByRole("listitem", { name: /^C5, bar 2/ }));
+    expect(label.y + label.height).toBeCloseTo(c4.y + c4.height, -1);
+    expect(c4.y - c5.y).toBeCloseTo(12 * c4.height, 0);
+    await expect(page.getByText("C5", { exact: true })).toBeVisible();
   });
 });

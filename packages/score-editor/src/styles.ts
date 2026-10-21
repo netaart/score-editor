@@ -250,13 +250,72 @@ const css = `
   display: flex;
   border-bottom: 1px solid var(--sce-_line);
 }
+.sce-root .sce-keys {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: none;
+  width: var(--sce-_keys);
+  background: var(--sce-_surface);
+  border-right: 1px solid var(--sce-_line);
+}
+.sce-root .sce-octave {
+  display: flex;
+  align-items: flex-end;
+  height: calc(12 * var(--sce-_row));
+  padding: 0 6px 1px;
+  border-top: 1px solid var(--sce-_line);
+  color: var(--sce-_muted);
+  font-size: 0.85em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.sce-root .sce-octave:first-child {
+  border-top: 0;
+}
+
 .sce-root .sce-lane {
   position: relative;
   flex: none;
   width: calc(var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
-  height: calc(12 * var(--sce-_row));
+  height: calc(var(--sce-rows) * var(--sce-_row));
   background-image: ${octaveStripes()};
   background-size: 100% calc(12 * var(--sce-_row));
+}
+.sce-root .sce-notes {
+  position: absolute;
+  inset: 0;
+}
+
+.sce-root .sce-note {
+  box-sizing: border-box;
+  display: block;
+  margin: 0;
+  padding: 0;
+  opacity: 1;
+  box-shadow: none;
+  filter: none;
+  position: absolute;
+  z-index: 1;
+  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  top: calc(var(--r) * var(--sce-_row));
+  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER} - 1px);
+  min-width: 2px;
+  height: var(--sce-_row);
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 30%, var(--sce-_note));
+  border-radius: min(var(--sce-_radius), 3px);
+  background: var(--sce-_note);
+}
+/* A tie joins two notes into one bar: no gap, no border and no rounding where they meet. */
+.sce-root .sce-note[data-tie-next] {
+  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  border-right-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.sce-root .sce-note[data-tie-prev] {
+  border-left-width: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
 }
 
 .sce-root .sce-sr-only {

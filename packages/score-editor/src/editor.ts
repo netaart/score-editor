@@ -1,7 +1,8 @@
 // ABOUTME: The mounted editor: reads the song project's score with its dialect and builds the read-only arrangement view.
 // ABOUTME: Every listener is registered with one AbortSignal, so destroy() removes them all and leaves no node behind.
+import { lengthInBeats, notesByVoice, pitchName, pitchRangeOf, positionOf, tieJoins } from "./arrangement";
 import { messagesFor } from "./i18n";
-import type { Score } from "./score";
+import type { Note, Score } from "./score";
 import { acquireStyles } from "./styles";
 import type { MountedEditor, MountOptions } from "./types";
 
@@ -129,16 +130,8 @@ export class Editor implements MountedEditor {
     this.buildSections(top, score);
     this.buildChords(top, score);
 
-    for (const voice of score.voices) {
-      const group = create(doc, "div", "sce-track-group", canvas);
-      const head = create(doc, "div", "sce-track-head", group);
-      create(doc, "span", "sce-track-name", head).textContent = voice;
-      const track = create(doc, "div", "sce-track", group);
-      create(doc, "div", "sce-corner", track);
-      const lane = create(doc, "div", "sce-lane", track);
-      lane.setAttribute("role", "list");
-      lane.setAttribute("aria-label", voice);
-    }
+    const notes = notesByVoice(score);
+    for (const voice of score.voices) this.buildTrack(canvas, score, voice, notes.get(voice) ?? []);
     return scroller;
   }
 
@@ -206,5 +199,44 @@ export class Editor implements MountedEditor {
       chords.appendChild(item);
     });
     timeline.appendChild(chords);
+  }
+
+  /** One piano-roll track: its head, the pitch column and the lane with a block for every pitched note. */
+  private buildTrack(canvas: HTMLElement, score: Score, voice: string, notes: ReadonlyArray<Note>): void {
+    const doc = this.doc;
+    const t = messagesFor(this.options.language);
+    const range = pitchRangeOf(notes);
+    const group = create(doc, "div", "sce-track-group", canvas);
+    const head = create(doc, "div", "sce-track-head", group);
+    create(doc, "span", "sce-track-name", head).textContent = voice;
+    const track = create(doc, "div", "sce-track", group);
+    const keys = create(doc, "div", "sce-keys", track);
+    for (let octave = range.hi - 12; octave >= range.lo; octave -= 12) {
+      create(doc, "div", "sce-octave", keys).textContent = pitchName(octave);
+    }
+    const lane = create(doc, "div", "sce-lane", track);
+    lane.style.setProperty("--sce-rows", String(range.hi - range.lo));
+    const list = create(doc, "div", "sce-notes", lane);
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", voice);
+
+    const joins = tieJoins(notes);
+    const blocks = doc.createDocumentFragment();
+    for (const [index, note] of notes.entries()) {
+      if (note.midi === null) continue;
+      const block = create(doc, "div", "sce-note");
+      block.setAttribute("role", "listitem");
+      block.style.cssText = `--t:${note.start};--d:${note.duration};--r:${range.hi - 1 - note.midi}`;
+      const tiedToNext = joins.has(note.id);
+      if (tiedToNext) block.dataset.tieNext = "";
+      if (index > 0 && joins.has(notes[index - 1]?.id ?? "")) block.dataset.tiePrev = "";
+      const position = positionOf(score.bars, note.bar, note.start);
+      block.setAttribute(
+        "aria-label",
+        t.noteLabel(pitchName(note.midi), position, lengthInBeats(note.duration, position.beatTicks), tiedToNext),
+      );
+      blocks.appendChild(block);
+    }
+    list.appendChild(blocks);
   }
 }
