@@ -10,12 +10,14 @@ export interface ParseResult {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
-/** What a score dialect must provide. `check` joins in a later ticket. */
+/** What a score dialect must provide. */
 export interface ScoreDialect {
   readonly id: string;
   readonly constraints: DialectConstraints;
   parse(text: string): ParseResult;
   serialize(score: Score): string;
+  /** Writes the score, reads the written text back, and reports every way it differs from the model. */
+  check(score: Score): ReadonlyArray<Diagnostic>;
 }
 
 export interface DialectRegistry {

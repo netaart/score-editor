@@ -23,14 +23,30 @@ const INS_HEADER = 'V: Ins clef=treble name="Ins Melody" snm="Inst."';
 const VOCAL_OPEN = "V: Vocal";
 const INS_OPEN = "V: Ins";
 
-const MAJOR_KEYS = ["Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#"];
-const MINOR_KEYS = ["Abm", "Ebm", "Bbm", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m", "G#m", "D#m", "A#m"];
-const KEY_FIFTHS = new Map<string, number>();
+export const MAJOR_KEYS = ["Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E", "B", "F#", "C#"];
+export const MINOR_KEYS = [
+  "Abm",
+  "Ebm",
+  "Bbm",
+  "Fm",
+  "Cm",
+  "Gm",
+  "Dm",
+  "Am",
+  "Em",
+  "Bm",
+  "F#m",
+  "C#m",
+  "G#m",
+  "D#m",
+  "A#m",
+];
+export const KEY_FIFTHS = new Map<string, number>();
 for (const [index, key] of MAJOR_KEYS.entries()) KEY_FIFTHS.set(key, index - 7);
 for (const [index, key] of MINOR_KEYS.entries()) KEY_FIFTHS.set(key, index - 7);
 
-type Letter = "A" | "B" | "C" | "D" | "E" | "F" | "G";
-const LETTER_SEMITONES: Record<Letter, number> = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
+export type Letter = "A" | "B" | "C" | "D" | "E" | "F" | "G";
+export const LETTER_SEMITONES: Record<Letter, number> = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
 const SHARP_ORDER: ReadonlyArray<Letter> = ["F", "C", "G", "D", "A", "E", "B"];
 const FLAT_ORDER: ReadonlyArray<Letter> = ["B", "E", "A", "D", "G", "C", "F"];
 const DURATIONS: ReadonlyArray<number> = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48];
@@ -58,7 +74,7 @@ const CHORD_ROOTS = ROOT_SOURCE.flatMap((letter) => ROOT_SUFFIXES.map((suffix) =
 
 type AccidentalState = Partial<Record<Letter, number>>;
 
-interface Signature {
+export interface Signature {
   readonly key: string;
   readonly values: Partial<Record<Letter, number>>;
 }
@@ -96,6 +112,7 @@ interface VoiceState {
   key: string;
   signature: Partial<Record<Letter, number>>;
   timeline: KeyChange[];
+  inlineKeys: KeyChange[];
   measures: MeasureRecord[];
   partial: PartialMeasure | null;
   notes: Note[];
@@ -125,7 +142,10 @@ class ParseFailure extends Error {
 }
 
 class MeasureCut extends Error {
-  constructor(readonly offset: number) {
+  constructor(
+    readonly offset: number,
+    readonly reason: "tie" | "unfinished" = "unfinished",
+  ) {
     super("cut");
   }
 }
@@ -135,8 +155,104 @@ export interface Song2ParseResult {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 }
 
+/** What one bar of one voice held when it was read. The writer compares this to the model bar. */
+export interface BarContent {
+  readonly start: number;
+  readonly length: number;
+  readonly meter: string;
+  readonly key: string;
+  readonly keyChanges: ReadonlyArray<KeyChange>;
+  readonly notes: ReadonlyArray<{
+    readonly start: number;
+    readonly duration: number;
+    readonly midi: number | null;
+    readonly tie: boolean;
+  }>;
+  readonly chords: ReadonlyArray<{ readonly start: number; readonly name: string }>;
+  readonly incomplete: boolean;
+}
+
+export interface Song2SourceBar {
+  readonly voice: string;
+  readonly bar: number;
+  readonly content: BarContent;
+  /** The `[K:...]` tokens read in this bar, including one at its first instant. */
+  readonly inlineKeys: ReadonlyArray<KeyChange>;
+}
+
+/** One piece between barlines. A `Z2`-`Z4` piece expands to more than one bar. */
+export interface Song2SourceSegment {
+  readonly raw: string;
+  readonly bars: ReadonlyArray<Song2SourceBar>;
+}
+
+export interface Song2SourceLine {
+  /** 0-based line index in the normalized text. */
+  readonly line: number;
+  readonly voice: string;
+  readonly endsWithBarline: boolean;
+  readonly segments: ReadonlyArray<Song2SourceSegment>;
+  /** X5: the reader dropped a final tie continuation whose pitch did not match. */
+  readonly unfinishedTie: boolean;
+}
+
+export interface Song2Source {
+  /** The text with CRLF and lone CR already turned into LF. */
+  readonly text: string;
+  /** The denominator of the `L:1/d` line, so a duration can be written in the format's units. */
+  readonly unitDenominator: number;
+  readonly musicLines: ReadonlyArray<Song2SourceLine>;
+}
+
+interface PendingBar {
+  readonly voice: string;
+  readonly bar: number;
+}
+
+interface PendingSegment {
+  readonly raw: string;
+  readonly bars: ReadonlyArray<PendingBar>;
+}
+
+interface PendingLine {
+  readonly line: number;
+  readonly voice: string;
+  readonly endsWithBarline: boolean;
+  readonly segments: ReadonlyArray<PendingSegment>;
+  /** X5: the last token is a tie continuation that the reader dropped as unfinished. */
+  unfinishedTie: boolean;
+}
+
+type BarContentSource = Pick<Score, "bars" | "notes" | "chords">;
+
+/** The content the writer compares: everything a rewritten bar must reproduce. */
+export function barContentOf(score: BarContentSource, voice: string, barIndex: number): BarContent {
+  const bar = score.bars[barIndex];
+  if (bar === undefined) throw new Error(`song2: bar ${barIndex} of ${voice} has no model record`);
+  const start = bar.start;
+  const end = start + bar.length;
+  return {
+    start,
+    length: bar.length,
+    meter: `${bar.meter.numerator}/${bar.meter.denominator}`,
+    key: bar.key,
+    keyChanges: bar.keyChanges.map((change) => ({ at: change.at, key: change.key })),
+    notes: score.notes
+      .filter((note) => note.voice === voice && note.bar === barIndex)
+      .sort((a, b) => a.start - b.start)
+      .map((note) => ({ start: note.start, duration: note.duration, midi: note.midi, tie: note.tie })),
+    chords:
+      voice === "Vocal"
+        ? score.chords
+            .filter((chord) => chord.start >= start && chord.start < end)
+            .map((chord) => ({ start: chord.start, name: chord.name }))
+        : [],
+    incomplete: bar.incomplete,
+  };
+}
+
 // RULES.md H9 and P3: a key is its count of fifths, which gives the alteration of each letter.
-function signatureOf(key: string): Signature {
+export function signatureOf(key: string): Signature {
   const fifths = KEY_FIFTHS.get(key) ?? 0;
   const values: Partial<Record<Letter, number>> = {};
   if (fifths > 0) {
@@ -235,6 +351,8 @@ class Song2Parser {
   private readonly groups: GroupCounts[] = [];
   private readonly plannedSections: PlannedSection[] = [];
   private musicLines = 0;
+  private readonly sourceLines: PendingLine[] = [];
+  private lastCutReason: "tie" | "unfinished" = "unfinished";
   private hasChords = false;
   private truncation: Truncation | null = null;
 
@@ -265,6 +383,7 @@ class Song2Parser {
       key: this.initialKey,
       signature: signatureOf(this.initialKey).values,
       timeline: [{ at: 0, key: this.initialKey }],
+      inlineKeys: [],
       measures: [],
       partial: null,
       notes: [],
@@ -582,6 +701,24 @@ class Song2Parser {
       fail("bar-count", { count, max: 4, reason: "too-many" }, this.at(voice, lineNumber, voice.measures.length + 1));
     }
 
+    let nextBar = voice.measures.length;
+    const segments: PendingSegment[] = [];
+    for (const raw of bodies) {
+      const expanded = wholeRestCount(trimBody(raw)) ?? 1;
+      const bars: PendingBar[] = [];
+      for (let offset = 0; offset < expanded; offset += 1) bars.push({ voice: voice.name, bar: nextBar + offset });
+      segments.push({ raw, bars });
+      nextBar += expanded;
+    }
+    const sourceLine: PendingLine = {
+      line: lineNumber - 1,
+      voice: voice.name,
+      endsWithBarline: endsWithBar,
+      segments,
+      unfinishedTie: false,
+    };
+    this.sourceLines.push(sourceLine);
+
     this.musicLines += 1;
     let outcome: "none" | "partial" | "next" = "none";
     for (let bodyIndex = 0; bodyIndex < bodies.length; bodyIndex += 1) {
@@ -599,6 +736,7 @@ class Song2Parser {
         break;
       }
     }
+    if (outcome === "partial" && this.lastCutReason === "tie") sourceLine.unfinishedTie = true;
     return outcome === "none" && !endsWithBar ? "next" : outcome;
   }
 
@@ -613,6 +751,7 @@ class Song2Parser {
     const length = measureTicks(voice.meter);
     const bar = voice.measures.length;
     voice.accidental = {};
+    this.lastCutReason = "unfinished";
 
     let offset = 0;
     let cut = false;
@@ -622,6 +761,7 @@ class Song2Parser {
       if (!(error instanceof MeasureCut)) throw error;
       cut = true;
       offset = error.offset;
+      this.lastCutReason = error.reason;
     }
 
     if (!cut && offset === length) {
@@ -716,6 +856,7 @@ class Song2Parser {
         this.requireRoom(voice, offset, length, bar, lineNumber);
         if (!isKey(key)) this.failHeader("K", lineNumber, key, key);
         this.setKey(voice, key, measureStart + offset);
+        voice.inlineKeys.push({ at: measureStart + offset, key });
         pos = end + 1;
         continue;
       }
@@ -908,7 +1049,7 @@ class Song2Parser {
       const alteration = accidental ?? voice.accidental[letter] ?? voice.signature[letter] ?? 0;
       pitch = written + alteration;
       if (voice.pendingTie !== null && pitch !== voice.pendingTie.pitch) {
-        if (partialBody && pos >= body.length) throw new MeasureCut(offset);
+        if (partialBody && pos >= body.length) throw new MeasureCut(offset, "tie");
         fail("tie", { reason: "pitch", bar: bar + 1 }, this.at(voice, lineNumber, bar + 1));
       }
     }
@@ -1069,8 +1210,21 @@ class Song2Parser {
       incomplete: false,
     }));
 
+    const notes: Note[] = [...this.vocal.notes];
+    if (this.ins !== null) notes.push(...this.ins.notes);
+    const chords = this.vocal.chords.map((chord: InternalChord): Chord => ({ ...chord }));
+
     const partial = this.vocal.partial ?? this.ins?.partial ?? null;
-    if (partial !== null && partial.bar >= bars.length) {
+    const partialVoice = this.vocal.partial !== null ? this.vocal : this.ins;
+    const partialHasContent =
+      partial !== null &&
+      (notes.some((note) => note.voice === partialVoice?.name && note.bar === partial.bar) ||
+        chords.some((chord) => chord.start >= partial.start && chord.start < partial.start + partial.length) ||
+        (partialVoice?.timeline.some(
+          (change) => change.at >= partial.start && change.at < partial.start + partial.length,
+        ) ??
+          false));
+    if (partial !== null && partial.bar >= bars.length && partialHasContent) {
       bars.push({
         index: bars.length,
         start: partial.start,
@@ -1092,8 +1246,35 @@ class Song2Parser {
       };
     });
 
-    const notes: Note[] = [...this.vocal.notes];
-    if (this.ins !== null) notes.push(...this.ins.notes);
+    const contentSource: BarContentSource = { bars, notes, chords };
+
+    const source: Song2Source = {
+      text: this.normalized,
+      unitDenominator: this.unitDenominator,
+      musicLines: this.sourceLines.map((line) => ({
+        line: line.line,
+        voice: line.voice,
+        endsWithBarline: line.endsWithBarline,
+        unfinishedTie: line.unfinishedTie,
+        segments: line.segments.map((segment) => ({
+          raw: segment.raw,
+          bars: segment.bars
+            .filter((bar) => bar.bar < bars.length)
+            .map((bar) => {
+              const record = bars[bar.bar] as Bar;
+              const state = bar.voice === "Vocal" ? this.vocal : this.ins;
+              return {
+                voice: bar.voice,
+                bar: bar.bar,
+                content: barContentOf(contentSource, bar.voice, bar.bar),
+                inlineKeys: (state?.inlineKeys ?? []).filter(
+                  (change) => change.at >= record.start && change.at < record.start + record.length,
+                ),
+              };
+            }),
+        })),
+      })),
+    };
 
     return {
       tempo: this.tempo,
@@ -1102,10 +1283,10 @@ class Song2Parser {
       keys: [...this.vocal.timeline],
       sections,
       notes,
-      chords: this.vocal.chords.map((chord: InternalChord): Chord => ({ ...chord })),
+      chords,
       truncation: this.truncation,
       hasChords: this.hasChords,
-      source: { text: this.normalized },
+      source,
     };
   }
 

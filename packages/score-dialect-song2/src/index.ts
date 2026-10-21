@@ -1,7 +1,8 @@
 // ABOUTME: Main entry of @neta-art/score-dialect-song2. It depends on the core package for types only.
-// ABOUTME: Exports the song2 dialect (identity, declarative constraints, parse, serialize) and its reading facts.
-import type { DialectConstraints, Score, ScoreDialect } from "@neta-art/score-editor";
+// ABOUTME: Exports the song2 dialect (identity, declarative constraints, parse, serialize, check) and its reading facts.
+import type { DialectConstraints, ScoreDialect } from "@neta-art/score-editor";
 import { CHORD_ROOTS, parseSong2, QUALITIES } from "./parser";
+import { checkSong2, serializeSong2 } from "./writer";
 
 export const song2Id = "song2";
 
@@ -30,18 +31,6 @@ export const song2Constraints: DialectConstraints = {
   chords: { roots: CHORD_ROOTS, qualities: QUALITIES, slashBass: true },
 };
 
-interface Song2Source {
-  readonly text: string;
-}
-
-function sourceText(score: Score): string {
-  const source = score.source as Partial<Song2Source> | null | undefined;
-  if (source && typeof source.text === "string") return source.text;
-  throw new Error(
-    "@neta-art/score-dialect-song2: this score was not read from song2 text, so it cannot be written back.",
-  );
-}
-
 export const song2Dialect: ScoreDialect = {
   id: song2Id,
   constraints: song2Constraints,
@@ -49,6 +38,9 @@ export const song2Dialect: ScoreDialect = {
     return parseSong2(text);
   },
   serialize(score) {
-    return sourceText(score);
+    return serializeSong2(score);
+  },
+  check(score) {
+    return checkSong2(score);
   },
 };
