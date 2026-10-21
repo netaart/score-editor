@@ -147,4 +147,34 @@ test.describe("the arrangement of a song2 score", () => {
     expect(c4.y - c5.y).toBeCloseTo(12 * c4.height, 0);
     await expect(page.getByText("C5", { exact: true })).toBeVisible();
   });
+
+  test("key and meter marks stand where they take effect: at a bar line, and inside a bar for a key change", async ({
+    page,
+    harness,
+  }) => {
+    // D major in 4/4; bar 2 changes to B-flat major after two beats; bar 3 is 3/4 in E-flat major.
+    await harness.mount({ score: { vector: "accept-two-voices-meter-and-key-changes" } });
+    const marks = page.getByRole("list", { name: "Marks" }).getByRole("listitem");
+    await expect(marks).toHaveCount(3);
+    await expect(marks.nth(0)).toContainText("4/4");
+    await expect(marks.nth(0)).toContainText("Key D");
+    await expect(marks.nth(1)).toHaveText("Key Bb");
+    await expect(marks.nth(2)).toContainText("3/4");
+    await expect(marks.nth(2)).toContainText("Key Eb");
+
+    const bar = async (number: string) =>
+      (await box(page.getByRole("list", { name: "Bars" }).getByText(number, { exact: true }))).x;
+    const [one, two, three] = [await bar("1"), await bar("2"), await bar("3")];
+    expect((await box(marks.nth(0))).x).toBeCloseTo(one, 0);
+    expect((await box(marks.nth(1))).x).toBeCloseTo(two + (three - two) / 2, 0);
+    expect((await box(marks.nth(2))).x).toBeCloseTo(three, 0);
+  });
+
+  test("a score that never changes key or meter has one mark, at the start", async ({ page, harness }) => {
+    await harness.mount({ score: { vector: "accept-vocal-only" } });
+    const marks = page.getByRole("list", { name: "Marks" }).getByRole("listitem");
+    await expect(marks).toHaveCount(1);
+    await expect(marks).toContainText("4/4");
+    await expect(marks).toContainText("Key C");
+  });
 });

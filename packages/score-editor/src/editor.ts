@@ -1,6 +1,6 @@
 // ABOUTME: The mounted editor: reads the song project's score with its dialect and builds the read-only arrangement view.
 // ABOUTME: Every listener is registered with one AbortSignal, so destroy() removes them all and leaves no node behind.
-import { lengthInBeats, notesByVoice, pitchName, pitchRangeOf, positionOf, tieJoins } from "./arrangement";
+import { lengthInBeats, marksOf, notesByVoice, pitchName, pitchRangeOf, positionOf, tieJoins } from "./arrangement";
 import { messagesFor } from "./i18n";
 import type { Note, Score } from "./score";
 import { acquireStyles } from "./styles";
@@ -128,6 +128,7 @@ export class Editor implements MountedEditor {
     const top = create(doc, "div", "sce-top", canvas);
     this.buildRuler(top, score);
     this.buildSections(top, score);
+    this.buildMarks(top, score);
     this.buildChords(top, score);
 
     const notes = notesByVoice(score);
@@ -238,5 +239,32 @@ export class Editor implements MountedEditor {
       blocks.appendChild(block);
     }
     list.appendChild(blocks);
+  }
+
+  /** The key and meter flags: what is in force at the start, then each change at the position it takes effect. */
+  private buildMarks(top: HTMLElement, score: Score): void {
+    const t = messagesFor(this.options.language);
+    const { timeline } = this.headerRow(top, "sce-marks", t.marks);
+    const end = gridTicks(score);
+    const marks = marksOf(score);
+    const flags = this.doc.createDocumentFragment();
+    marks.forEach((mark, index) => {
+      const next = marks[index + 1]?.at ?? end;
+      const flag = create(this.doc, "div", "sce-mark");
+      flag.setAttribute("role", "listitem");
+      flag.style.cssText = `--t:${mark.at};--w:${Math.max(0, next - mark.at)}`;
+      const names: string[] = [];
+      if (mark.meter) {
+        create(this.doc, "span", "sce-mark-item", flag).textContent = t.meterText(mark.meter);
+        names.push(t.meterName(mark.meter));
+      }
+      if (mark.key) {
+        create(this.doc, "span", "sce-mark-item", flag).textContent = t.keyText(mark.key);
+        names.push(t.keyText(mark.key));
+      }
+      flag.setAttribute("aria-label", names.join(", "));
+      flags.appendChild(flag);
+    });
+    timeline.appendChild(flags);
   }
 }

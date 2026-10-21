@@ -33,7 +33,7 @@ const css = `
   --sce-_beat: var(--sce-beat-width, 40px);
   --sce-_keys: var(--sce-keys-width, 44px);
   --sce-_shade: color-mix(in srgb, var(--sce-_text) 5%, transparent);
-  --sce-_top: 72px;
+  --sce-_top: 94px;
 
   position: relative;
   isolation: isolate;
@@ -152,6 +152,24 @@ const css = `
 }
 .sce-root .sce-sections {
   height: 22px;
+}
+.sce-root .sce-marks {
+  height: 22px;
+}
+.sce-root .sce-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  display: flex;
+  gap: 8px;
+  max-width: calc(var(--w) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  padding: 3px 0 0 5px;
+  overflow: hidden;
+  border-left: 1px solid var(--sce-_line-strong);
+  font-size: 0.92em;
+  font-variant-numeric: lining-nums tabular-nums;
+  white-space: nowrap;
 }
 .sce-root .sce-chords {
   height: 26px;

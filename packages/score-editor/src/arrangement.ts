@@ -1,6 +1,6 @@
 // ABOUTME: Pure facts the arrangement view derives from a score: pitch names and ranges, bar and beat positions, ties.
 // ABOUTME: No DOM and no text in any language here; the editor draws them and the message catalog words them.
-import type { Bar, Note, Score } from "./score";
+import type { Bar, Meter, Note, Score } from "./score";
 
 const PITCH_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -79,4 +79,40 @@ export function tieJoins(notes: ReadonlyArray<Note>): Set<string> {
     if (next.midi === note.midi && next.start === note.start + note.duration) joined.add(note.id);
   }
   return joined;
+}
+
+/** What takes effect at one position: a new meter, a new key, or both. */
+export interface Mark {
+  readonly at: number;
+  readonly meter: Meter | null;
+  readonly key: string | null;
+}
+
+/**
+ * The marks of the key and meter timelines: the state in force at the start, then each change where it takes effect.
+ * A key that the text states again without changing it, and a meter that stays the same, are not changes.
+ */
+export function marksOf(score: Score): Mark[] {
+  const byPosition = new Map<number, { meter: Meter | null; key: string | null }>();
+  const at = (position: number) => {
+    let entry = byPosition.get(position);
+    if (!entry) {
+      entry = { meter: null, key: null };
+      byPosition.set(position, entry);
+    }
+    return entry;
+  };
+  let meter: Meter | null = null;
+  for (const bar of score.bars) {
+    if (meter && bar.meter.numerator === meter.numerator && bar.meter.denominator === meter.denominator) continue;
+    meter = bar.meter;
+    at(bar.start).meter = bar.meter;
+  }
+  let key: string | null = null;
+  for (const change of score.keys) {
+    if (change.key === key) continue;
+    key = change.key;
+    at(change.at).key = key;
+  }
+  return [...byPosition].sort(([a], [b]) => a - b).map(([position, entry]) => ({ at: position, ...entry }));
 }
