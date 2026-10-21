@@ -46,4 +46,4 @@ No internal company, team, service or person names in code, comments, tests, doc
 
 ## Publishing
 
-Both packages share one version and are published together from a maintainer's machine, never from CI with provenance. The steps are in the [README](README.md#publish). An agent does not publish.
+Both packages share one version and are published together from a maintainer's machine, never from CI with provenance. The steps and the two release rules (7-day-old third-party dependencies, the internal-names check before every push) are in the [README](README.md#publish). An agent does not publish. When you add a file a package must ship, keep `pnpm check:pack` passing.
