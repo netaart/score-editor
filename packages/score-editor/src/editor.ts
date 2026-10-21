@@ -124,20 +124,9 @@ export class Editor implements MountedEditor {
     const canvas = create(doc, "div", "sce-canvas", scroller);
     canvas.style.setProperty("--sce-ticks", String(gridTicks(score)));
 
-    const ruler = create(doc, "div", "sce-row sce-ruler", canvas);
-    create(doc, "div", "sce-corner", ruler);
-    const bars = create(doc, "div", "sce-timeline", ruler);
-    bars.setAttribute("role", "list");
-    bars.setAttribute("aria-label", t.bars);
-    const numbers = doc.createDocumentFragment();
-    for (const bar of score.bars) {
-      const label = create(doc, "span", "sce-bar-number");
-      label.setAttribute("role", "listitem");
-      label.style.setProperty("--t", String(bar.start));
-      label.textContent = String(bar.index + 1);
-      numbers.appendChild(label);
-    }
-    bars.appendChild(numbers);
+    const top = create(doc, "div", "sce-top", canvas);
+    this.buildRuler(top, score);
+    this.buildSections(top, score);
 
     for (const voice of score.voices) {
       const group = create(doc, "div", "sce-track-group", canvas);
@@ -150,5 +139,43 @@ export class Editor implements MountedEditor {
       lane.setAttribute("aria-label", voice);
     }
     return scroller;
+  }
+
+  /** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
+  private headerRow(top: HTMLElement, className: string, label: string): HTMLElement {
+    const row = create(this.doc, "div", `sce-row ${className}`, top);
+    create(this.doc, "div", "sce-corner", row);
+    const timeline = create(this.doc, "div", "sce-timeline", row);
+    timeline.setAttribute("role", "list");
+    timeline.setAttribute("aria-label", label);
+    return timeline;
+  }
+
+  private buildRuler(top: HTMLElement, score: Score): void {
+    const timeline = this.headerRow(top, "sce-ruler", messagesFor(this.options.language).bars);
+    const numbers = this.doc.createDocumentFragment();
+    for (const bar of score.bars) {
+      const label = create(this.doc, "span", "sce-bar-number");
+      label.setAttribute("role", "listitem");
+      label.style.setProperty("--t", String(bar.start));
+      label.textContent = String(bar.index + 1);
+      numbers.appendChild(label);
+    }
+    timeline.appendChild(numbers);
+  }
+
+  /** One band per section that has bars; a marker with no bars after it has nothing to cover. */
+  private buildSections(top: HTMLElement, score: Score): void {
+    const t = messagesFor(this.options.language);
+    const timeline = this.headerRow(top, "sce-sections", t.sections);
+    for (const section of score.sections) {
+      const first = score.bars[section.firstBar];
+      const last = score.bars[section.firstBar + section.barCount - 1];
+      if (section.barCount < 1 || !first || !last) continue;
+      const band = create(this.doc, "div", "sce-section", timeline);
+      band.setAttribute("role", "listitem");
+      band.style.cssText = `--t:${first.start};--d:${last.start + last.length - first.start}`;
+      create(this.doc, "span", "sce-section-name", band).textContent = section.name ?? t.unnamedSection;
+    }
   }
 }

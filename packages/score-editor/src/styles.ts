@@ -33,7 +33,7 @@ const css = `
   --sce-_beat: var(--sce-beat-width, 40px);
   --sce-_keys: var(--sce-keys-width, 44px);
   --sce-_shade: color-mix(in srgb, var(--sce-_text) 5%, transparent);
-  --sce-_sub: color-mix(in srgb, var(--sce-_line) 50%, transparent);
+  --sce-_top: 46px;
 
   position: relative;
   isolation: isolate;
@@ -142,11 +142,40 @@ const css = `
   flex: none;
   width: calc(var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
 }
-.sce-root .sce-ruler {
+.sce-root .sce-top {
   position: sticky;
   top: 0;
   z-index: 5;
+}
+.sce-root .sce-ruler {
   height: 24px;
+}
+.sce-root .sce-sections {
+  height: 22px;
+}
+.sce-root .sce-section {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  border-left: 1px solid var(--sce-_line-strong);
+}
+.sce-root .sce-section:nth-child(even) {
+  background: var(--sce-_shade);
+}
+.sce-root .sce-section-name {
+  position: sticky;
+  left: var(--sce-_keys);
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 6px 0;
+  overflow: hidden;
+  font-size: 0.92em;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sce-root .sce-bar-number {
   position: absolute;
@@ -165,7 +194,7 @@ const css = `
 }
 .sce-root .sce-track-head {
   position: sticky;
-  top: 24px;
+  top: var(--sce-_top);
   z-index: 4;
   display: flex;
   align-items: center;

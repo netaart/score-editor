@@ -7,6 +7,8 @@ interface Messages {
   hint: string;
   readOnly: string;
   bars: string;
+  sections: string;
+  unnamedSection: string;
 }
 
 const en: Messages = {
@@ -14,6 +16,8 @@ const en: Messages = {
   hint: "Scroll with the arrow keys or a swipe.",
   readOnly: "Read only",
   bars: "Bars",
+  sections: "Sections",
+  unnamedSection: "Unnamed",
 };
 
 const zh: Messages = {
@@ -21,6 +25,8 @@ const zh: Messages = {
   hint: "用方向键或滑动来滚动。",
   readOnly: "只读",
   bars: "小节",
+  sections: "段落",
+  unnamedSection: "未命名",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
