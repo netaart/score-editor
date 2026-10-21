@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-20T08:00:00Z",
+  "generatedAt": "2026-10-21T09:00:00Z",
   "title": "Design System: Score Editor",
   "extensions": {
     "colorMeta": {
@@ -14,39 +14,26 @@
     "typographyMeta": {
       "base": {
         "displayName": "Base",
-        "purpose": "Inherited host font at keyword size small; buttons and menu items."
+        "purpose": "Inherited host font at keyword size small; buttons, menu items, the cut sentence and the problem panel."
       },
-      "title": { "displayName": "Title", "purpose": "Toolbar title and grid value, weight 600." },
+      "title": { "displayName": "Title", "purpose": "Toolbar title, the zoom value and chord names, weight 600." },
       "label": {
         "displayName": "Label",
-        "purpose": "Bar numbers, track names, badge, readout chip, 0.92em with tabular numerals."
+        "purpose": "Bar numbers, section names, marks, track names and the badge, 0.92em with tabular numerals."
       },
-      "numeral-label": { "displayName": "Numeral label", "purpose": "Octave labels in the pitch column, 0.85em." }
+      "numeral-label": {
+        "displayName": "Numeral label",
+        "purpose": "Octave labels in the pitch column and the Chords label, 0.85em."
+      }
     },
     "shadows": [
       {
-        "name": "lifted-note",
-        "value": "0 4px 10px color-mix(in srgb, var(--sce-_text) 40%, transparent)",
-        "purpose": "A note being dragged."
-      },
-      {
         "name": "popover",
         "value": "0 8px 24px color-mix(in srgb, var(--sce-_text) 22%, transparent)",
-        "purpose": "The grid popover in the top layer."
-      },
-      {
-        "name": "selected-focus-ring",
-        "value": "0 0 0 5px var(--sce-_accent)",
-        "purpose": "Spread ring on a note that is both selected and keyboard-focused."
+        "purpose": "The zoom menu in the top layer. The only shadow."
       }
     ],
-    "motion": [
-      {
-        "name": "note-opacity",
-        "value": "opacity 120ms ease-out",
-        "purpose": "Note dimming for the blocked-drop cue; only under prefers-reduced-motion: no-preference."
-      }
-    ],
+    "motion": [],
     "breakpoints": [{ "name": "coarse-pointer", "value": "(pointer: coarse)" }],
     "themeVariables": [
       { "name": "--sce-color-bg", "default": "light-dark(#ffffff, #1b1c1f)" },
@@ -66,11 +53,11 @@
   },
   "components": [
     {
-      "name": "Grid Button",
+      "name": "Zoom Value Button",
       "kind": "button",
       "refersTo": "button",
-      "description": "Toolbar button that opens the grid popover.",
-      "html": "<button class=\"ds-button\" type=\"button\">Grid <b>1/16</b><span class=\"ds-chev\"></span></button>",
+      "description": "Toolbar button that shows the zoom and opens the zoom menu.",
+      "html": "<button class=\"ds-button\" type=\"button\"><b>100%</b><span class=\"ds-chev\"></span></button>",
       "css": ".ds-button { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px; border: 1px solid color-mix(in srgb, #18181b 28%, #ffffff); border-radius: 4px; background: #ffffff; color: #18181b; font: inherit; font-size: small; cursor: pointer; } .ds-button b { font-weight: 600; font-variant-numeric: lining-nums tabular-nums; } .ds-chev { width: 5px; height: 5px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); } .ds-button:hover { background: color-mix(in srgb, #18181b 6%, #ffffff); } .ds-button:focus-visible { outline: 2px solid #2457d6; outline-offset: 2px; }"
     },
     {
@@ -85,44 +72,45 @@
       "name": "Note",
       "kind": "custom",
       "refersTo": "note",
-      "description": "One note: a block one row high. Shown selected.",
+      "description": "One note: a block one row high, drawn from its start to its end less a 1px gap.",
       "html": "<div class=\"ds-note\" style=\"width:48px\"></div>",
-      "css": ".ds-note { box-sizing: border-box; height: 14px; border: 1px solid color-mix(in srgb, #18181b 30%, #2457d6); border-radius: 3px; background: color-mix(in srgb, #2457d6 72%, #18181b); outline: 2px solid #18181b; outline-offset: 1px; cursor: grab; } .ds-note:focus-visible { box-shadow: 0 0 0 5px #2457d6; }"
+      "css": ".ds-note { box-sizing: border-box; height: 14px; border: 1px solid color-mix(in srgb, #18181b 30%, #2457d6); border-radius: 3px; background: #2457d6; }"
     },
     {
-      "name": "Blocked Note",
+      "name": "Tied Notes",
       "kind": "custom",
       "refersTo": "note",
-      "description": "Blocked-drop cue: dashed outline and dimmed.",
-      "html": "<div class=\"ds-note-blocked\" style=\"width:48px\"></div>",
-      "css": ".ds-note-blocked { box-sizing: border-box; height: 14px; border: 1px solid color-mix(in srgb, #18181b 30%, #2457d6); border-radius: 3px; background: #2457d6; opacity: 0.45; outline: 2px dashed #18181b; transition: opacity 120ms ease-out; }"
+      "description": "Two notes joined by a tie read as one connected bar: no gap, border or rounding where they meet.",
+      "html": "<div class=\"ds-tie\"><div class=\"ds-tie-a\" style=\"width:48px\"></div><div class=\"ds-tie-b\" style=\"width:32px\"></div></div>",
+      "css": ".ds-tie { display: flex; } .ds-tie-a, .ds-tie-b { box-sizing: border-box; height: 14px; border: 1px solid color-mix(in srgb, #18181b 30%, #2457d6); background: #2457d6; } .ds-tie-a { border-right-width: 0; border-radius: 3px 0 0 3px; } .ds-tie-b { border-left-width: 0; border-radius: 0 3px 3px 0; }"
     },
     {
-      "name": "Readout Chip",
+      "name": "Cut Strip",
       "kind": "custom",
-      "refersTo": "readout",
-      "description": "The one authored move: inverted chip that follows the pointer during a drag.",
-      "html": "<span class=\"ds-readout\">E4 · bar 8 beat 1.75</span>",
-      "css": ".ds-readout { display: inline-block; padding: 3px 8px; border-radius: 4px; background: #18181b; color: #ffffff; font-size: 0.92em; font-variant-numeric: lining-nums tabular-nums; white-space: nowrap; }"
+      "refersTo": "notice",
+      "description": "The one sentence above the view when the score text stops before the song does, led by a swatch of the hatch.",
+      "html": "<div class=\"ds-cut\"><span class=\"ds-swatch\"></span>This score is cut off: bar 232 of Ins is incomplete.</div>",
+      "css": ".ds-cut { padding: 6px 12px; background: color-mix(in srgb, #18181b 5%, #ffffff); border-bottom: 1px solid color-mix(in srgb, #18181b 13%, #ffffff); color: #18181b; font-size: small; } .ds-swatch { display: inline-block; width: 1.1em; height: 1.1em; margin-right: 0.6em; border: 1px dashed color-mix(in srgb, #18181b 28%, #ffffff); background: repeating-linear-gradient(135deg, color-mix(in srgb, #18181b 28%, #ffffff) 0 1px, transparent 1px 7px); vertical-align: -0.2em; }"
     },
     {
       "name": "Menu Item",
       "kind": "nav",
       "refersTo": "menu-item",
-      "description": "Radio item in the grid popover; the dot marks the checked one.",
-      "html": "<button class=\"ds-menu-item\" type=\"button\"><span class=\"ds-dot\"></span>Eighth note (1/8)</button>",
+      "description": "Radio item in the zoom menu; the dot marks the checked one.",
+      "html": "<button class=\"ds-menu-item\" type=\"button\"><span class=\"ds-dot\"></span>100%</button>",
       "css": ".ds-menu-item { display: flex; align-items: center; gap: 8px; width: 190px; min-height: 30px; padding: 0 10px 0 8px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; font-size: small; text-align: start; cursor: pointer; } .ds-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #2457d6; } .ds-menu-item:hover { background: color-mix(in srgb, #18181b 8%, transparent); } .ds-menu-item:focus-visible { outline: 2px solid #2457d6; outline-offset: 2px; }"
     }
   ],
   "narrative": {
     "northStar": "The Borrowed Instrument Panel",
-    "overview": "The editor has no brand. It takes the look of its host through the public theme variables and ships only neutral defaults. It is an Operate surface following DAW conventions, with touch and keyboard first-class. The readout chip is its one authored move.",
+    "overview": "The editor has no brand. It takes the look of its host through the public theme variables and ships only neutral defaults. It is an Operate surface, a read-only arrangement view that follows DAW conventions, with touch and keyboard first-class. The cut, a hatched tail for the part of a song the text never reached, is its one authored move.",
     "keyCharacteristics": [
       "No identity of its own: colours and type come from the host; defaults are neutral.",
       "Hairline structure: 1px lines, tonal fills, almost no shadow.",
       "Two densities selected by pointer type, not by screen width.",
-      "Every state is visible without colour alone: selection adds an outline, a blocked drop is dashed and dimmed.",
-      "Fully isolated styles: the host cannot restyle the editor by accident."
+      "Meaning never rests on colour alone: a cut is hatched and dashed, a tie is one joined bar, a missing chord track says so in words.",
+      "Text that does not fit its cell is left out whole, never cut mid-word.",
+      "Isolated styles: a host's element and class selectors do not reach in; inside a shadow root nothing does."
     ],
     "rules": [
       {
@@ -146,17 +134,19 @@
         "section": "typography"
       },
       {
-        "name": "The Flat-Until-Moved Rule",
-        "body": "A note has no shadow at rest. It gains one only while dragged.",
+        "name": "The Flat Rule",
+        "body": "Nothing has a shadow at rest. A shadow marks a floating layer.",
         "section": "elevation"
       }
     ],
     "dos": [
       "Do take every colour from the theme variable contract or a color-mix of bg and text.",
       "Do keep the neutral defaults described as defaults, and keep hosts' mapping optional.",
-      "Do size type with small at the root and em below, and use tabular lining numerals for any number.",
+      "Do size type with small at the root and em below, size header rows and pinned heads in em, and use tabular lining numerals for any number.",
       "Do give every new interactive element a 2px accent outline with 2px offset on :focus-visible, and a coarse-pointer size.",
-      "Do show a state with a shape or outline in addition to colour.",
+      "Do say a state with a shape or words as well as colour.",
+      "Do leave out text that does not fit its cell, whole, instead of cutting it.",
+      "Do place anything on the time axis in percent of its axis element, and change the zoom only by setting those elements' widths.",
       "Do put any new floating layer in a native popover so it reaches the top layer.",
       "Do prefix every class with sce-, inject styles once per container, and release them on destroy."
     ],
@@ -164,7 +154,8 @@
       "Don't state a brand: no fixed brand colour, no bundled font, no logo.",
       "Don't hard-code px or rem font sizes, or a font family other than through --sce-font-family.",
       "Don't add shadows at rest.",
-      "Don't add decoration or motion beyond the 120ms note opacity transition.",
+      "Don't add decoration or motion.",
+      "Don't hold the zoom, or anything else that changes while the user zooms or scrolls, in an inherited custom property on the root.",
       "Don't rely on a host's cascade: keep the all: initial root, the all: revert descendants under the doubled class, and the hand-reset exception for notes.",
       "Don't publish or depend on --sce-_* variables outside the stylesheet.",
       "Don't import styles as a CSS file or leave nodes behind."

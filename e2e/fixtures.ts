@@ -1,4 +1,4 @@
-// ABOUTME: Playwright fixtures of the mount seam: a harness that drives the test page and records the host's fake callbacks.
+// ABOUTME: Playwright fixtures of the mount seam: a harness that drives the test page, plus real touch input.
 // ABOUTME: Tests talk to the page only through window.harness and through what a user can see and do.
 import { test as base, type Page } from "@playwright/test";
 

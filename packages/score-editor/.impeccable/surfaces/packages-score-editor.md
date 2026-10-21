@@ -19,7 +19,7 @@ Assumptions (no human to confirm; mark and proceed):
 - A4. A cut that stops inside a bar is marked at that bar and hatched from the last finished note to the end of the score in the cut voice; a cut at a bar edge is marked at the end of that voice. A one-line strip under the toolbar says what it means, in the interface language.
 - A5. Zoom is a menu of presets plus "fit the whole song", with minus and plus buttons stepping through the presets. The menu is the native popover the spike settled.
 
-Chosen direction: the world is pinned by PRODUCT.md (no identity of its own), so the choices are structure and density only. Reference: the arrangement window of a DAW (Ableton Live's Arrangement view, Logic's global tracks) in the editor's neutral defaults. Nothing decorative is added; the one authored move stays the readout chip idea in spirit: every mark says in words what it is.
+Chosen direction: the world is pinned by PRODUCT.md (no identity of its own), so the choices are structure and density only. Reference: the arrangement window of a DAW (Ableton Live's Arrangement view, Logic's global tracks) in the editor's neutral defaults. Nothing decorative is added; the one authored move is the cut, and every mark says in words what it is.
 
 ## Direction contract
 
