@@ -20,7 +20,7 @@ import {
 import type { Diagnostic } from "./diagnostics";
 import { formatDiagnostic } from "./diagnostics";
 import { messagesFor } from "./i18n";
-import type { Note, Score } from "./score";
+import { type Note, type Score, TICKS_PER_QUARTER } from "./score";
 import { acquireStyles } from "./styles";
 import type { MountedEditor, MountOptions } from "./types";
 
@@ -59,6 +59,10 @@ interface FirstLane {
 /** The parts of a built arrangement that zooming and the first scroll need to find again. */
 interface View {
   scroller: HTMLElement;
+  /** Holds the pitch column and the time axis. */
+  canvas: HTMLElement;
+  /** The elements that each carry the time axis: the timeline rows and the lanes. */
+  axes: HTMLElement[];
   /** The pinned header block. */
   top: HTMLElement;
   /** The pinned corner of the ruler: its width is the pitch column's. */
@@ -91,6 +95,7 @@ export class Editor implements MountedEditor {
   private readonly menuItems = new Map<number, HTMLButtonElement>();
   private readonly fitItem: HTMLButtonElement;
   private zoom = 1;
+  private axes: HTMLElement[] = [];
   private reading: Reading;
   private view: View | null = null;
   private destroyed = false;
@@ -296,6 +301,7 @@ export class Editor implements MountedEditor {
     scroller.setAttribute("aria-describedby", this.hint.id);
 
     const ticks = gridTicks(score);
+    this.axes = [];
     const canvas = create(doc, "div", "sce-canvas", scroller);
     canvas.style.setProperty("--sce-ticks", String(ticks));
 
@@ -313,6 +319,8 @@ export class Editor implements MountedEditor {
     }
     this.view = {
       scroller,
+      canvas,
+      axes: this.axes,
       top,
       corner: ruler.corner,
       timeline: ruler.timeline,
@@ -332,6 +340,7 @@ export class Editor implements MountedEditor {
     const row = create(this.doc, "div", `sce-row ${className}`, top);
     const corner = create(this.doc, "div", "sce-corner", row);
     const timeline = create(this.doc, "div", "sce-timeline", row);
+    this.axes.push(timeline);
     timeline.setAttribute("role", "list");
     timeline.setAttribute("aria-label", label);
     return { corner, timeline };
@@ -438,6 +447,7 @@ export class Editor implements MountedEditor {
       create(doc, "div", "sce-octave", keys).textContent = pitchName(octave);
     }
     const lane = create(doc, "div", "sce-lane", track);
+    this.axes.push(lane);
     lane.style.setProperty("--sce-rows", String(range.hi - range.lo));
     const cut = cutOf(score);
     if (cut && cut.voice === voice && gridTicks(score) > cut.missingFrom) {
@@ -477,10 +487,13 @@ export class Editor implements MountedEditor {
 
   // --- zoom --------------------------------------------------------------------------------------
 
-  /** Sets the zoom variable, the readout, the menu and the bar numbers that still have room. */
-  private applyZoom(): void {
+  /**
+   * Sets the zoom variable, the readout, the menu and the bar numbers that still have room. `timelineWidth` is the
+   * width of the time axis at this zoom, when the caller knows it; reading it back would lay the page out again.
+   */
+  private applyZoom(timelineWidth = this.view?.timeline.offsetWidth ?? 0): void {
     const view = this.view;
-    this.root.style.setProperty("--sce-zoom", String(this.zoom));
+    if (view) this.widen(view);
     this.zoomValue.textContent = `${Math.round(this.zoom * 100)}%`;
     for (const [preset, item] of this.menuItems) {
       item.setAttribute("aria-checked", String(Math.abs(preset - this.zoom) < 1e-6));
@@ -488,11 +501,18 @@ export class Editor implements MountedEditor {
     this.zoomOut.setAttribute("aria-disabled", String(stepZoom(this.zoom, "out") === null));
     this.zoomIn.setAttribute("aria-disabled", String(stepZoom(this.zoom, "in") === null));
     this.zoomGroup.hidden = !view;
-    if (view && view.barCount > 0 && view.timeline.offsetWidth > 0) {
-      this.root.dataset.labelStep = String(barLabelStep(view.timeline.offsetWidth / view.barCount));
+    if (view && view.barCount > 0 && timelineWidth > 0) {
+      this.root.dataset.labelStep = String(barLabelStep(timelineWidth / view.barCount));
     } else {
       delete this.root.dataset.labelStep;
     }
+  }
+
+  /** Sets the width of the elements that carry the time axis to the score's length at the current zoom. */
+  private widen({ canvas, axes }: View): void {
+    const span = `var(--sce-ticks) * var(--sce-_beat) * ${this.zoom} / ${TICKS_PER_QUARTER}`;
+    canvas.style.width = `calc(var(--sce-_keys) + ${span})`;
+    for (const axis of axes) axis.style.width = `calc(${span})`;
   }
 
   /**
@@ -509,11 +529,12 @@ export class Editor implements MountedEditor {
     const keys = view.corner.offsetWidth;
     const anchor =
       anchorClientX === undefined ? keys + (scroller.clientWidth - keys) / 2 : (anchorClientX - frame.left) / scale;
-    const pixelsPerTick = view.ticks > 0 ? view.timeline.offsetWidth / view.ticks : 0;
+    const width = view.timeline.offsetWidth;
+    const pixelsPerTick = view.ticks > 0 ? width / view.ticks : 0;
     const tick = pixelsPerTick > 0 ? (scroller.scrollLeft + anchor - keys) / pixelsPerTick : 0;
     const before = this.zoom;
     this.zoom = zoom;
-    this.applyZoom();
+    this.applyZoom((width * zoom) / before);
     scroller.scrollLeft = tick * pixelsPerTick * (zoom / before) + keys - anchor;
   }
 

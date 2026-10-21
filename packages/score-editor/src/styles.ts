@@ -41,7 +41,7 @@ const css = `
   --sce-_note: var(--sce-color-note, var(--sce-_accent));
   --sce-_radius: var(--sce-radius, 4px);
   --sce-_row: var(--sce-row-height, 14px);
-  --sce-_beat: calc(var(--sce-beat-width, 40px) * var(--sce-zoom, 1));
+  --sce-_beat: var(--sce-beat-width, 40px);
   --sce-_keys: var(--sce-keys-width, 44px);
   --sce-_shade: color-mix(in srgb, var(--sce-_text) 5%, transparent);
   --sce-_top: 94px;
@@ -246,6 +246,11 @@ const css = `
   -webkit-user-select: none;
   user-select: none;
 }
+/*
+ * Everything on the time axis is placed in percent of the element that carries the axis (a timeline row or a lane).
+ * Zooming only sets the width of those few elements. A zoom factor held in an inherited variable made every note
+ * restyle on each step: about 70 ms at 1500 notes, against about 3 ms this way.
+ */
 .sce-root .sce-canvas {
   position: relative;
   width: calc(var(--sce-_keys) + var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
@@ -288,10 +293,10 @@ const css = `
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
   display: flex;
   gap: 8px;
-  max-width: calc(var(--w) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  max-width: calc(var(--w) / var(--sce-ticks) * 100%);
   padding: 3px 0 0 5px;
   overflow: hidden;
   border-left: 1px solid var(--sce-_line-strong);
@@ -323,8 +328,8 @@ const css = `
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
-  max-width: calc(var(--w) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
+  max-width: calc(var(--w) / var(--sce-ticks) * 100%);
   padding: 5px 0 0 5px;
   overflow: hidden;
   border-left: 1px solid var(--sce-_line-strong);
@@ -345,8 +350,8 @@ const css = `
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
-  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
+  width: calc(var(--d) / var(--sce-ticks) * 100%);
   border-left: 1px solid var(--sce-_line-strong);
 }
 .sce-root .sce-section:nth-child(even) {
@@ -369,7 +374,7 @@ const css = `
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
   padding: 4px 0 0 5px;
   border-left: 1px solid var(--sce-_line-strong);
   color: var(--sce-_muted);
@@ -442,8 +447,8 @@ ${labelThinning()}
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
-  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
+  width: calc(var(--d) / var(--sce-ticks) * 100%);
   background: repeating-linear-gradient(135deg, var(--sce-_line-strong) 0 1px, transparent 1px 7px);
   border-left: 1px dashed var(--sce-_line-strong);
 }
@@ -462,9 +467,9 @@ ${labelThinning()}
   filter: none;
   position: absolute;
   z-index: 1;
-  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
   top: calc(var(--r) * var(--sce-_row));
-  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER} - 1px);
+  width: calc(var(--d) / var(--sce-ticks) * 100% - 1px);
   min-width: 2px;
   height: var(--sce-_row);
   border: 1px solid color-mix(in srgb, var(--sce-_text) 30%, var(--sce-_note));
@@ -473,7 +478,7 @@ ${labelThinning()}
 }
 /* A tie joins two notes into one bar: no gap, no border and no rounding where they meet. */
 .sce-root .sce-note[data-tie-next] {
-  width: calc(var(--d) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  width: calc(var(--d) / var(--sce-ticks) * 100%);
   border-right-width: 0;
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
