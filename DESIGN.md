@@ -1,6 +1,6 @@
 ---
 name: Score Editor
-description: A piano-roll editor with no brand of its own. The host supplies colour and type through theme variables; the package supplies structure, interaction and neutral defaults.
+description: A read-only arrangement view of a song score, in the manner of a DAW's piano roll, with no brand of its own. The host supplies colour and type through theme variables; the package supplies structure, interaction and neutral defaults.
 colors:
   ground-light: "#ffffff"
   ground-dark: "#1b1c1f"
@@ -31,11 +31,12 @@ rounded:
   note-max: "3px"
   popover: "calc(var(--sce-radius) + 2px)"
   pill: "999px"
+  glyph: "1px"
 spacing:
   toolbar-gap: "8px"
   toolbar-padding-x: "12px"
   button-padding-x: "10px"
-  readout-padding-x: "8px"
+  flag-padding-x: "5px"
 components:
   toolbar:
     height: "40px"
@@ -50,17 +51,17 @@ components:
     rounded: "{rounded.pill}"
     padding: "2px 8px"
     typography: "{typography.label}"
+  ruler:
+    height: "1.85em"
+  band:
+    height: "1.7em"
+  chord-row:
+    height: "2em"
   note:
     height: "14px"
     rounded: "{rounded.note-max}"
   note-coarse:
     height: "24px"
-  readout:
-    textColor: "{colors.ground-light}"
-    backgroundColor: "{colors.ink-light}"
-    rounded: "{rounded.default}"
-    padding: "3px 8px"
-    typography: "{typography.label}"
   menu-item:
     height: "30px"
     rounded: "{rounded.default}"
@@ -77,16 +78,17 @@ components:
 
 The editor has no brand. It is a tool panel that takes on the look of whatever host app embeds it. The package owns structure, interaction and legibility; the host owns colour and type. Everything stated below about colour and type is therefore a contract for hosts first, and a set of neutral fallbacks second.
 
-It is an Operate surface: a piano roll for people who generated a song and want to nudge notes. DAW conventions are the reference (a pitch column at the left, a bar ruler on top, a hairline grid with heavier bar lines, black-key rows shaded). Touch and keyboard are first-class: a note can be dragged with a mouse or a finger and moved with arrow keys. The interface is dense on a fine pointer and roomier on a coarse one.
+It is an Operate surface: a read-only arrangement view for people who generated a song and want to see how it is built before changing it. DAW conventions are the reference: a pitch column at the left, a bar ruler on top with section bands, key and meter marks and a chord track under it, one piano-roll track per voice, a hairline grid with heavier bar lines, black-key rows shaded, zoom on the time axis. Touch and keyboard are first-class: the view scrolls with a finger, the arrow keys and the wheel, and zooms with buttons, a menu, the plus and minus keys and control plus the wheel. The interface is dense on a fine pointer and roomier on a coarse one.
 
-The one authored move is the readout chip: while a note is dragged, an inverted chip follows the pointer and says where the note would land (pitch name, bar, beat). The rest of the surface stays plain on purpose.
+The one authored move is the cut: when the score text stops before the song does, the part that was never written is hatched and edged with a dashed line, an "Incomplete bar" flag sits at the bar where it stops, and one sentence above the view says what that means. A hatch reads as "nothing here yet", which is the opposite of a rest (a gap). The rest of the surface stays plain on purpose.
 
 **Key Characteristics:**
 
 - No identity of its own: colours and type come from the host; defaults are neutral.
 - Hairline structure: 1px lines, tonal fills, almost no shadow.
 - Two densities selected by pointer type, not by screen width.
-- Every state is visible without colour alone: selection adds an outline, a blocked drop is dashed and dimmed.
+- Meaning never rests on colour alone: a cut is hatched and dashed, a tie is one joined bar, a missing chord track says so in words.
+- Text that does not fit its cell is left out whole, never cut mid-word: a cut "Dm" would read as "D".
 - Isolated styles: a host's element and class selectors do not reach in; inside a shadow root nothing does.
 
 ## Colors
@@ -99,33 +101,33 @@ A host maps its own theme onto these public variables, set on the editor's root 
 
 | Variable | Controls | Default when unmapped |
 | --- | --- | --- |
-| `--sce-color-bg` | Roll ground, button fill, text of the readout chip | `#ffffff` light, `#1b1c1f` dark |
-| `--sce-color-text` | Text, selected-note outline, readout chip fill | `#18181b` light, `#ececee` dark |
-| `--sce-color-surface` | Toolbar, ruler, track head, pitch column, popover | 5% of text mixed into bg |
-| `--sce-color-muted` | Secondary text: bar numbers, octave labels, badge | 66% of text mixed into bg |
-| `--sce-color-line` | Hairlines: beat lines, panel borders | 13% of text mixed into bg |
-| `--sce-color-line-strong` | Bar lines, button and badge borders, popover border | 28% of text mixed into bg |
+| `--sce-color-bg` | Ground of the roll, button fill | `#ffffff` light, `#1b1c1f` dark |
+| `--sce-color-text` | Text | `#18181b` light, `#ececee` dark |
+| `--sce-color-surface` | Toolbar, header rows, track head, pitch column, popover | 5% of text mixed into bg |
+| `--sce-color-muted` | Secondary text: bar numbers, octave labels, the Chords label, the empty-chord message, the badge | 66% of text mixed into bg |
+| `--sce-color-line` | Hairlines: beat lines, row rules, panel borders | 13% of text mixed into bg |
+| `--sce-color-line-strong` | Bar lines, the edges of section bands, marks and chords, the cut hatch, button and badge borders, popover border | 28% of text mixed into bg |
 | `--sce-color-accent` | Focus ring, checked menu dot | `#2457d6` light, `#7da3ff` dark |
 | `--sce-color-note` | Note fill | the accent value |
 | `--sce-font-family` | Font family | the host's inherited font |
 | `--sce-radius` | Base corner radius | `4px` |
 | `--sce-row-height` | Height of one pitch row (and of a note) | `14px` fine pointer, `24px` coarse pointer |
-| `--sce-beat-width` | Width of one beat | `40px` |
+| `--sce-beat-width` | Width of one quarter note at 100% zoom | `40px` |
 | `--sce-keys-width` | Width of the pitch column | `44px` |
 
 Defaults follow the host's `color-scheme` through `light-dark()`: a host that sets `color-scheme: dark` gets the dark values with no mapping at all.
 
-**Derivation.** Surface, muted, line and line-strong are computed from the mapped background and text with `color-mix(in srgb, ...)` at the percentages above. A host that maps only `--sce-color-bg` and `--sce-color-text` therefore gets a coherent set of greys in any scheme. A host that maps one of the four greys overrides only that one. Do not add a variable for a derived grey unless a host proves the derivation fails.
+**Derivation.** Surface, muted, line and line-strong are computed from the mapped background and text with `color-mix(in srgb, ...)` at the percentages above. A host that maps only `--sce-color-bg` and `--sce-color-text` therefore gets a coherent set of greys in any scheme, and every text colour keeps a contrast of at least 4.5:1 (a test maps only those two and checks the title, zoom value, bar numbers, section names, chords, marks, track names and octave labels). A host that maps one of the four greys overrides only that one. Do not add a variable for a derived grey unless a host proves the derivation fails.
 
-**Private variables.** The `--sce-_*` names (`--sce-_bg`, `--sce-_text`, `--sce-_surface`, `--sce-_muted`, `--sce-_line`, `--sce-_line-strong`, `--sce-_accent`, `--sce-_note`, `--sce-_radius`, `--sce-_row`, `--sce-_beat`, `--sce-_keys`, `--sce-_shade`, `--sce-_sub`) are aliases that resolve the public variable or its default. They are not public: hosts must not set them and new work must not document them as an API. Per-instance layout values (`--sce-bars`, `--sce-rows`, `--sce-grid-div`, and per-note `--t`, `--d`, `--r`, `--i`) are set by the editor itself.
+**Private variables.** The `--sce-_*` names (`--sce-_bg`, `--sce-_text`, `--sce-_surface`, `--sce-_muted`, `--sce-_line`, `--sce-_line-strong`, `--sce-_accent`, `--sce-_note`, `--sce-_radius`, `--sce-_row`, `--sce-_beat`, `--sce-_keys`, `--sce-_shade`, and the row heights `--sce-_ruler`, `--sce-_band`, `--sce-_chords` and their sum `--sce-_top`) are aliases that resolve the public variable or its default. They are not public: hosts must not set them and new work must not document them as an API. Per-instance layout values (`--sce-ticks`, the length of the score in ticks, on the canvas; `--sce-rows`, the pitch rows of a lane) and per-item values (`--t` start, `--d` or `--w` length, `--r` row, all in ticks or rows) are set by the editor itself.
 
 ### Neutral defaults
 
-- **Ground** (#ffffff light, #1b1c1f dark): roll and button ground.
-- **Ink** (#18181b light, #ececee dark): text, selected-note outline, readout chip fill.
+- **Ground** (#ffffff light, #1b1c1f dark): the roll and the button ground.
+- **Ink** (#18181b light, #ececee dark): text.
 - **Cool accent** (#2457d6 light, #7da3ff dark): focus and checked state; also the note fill unless a note colour is mapped.
 
-Derived values used by the build: black-key row shading is 5% of text over transparent; the sub-beat line is the line colour at 50%; a hovered button is 6% of text over bg and an expanded one 10%; a hovered menu item is 8% of text; a note's border is 30% of text mixed into the note colour; a selected note is the note colour mixed 72% with text.
+Derived values used by the build: black-key row shading and the tint of every second section band are 5% of text over transparent; a hovered button is 6% of text over bg and an expanded one 10%; a hovered menu item is 8% of text; a note's border is 30% of text mixed into the note colour.
 
 ### Named Rules
 
@@ -139,26 +141,30 @@ Derived values used by the build: black-key row shading is 5% of text over trans
 
 **Character:** whatever the host's text looks like, set small and quiet so that notes and grid carry the surface.
 
-Sizes are keyword-relative so the user's browser font size applies and a host's rem tricks do not distort the tool: the root is `small`, and every other size is in `em` of it.
+Sizes are keyword-relative so the user's browser font size applies and a host's rem tricks do not distort the tool: the root is `small`, and every other size is in `em` of it. The header rows and the pinned track heads are sized in `em` too, so a larger browser text size makes them taller instead of clipping their text.
 
 ### Hierarchy
 
-- **Base** (400, `small`, line-height 1.3): toolbar buttons, menu items.
-- **Title** (600, `small`): toolbar title, value of the grid button.
-- **Label** (`0.92em`): bar numbers, track names (600, 0.02em tracking), badge, readout chip.
-- **Numeral label** (`0.85em`): octave labels in the pitch column.
+- **Base** (400, `small`, line-height 1.3): toolbar buttons, menu items, the cut sentence, the problem panel.
+- **Title** (600, `small`): toolbar title, the zoom value, chord names.
+- **Label** (`0.92em`): bar numbers, section names (600), marks, track names (600, 0.02em tracking), badge.
+- **Numeral label** (`0.85em`): octave labels in the pitch column and the Chords label.
 
 ### Named Rules
 
-**The Tabular Numbers Rule.** Every number that can change (bar numbers, octave labels, grid value, readout) uses lining, tabular numerals (`font-variant-numeric: lining-nums tabular-nums`) so the readout does not jitter while dragging.
+**The Tabular Numbers Rule.** Every number that can change (bar numbers, octave labels, the zoom value, marks) uses lining, tabular numerals (`font-variant-numeric: lining-nums tabular-nums`) so numbers do not shift as the zoom changes.
 
 **The Keyword Size Rule.** No `px` or `rem` font sizes. The root is a keyword; descendants are `em`.
 
 ## Layout
 
-A single scroller holds a canvas whose width is the pitch column plus bars times four beats times the beat width. The scroller scrolls both ways and keeps the ruler (24px) pinned to the top, the track head (22px, under the ruler) pinned below it, and the pitch column pinned to the left. Time runs left to right whatever the page direction. The lane height is rows times the row height, with each octave being twelve rows.
+A single scroller holds a canvas. Its width is the pitch column plus the score's length at the current zoom (the length in ticks times the beat width, over 256 ticks to the quarter note, times the zoom). The scroller scrolls both ways. A header block is pinned to the top: the bar ruler, the section bands, the marks row and the chord track, in that order. Under it each voice has a track: a track head (the voice's name) pinned below the header, a pitch column pinned to the left, and a lane. Time runs left to right whatever the page direction. A lane's height is its rows times the row height, with each octave being twelve rows; a voice's rows run from a margin of a few semitones below its lowest note to a margin above its highest, rounded out to whole octaves.
 
-Structure from top to bottom: toolbar strip (minimum 40px; title, grid button, spacer, read-only badge), bar ruler, track head, then the pitch column and lane. The root fills its parent (`height: 100%`, minimum 288px) and clips overflow; the host decides the size.
+Structure from top to bottom: toolbar strip (minimum 40px; title, zoom group, spacer, read-only badge), the cut sentence when the score is cut, the header block, then the tracks (`Vocal`, then `Ins` when present). The root fills its parent (`height: 100%`, minimum 288px) and clips overflow; the host decides the size.
+
+**The time axis.** Zooming sets the width of the elements that carry the axis (the canvas, the four header timelines, the lanes), by writing `calc(var(--sce-ticks) * var(--sce-_beat) * <zoom> / 256)` as their width. Everything placed on the axis (notes, bar numbers, chords, flags, bands, the cut, the grid) is positioned in percent of its axis element from its start and length in ticks. Do not hold the zoom in an inherited custom property: a variable that changes on the root restyles every note (about 70 ms per step at 1500 notes, against about 3 ms for widths). The zoom steps are 10%, 25%, 50%, 100%, 150%, 200% and 400% (1% to 400% reachable with the control wheel), and "Fit whole song" fits the score to the width shown.
+
+The opening view is scrolled to the middle of the first voice's notes in pitch and to the first bar in time.
 
 Density follows pointer type, not viewport width. A fine pointer gets the compact set; a coarse pointer (`pointer: coarse`) gets the larger one:
 
@@ -167,72 +173,84 @@ Density follows pointer type, not viewport width. A fine pointer gets the compac
 | Row height and note height | 14px | 24px |
 | Toolbar button minimum height | 28px | 36px |
 | Menu item minimum height | 30px | 40px |
-| Note hit area | the note | the note plus 4px above and below, 6px left and right |
 
-A host that maps `--sce-row-height` overrides both. Spacing is a small set used as seen: 8px gaps in the toolbar, 12px toolbar side padding, 10px button side padding, 8px chip and badge side padding.
+A host that maps `--sce-row-height` overrides both. Header rows at the default text size are 24px (ruler), 22px (sections), 22px (marks) and 26px (chords); track heads are 22px. Spacing is a small set used as seen: 8px gaps in the toolbar, 12px toolbar side padding, 10px button side padding, 5px before the text of a flag or chord.
 
-Touch behaviour: blank space pans and pinch-zooms the page as the browser allows; a note takes the touch for dragging and does not pan (`touch-action: none`). Dragging a note to the edge of the visible roll scrolls it, in a band of 32px (mouse) or 48px (touch).
+Touch behaviour: the scroller takes one finger for panning in both directions and leaves the page's own pinch (`touch-action: pan-x pan-y pinch-zoom`). A pinch does not zoom the time axis; the buttons and the menu do.
 
 ## Elevation & Depth
 
-Flat by default, tonal layering for depth: the toolbar, ruler, track head and pitch column sit on the surface tone; the roll sits on the ground tone. Shadows appear only as a response to a state or a floating layer.
+Flat by default, tonal layering for depth: the toolbar, header rows, track head and pitch column sit on the surface tone; the lanes sit on the ground tone. The only shadow is the popover's.
 
 ### Shadow Vocabulary
 
-- **Lifted note** (`box-shadow: 0 4px 10px color-mix(in srgb, var(--sce-_text) 40%, transparent)`): a note being dragged.
-- **Popover** (`box-shadow: 0 8px 24px color-mix(in srgb, var(--sce-_text) 22%, transparent)`): the grid popover in the top layer.
-- **Selected and focused note ring** (`box-shadow: 0 0 0 5px var(--sce-_accent)`): a spread ring, not a shadow; see Components.
+- **Popover** (`box-shadow: 0 8px 24px color-mix(in srgb, var(--sce-_text) 22%, transparent)`): the zoom menu in the top layer.
 
 ### Named Rules
 
-**The Flat-Until-Moved Rule.** A note has no shadow at rest. It gains one only while dragged, so shadow always means "in your hand".
+**The Flat Rule.** Nothing has a shadow at rest. A shadow marks a floating layer.
 
 ## Shapes
 
-Small, even corners. The base radius is 4px and comes from `--sce-radius`. Notes use the smaller of the radius and 3px. The popover uses the radius plus 2px. The read-only badge is a full pill (999px). All borders are 1px hairlines in the line colours; the notes' border is 1px in a darker mix of the note colour. The grid button's expand indicator is a 5px rotated border corner drawn in CSS, not a glyph. The checked menu dot is a 6px circle.
+Small, even corners. The base radius is 4px and comes from `--sce-radius`. Notes use the smaller of the radius and 3px. The popover uses the radius plus 2px. The read-only badge is a full pill (999px). All borders are 1px hairlines in the line colours; a note's border is 1px in a darker mix of the note colour. The zoom value button's chevron is a 5px rotated border corner, and the minus and plus buttons draw 10px by 2px bars with 1px ends, both in CSS and not glyphs, so no font is involved. The checked menu dot is a 6px circle.
 
 ## Components
 
 ### Toolbar
 
-Surface-tone strip, minimum 40px high, 1px line under it. Title at the start in 600 weight, a flexible spacer, and at the end the read-only badge when the editor is not editable. Visible controls are only those that work in the current mode: a read-only editor shows the badge and hides the grid button.
+Surface-tone strip, minimum 40px high, 1px line under it. Title at the start in 600 weight, the zoom group (minus button, zoom value button with a chevron, plus button), a flexible spacer, and at the end the read-only badge when the editor is not editable. The title is the one thing that gives way in a narrow host (it is cut with an ellipsis), so the zoom group and the badge stay whole down to 320px. The zoom group is hidden when the view is not shown (an unreadable score, no dialect).
 
-### Grid button and popover
+### Zoom controls and menu
 
-- **Button:** ground fill, 1px strong line, 4px radius, 28px high (36px coarse), with a label, the current value in 600 weight and a CSS chevron. Hover darkens by 6% of text; expanded state 10%.
+- **Buttons:** ground fill, 1px strong line, 4px radius, 28px high (36px coarse). The step buttons are square (28px or 36px). Hover darkens by 6% of text; expanded state 10%. A step that has nowhere to go is `aria-disabled` and muted.
+- **Value button:** shows the zoom as a percentage in 600 weight and opens the menu; its accessible name is "Zoom 100%" and it carries the popover's expanded state.
 - **Popover:** a native popover (`popover="auto"`), so it lives in the top layer and stacks above a host's full-screen layer. Surface fill, 1px strong line, 8px/24px shadow, positioned under the button and nudged left if it would overflow the viewport (8px margin).
-- **Menu items:** radio items, a 6px dot at the start marks the checked one in the accent colour; hover is 8% of text. Arrow keys, Home and End walk the items.
+- **Menu items:** radio items for the presets, a rule, then "Fit whole song" as a plain item. A 6px dot at the start marks the checked preset in the accent colour; hover is 8% of text. Arrow keys, Home and End walk the items; Enter or Space picks; Escape closes and returns focus to the button.
+- **Keys and wheel:** `+`, `=` step in; `-`, `_` step out (on the focused view); control plus the wheel zooms smoothly around the pointer, and stops the page from zooming itself.
+
+### Ruler and bar numbers
+
+A 1.85em row (24px at the default size). Each bar number sits at the left edge of its bar in muted text, with a strong line at its left. When bars get narrow the numbers thin out: only every 2nd, 4th, 8th, 16th or 32nd bar is numbered (the smallest power of two that leaves 32px between numbers), and the first is always shown.
+
+### Section bands
+
+A 1.7em row. One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing.
+
+### Marks row
+
+A 1.7em row of flags. The first flag shows what is in force at the start (meter and key); each later flag stands where a meter or key change takes effect, which for a key change may be inside a bar. A flag has a strong line at its left, 5px of padding and its items in a row ("4/4", "Key D"). The items stay at the pitch column's edge while the flag's stretch is scrolled past, so the key and meter in force are always readable; they never leave the flag's stretch. The last flag of a cut score carries "Incomplete bar" or "Cut off" (see The cut). A flag too narrow for an item leaves that item out whole.
+
+### Chord track
+
+A 2em row labelled "Chords" in its corner. Each chord's name in 600 weight at the position where the score writes it, running to the next chord, with a strong line at its left. A chord name that does not fit its width is left out whole. A score with no chords shows one muted sentence, "No chords in this score", pinned at the left, instead of an empty row.
+
+### Track, lane and grid
+
+A track is its head (the voice's name, 22px, pinned under the header), the pitch column and the lane. The pitch column labels each octave (C4, C5) in muted text, bottom-aligned on its C row. Black-key rows are shaded with 5% of text. The grid is drawn in each meter run of the score: a strong line at every bar start and a light line at every beat of the bar's own meter (a quarter note in 4/4, an eighth in 6/8), as gradients, so a line costs no node. Beat lines are dropped when beats are closer than 12px, leaving the bar lines; bar lines are dropped too when bars are closer than 10px (a whole long song fitted to the width), leaving the ruler's numbers and the bands to carry the structure, because a line every 5px is a comb over the notes.
 
 ### Note
 
-The one thing the user manipulates. A block exactly one row high, filled with the note colour, with a border mixed 30% toward the text colour. Width is its duration, with a 5px minimum.
+A block exactly one row high, filled with the note colour, with a border mixed 30% toward the text colour. Width is its duration less a 1px gap, with a 2px minimum. Rests are not drawn: a rest is the gap between blocks. A note tied to the next note of the same pitch loses its gap, its right border and its right corners, and the next note loses its left border and corners, so a tie reads as one connected bar. A note is a list item labelled "C4, bar 1 beat 1, length 1 beat" (with ", tied to the next note" when it is), in the host language, in a list named for its voice.
 
-- **Hover:** none beyond the grab cursor.
-- **Selected** (`aria-pressed="true"`): fill mixed 72% with text and a 2px text-colour outline, 1px offset.
-- **Focus** (keyboard): 2px accent outline, 2px offset. When the note is also selected the accent shows as a 5px spread ring around the selection outline, so selected-and-focused is distinguishable from selected alone.
-- **Dragging** (`data-dragging`): lifted note shadow, grabbing cursor, stacked above others.
-- **Blocked drop** (`data-blocked`): opacity 0.45 and a 2px dashed text-colour outline. Shape and dimming carry the meaning, not colour.
-- **Read-only:** default cursor; the drag threshold still applies and a notice is sent to the host.
+### The cut
 
-### Readout chip
+When the text of a voice stops before the song does, three things say so: a strip of one sentence above the view, led by a small swatch of the hatch so the sentence and the texture read as one ("This score is cut off: bar 232 of Ins is incomplete." or "...after bar 5 of Vocal."), a flag in the marks row at the bar where it stops ("Incomplete bar" when the bar is unfinished, "Cut off" when the text stops at a bar line, which puts the flag at the end of the score), and in that voice's lane a hatched tail with a dashed left edge from where its last note ends to the end of the score. The hatch is 1px diagonal lines in the strong line colour at 7px (the swatch is 1.1em square with a dashed border); the strip is a note landmark. None of it uses a new colour.
 
-The one authored move. An inverted chip: text colour as fill, background colour as text, 4px radius, `3px 8px` padding, label size, tabular numerals, no pointer events. It follows the pointer while dragging, offset 14px right and 34px above (56px above for touch, so the hand does not cover it), clamped inside the editor. It shows the pitch name and the bar and beat the note would land on, in the host language (for example "E4 · bar 8 beat 1.75"). It is hidden when no drag is in progress and is hidden from assistive technology; the position a move ends at, and a refused move, are announced through a polite status region instead.
+### Problem panel
+
+When the score cannot be read, the view is replaced by an alert panel: one sentence in 600 weight ("This score can't be shown because it can't be read."), then the dialect's diagnostics as a list in the interface language ("The duration "5" is not allowed. (bar 1, line 10)"), at most 20 and then "and N more". A model with no dialect gets one sentence naming it. The toolbar keeps its title and loses the zoom group.
 
 ### Read-only badge
 
-Pill, 1px strong line, muted text, label size, at the end of the toolbar. It appears only when the editor is not editable.
+Pill, 1px strong line, muted text, label size, at the end of the toolbar. It appears only when `editable` is false. `editable` has no other effect in this version.
 
 ### Focus treatment
 
-Interactive parts (button, menu item, note) get a 2px accent outline with 2px offset on keyboard focus. The scroller is focusable; because its own outline would be hidden behind the sticky ruler and pitch column, a 2px accent ring is drawn over the whole body instead.
-
-### Ruler, pitch column, lane
-
-Bar numbers at the left of each bar in muted text. Pitch labels per octave in muted text, bottom-aligned. Lane grid lines, heaviest to lightest: bar (strong line), beat (line), sub-beat (line at 50%; spacing follows the chosen grid of 1/4, 1/8 or 1/16). Black-key rows are shaded with 5% of text.
+Interactive parts (buttons, menu items) get a 2px accent outline with 2px offset on keyboard focus. The scroller is focusable; because its own outline would be hidden behind the sticky header and pitch column, a 2px accent ring is drawn over the whole body instead.
 
 ### Motion
 
-Only one transition exists: notes fade opacity over 120ms ease-out (the blocked-drop dimming). It is applied only under `prefers-reduced-motion: no-preference`. Dragging itself moves by direct translation with no easing. No other animation exists.
+None. No transition or animation exists, so nothing needs a reduced-motion alternative. Zoom and scroll change the view directly.
 
 ## Do's and Don'ts
 
@@ -240,9 +258,11 @@ Only one transition exists: notes fade opacity over 120ms ease-out (the blocked-
 
 - **Do** take every colour from the theme variable contract or a `color-mix` of bg and text; add a new public variable only when a host cannot be served by derivation.
 - **Do** keep the neutral defaults described as defaults, and keep hosts' mapping optional: mapping only bg and text must stay readable.
-- **Do** size type with `small` at the root and `em` below, and use tabular lining numerals for any number.
-- **Do** give every new interactive element a 2px accent outline with 2px offset on `:focus-visible`, and a coarse-pointer size (36px or larger for controls, a hit area padded around a note).
-- **Do** show a state with a shape or outline in addition to colour, as selection (outline) and blocked drops (dashed, dimmed) do.
+- **Do** size type with `small` at the root and `em` below, size header rows and pinned heads in `em`, and use tabular lining numerals for any number.
+- **Do** give every new interactive element a 2px accent outline with 2px offset on `:focus-visible`, and a coarse-pointer size (36px or larger for controls).
+- **Do** say a state with a shape or words as well as colour, as the cut (hatch, dashed edge, a sentence) and the tie (one joined bar) do.
+- **Do** leave out text that does not fit its cell, whole, instead of cutting it; thin numbers out rather than crowd them.
+- **Do** place anything on the time axis in percent of its axis element, and change the zoom only by setting those elements' widths.
 - **Do** put any new floating layer in a native popover so it reaches the top layer.
 - **Do** prefix every class with `sce-`, inject styles once per container, and release them on destroy.
 
@@ -250,8 +270,9 @@ Only one transition exists: notes fade opacity over 120ms ease-out (the blocked-
 
 - **Don't** state a brand: no fixed brand colour, no bundled font, no logo.
 - **Don't** hard-code `px` or `rem` font sizes, or a font family other than through `--sce-font-family`.
-- **Don't** add shadows at rest. Shadow marks a lifted or floating thing.
-- **Don't** add decoration or motion beyond the 120ms note opacity transition, and keep that one off under reduced motion.
+- **Don't** add shadows at rest. A shadow marks a floating thing.
+- **Don't** add decoration or motion.
+- **Don't** hold the zoom, or anything else that changes while the user zooms or scrolls, in an inherited custom property on the root.
 - **Don't** rely on a host's cascade. Style isolation is a constraint on all future work: the root resets everything (`all: initial`), descendants revert (`all: revert`) under a doubled `.sce-root.sce-root` selector so a host rule such as `.page div` does not reach in, and component rules are written under `.sce-root`. Notes are the one exception: they reset only the few properties they need by hand, because reverting every note made first render about three times slower. A new note-like element that is created in the thousands must follow the notes, not the rest.
 - **Don't** publish or depend on `--sce-_*` variables outside the stylesheet.
 - **Don't** import styles as a CSS file or leave anything behind: the stylesheet is a string, delivered as a constructed stylesheet (a style element only where that is unavailable, since a strict style policy blocks injected style elements) into the document or the host's shadow root, and removed with the last editor.
