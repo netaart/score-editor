@@ -284,6 +284,46 @@ test.describe("zoom on the time axis", () => {
     expect(await roll.evaluate((el) => el.scrollLeft)).toBe(0);
   });
 
+  /** Per item: its text drawn whole inside its cell, left out (pushed out of sight), or cut off, which is a misreading. */
+  const textFit = (items: Locator) =>
+    items.evaluateAll((elements) =>
+      elements.map((element) => {
+        const cell = (element.closest('[role="listitem"]') ?? element).getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const text = range.getBoundingClientRect();
+        if (text.top >= cell.bottom - 1) return "left out";
+        const inside =
+          text.left >= cell.left - 0.5 &&
+          text.right <= cell.right + 0.5 &&
+          text.top >= cell.top - 0.5 &&
+          text.bottom <= cell.bottom + 0.5;
+        return inside ? "whole" : "cut off";
+      }),
+    );
+
+  test("a chord name that does not fit its bar is left out, never shown cut off", async ({ page, harness }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    await page.getByRole("button", { name: "Zoom 100%", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "25%", exact: true }).click();
+    // A 2/4 bar is 20 pixels wide now: the one-letter chords fit, the longer names do not.
+    const fits = await textFit(page.getByRole("list", { name: "Chords" }).getByRole("listitem"));
+    expect(fits).not.toContain("cut off");
+    expect(fits.filter((fit) => fit === "whole").length).toBeGreaterThan(5);
+    expect(fits.filter((fit) => fit === "left out").length).toBeGreaterThan(5);
+  });
+
+  test("a mark that does not fit its stretch is left out whole, never shown cut off", async ({ page, harness }) => {
+    await harness.mount({ score: { vector: "accept-two-voices-meter-and-key-changes" } });
+    await page.getByRole("button", { name: "Zoom 100%", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "25%", exact: true }).click();
+    // Two beats of Bb major are 20 pixels wide now, and the 3/4 bar 30.
+    const fits = await textFit(page.getByRole("list", { name: "Marks" }).locator("span"));
+    expect(fits).not.toContain("cut off");
+    expect(fits).toContain("whole");
+    expect(fits).toContain("left out");
+  });
+
   test("bar numbers thin out when bars get too narrow to carry them", async ({ page, harness, isMobile }) => {
     await harness.mount({ score: { sample: "compact-three-sections" } });
     const press = (target: Locator) => (isMobile ? target.tap() : target.click());

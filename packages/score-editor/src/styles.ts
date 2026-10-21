@@ -295,7 +295,9 @@ const css = `
   bottom: 0;
   left: calc(var(--t) / var(--sce-ticks) * 100%);
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  column-gap: 8px;
   max-width: calc(var(--w) / var(--sce-ticks) * 100%);
   padding: 3px 0 0 5px;
   overflow: hidden;
@@ -303,6 +305,20 @@ const css = `
   font-size: 0.92em;
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
+}
+/*
+ * Text that does not fit its stretch is left out whole instead of cut mid-word: a full-height empty first item
+ * makes any item that is too wide wrap to a second line, which the clip hides. A cut "Dm" would read as "D".
+ */
+.sce-root .sce-mark::before,
+.sce-root .sce-chord::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 100%;
+}
+.sce-root .sce-mark::before {
+  margin-right: -8px;
 }
 .sce-root .sce-mark[data-edge="end"] {
   right: 0;
@@ -329,12 +345,14 @@ const css = `
   top: 0;
   bottom: 0;
   left: calc(var(--t) / var(--sce-ticks) * 100%);
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   max-width: calc(var(--w) / var(--sce-ticks) * 100%);
   padding: 5px 0 0 5px;
   overflow: hidden;
   border-left: 1px solid var(--sce-_line-strong);
   font-weight: 600;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sce-root .sce-empty {
