@@ -1,4 +1,4 @@
-// ABOUTME: Measures the mounted editor at a realistic song size in Chromium: first render, drag frames, scrolling.
+// ABOUTME: Measures the mounted arrangement view at a realistic song size in Chromium: first render, zoom, scrolling.
 // ABOUTME: Evidence for docs/spike.md, not a test: it asserts nothing. Run it after `pnpm build`; see AGENTS.md.
 import { spawn } from "node:child_process";
 import { chromium } from "@playwright/test";
@@ -111,17 +111,29 @@ try {
   });
   await page.evaluate(installRecorder);
 
-  // First render: mount() itself, and until the second animation frame after it (the first frame is out by then).
+  // First render: mount() itself, which reads the score text through the dialect, and until the second animation
+  // frame after it (the first frame is out by then). The parse is also timed alone, on the same text.
   const mounts = [];
   for (let run = 0; run < runs; run++) {
     mounts.push(
       await page.evaluate(
         async ({ bars, notes, last }) => {
-          const { mount } = await import("/packages/score-editor/dist/index.js");
-          const { syntheticScore } = await import("/e2e/page/synthetic.js");
-          const score = syntheticScore({ bars, notes });
+          const { mount, createDialectRegistry } = await import("/packages/score-editor/dist/index.js");
+          const { song2Dialect } = await import("/packages/score-dialect-song2/dist/index.js");
+          const { syntheticSong } = await import("/e2e/page/synthetic.js");
+          const score = syntheticSong({ bars, notes });
+          const dialects = createDialectRegistry([song2Dialect]);
+          const project = {
+            style: "",
+            lyrics: "",
+            score,
+            scoreMode: "full",
+            seed: null,
+            modelId: "song2",
+            sourceKey: "m",
+          };
           const t0 = performance.now();
-          const editor = mount(window.harness.stage, { language: "en", spikeScore: score });
+          const editor = mount(window.harness.stage, { language: "en", project, dialects });
           const t1 = performance.now();
           await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
           const t2 = performance.now();
@@ -129,7 +141,10 @@ try {
           const heap = performance.memory?.usedJSHeapSize ?? 0;
           if (!last) editor.destroy();
           else window.__editor = editor;
-          return { mountMs: t1 - t0, firstFrameMs: t2 - t0, nodes, heapMB: Math.round(heap / 1e6) };
+          const p0 = performance.now();
+          song2Dialect.parse(score);
+          const parseMs = performance.now() - p0;
+          return { mountMs: t1 - t0, firstFrameMs: t2 - t0, parseMs, nodes, heapMB: Math.round(heap / 1e6) };
         },
         { bars, notes, last: run === runs - 1 },
       ),
@@ -142,6 +157,7 @@ try {
     coldMountMs: round(mounts[0].mountMs),
     warmFirstFrameMs: stats(mounts.slice(1).map((m) => m.firstFrameMs)),
     warmMountMs: stats(mounts.slice(1).map((m) => m.mountMs)),
+    parseMs: stats(mounts.map((m) => m.parseMs)),
     domNodes: mounts.at(-1).nodes,
     jsHeapMB: mounts.at(-1).heapMB,
   };
@@ -150,36 +166,17 @@ try {
   await cdp.send("HeapProfiler.collectGarbage");
   await page.waitForTimeout(300);
 
-  // Dragging a note across ~3.5 bars with real mouse input, one move per ~16 ms.
-  const findTarget = () =>
-    page.evaluate(() => {
-      const scroller = document.querySelector('[role="region"]');
-      const box = scroller.getBoundingClientRect();
-      let best = null;
-      for (const el of document.querySelectorAll('[role="button"][aria-label]')) {
-        const r = el.getBoundingClientRect();
-        if (r.left < box.left + 200 || r.right > box.right - 100 || r.top < box.top + 60 || r.bottom > box.bottom - 20)
-          continue;
-        const d = Math.abs(r.left - box.left - 500);
-        if (!best || d < best.d) best = { d, x: r.left + 4, y: r.top + r.height / 2 };
-      }
-      return best;
-    });
-  const drags = [];
+  // Zooming with the buttons: each step lays the whole time axis out again.
+  const zoomButtons = [];
   for (let run = 0; run < 3; run++) {
-    const target = await findTarget();
     await page.evaluate(() => window.__rec.start());
-    await page.mouse.move(target.x, target.y);
-    await page.mouse.down();
-    for (let step = 1; step <= 90; step++) {
-      await page.mouse.move(target.x + step * 6, target.y + Math.sin(step / 6) * 20);
-      await page.waitForTimeout(16);
+    for (const name of ["Zoom in", "Zoom in", "Zoom in", "Zoom out", "Zoom out", "Zoom out", "Zoom out", "Zoom in"]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      await page.waitForTimeout(120);
     }
-    await page.mouse.up();
-    await page.waitForTimeout(100);
-    drags.push(summarize(await page.evaluate(() => window.__rec.stop())));
+    zoomButtons.push(summarize(await page.evaluate(() => window.__rec.stop())));
   }
-  result.drag = drags;
+  result.zoomButtons = zoomButtons;
 
   // Scrolling: wheel input (compositor driven) and a script that moves scrollLeft every frame (main thread driven).
   const scrollBox = await page.evaluate(() => {
@@ -218,6 +215,27 @@ try {
       }),
   );
   result.scriptScroll = summarize(await page.evaluate(() => window.__rec.stop()));
+
+  // Scrolling in pitch with the wheel, then the control wheel zooming around the pointer.
+  await page.mouse.move(scrollBox.x, scrollBox.y);
+  await page.evaluate(() => window.__rec.start());
+  for (let step = 0; step < 60; step++) {
+    await page.mouse.wheel(0, step < 30 ? 40 : -40);
+    await page.waitForTimeout(16);
+  }
+  await page.waitForTimeout(200);
+  result.pitchScroll = summarize(await page.evaluate(() => window.__rec.stop()));
+
+  await page.mouse.move(scrollBox.x, scrollBox.y);
+  await page.keyboard.down("Control");
+  await page.evaluate(() => window.__rec.start());
+  for (let step = 0; step < 60; step++) {
+    await page.mouse.wheel(0, step < 30 ? -60 : 60);
+    await page.waitForTimeout(16);
+  }
+  await page.waitForTimeout(200);
+  result.zoomWheel = summarize(await page.evaluate(() => window.__rec.stop()));
+  await page.keyboard.up("Control");
 } finally {
   await browser.close();
   server.kill();
