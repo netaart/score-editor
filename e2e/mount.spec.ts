@@ -441,3 +441,476 @@ test.describe("a score that cannot be shown", () => {
     expect(await page.getByRole("region", { name: "编曲视图" }).evaluate((el) => el.scrollLeft)).toBe(300);
   });
 });
+
+test("update switches the interface language and back", async ({ page, harness }) => {
+  // Bar 1 is a quarter C4, a quarter rest and a half D4; bar 2 stops after a half note.
+  await harness.mount({ language: "en", editable: false, score: { text: vocalOnly("C4z4D8|C8") } });
+  await expect(page.getByRole("region", { name: "Arrangement" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Zoom 100%", exact: true })).toBeVisible();
+  await expect(page.getByRole("listitem", { name: "C4, bar 1 beat 1, length 1 beat" })).toBeVisible();
+  await expect(page.getByText("No chords in this score")).toBeVisible();
+  await expect(page.getByText("Key C")).toBeVisible();
+  await expect(page.getByText("Read only")).toBeVisible();
+  await expect(page.getByRole("note")).toHaveText("This score is cut off: bar 2 of Vocal is incomplete.");
+
+  await harness.update({ language: "zh" });
+  await expect(page.getByRole("region", { name: "编曲视图" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "缩放 100%", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "放大", exact: true })).toBeVisible();
+  await expect(page.getByRole("listitem", { name: "C4，第 1 小节第 1 拍，长 1 拍" })).toBeVisible();
+  await expect(page.getByRole("listitem", { name: "C4, bar 1 beat 1, length 1 beat" })).toHaveCount(0);
+  await expect(page.getByText("调号 C")).toBeVisible();
+  await expect(page.getByText("这份乐谱里没有和弦")).toBeVisible();
+  await expect(page.getByText("只读")).toBeVisible();
+  await expect(page.getByRole("note")).toHaveText("这份乐谱在末尾被截断：Vocal 的第 2 小节不完整。");
+
+  await harness.update({ language: "en", editable: true });
+  await expect(page.getByRole("region", { name: "Arrangement" })).toBeVisible();
+  await expect(page.getByText("Read only")).toBeHidden();
+});
+
+test("repeated update and destroy leave no listeners and no nodes behind", async ({ page, harness }) => {
+  const cdp = await page.context().newCDPSession(page);
+  const listenerCount = async (expression: string) => {
+    const { result } = await cdp.send("Runtime.evaluate", { expression });
+    if (!result.objectId) throw new Error(`no object for ${expression}`);
+    const { listeners } = await cdp.send("DOMDebugger.getEventListeners", { objectId: result.objectId });
+    return listeners.length;
+  };
+  const globals = [
+    "window",
+    "document",
+    "document.documentElement",
+    "document.body",
+    "document.head",
+    "window.harness.stage",
+  ];
+  const countGlobals = () => Promise.all(globals.map(listenerCount));
+  const before = await countGlobals();
+  const htmlBefore = await page.evaluate(() => document.documentElement.outerHTML);
+  const adoptedSheets = () => page.evaluate(() => document.adoptedStyleSheets.length);
+  const sheetsBefore = await adoptedSheets();
+
+  for (let cycle = 0; cycle < 4; cycle++) {
+    await harness.mount();
+    await harness.update({ language: "zh" });
+    await harness.update({ editable: false });
+    await harness.update({ score: { vector: "reject-duration-five" } });
+    await harness.update({ score: { sample: "short-two-sections" } });
+    await harness.update({ language: "en", editable: true });
+    await harness.destroy();
+    await harness.destroy();
+    await harness.update({ language: "zh" });
+  }
+  expect(await countGlobals()).toEqual(before);
+  expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
+  expect(await adoptedSheets()).toBe(sheetsBefore);
+
+  await harness.mount();
+  expect(await adoptedSheets()).toBe(sheetsBefore + 1);
+  await page.getByRole("button", { name: /^Zoom \d+%$/ }).click();
+  await expect(page.getByRole("menuitemradio", { name: "200%" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Zoom \d+%$/ })).toHaveAttribute("aria-expanded", "true");
+  expect(await page.evaluate(() => window.harness.stage.firstElementChild?.nodeName)).toBe("DIV");
+  await page.evaluate(() => {
+    const kept = [window.harness.stage.firstElementChild as Element];
+    kept.push(...(kept[0] as Element).querySelectorAll("*"));
+    Object.assign(window, { kept });
+  });
+  const keptListeners = async () => {
+    const { result } = await cdp.send("Runtime.evaluate", { expression: "window.kept" });
+    const { result: length } = await cdp.send("Runtime.evaluate", { expression: "window.kept.length" });
+    if (!result.objectId) throw new Error("kept nodes missing");
+    let total = 0;
+    for (let index = 0; index < Number(length.value); index++) {
+      const { result: node } = await cdp.send("Runtime.evaluate", { expression: `window.kept[${index}]` });
+      if (!node.objectId) continue;
+      const { listeners } = await cdp.send("DOMDebugger.getEventListeners", { objectId: node.objectId });
+      total += listeners.length;
+    }
+    return total;
+  };
+  expect(await keptListeners()).toBeGreaterThan(0);
+  await harness.destroy();
+  expect(await keptListeners()).toBe(0);
+  expect(await page.evaluate(() => document.querySelectorAll(":popover-open").length)).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
+  expect(await adoptedSheets()).toBe(sheetsBefore);
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0);
+  await cdp.detach();
+
+  await harness.mount();
+  await expect(page.evaluate(() => window.harness.mount())).rejects.toThrow(/already holds an editor/);
+  await harness.destroy();
+});
+
+test.describe("host styling", () => {
+  test.skip(({ isMobile }) => isMobile, "styling is checked once, on the desktop project");
+  // Bar 1 is a quarter C4, a quarter rest and a half D4, then two whole bars.
+  const score = { text: vocalOnly("C4z4D8|C16|C16|") };
+  const c4 = "C4, bar 1 beat 1, length 1 beat";
+
+  test("host theme variables restyle the editor, with neutral defaults and the host's colour scheme when unmapped", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount({ score });
+    const note = page.getByRole("listitem", { name: c4 });
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    const colour = (target: Locator, property: "backgroundColor" | "fontFamily") =>
+      target.evaluate((el, name) => getComputedStyle(el)[name], property);
+    const lightness = async () => {
+      const [r = 0, g = 0, b = 0] = (await colour(roll, "backgroundColor")).match(/\d+/g)?.map(Number) ?? [];
+      return (r + g + b) / 3;
+    };
+
+    expect(await lightness()).toBeGreaterThan(200);
+    await page.evaluate(() => {
+      document.documentElement.style.colorScheme = "dark";
+    });
+    expect(await lightness()).toBeLessThan(60);
+    await page.evaluate(() => {
+      document.documentElement.style.colorScheme = "";
+    });
+
+    await page.evaluate(() => {
+      const { style } = window.harness.stage;
+      style.setProperty("--sce-color-note", "rgb(255, 0, 128)");
+      style.setProperty("--sce-color-bg", "rgb(10, 20, 30)");
+      style.setProperty("--sce-font-family", "'Courier New', monospace");
+    });
+    expect(await colour(note, "backgroundColor")).toBe("rgb(255, 0, 128)");
+    expect(await colour(roll, "backgroundColor")).toBe("rgb(10, 20, 30)");
+    expect(await colour(page.getByText("Arrangement", { exact: true }), "fontFamily")).toContain("Courier New");
+  });
+
+  test("a host that maps only the background and text colours still gets readable text everywhere", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    await page.evaluate(() => {
+      const { style } = window.harness.stage;
+      style.setProperty("--sce-color-bg", "rgb(18, 19, 22)");
+      style.setProperty("--sce-color-text", "rgb(232, 233, 237)");
+    });
+    const contrastOf = (target: Locator) =>
+      target.evaluate((el) => {
+        const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+        if (!canvas) throw new Error("no canvas");
+        const paint = (css: string) => {
+          canvas.fillStyle = css;
+          canvas.fillRect(0, 0, 1, 1);
+        };
+        const pixel = () => Array.from(canvas.getImageData(0, 0, 1, 1).data.slice(0, 3));
+        const luminance = ([r = 0, g = 0, b = 0]: number[]) => {
+          const [lr = 0, lg = 0, lb = 0] = [r, g, b].map((c) => {
+            const v = c / 255;
+            return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+        };
+        // The backdrop is every ancestor's background laid over white, outermost first: tints are translucent.
+        const layers: string[] = [];
+        for (let node: Element | null = el; node; node = node.parentElement) {
+          layers.unshift(getComputedStyle(node).backgroundColor);
+        }
+        paint("white");
+        for (const layer of layers) paint(layer);
+        const backdrop = luminance(pixel());
+        paint(getComputedStyle(el).color);
+        const text = luminance(pixel());
+        return (Math.max(text, backdrop) + 0.05) / (Math.min(text, backdrop) + 0.05);
+      });
+    const texts: Record<string, Locator> = {
+      title: page.getByText("Arrangement", { exact: true }),
+      "zoom label": page.getByText("Zoom", { exact: true }),
+      "zoom value": page.getByText("100%", { exact: true }).first(),
+      "bar number": page.getByRole("list", { name: "Bars" }).getByText("2", { exact: true }),
+      "section name": page.getByRole("list", { name: "Sections" }).getByText("verse", { exact: true }),
+      chord: page.getByRole("list", { name: "Chords" }).getByText("Dm", { exact: true }).first(),
+      "meter mark": page.getByRole("list", { name: "Marks" }).getByText("2/4", { exact: true }),
+      "key mark": page.getByRole("list", { name: "Marks" }).getByText(/^Key /),
+      "track name": page.getByText("Vocal", { exact: true }),
+      "octave label": page.getByText(/^C\d$/).first(),
+    };
+    for (const [what, target] of Object.entries(texts)) {
+      expect(await contrastOf(target), `contrast of the ${what}`).toBeGreaterThan(4.5);
+    }
+  });
+
+  test("the host's global styles do not change the editor, and the editor does not change the host", async ({
+    page,
+    harness,
+  }) => {
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML(
+        "beforeend",
+        '<div id="probe"><button id="probe-button">Host button</button><span>Host text</span></div>',
+      );
+    });
+    const probe = () =>
+      page.evaluate(() =>
+        ["#probe", "#probe-button", "#probe span", "body", "h1"].map((selector) => {
+          const el = document.querySelector(selector);
+          if (!el) return null;
+          const style = getComputedStyle(el);
+          return [
+            "color",
+            "font-family",
+            "font-size",
+            "font-weight",
+            "line-height",
+            "margin-top",
+            "padding-top",
+            "border-top-width",
+            "border-radius",
+            "background-color",
+            "display",
+            "box-sizing",
+            "text-transform",
+            "letter-spacing",
+          ].map((name) => style.getPropertyValue(name));
+        }),
+      );
+    const names = [
+      "color",
+      "font-family",
+      "font-size",
+      "font-style",
+      "font-weight",
+      "line-height",
+      "letter-spacing",
+      "text-transform",
+      "text-decoration-line",
+      "margin-top",
+      "padding-top",
+      "padding-left",
+      "border-top-width",
+      "border-radius",
+      "background-color",
+      "box-shadow",
+      "opacity",
+      "position",
+      "width",
+      "height",
+    ];
+    const parts = (): Record<string, Locator> => ({
+      note: page.getByRole("listitem", { name: c4 }),
+      title: page.getByText("Arrangement", { exact: true }),
+      "zoom button": page.getByRole("button", { name: "Zoom 100%", exact: true }),
+      "zoom in": page.getByRole("button", { name: "Zoom in", exact: true }),
+      "bar number": page.getByRole("list", { name: "Bars" }).getByRole("listitem").first(),
+      "section band": page.getByRole("list", { name: "Sections" }).getByRole("listitem").first(),
+      "mark flag": page.getByRole("list", { name: "Marks" }).getByRole("listitem").first(),
+      "track name": page.getByText("Vocal", { exact: true }),
+      "octave label": page.getByText(/^C\d$/).first(),
+      "no-chords message": page.getByText("No chords in this score"),
+    });
+    const styleOf = (target: Locator, list = names) =>
+      target.evaluate(
+        (el, properties) =>
+          Object.fromEntries(properties.map((name) => [name, getComputedStyle(el).getPropertyValue(name)])),
+        list,
+      );
+    // A note carries no text, so only what it draws is compared; its text properties are never used.
+    const drawn = names.filter((name) => !/^(font|line|letter|text|color)/.test(name));
+    const styles = async () => {
+      const found: Record<string, unknown> = {};
+      for (const [what, target] of Object.entries(parts()))
+        found[what] = await styleOf(target, what === "note" ? drawn : names);
+    };
+
+    await harness.mount({ score });
+    const clean = await styles();
+    await harness.destroy();
+
+    await page.addStyleTag({
+      content: `
+        div, span, button { margin: 7px; padding: 9px; border: 3px solid red; border-radius: 0; background: yellow;
+          color: red; font: italic 28px/3 cursive; letter-spacing: 4px; text-transform: uppercase;
+          box-shadow: 0 0 0 5px green; position: static; width: auto; height: auto; }
+        main div, main span, main button { opacity: 0.9; text-decoration: underline; }
+      `,
+    });
+    const hostBefore = await probe();
+    await harness.mount({ score });
+    expect(await styles()).toEqual(clean);
+    expect(await styleOf(parts().note as Locator)).toMatchObject({
+      height: "14px",
+      "border-top-width": "1px",
+      "margin-top": "0px",
+      "padding-top": "0px",
+      "box-shadow": "none",
+      opacity: "1",
+    });
+    expect(await styleOf(parts().title as Locator)).toMatchObject({
+      "font-size": "13px",
+      "font-style": "normal",
+      "letter-spacing": "normal",
+      "padding-top": "0px",
+      "text-decoration-line": "none",
+    });
+    expect(await styleOf(parts()["zoom button"] as Locator)).toMatchObject({
+      "font-size": "13px",
+      "border-top-width": "1px",
+      "padding-top": "0px",
+    });
+
+    expect(await probe()).toEqual(hostBefore);
+    await harness.destroy();
+    expect(await probe()).toEqual(hostBefore);
+  });
+});
+
+test.describe("style delivery", () => {
+  test.skip(({ isMobile }) => isMobile, "style delivery is checked once, on the desktop project");
+  const score = { text: vocalOnly("C4z4D8|C16|C16|") };
+  const c4 = "C4, bar 1 beat 1, length 1 beat";
+
+  test("the editor is styled under a strict style policy, where an injected style element would be blocked", async ({
+    page,
+    harness,
+  }) => {
+    await page.route("**/", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), "content-security-policy": "style-src 'self'" },
+      });
+    });
+    await page.goto("/");
+    await harness.mount({ score });
+    const note = page.getByRole("listitem", { name: c4 });
+    expect((await note.boundingBox())?.height).toBe(14);
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
+    await harness.destroy();
+  });
+
+  test("inside a host's shadow root it is styled there, works, and is out of reach of rules even !important ones", async ({
+    page,
+    harness,
+  }) => {
+    await page.addStyleTag({
+      content: "#shadow-host span, #shadow-host div { padding: 9px !important; color: red !important; }",
+    });
+    await harness.mount({ shadow: true, score });
+    const result = await page.evaluate(() => ({
+      sheets: window.harness.shadowRoot?.adoptedStyleSheets.length,
+      documentSheets: document.adoptedStyleSheets.length,
+    }));
+    expect(result).toEqual({ sheets: 1, documentSheets: 0 });
+
+    const title = page.getByText("Arrangement", { exact: true });
+    expect(await title.evaluate((el) => [getComputedStyle(el).paddingTop, getComputedStyle(el).color])).toEqual([
+      "0px",
+      "rgb(24, 24, 27)",
+    ]);
+    const note = page.getByRole("listitem", { name: c4 });
+    const noteBox = await note.boundingBox();
+    if (!noteBox) throw new Error("the editor did not render inside the shadow root");
+    expect(noteBox.height).toBe(14);
+
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
+    // A note is its length less a one pixel gap, so a beat that grows from 40 to 60 pixels takes it from 39 to 59.
+    expect((await box(note)).width).toBeCloseTo((noteBox.width + 1) * 1.5 - 1, 0);
+    await page.getByRole("button", { name: "Zoom 150%", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "200%" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menuitemradio", { name: "200%" })).toBeHidden();
+
+    await harness.destroy();
+    const after = await page.evaluate(() => ({
+      sheets: window.harness.shadowRoot?.adoptedStyleSheets.length,
+      children: window.harness.shadowRoot?.firstElementChild?.childElementCount,
+    }));
+    expect(after).toEqual({ sheets: 0, children: 0 });
+  });
+});
+
+test.describe("popovers", () => {
+  test("the zoom menu works above a host's layers and past the clip of its container", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
+    await page.evaluate(() => {
+      const { stage } = window.harness;
+      const layer = document.createElement("div");
+      layer.style.cssText =
+        "position:fixed;left:0;top:0;width:100vw;height:110px;z-index:1000;overflow:hidden;transform:translateZ(0);background:#ddd";
+      document.body.append(layer);
+      layer.append(stage);
+      stage.style.height = "110px";
+      const toast = document.createElement("div");
+      toast.style.cssText =
+        "position:fixed;left:0;top:70px;width:100vw;height:300px;z-index:2147483647;background:rgba(255,0,0,.4)";
+      document.body.append(toast);
+    });
+    await harness.mount();
+
+    await press(page.getByRole("button", { name: "Zoom 100%", exact: true }));
+    const half = page.getByRole("menuitemradio", { name: "50%", exact: true });
+    await expect(half).toBeVisible();
+    const layerBottom = await page.evaluate(() => window.harness.stage.getBoundingClientRect().bottom);
+    const menuBox = await page.getByRole("menu", { name: "Zoom" }).boundingBox();
+    expect(menuBox ? menuBox.y + menuBox.height : 0).toBeGreaterThan(layerBottom);
+
+    await press(half);
+    await expect(page.getByRole("button", { name: "Zoom 50%", exact: true })).toBeVisible();
+    await expect(page.getByRole("menu", { name: "Zoom" })).toBeHidden();
+  });
+
+  test.describe("on a desktop", () => {
+    test.skip(({ isMobile }) => isMobile, "keyboard and modal dialogs are checked on the desktop project");
+
+    test("it opens inside a host's modal dialog and closes with Escape, returning focus to its button", async ({
+      page,
+      harness,
+    }) => {
+      await page.evaluate(() => {
+        const { stage } = window.harness;
+        const dialog = document.createElement("dialog");
+        dialog.style.cssText = "width:640px;height:120px;padding:0;overflow:hidden";
+        document.body.append(dialog);
+        dialog.append(stage);
+        stage.style.height = "120px";
+        dialog.showModal();
+      });
+      await harness.mount();
+      const zoomButton = page.getByRole("button", { name: /^Zoom \d+%$/ });
+      await zoomButton.click();
+      const quarter = page.getByRole("menuitemradio", { name: "25%" });
+      await expect(quarter).toBeVisible();
+      await expect(page.getByRole("menuitemradio", { name: "100%" })).toHaveAttribute("aria-checked", "true");
+      await page.keyboard.press("Escape");
+      await expect(quarter).toBeHidden();
+      await expect(zoomButton).toBeFocused();
+      await zoomButton.click();
+      await quarter.click();
+      await expect(page.getByRole("button", { name: "Zoom 25%", exact: true })).toBeVisible();
+    });
+
+    test("the open menu is walked with the arrow keys and a choice is made with Enter", async ({ page, harness }) => {
+      await harness.mount();
+      await page.getByRole("button", { name: /^Zoom \d+%$/ }).click();
+      const item = (name: string) => page.getByRole("menuitemradio", { name, exact: true });
+      await expect(item("100%")).toBeFocused();
+      await page.keyboard.press("ArrowUp");
+      await expect(item("50%")).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await page.keyboard.press("ArrowDown");
+      await expect(item("150%")).toBeFocused();
+      await page.keyboard.press("End");
+      await expect(page.getByRole("menuitem", { name: "Fit whole song" })).toBeFocused();
+      await page.keyboard.press("Home");
+      await expect(item("10%")).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("button", { name: "Zoom 10%", exact: true })).toBeVisible();
+      await expect(page.getByRole("menu", { name: "Zoom" })).toBeHidden();
+    });
+  });
+});
