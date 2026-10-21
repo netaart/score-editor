@@ -383,3 +383,61 @@ test.describe("scrolling in time and in pitch", () => {
     await expect.poll(async () => (await offset()).top).toBeGreaterThan(start.top + 50);
   });
 });
+
+test.describe("a score that cannot be shown", () => {
+  test("a score that does not read shows its diagnostics in the interface language, and a good project replaces them with the view", async ({
+    page,
+    harness,
+  }) => {
+    // The duration 5 is not one the format writes.
+    await harness.mount({ score: { vector: "reject-duration-five" } });
+    const problem = page.getByRole("alert");
+    await expect(problem).toContainText("This score can't be shown because it can't be read.");
+    await expect(problem.getByRole("listitem")).toHaveText(["The duration “5” is not allowed. (bar 1, line 10)"]);
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Zoom/ })).toHaveCount(0);
+
+    await harness.update({ language: "zh" });
+    await expect(problem.getByRole("listitem")).toHaveText(["时值 “5”不在允许的范围内。（第 1 小节，第 10 行）"]);
+
+    await harness.update({ score: { sample: "compact-three-sections" } });
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "编曲视图" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "小节" }).getByRole("listitem")).toHaveCount(28);
+
+    await harness.update({ score: { vector: "reject-duration-five" } });
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.getByRole("region", { name: "编曲视图" })).toHaveCount(0);
+  });
+
+  test("a cut message does not outlive the score it described", async ({ page, harness }) => {
+    await harness.mount({ score: { vector: "truncate-partial-measure" } });
+    await expect(page.getByRole("note")).toBeVisible();
+    await harness.update({ score: { vector: "reject-duration-five" } });
+    await expect(page.getByRole("note")).toHaveCount(0);
+  });
+
+  test("a model with no dialect gets one plain sentence and no view", async ({ page, harness }) => {
+    await harness.mount({ project: { modelId: "other-model" } });
+    await expect(page.getByRole("alert")).toHaveText(
+      "The score format of “other-model” isn't supported by this editor, so the score can't be shown.",
+    );
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveCount(0);
+
+    await harness.update({ language: "zh" });
+    await expect(page.getByRole("alert")).toHaveText("这个编辑器不支持“other-model”的乐谱格式，所以无法显示这份乐谱。");
+
+    await harness.update({ project: { modelId: "song2" } });
+    await expect(page.getByRole("region", { name: "编曲视图" })).toBeVisible();
+  });
+
+  test("changing only other fields of the project keeps the view as the user left it", async ({ page, harness }) => {
+    await harness.mount({ score: { text: vocalOnly("C16|C16|C16|C16|", "C16|C16|C16|C16|", "C16|C16|C16|C16|") } });
+    const roll = page.getByRole("region", { name: "Arrangement" });
+    await roll.evaluate((el) => el.scrollTo(300, 0));
+    await harness.update({ project: { style: "a different style", seed: 7 } });
+    expect(await roll.evaluate((el) => el.scrollLeft)).toBe(300);
+    await harness.update({ language: "zh" });
+    expect(await page.getByRole("region", { name: "编曲视图" }).evaluate((el) => el.scrollLeft)).toBe(300);
+  });
+});

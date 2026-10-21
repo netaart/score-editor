@@ -115,6 +115,28 @@ const css = `
   background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
 }
+.sce-root .sce-problem {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 12px;
+  overflow: auto;
+}
+.sce-root .sce-problem-title {
+  margin: 0;
+  font-weight: 600;
+}
+.sce-root .sce-problem-list {
+  margin: 8px 0 0;
+  padding: 0 0 0 1.4em;
+  list-style: disc;
+}
+.sce-root .sce-problem-item {
+  margin: 4px 0;
+}
+.sce-root .sce-problem-more {
+  margin: 4px 0 0;
+  color: var(--sce-_muted);
+}
 .sce-root .sce-zoom {
   display: inline-flex;
   align-items: center;

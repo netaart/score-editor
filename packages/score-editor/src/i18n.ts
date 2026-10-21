@@ -17,6 +17,9 @@ interface Messages {
   unnamedSection: string;
   chords: string;
   noChords: string;
+  unreadable: string;
+  moreProblems(count: number): string;
+  noDialect(modelId: string): string;
   marks: string;
   incompleteBar: string;
   cutOff: string;
@@ -40,6 +43,10 @@ const en: Messages = {
   unnamedSection: "Unnamed",
   chords: "Chords",
   noChords: "No chords in this score",
+  unreadable: "This score can't be shown because it can't be read.",
+  moreProblems: (count) => `and ${count} more`,
+  noDialect: (modelId) =>
+    `The score format of “${modelId}” isn't supported by this editor, so the score can't be shown.`,
   marks: "Marks",
   incompleteBar: "Incomplete bar",
   cutOff: "Cut off",
@@ -71,6 +78,9 @@ const zh: Messages = {
   unnamedSection: "未命名",
   chords: "和弦",
   noChords: "这份乐谱里没有和弦",
+  unreadable: "这份乐谱读不通，所以无法显示。",
+  moreProblems: (count) => `还有 ${count} 条`,
+  noDialect: (modelId) => `这个编辑器不支持“${modelId}”的乐谱格式，所以无法显示这份乐谱。`,
   marks: "标记",
   incompleteBar: "不完整的小节",
   cutOff: "在此截断",

@@ -17,6 +17,8 @@ import {
   ZOOM_MIN,
   ZOOM_PRESETS,
 } from "./arrangement";
+import type { Diagnostic } from "./diagnostics";
+import { formatDiagnostic } from "./diagnostics";
 import { messagesFor } from "./i18n";
 import type { Note, Score } from "./score";
 import { acquireStyles } from "./styles";
@@ -35,6 +37,15 @@ function create<K extends keyof HTMLElementTagNameMap>(
   parent?.appendChild(el);
   return el;
 }
+
+/** What reading the project's score came to: a score to show, or the reason there is none. */
+type Reading =
+  | { kind: "score"; score: Score }
+  | { kind: "unreadable"; diagnostics: ReadonlyArray<Diagnostic> }
+  | { kind: "no-dialect"; modelId: string };
+
+/** The most diagnostics listed; a score that fails everywhere should not fill the screen with it. */
+const MAX_LISTED_DIAGNOSTICS = 20;
 
 /** The first voice's lane, which the first scroll opens on the middle of. */
 interface FirstLane {
@@ -80,6 +91,7 @@ export class Editor implements MountedEditor {
   private readonly menuItems = new Map<number, HTMLButtonElement>();
   private readonly fitItem: HTMLButtonElement;
   private zoom = 1;
+  private reading: Reading;
   private view: View | null = null;
   private destroyed = false;
 
@@ -139,6 +151,7 @@ export class Editor implements MountedEditor {
     this.root.addEventListener("keydown", this.onKeyDown, { signal });
     this.body.addEventListener("wheel", this.onWheel, { signal, passive: false });
 
+    this.reading = this.read();
     this.applyLanguage();
     this.applyEditable();
     this.render();
@@ -152,10 +165,17 @@ export class Editor implements MountedEditor {
     this.options = { ...before, ...patch };
     if (this.options.language !== before.language) this.applyLanguage();
     if (this.options.editable !== before.editable) this.applyEditable();
-    if (this.options.language !== before.language || this.options.project !== before.project) {
-      this.render();
-      this.afterRender();
-    }
+    const sameScore =
+      this.options.project.modelId === before.project.modelId &&
+      this.options.project.score === before.project.score &&
+      this.options.dialects === before.dialects;
+    if (sameScore && this.options.language === before.language) return;
+    const kept = sameScore ? this.view?.scroller : null;
+    const offset = kept ? { left: kept.scrollLeft, top: kept.scrollTop } : null;
+    if (!sameScore) this.reading = this.read();
+    this.render();
+    this.afterRender();
+    if (offset && this.view) this.view.scroller.scrollTo(offset.left, offset.top);
   }
 
   destroy(): void {
@@ -209,16 +229,46 @@ export class Editor implements MountedEditor {
 
   // --- building the view -------------------------------------------------------------------------
 
-  private render(): void {
+  private read(): Reading {
     const { project, dialects } = this.options;
     const dialect = dialects.find(project.modelId);
-    const score = dialect?.parse(project.score).score;
+    if (!dialect) return { kind: "no-dialect", modelId: project.modelId };
+    const { score, diagnostics } = dialect.parse(project.score);
+    return score ? { kind: "score", score } : { kind: "unreadable", diagnostics };
+  }
+
+  private render(): void {
+    const reading = this.reading;
+    const score = reading.kind === "score" ? reading.score : null;
     this.body.replaceChildren();
     this.view = null;
     const cut = score ? cutOf(score) : null;
     this.notice.hidden = !cut;
     this.notice.textContent = cut ? messagesFor(this.options.language).cutNotice(cut) : "";
-    if (score) this.body.appendChild(this.buildArrangement(score));
+    if (reading.kind === "score") this.body.appendChild(this.buildArrangement(reading.score));
+    else this.body.appendChild(this.buildProblem(reading));
+  }
+
+  /** Instead of the arrangement: why there is none, in the interface language. */
+  private buildProblem(reading: Exclude<Reading, { kind: "score" }>): HTMLElement {
+    const t = messagesFor(this.options.language);
+    const panel = create(this.doc, "div", "sce-problem");
+    panel.setAttribute("role", "alert");
+    if (reading.kind === "no-dialect") {
+      create(this.doc, "p", "sce-problem-title", panel).textContent = t.noDialect(reading.modelId);
+      return panel;
+    }
+    create(this.doc, "p", "sce-problem-title", panel).textContent = t.unreadable;
+    const list = create(this.doc, "ul", "sce-problem-list", panel);
+    for (const diagnostic of reading.diagnostics.slice(0, MAX_LISTED_DIAGNOSTICS)) {
+      create(this.doc, "li", "sce-problem-item", list).textContent = formatDiagnostic(
+        diagnostic,
+        this.options.language,
+      );
+    }
+    const more = reading.diagnostics.length - MAX_LISTED_DIAGNOSTICS;
+    if (more > 0) create(this.doc, "p", "sce-problem-more", panel).textContent = t.moreProblems(more);
+    return panel;
   }
 
   /** What needs the built view to be in the page: the zoom variable and bar numbers, then the first scroll. */
