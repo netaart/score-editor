@@ -25,6 +25,8 @@ interface Vector {
 const directory = new URL("../packages/score-dialect-song2/tests/", import.meta.url);
 const facts = JSON.parse(readFileSync(new URL("samples.json", directory), "utf8")) as SampleFact[];
 const vectors = (JSON.parse(readFileSync(new URL("vectors.json", directory), "utf8")) as { vectors: Vector[] }).vectors;
+const tieMismatch = vectors.find((vector) => vector.id === "truncate-tie-mismatch-final");
+if (tieMismatch === undefined) throw new Error("the truncate-tie-mismatch-final vector is missing");
 
 const HEADER = `X:1
 T:
@@ -208,10 +210,81 @@ describe("toRest on every sample", () => {
 describe("toRest on every accepted vector with notes", () => {
   for (const vector of vectors) {
     if (vector.expect !== "accept" || vector.notes === undefined) continue;
+    // The X5 cut vector needs its tie to keep the cut; its refusal is pinned in "toRest and cut tails".
+    if (vector.id === tieMismatch.id) continue;
     it(`${vector.id}`, () => {
       exercise(vector.id, vector.text);
     });
   }
+});
+
+describe("toRest and cut tails", () => {
+  it("refuses the X5 tail that would stop being a cut when its tie is removed", () => {
+    const result = applyScoreCommand(song2Dialect, tieMismatch.text, { type: "toRest", noteId: "Vocal:0" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("write-mismatch");
+    expect(result.diagnostic.params.field).toBe("truncation");
+  });
+
+  it("keeps the X5 tail inside a partial measure that still has a finished token", () => {
+    const text = `${HEADER}
+K:C
+V: Vocal
+C16|D2-B`;
+    const input = parse(text);
+    const result = applyScoreCommand(song2Dialect, text, { type: "toRest", noteId: "Vocal:1024" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${HEADER}
+K:C
+V: Vocal
+C16|z2`);
+    const output = parse(result.text);
+    expect(output.truncation).toEqual(input.truncation);
+    check(output);
+  });
+
+  it("keeps an unfinished chord string at the end of a rewritten partial measure", () => {
+    const text = `${HEADER}
+K:C
+V: Vocal
+C16|D8"C`;
+    const input = parse(text);
+    const result = applyScoreCommand(song2Dialect, text, { type: "toRest", noteId: "Vocal:1024" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${HEADER}
+K:C
+V: Vocal
+C16|z8"C`);
+    const output = parse(result.text);
+    expect(output.truncation).toEqual(input.truncation);
+    expect(output.hasChords).toBe(true);
+    check(output);
+  });
+
+  it("keeps the X5 tail when only a note before the tied last note becomes a rest", () => {
+    const text = `${HEADER}
+K:C
+V: Vocal
+C16|D2-D2D2-B`;
+    const input = parse(text);
+    const result = applyScoreCommand(song2Dialect, text, { type: "toRest", noteId: "Vocal:1024" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${HEADER}
+K:C
+V: Vocal
+C16|z2z2D2-B`);
+    const output = parse(result.text);
+    expect(output.truncation).toEqual(input.truncation);
+    check(output);
+  });
 });
 
 describe("toRest failures", () => {
@@ -285,6 +358,15 @@ C16|`,
     expect(result.project).toBe(project);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["note-not-found"]);
   });
+
+  it("returns the project unchanged with write-mismatch when the cut cannot be kept", () => {
+    const cutProject: SongProject = { ...project, score: tieMismatch.text };
+    const result = applyProjectCommand(song2Dialect, cutProject, { type: "toRest", noteId: "Vocal:0" });
+
+    expect(result.project).toBe(cutProject);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["write-mismatch"]);
+    expect(result.diagnostics[0]?.params.field).toBe("truncation");
+  });
 });
 
 describe("check", () => {
@@ -308,6 +390,7 @@ C16|`);
     const diagnostics = song2Dialect.check({ ...score, bars });
 
     expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["write-mismatch"]);
+    expect(diagnostics[0]?.params.field).toBe("bars");
   });
 });
 
@@ -378,7 +461,7 @@ V: Vocal
     check(parse(result.text));
   });
 
-  it("rewrites a cut bar short, without its unfinished token and without a closing barline", () => {
+  it("rewrites a cut bar short, keeps its unfinished accidental, and omits the closing barline", () => {
     const text = `${HEADER}
 K:C
 V: Vocal
@@ -390,7 +473,7 @@ C16|D8E4^`;
     expect(result.text).toBe(`${HEADER}
 K:C
 V: Vocal
-C16|z8E4`);
+C16|z8E4^`);
     check(parse(result.text));
   });
 });

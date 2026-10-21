@@ -361,7 +361,7 @@ A writer that implements these rules MUST produce text that reads back to the sa
 
 **W13 — pitch spelling.** For a sharp key, C major, or A minor, spell chromatic notes with sharps; for a flat key, spell them with flats; use double accidentals only when the spelling requires them. Keep every sounding pitch within MIDI 0–127.
 
-**W14 — complete scores only.** A writer that produces a new score MUST write a complete score with every block and closing barline; it MUST NOT emit a cut tail. A writer that preserves an unchanged cut tail emits its bytes unchanged (X17) and changes nothing before it.
+**W14 — complete scores only.** A writer that produces a new score MUST write a complete score with every block and closing barline; it MUST NOT emit a cut tail. A writer that edits a cut score keeps its cut: an unchanged cut tail is emitted byte for byte (X17); bars before it MAY be rewritten under W2–W13; a rewritten partial measure keeps its finished tokens and its X4 remainder, and keeps an X5 remainder only while the tie into it is unchanged. An edit after which the text would read with a different cut, or with none, is not writable.
 
 ## Reading diagnostic codes
 

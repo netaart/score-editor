@@ -292,12 +292,18 @@ function chineseNotANote(params: DiagnosticParams): string {
   return `这个事件${quoted(value(params, "noteId"))}是休止符，不是音符。`;
 }
 
-function englishWriteMismatch(): string {
-  return "The written score does not read back the same.";
+function englishWriteMismatch(params: DiagnosticParams): string {
+  const field = value(params, "field");
+  return field === ""
+    ? "The written score does not read back the same."
+    : `The written score does not read back the same in ${field}.`;
 }
 
-function chineseWriteMismatch(): string {
-  return "写回后的乐谱读回来和改动后的乐谱不一致。";
+function chineseWriteMismatch(params: DiagnosticParams): string {
+  const field = value(params, "field");
+  return field === ""
+    ? "写回后的乐谱读回来和改动后的乐谱不一致。"
+    : `写回后的乐谱读回来和改动后的乐谱不一致，${field} 字段不同。`;
 }
 
 const en: Catalog = {
