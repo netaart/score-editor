@@ -9,6 +9,8 @@ interface Messages {
   bars: string;
   sections: string;
   unnamedSection: string;
+  chords: string;
+  noChords: string;
 }
 
 const en: Messages = {
@@ -18,6 +20,8 @@ const en: Messages = {
   bars: "Bars",
   sections: "Sections",
   unnamedSection: "Unnamed",
+  chords: "Chords",
+  noChords: "No chords in this score",
 };
 
 const zh: Messages = {
@@ -27,6 +31,8 @@ const zh: Messages = {
   bars: "小节",
   sections: "段落",
   unnamedSection: "未命名",
+  chords: "和弦",
+  noChords: "这份乐谱里没有和弦",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

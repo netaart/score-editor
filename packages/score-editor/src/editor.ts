@@ -127,6 +127,7 @@ export class Editor implements MountedEditor {
     const top = create(doc, "div", "sce-top", canvas);
     this.buildRuler(top, score);
     this.buildSections(top, score);
+    this.buildChords(top, score);
 
     for (const voice of score.voices) {
       const group = create(doc, "div", "sce-track-group", canvas);
@@ -142,17 +143,21 @@ export class Editor implements MountedEditor {
   }
 
   /** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
-  private headerRow(top: HTMLElement, className: string, label: string): HTMLElement {
+  private headerRow(
+    top: HTMLElement,
+    className: string,
+    label: string,
+  ): { corner: HTMLElement; timeline: HTMLElement } {
     const row = create(this.doc, "div", `sce-row ${className}`, top);
-    create(this.doc, "div", "sce-corner", row);
+    const corner = create(this.doc, "div", "sce-corner", row);
     const timeline = create(this.doc, "div", "sce-timeline", row);
     timeline.setAttribute("role", "list");
     timeline.setAttribute("aria-label", label);
-    return timeline;
+    return { corner, timeline };
   }
 
   private buildRuler(top: HTMLElement, score: Score): void {
-    const timeline = this.headerRow(top, "sce-ruler", messagesFor(this.options.language).bars);
+    const { timeline } = this.headerRow(top, "sce-ruler", messagesFor(this.options.language).bars);
     const numbers = this.doc.createDocumentFragment();
     for (const bar of score.bars) {
       const label = create(this.doc, "span", "sce-bar-number");
@@ -167,7 +172,7 @@ export class Editor implements MountedEditor {
   /** One band per section that has bars; a marker with no bars after it has nothing to cover. */
   private buildSections(top: HTMLElement, score: Score): void {
     const t = messagesFor(this.options.language);
-    const timeline = this.headerRow(top, "sce-sections", t.sections);
+    const { timeline } = this.headerRow(top, "sce-sections", t.sections);
     for (const section of score.sections) {
       const first = score.bars[section.firstBar];
       const last = score.bars[section.firstBar + section.barCount - 1];
@@ -177,5 +182,29 @@ export class Editor implements MountedEditor {
       band.style.cssText = `--t:${first.start};--d:${last.start + last.length - first.start}`;
       create(this.doc, "span", "sce-section-name", band).textContent = section.name ?? t.unnamedSection;
     }
+  }
+
+  /** The chord track: each chord's name at its position, or one line saying the score has none. */
+  private buildChords(top: HTMLElement, score: Score): void {
+    const t = messagesFor(this.options.language);
+    const { corner, timeline } = this.headerRow(top, "sce-chords", t.chords);
+    corner.textContent = t.chords;
+    if (score.chords.length === 0) {
+      timeline.removeAttribute("role");
+      timeline.removeAttribute("aria-label");
+      create(this.doc, "span", "sce-empty", timeline).textContent = t.noChords;
+      return;
+    }
+    const end = gridTicks(score);
+    const chords = this.doc.createDocumentFragment();
+    score.chords.forEach((chord, index) => {
+      const next = score.chords[index + 1]?.start ?? end;
+      const item = create(this.doc, "div", "sce-chord");
+      item.setAttribute("role", "listitem");
+      item.style.cssText = `--t:${chord.start};--w:${next - chord.start}`;
+      item.textContent = chord.name;
+      chords.appendChild(item);
+    });
+    timeline.appendChild(chords);
   }
 }

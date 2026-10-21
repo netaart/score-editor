@@ -69,4 +69,34 @@ test.describe("the arrangement of a song2 score", () => {
     await expect(page.getByRole("list", { name: "小节" }).getByRole("listitem")).toHaveCount(2);
     await expect(page.getByRole("list", { name: "段落" }).getByRole("listitem")).toHaveText(["未命名", "chorus"]);
   });
+
+  test("the chord track, above Vocal, names every chord of the score in order", async ({ page, harness }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const chords = page.getByRole("list", { name: "Chords" });
+    // intro, verse (two lines), chorus (four lines), one chord per bar, read off the score text.
+    await expect(chords.getByRole("listitem")).toHaveText([
+      ...["F", "F", "F", "F"],
+      ...["F", "F", "Dm", "Dm", "Bb", "Bb", "C", "C"],
+      ...["F", "C/E", "Dm", "Dm", "F", "C/E", "Dm", "Dm", "Bb", "C", "Bb", "C", "F", "F", "F", "F"],
+    ]);
+    const above = await box(chords);
+    const vocal = await box(page.getByRole("list", { name: "Vocal" }));
+    expect(above.y + above.height).toBeLessThanOrEqual(vocal.y);
+  });
+
+  test("a chord sits at the beat where the score writes it", async ({ page, harness }) => {
+    await harness.mount({ score: { sample: "short-two-sections" } });
+    // Bar 1 reads z12"A"e2e2: three beats of rest, then the chord A, so A starts three quarters into bar 1.
+    const bar = (number: string) => page.getByRole("list", { name: "Bars" }).getByText(number, { exact: true });
+    const [first, second] = [await box(bar("1")), await box(bar("2"))];
+    const chord = page.getByRole("list", { name: "Chords" }).getByRole("listitem").first();
+    await expect(chord).toHaveText("A");
+    expect((await box(chord)).x).toBeCloseTo(first.x + 0.75 * (second.x - first.x), 0);
+  });
+
+  test("a score without chords says so in the chord track", async ({ page, harness }) => {
+    await harness.mount({ score: { vector: "accept-vocal-only" } });
+    await expect(page.getByText("No chords in this score")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Chords" })).toHaveCount(0);
+  });
 });

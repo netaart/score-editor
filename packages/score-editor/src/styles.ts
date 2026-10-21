@@ -33,7 +33,7 @@ const css = `
   --sce-_beat: var(--sce-beat-width, 40px);
   --sce-_keys: var(--sce-keys-width, 44px);
   --sce-_shade: color-mix(in srgb, var(--sce-_text) 5%, transparent);
-  --sce-_top: 46px;
+  --sce-_top: 72px;
 
   position: relative;
   isolation: isolate;
@@ -152,6 +152,40 @@ const css = `
 }
 .sce-root .sce-sections {
   height: 22px;
+}
+.sce-root .sce-chords {
+  height: 26px;
+}
+.sce-root .sce-chords .sce-corner {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  overflow: hidden;
+  color: var(--sce-_muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.sce-root .sce-chord {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  max-width: calc(var(--w) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  padding: 5px 0 0 5px;
+  overflow: hidden;
+  border-left: 1px solid var(--sce-_line-strong);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sce-root .sce-empty {
+  position: sticky;
+  left: var(--sce-_keys);
+  display: block;
+  width: fit-content;
+  padding: 5px 8px 0;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
 }
 .sce-root .sce-section {
   position: absolute;
