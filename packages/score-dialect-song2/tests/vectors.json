@@ -3291,6 +3291,68 @@
           }
         ]
       }
+    },
+    {
+      "id": "reject-short-ins-before-trailing-comment",
+      "rules": ["X9", "X11", "V2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|C16|\nV: Ins\nZ|\n% b\n",
+      "expect": "reject",
+      "code": "bar-count"
+    },
+    {
+      "id": "truncate-short-ins-at-end",
+      "rules": ["X9", "V2"],
+      "text": "X:1\nT:\nM:4/4\nL:1/16\nQ:1/4=100\nV: Vocal clef=treble name=\"Vocal Melody\" snm=\"Vocal\"\nV: Ins clef=treble name=\"Ins Melody\" snm=\"Inst.\"\nK:C\n% a\nV: Vocal\nC16|C16|\nV: Ins\nZ|\n",
+      "expect": "accept",
+      "truncated": true,
+      "voices": ["Vocal", "Ins"],
+      "hasChords": false,
+      "notes": {
+        "Vocal": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          },
+          {
+            "start": "4",
+            "duration": "4",
+            "pitch": 60,
+            "tie": false
+          }
+        ],
+        "Ins": [
+          {
+            "start": "0",
+            "duration": "4",
+            "pitch": null,
+            "tie": false
+          }
+        ]
+      },
+      "bars": {
+        "Vocal": [
+          {
+            "start": "0",
+            "length": "4",
+            "meter": "4/4"
+          },
+          {
+            "start": "4",
+            "length": "4",
+            "meter": "4/4"
+          }
+        ]
+      },
+      "keys": {
+        "Vocal": [
+          {
+            "at": "0",
+            "key": "C"
+          }
+        ]
+      }
     }
   ]
 }
