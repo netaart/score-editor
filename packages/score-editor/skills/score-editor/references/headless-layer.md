@@ -109,9 +109,11 @@ and other letters one each, and ignore spaces and punctuation. `noteOnsets(score
 a phrase that are not rests or tie continuations. `alignLyricLine(score, line)` returns `LyricAlignment` with the
 syllables, onsets, whether the counts are equal, and one `LyricSyllableNote` per syllable when they are.
 
-A score command through `applyProjectCommand` remaps stored lines: a deleted section takes its lines, a copied section
-copies them, a moved section moves them, and bar commands shift their bindings. A project without `lyricLines`, and
-every result of `applyScoreCommand`, is unchanged by this.
+A score command through `applyProjectCommand` remaps stored lines, or an old project's computed layout: a deleted
+section takes its lines, a copied section copies them, a moved section moves them, and bar commands shift their
+bindings. A new section marker inside a phrase keeps the line in the section of its first bar, on the bars that remain
+there. The result is stored and `lyrics` is rewritten only when the lines or their join changed; a command that
+changes neither adds no field and leaves `lyrics` as it was. Every result of `applyScoreCommand` is unchanged by this.
 
 ## The dialect and its constraints
 
