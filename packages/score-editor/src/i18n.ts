@@ -7,11 +7,16 @@ import type { Language } from "./types";
 export interface Messages {
   title: string;
   hint: string;
+  hintEditing: string;
   zoom: string;
   zoomIn: string;
   zoomOut: string;
   zoomFit: string;
   readOnly: string;
+  history: string;
+  undo: string;
+  redo: string;
+  delete: string;
   bars: string;
   timeRuler: string;
   sections: string;
@@ -28,17 +33,34 @@ export interface Messages {
   meterText(meter: Meter): string;
   meterName(meter: Meter): string;
   keyText(key: string): string;
-  noteLabel(pitch: string, position: BarPosition, length: number, tiedToNext: boolean): string;
+  noteLabel(pitch: string, position: BarPosition, length: number, tiedToNext: boolean, selected: boolean): string;
+  /** The name of the insertion point; `position` is null at the end of the score, where no bar has the next beat. */
+  insertionPoint(position: BarPosition | null): string;
+  /** What a live region says when one note is selected, and when several are. */
+  selectedNote(pitch: string, position: BarPosition): string;
+  selectedNotes(count: number): string;
+  /** What a live region says when a delete took one note, and when it took several. */
+  deletedNote(pitch: string, position: BarPosition): string;
+  deletedNotes(count: number): string;
+  /** What a live region says when an undo brought back one deleted note, and when it brought back several. */
+  restoredNote(pitch: string, position: BarPosition): string;
+  restoredNotes(count: number): string;
 }
 
 const en: Messages = {
   title: "Arrangement",
   hint: "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel.",
+  hintEditing:
+    "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel. Click or tap a note to select it, or press Tab to reach the notes, then Left and Right to step from note to note, selecting each, and Enter or Space to select the one you are on. Press Delete, Backspace or the Delete button to turn the selected notes into rests. Click or tap empty space to set the insertion point, then move it with Left, Right, Home and End. Ctrl and Z undoes, Ctrl and Y redoes.",
   zoom: "Zoom",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
   zoomFit: "Fit whole song",
   readOnly: "Read only",
+  history: "History",
+  undo: "Undo",
+  redo: "Redo",
+  delete: "Delete",
   bars: "Bars",
   timeRuler: "Time ruler",
   sections: "Sections",
@@ -61,20 +83,35 @@ const en: Messages = {
   meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
   meterName: ({ numerator, denominator }) => `Meter ${numerator}/${denominator}`,
   keyText: (key) => `Key ${key}`,
-  noteLabel(pitch, { bar, beat }, length, tiedToNext) {
+  noteLabel(pitch, { bar, beat }, length, tiedToNext, selected) {
     const tie = tiedToNext ? ", tied to the next note" : "";
-    return `${pitch}, bar ${bar} beat ${beat}, length ${length} ${length === 1 ? "beat" : "beats"}${tie}`;
+    const chosen = selected ? ", selected" : "";
+    return `${pitch}, bar ${bar} beat ${beat}, length ${length} ${length === 1 ? "beat" : "beats"}${tie}${chosen}`;
   },
+  insertionPoint: (position) =>
+    position ? `Insertion point, bar ${position.bar} beat ${position.beat}` : "Insertion point, end of the score",
+  selectedNote: (pitch, { bar, beat }) => `Selected ${pitch}, bar ${bar} beat ${beat}`,
+  selectedNotes: (count) => `Selected ${count} notes`,
+  deletedNote: (pitch, { bar, beat }) => `Deleted ${pitch}, bar ${bar} beat ${beat}`,
+  deletedNotes: (count) => `Deleted ${count} notes`,
+  restoredNote: (pitch, { bar, beat }) => `Restored ${pitch}, bar ${bar} beat ${beat}`,
+  restoredNotes: (count) => `Restored ${count} notes`,
 };
 
 const zh: Messages = {
   title: "编曲视图",
   hint: "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。",
+  hintEditing:
+    "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。点击或轻点音符来选中它，也可以按 Tab 到达音符，再用左、右键在音符之间逐个移动并选中，用 Enter 或空格选中当前所在的音符。按 Delete、Backspace 或删除按钮把选中的音符变成休止符。点击或轻点空白处来放置插入点，再用左、右、Home、End 键移动。Ctrl 加 Z 撤销，Ctrl 加 Y 重做。",
   zoom: "缩放",
   zoomIn: "放大",
   zoomOut: "缩小",
   zoomFit: "适合整首歌",
   readOnly: "只读",
+  history: "历史",
+  undo: "撤销",
+  redo: "重做",
+  delete: "删除",
   bars: "小节",
   timeRuler: "时间尺",
   sections: "段落",
@@ -96,9 +133,18 @@ const zh: Messages = {
   meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
   meterName: ({ numerator, denominator }) => `拍号 ${numerator}/${denominator}`,
   keyText: (key) => `调号 ${key}`,
-  noteLabel(pitch, { bar, beat }, length, tiedToNext) {
-    return `${pitch}，第 ${bar} 小节第 ${beat} 拍，长 ${length} 拍${tiedToNext ? "，连到下一个音" : ""}`;
+  noteLabel(pitch, { bar, beat }, length, tiedToNext, selected) {
+    const tie = tiedToNext ? "，连到下一个音" : "";
+    return `${pitch}，第 ${bar} 小节第 ${beat} 拍，长 ${length} 拍${tie}${selected ? "，已选中" : ""}`;
   },
+  insertionPoint: (position) =>
+    position ? `插入点，第 ${position.bar} 小节第 ${position.beat} 拍` : "插入点，乐谱末尾",
+  selectedNote: (pitch, { bar, beat }) => `已选中 ${pitch}，第 ${bar} 小节第 ${beat} 拍`,
+  selectedNotes: (count) => `已选中 ${count} 个音符`,
+  deletedNote: (pitch, { bar, beat }) => `已删除 ${pitch}，第 ${bar} 小节第 ${beat} 拍`,
+  deletedNotes: (count) => `已删除 ${count} 个音符`,
+  restoredNote: (pitch, { bar, beat }) => `已恢复 ${pitch}，第 ${bar} 小节第 ${beat} 拍`,
+  restoredNotes: (count) => `已恢复 ${count} 个音符`,
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

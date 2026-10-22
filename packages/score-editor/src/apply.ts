@@ -1,7 +1,7 @@
-// ABOUTME: The two entry points into the generic edit layer: one works on score text, one on a song project.
+// ABOUTME: The two entry points into the generic headless layer: one works on score text, one on a song project.
 // ABOUTME: Both run the dialect's check after the command; any failure returns a diagnostic and leaves the input unchanged.
-import { runScoreCommand, type ScoreCommand } from "./commands";
-import type { Diagnostic } from "./diagnostics";
+import { commandAt, runScoreCommand, type ScoreCommand } from "./commands";
+import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import type { SongProject } from "./score";
 
@@ -18,6 +18,11 @@ function fallbackDiagnostic(): Diagnostic {
   return { code: "token", params: { reason: "unrecognized" }, at: {} };
 }
 
+/** A diagnostic the dialect left without a bar points where the command acted; one that has its own place keeps it. */
+function located(diagnostic: Diagnostic, acted: DiagnosticAt): Diagnostic {
+  return diagnostic.at.bar === undefined ? { ...diagnostic, at: { ...acted, ...diagnostic.at } } : diagnostic;
+}
+
 /** Reads, applies one command, writes, and checks. On any failure the result carries no new text. */
 export function applyScoreCommand(dialect: ScoreDialect, text: string, command: ScoreCommand): ApplyScoreResult {
   const parsed = dialect.parse(text);
@@ -30,7 +35,8 @@ export function applyScoreCommand(dialect: ScoreDialect, text: string, command: 
 
   const written = dialect.serialize(applied.score);
   const diagnostics = dialect.check(applied.score);
-  if (diagnostics.length > 0) return { ok: false, diagnostic: diagnostics[0] as Diagnostic };
+  const first = diagnostics[0];
+  if (first !== undefined) return { ok: false, diagnostic: located(first, commandAt(parsed.score, command)) };
   return { ok: true, text: written };
 }
 

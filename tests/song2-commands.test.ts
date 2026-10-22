@@ -5,6 +5,7 @@ import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
   applyProjectCommand,
   applyScoreCommand,
+  formatDiagnostic,
   type Note,
   type Score,
   type SongProject,
@@ -226,6 +227,20 @@ describe("toRest and cut tails", () => {
     if (result.ok) return;
     expect(result.diagnostic.code).toBe("write-mismatch");
     expect(result.diagnostic.params.field).toBe("bars");
+  });
+
+  it("says where the refused note is, in the bar and beat a person counts, in both languages", () => {
+    const result = applyScoreCommand(song2Dialect, tieMismatch.text, { type: "toRest", noteId: "Vocal:0" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.at).toEqual({ voice: "Vocal", bar: 1, beat: 1, noteId: "Vocal:0" });
+    expect(formatDiagnostic(result.diagnostic, "en")).toBe(
+      "This change can't be written into the score safely, so the score was left as it was. (bar 1, beat 1)",
+    );
+    expect(formatDiagnostic(result.diagnostic, "zh")).toBe(
+      "这个改动没法安全地写进乐谱，乐谱保持原样。（第 1 小节，第 1 拍）",
+    );
   });
 
   it("keeps an X4-only cut measure and its incomplete bar when a note before it becomes a rest", () => {

@@ -4,7 +4,9 @@
 import { barLabelStep, type GridRun, gridTicks, MIN_BAR_LINE_PIXELS, MIN_BEAT_LINE_PIXELS } from "./arrangement";
 import { type AxisFrame, type AxisMember, installZoomGestures, joinAxis } from "./axis";
 import { create, requireDom } from "./dom";
+import { installEditKeys } from "./edit-keys";
 import { type Messages, messagesFor } from "./i18n";
+import { createLiveRegion, type LiveRegion, sayRefusals } from "./live-region";
 import { type Score, TICKS_PER_QUARTER } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -38,6 +40,16 @@ export interface AxisSpec {
   region(t: Messages): string;
   /** Builds the part's content into `canvas`, or returns null when the score has nothing for this part. */
   build(canvas: HTMLElement, score: Score, t: Messages, language: Language): BuiltAxis | null;
+  /**
+   * Wires what the part does on its root, once, before the first draw. Its listeners go with `signal`. `live` is the
+   * part's live region, which stays through every redraw.
+   */
+  attach?(root: HTMLElement, signal: AbortSignal, live: LiveRegion): void;
+  /**
+   * Shows what the session holds beyond the score, such as the selection. It runs after every draw and after every
+   * other change of the session, so it must be cheap when nothing it shows has changed.
+   */
+  refresh?(): void;
 }
 
 /** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
@@ -83,6 +95,8 @@ export function mountAxisPart(
   const releaseStyles = acquireStyles(host);
   const root = create(doc, "div", `sce-root sce-part sce-axis sce-part-${spec.kind}`);
   host.appendChild(root);
+  const live = createLiveRegion(root);
+  spec.attach?.(root, abort.signal, live);
   const ownSurface = options.scroller === undefined;
   const surface = options.scroller ?? root;
   if (!ownSurface) root.classList.add("sce-in-scroller");
@@ -117,7 +131,7 @@ export function mountAxisPart(
     reading = session.reading;
     language = session.view.language;
     root.lang = language;
-    root.replaceChildren();
+    canvas?.remove();
     delete root.dataset.labelStep;
     canvas = null;
     built = null;
@@ -136,6 +150,7 @@ export function mountAxisPart(
     }
     if (ownSurface) markAsRegion(built !== null, t);
     axis.place();
+    spec.refresh?.();
   }
 
   /** A part that scrolls itself must be reachable and named for a keyboard or a screen reader, as a region is. */
@@ -152,9 +167,14 @@ export function mountAxisPart(
   }
 
   installZoomGestures(root, session, abort.signal, { wheel: true, frame: () => member.frame() });
+  installEditKeys(root, session, abort.signal, {
+    frame: () => member.frame(),
+    onRefused: sayRefusals(live, session, options.onRefused),
+  });
   render();
   const unsubscribe = session.subscribe(() => {
     if (session.reading !== reading || session.view.language !== language) render();
+    else spec.refresh?.();
   });
 
   return {

@@ -1,0 +1,17 @@
+{
+  "name": "score-editor-skill-pnpm-bundler-example",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "preview": "node serve.mjs"
+  },
+  "dependencies": {
+    "@neta-art/score-dialect-song2": "0.1.0",
+    "@neta-art/score-editor": "0.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

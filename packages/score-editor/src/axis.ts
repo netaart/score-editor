@@ -188,6 +188,30 @@ export function zoomTo(session: EditingSession, next: number, anchor: ZoomAnchor
   session.setView({ zoom, scrollLeft: tick * pixelsPerTick * (zoom / before) + keys - at });
 }
 
+/** How much of the next stretch of time stays in view beside a tick that is brought into view, in pixels. */
+const REVEAL_MARGIN = 24;
+
+/**
+ * Scrolls the time axis just far enough to show `tick`, with a little of what is around it. Nothing moves when it is
+ * already in view. `frame` says whose geometry counts; without it, the first part on the axis.
+ */
+export function revealTick(session: EditingSession, tick: number, frame?: AxisFrame | null): void {
+  const found = frame ?? controllers.get(session)?.frame();
+  if (!found || !(found.ticks > 0)) return;
+  const { scroller, corner, timeline, ticks } = found;
+  const width = timeline.offsetWidth;
+  if (!(width > 0)) return;
+  const at = (tick / ticks) * width;
+  const from = scroller.scrollLeft;
+  // The pitch column covers the left of the scroller, so the time in view runs from `from` for the rest of its width.
+  const shown = scroller.clientWidth - corner.offsetWidth;
+  let to = from;
+  if (at - REVEAL_MARGIN < from) to = at - REVEAL_MARGIN;
+  else if (at + REVEAL_MARGIN > from + shown) to = at + REVEAL_MARGIN - shown;
+  to = Math.max(0, to);
+  if (Math.abs(to - from) >= SCROLL_TOLERANCE) session.setView({ scrollLeft: to });
+}
+
 /** Zooms so that the whole score is exactly as wide as the first part on the axis shows, and scrolls to its start. */
 export function fitZoom(session: EditingSession): void {
   const controller = controllers.get(session);

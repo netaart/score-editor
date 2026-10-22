@@ -28,6 +28,11 @@ export interface ViewState {
   readonly scrollLeft: number;
   /** The interface language of every part. */
   readonly language: Language;
+  /**
+   * Whether the user may change the score. Parts offer editing controls and accept selection and editing keys only while
+   * it is true. It does not stop `dispatch`: whoever drives the session directly decides what it sends.
+   */
+  readonly editable: boolean;
 }
 
 export interface SessionOptions {
@@ -37,6 +42,8 @@ export interface SessionOptions {
   dialects: DialectRegistry;
   /** The interface language of the parts bound to the session. Defaults to "en". */
   language?: Language;
+  /** Whether the user may edit. Defaults to true; see `ViewState.editable`. */
+  editable?: boolean;
 }
 
 /** What a dispatch came to. A refused command carries its diagnostics and the project it left untouched. */
@@ -54,7 +61,7 @@ export interface SessionChange {
   readonly project: boolean;
   readonly selection: boolean;
   readonly insertionPoint: boolean;
-  /** The view state (zoom, scroll, language) changed. */
+  /** The view state (zoom, scroll, language, editable) changed. */
   readonly view: boolean;
 }
 
@@ -79,7 +86,7 @@ export interface EditingSession {
   readonly selection: ReadonlyArray<string>;
   /** The insertion point, or null when none is set. UI state: not in the history. */
   readonly insertionPoint: InsertionPoint | null;
-  /** The view state: zoom, horizontal scroll and language, shared by every part bound to the session. */
+  /** The view state: zoom, horizontal scroll, language and whether the user may edit, shared by every part bound to the session. */
   readonly view: ViewState;
   /**
    * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
@@ -146,7 +153,12 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   let dialects = options.dialects;
   let selection: ReadonlyArray<string> = [];
   let insertionPoint: InsertionPoint | null = null;
-  let view: ViewState = { zoom: 1, scrollLeft: 0, language: options.language ?? "en" };
+  let view: ViewState = {
+    zoom: 1,
+    scrollLeft: 0,
+    language: options.language ?? "en",
+    editable: options.editable ?? true,
+  };
   let cached: { modelId: string; score: string; dialects: DialectRegistry; reading: ScoreReading } | null = null;
   const listeners: Array<{ call: SessionListener; active: boolean }> = [];
   const queue: SessionChange[] = [];
@@ -276,8 +288,16 @@ export function createEditingSession(options: SessionOptions): EditingSession {
           ? Math.max(0, patch.scrollLeft)
           : view.scrollLeft;
       const language = patch.language ?? view.language;
-      if (zoom === view.zoom && scrollLeft === view.scrollLeft && language === view.language) return;
-      view = { zoom, scrollLeft, language };
+      const editable = patch.editable ?? view.editable;
+      if (
+        zoom === view.zoom &&
+        scrollLeft === view.scrollLeft &&
+        language === view.language &&
+        editable === view.editable
+      ) {
+        return;
+      }
+      view = { zoom, scrollLeft, language, editable };
       announce("view", { view: true });
     },
     get insertionPoint() {

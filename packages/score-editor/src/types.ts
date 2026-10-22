@@ -1,13 +1,17 @@
 // ABOUTME: The public types of @neta-art/score-editor: mount options, host callbacks and the dialect constraints.
 // ABOUTME: Almost type-only, so importing it costs nothing at runtime and dialect packages can depend on it safely.
+import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry } from "./dialect";
 import type { SongProject } from "./score";
 
 /** Interface languages the package ships text for. The host picks one. */
 export type Language = "zh" | "en";
 
-/** The reasons of the one-time messages the editor sends to the host. The set is closed and starts empty: a later ticket adds its codes here. */
-export const NOTICE_CODES = [] as const;
+/**
+ * The reasons of the one-time messages the editor sends to the host. The set is closed; a later ticket adds its codes
+ * here. `command-refused`: the user asked for an edit and the score would not take it, so nothing changed.
+ */
+export const NOTICE_CODES = ["command-refused"] as const;
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */
 export type NoticeCode = (typeof NOTICE_CODES)[number];
@@ -22,8 +26,17 @@ export interface Notice {
   message: string;
 }
 
+/** What a part that takes the user's editing keys accepts besides its element and its session. */
+export interface EditingPartOptions {
+  /**
+   * Called with the diagnostics when a command the user's keys caused is refused and nothing changed. Without it the
+   * refusal is silent.
+   */
+  onRefused?: (diagnostics: ReadonlyArray<Diagnostic>) => void;
+}
+
 /** What every view part on the time axis takes besides its element and its session. */
-export interface AxisPartOptions {
+export interface AxisPartOptions extends EditingPartOptions {
   /**
    * The element that scrolls the part in time, when the host puts several parts in one scroller, as the default editor
    * does. Without it the part is its own scroll surface.
@@ -35,11 +48,12 @@ export interface MountOptions {
   /** Interface language. */
   language: Language;
   /**
-   * Whether the user may change the score. Defaults to true. This version shows the score read-only whatever
-   * the value; `false` additionally shows the read-only badge. Editing arrives in a later version.
+   * Whether the user may change the score. Defaults to true. While true the toolbar offers undo and redo, a click or tap
+   * selects a note or sets the insertion point, and Delete, the history keys and the insertion point keys act. While
+   * false none of that exists, the score is only shown, and the toolbar shows the read-only badge.
    */
   editable?: boolean;
-  /** Receives every one-time message the editor wants shown. No message exists yet, so it is never called. */
+  /** Receives every one-time message the editor wants shown, as listed in `NOTICE_CODES`. */
   notify?: (notice: Notice) => void;
   /** The song project to show. Only its score text and model ID are read in this version. */
   project: SongProject;
