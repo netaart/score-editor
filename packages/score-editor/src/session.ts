@@ -4,7 +4,7 @@ import { applyProjectCommand } from "./apply";
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
-import type { DialectRegistry } from "./dialect";
+import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
 import type { Language } from "./types";
 
@@ -80,7 +80,10 @@ export interface EditingSession {
   readonly insertionPoint: InsertionPoint | null;
   /** The view state: zoom, horizontal scroll and language, shared by every part bound to the session. */
   readonly view: ViewState;
-  /** Applies one command to the project. A refused command changes nothing and returns its diagnostics. */
+  /**
+   * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
+   * diagnostics; a command that leaves the project as it was adds no step and announces nothing.
+   */
   dispatch(command: ScoreCommand): DispatchResult;
   /** Selects exactly these notes. Ids that name no note are left out. */
   select(noteIds: ReadonlyArray<string>): void;
@@ -101,21 +104,29 @@ export interface EditingSession {
   redo(): boolean;
   /**
    * Calls `listener` after every change, in the order listeners subscribed. A change a listener causes is announced
-   * after the current one has reached every listener. Returns the function that unsubscribes it.
+   * after the current one has reached every listener. A listener that throws does not reach the caller of the change:
+   * its error goes to `reportError`, or is rethrown in a microtask where there is none. Returns the function that
+   * unsubscribes it.
    */
   subscribe(listener: SessionListener): () => void;
 }
 
+/** Every field counts, so a field added to the project later is compared without a change here. */
 function sameProject(a: SongProject, b: SongProject): boolean {
-  return (
-    a.style === b.style &&
-    a.lyrics === b.lyrics &&
-    a.score === b.score &&
-    a.scoreMode === b.scoreMode &&
-    a.seed === b.seed &&
-    a.modelId === b.modelId &&
-    a.sourceKey === b.sourceKey
-  );
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof SongProject>;
+  for (const key of keys) if (!Object.is(a[key], b[key])) return false;
+  return true;
+}
+
+/** A listener's failure must not reach the caller of a change that is already applied, so it is reported apart. */
+function reportListenerError(error: unknown): void {
+  if (typeof reportError === "function") {
+    reportError(error);
+    return;
+  }
+  queueMicrotask(() => {
+    throw error;
+  });
 }
 
 export function createEditingSession(options: SessionOptions): EditingSession {
@@ -132,11 +143,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   const queue: SessionChange[] = [];
   let delivering = false;
 
-  function announce(change: SessionChange): void {
-    queue.push(change);
+  function announce(cause: SessionChangeCause, touched: Partial<Omit<SessionChange, "cause">>): void {
+    queue.push({ cause, project: false, selection: false, insertionPoint: false, view: false, ...touched });
     if (delivering) return;
     delivering = true;
-    let failure: { error: unknown } | null = null;
     try {
       for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
         for (const listener of [...listeners]) {
@@ -144,34 +154,37 @@ export function createEditingSession(options: SessionOptions): EditingSession {
           try {
             listener.call(next);
           } catch (error) {
-            failure ??= { error };
+            reportListenerError(error);
           }
         }
       }
     } finally {
       delivering = false;
     }
-    if (failure) throw failure.error;
+  }
+
+  /** Runs `found` with the dialect of the project's model, or `missing` when the registry has none for it. */
+  function withDialect<T>(found: (dialect: ScoreDialect) => T, missing: (modelId: string) => T): T {
+    const dialect = dialects.find(project.modelId);
+    return dialect ? found(dialect) : missing(project.modelId);
   }
 
   function read(): ScoreReading {
     if (cached?.modelId === project.modelId && cached.score === project.score && cached.dialects === dialects) {
       return cached.reading;
     }
-    const dialect = dialects.find(project.modelId);
-    let reading: ScoreReading;
-    if (!dialect) {
-      reading = { kind: "no-dialect", modelId: project.modelId };
-    } else {
-      const { score, diagnostics } = dialect.parse(project.score);
-      reading = score ? { kind: "score", score } : { kind: "unreadable", diagnostics };
-    }
+    const reading = withDialect<ScoreReading>(
+      (dialect) => {
+        const { score, diagnostics } = dialect.parse(project.score);
+        return score ? { kind: "score", score } : { kind: "unreadable", diagnostics };
+      },
+      (modelId) => ({ kind: "no-dialect", modelId }),
+    );
     cached = { modelId: project.modelId, score: project.score, dialects, reading };
     return reading;
   }
 
-  /** The ids of `ids` that name a note of the current score, once each, in the order given. */
-  function existing(ids: ReadonlyArray<string>): string[] {
+  function idsStillInScore(ids: ReadonlyArray<string>): string[] {
     const reading = read();
     if (reading.kind !== "score") return [];
     const known = new Set(reading.score.notes.map((note) => note.id));
@@ -182,15 +195,13 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     return a.length === b.length && a.every((id, at) => id === b[at]);
   }
 
-  /** Announces that the project changed, and that the selection with it when notes it named are gone. */
   function projectChanged(cause: SessionChangeCause): void {
-    const kept = existing(selection);
+    const kept = idsStillInScore(selection);
     const selectionChanged = !sameIds(kept, selection);
     selection = kept;
-    announce({ cause, project: true, selection: selectionChanged, insertionPoint: false, view: false });
+    announce(cause, { project: true, selection: selectionChanged });
   }
 
-  /** Makes `next` the current project as a new step of the history. */
   function commit(next: SongProject, cause: SessionChangeCause): void {
     past.push(project);
     future.length = 0;
@@ -223,13 +234,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       project = next;
       selection = [];
       insertionPoint = null;
-      announce({
-        cause: "replace",
-        project: true,
-        selection: hadSelection,
-        insertionPoint: hadInsertionPoint,
-        view: false,
-      });
+      announce("replace", { project: true, selection: hadSelection, insertionPoint: hadInsertionPoint });
     },
     replaceDialects(next) {
       if (next === dialects) return;
@@ -251,7 +256,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       const language = patch.language ?? view.language;
       if (zoom === view.zoom && scrollLeft === view.scrollLeft && language === view.language) return;
       view = { zoom, scrollLeft, language };
-      announce({ cause: "view", project: false, selection: false, insertionPoint: false, view: true });
+      announce("view", { view: true });
     },
     get insertionPoint() {
       return insertionPoint;
@@ -262,27 +267,24 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       }
       if (point?.tick === insertionPoint?.tick) return;
       insertionPoint = point === null ? null : { tick: point.tick };
-      announce({ cause: "insertion-point", project: false, selection: false, insertionPoint: true, view: false });
+      announce("insertion-point", { insertionPoint: true });
     },
     select(noteIds) {
-      const next = existing(noteIds);
+      const next = idsStillInScore(noteIds);
       if (sameIds(next, selection)) return;
       selection = next;
-      announce({ cause: "select", project: false, selection: true, insertionPoint: false, view: false });
+      announce("select", { selection: true });
     },
     dispatch(command) {
-      const dialect = dialects.find(project.modelId);
-      if (!dialect) {
-        return {
-          ok: false,
-          project,
-          diagnostics: [{ code: "no-dialect", params: { modelId: project.modelId }, at: {} }],
-        };
-      }
-      const applied = applyProjectCommand(dialect, project, command);
-      if (applied.diagnostics.length > 0) return { ok: false, project, diagnostics: applied.diagnostics };
-      commit(applied.project, "dispatch");
-      return { ok: true, project, diagnostics: [] };
+      return withDialect<DispatchResult>(
+        (dialect) => {
+          const applied = applyProjectCommand(dialect, project, command);
+          if (applied.diagnostics.length > 0) return { ok: false, project, diagnostics: applied.diagnostics };
+          if (!sameProject(project, applied.project)) commit(applied.project, "dispatch");
+          return { ok: true, project, diagnostics: [] };
+        },
+        (modelId) => ({ ok: false, project, diagnostics: [{ code: "no-dialect", params: { modelId }, at: {} }] }),
+      );
     },
     undo() {
       const previous = past.pop();

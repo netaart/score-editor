@@ -19,7 +19,10 @@ export const READING_DIAGNOSTIC_CODES = [
 
 export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
 
-/** The codes the dialect-agnostic edit layer reports when a command cannot be applied or checked. */
+/**
+ * The codes a command is refused with: the dialect-agnostic edit layer reports the first three when a command cannot be
+ * applied or checked, and `session.dispatch` reports `no-dialect` for a model the registry has no dialect for.
+ */
 export const COMMAND_DIAGNOSTIC_CODES = ["note-not-found", "not-a-note", "write-mismatch", "no-dialect"] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];

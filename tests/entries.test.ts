@@ -37,22 +37,6 @@ describe("package entries in a node environment", () => {
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });
 
-  it("opens an editing session in node: it holds a project and touches no DOM", async () => {
-    const { createDialectRegistry, createEditingSession } = await import("@neta-art/score-editor");
-    const project = {
-      style: "",
-      lyrics: "",
-      score: "",
-      scoreMode: "full",
-      seed: null,
-      modelId: "song2",
-      sourceKey: "n",
-    } as const;
-    const session = createEditingSession({ project, dialects: createDialectRegistry([]) });
-    expect(session.project).toEqual(project);
-    expect(session.reading.kind).toBe("no-dialect");
-  });
-
   it("refuses to mount a view part without a DOM instead of failing obscurely", async () => {
     const { createDialectRegistry, createEditingSession, mountTimeRuler, mountZoomControl } = await import(
       "@neta-art/score-editor"

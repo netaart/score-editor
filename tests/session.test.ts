@@ -8,7 +8,7 @@ import {
   type SessionChange,
   type SongProject,
 } from "@neta-art/score-editor";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const HEADER = `X:1
 T:
@@ -51,12 +51,20 @@ function open(overrides: Partial<SongProject> = {}): EditingSession {
   return createEditingSession({ project: { ...project, ...overrides }, dialects });
 }
 
-/** Every change the session announces from now on. */
 function listen(session: EditingSession): SessionChange[] {
   const changes: SessionChange[] = [];
   session.subscribe((change) => changes.push(change));
   return changes;
 }
+
+describe("a session in node", () => {
+  it("holds the project and reads it where there is no DOM to touch", () => {
+    expect(typeof document).toBe("undefined");
+    const session = open();
+    expect(session.project).toEqual(project);
+    expect(session.reading.kind).toBe("score");
+  });
+});
 
 describe("dispatching a command", () => {
   it("applies to-rest to the project and reports no diagnostics", () => {
@@ -68,6 +76,22 @@ describe("dispatching a command", () => {
     expect(result.project.score).toBe(SCORE_WITHOUT_D);
     expect(session.project).toBe(result.project);
     expect(session.project).toEqual({ ...project, score: SCORE_WITHOUT_D });
+  });
+
+  it("adds no step and announces nothing when the command leaves the project as it was", () => {
+    // The edit layer hands back a new project object holding the same text, so the session has to compare fields.
+    const writesTheTextBack = { ...song2Dialect, serialize: () => SCORE };
+    const session = createEditingSession({ project, dialects: createDialectRegistry([writesTheTextBack]) });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics).toEqual([]);
+    expect(session.project).toBe(project);
+    expect(result.project).toBe(project);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
   });
 });
 
@@ -430,6 +454,16 @@ describe("replacing the project from outside", () => {
     expect(changes).toEqual([{ cause: "replace", project: true, selection: true, insertionPoint: true, view: false }]);
   });
 
+  it("counts a field the project type does not know yet, so a field added later is never ignored", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.replaceProject({ ...project, tempoOverride: 90 } as SongProject);
+
+    expect(changes).toHaveLength(1);
+    expect(session.project).toHaveProperty("tempoOverride", 90);
+  });
+
   it("does nothing when the project it is given has the same fields as the current one", () => {
     const session = open();
     session.dispatch({ type: "toRest", noteId: "Vocal:256" });
@@ -475,17 +509,46 @@ describe("replacing the project from outside", () => {
 });
 
 describe("a listener that throws", () => {
-  it("does not keep the others from hearing the change; its error is thrown once they all have", () => {
+  const broke = new Error("a view broke");
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("neither reaches the caller of a change that is applied nor keeps the others from hearing it", () => {
+    const reported: unknown[] = [];
+    vi.stubGlobal("reportError", (error: unknown) => reported.push(error));
     const session = open();
     const heard: string[] = [];
     session.subscribe(() => {
-      throw new Error("a view broke");
+      throw broke;
     });
     session.subscribe((change) => heard.push(change.cause));
 
-    expect(() => session.select(["Vocal:0"])).toThrow("a view broke");
+    expect(session.dispatch({ type: "toRest", noteId: "Vocal:256" })).toMatchObject({ ok: true, diagnostics: [] });
+    expect(session.undo()).toBe(true);
+    expect(session.redo()).toBe(true);
+    session.select(["Vocal:0"]);
 
-    expect(heard).toEqual(["select"]);
+    expect(heard).toEqual(["dispatch", "undo", "redo", "select"]);
+    expect(session.project.score).toBe(SCORE_WITHOUT_D);
     expect(session.selection).toEqual(["Vocal:0"]);
+    expect(reported).toEqual([broke, broke, broke, broke]);
+  });
+
+  it("is rethrown in a microtask where the platform has no reportError", () => {
+    vi.stubGlobal("reportError", undefined);
+    const microtasks: Array<() => void> = [];
+    vi.stubGlobal("queueMicrotask", (task: () => void) => microtasks.push(task));
+    const session = open();
+    session.subscribe(() => {
+      throw broke;
+    });
+
+    expect(session.dispatch({ type: "toRest", noteId: "Vocal:256" }).ok).toBe(true);
+
+    expect(session.canUndo).toBe(true);
+    expect(microtasks).toHaveLength(1);
+    expect(() => microtasks[0]?.()).toThrow("a view broke");
   });
 });
