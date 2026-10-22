@@ -32,7 +32,7 @@ export interface PreviewSchedule {
   readonly fromTick: number;
   /** Seconds in one tick. Time is linear in ticks, so a position is `fromTick + seconds / secondsPerTick`. */
   readonly secondsPerTick: number;
-  /** Seconds from the start until the last event ends; 0 when there is nothing to play. */
+  /** Seconds from the start until the music ends, a rest at the end included; 0 when there is nothing to play. */
   readonly length: number;
 }
 
@@ -134,6 +134,6 @@ export function schedulePreview(score: Score, fromTick = 0): PreviewSchedule {
     });
   });
   events.sort((a, b) => a.at - b.at);
-  const length = events.reduce((last, event) => Math.max(last, event.at + event.length), 0);
+  const length = events.length === 0 ? 0 : (contentEnd - fromTick) * perTick;
   return { events, fromTick, secondsPerTick: perTick, length };
 }
