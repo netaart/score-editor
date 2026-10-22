@@ -36,7 +36,7 @@ function chordsOf(events: ReadonlyArray<PreviewEvent>) {
   return events.flatMap((event) => (event.kind === "chord" ? [[event.name, event.midis, event.at, event.length]] : []));
 }
 
-/** The note events of one voice, as [midi, at, length] triples, in time order. */
+/** The note events of one voice, in time order. */
 function notesOf(events: ReadonlyArray<PreviewEvent>, voice: string) {
   return events.flatMap((event) => (event.kind === "note" && event.voice === voice ? [event] : []));
 }
@@ -182,27 +182,68 @@ describe("the schedule of a synth preview", () => {
     ]);
   });
 
-  it("gives every chord name the format accepts the notes of its quality: all roots, all fifteen qualities", () => {
-    // The semitones above the root that each quality of the format stands for.
-    const intervals: Record<string, number[]> = {
-      "": [0, 4, 7],
-      m: [0, 3, 7],
-      dim: [0, 3, 6],
-      aug: [0, 4, 8],
-      "7": [0, 4, 7, 10],
-      maj7: [0, 4, 7, 11],
-      m7: [0, 3, 7, 10],
-      dim7: [0, 3, 6, 9],
-      m7b5: [0, 3, 6, 10],
-      sus4: [0, 5, 7],
-      sus2: [0, 2, 7],
-      "6": [0, 4, 7, 9],
-      m6: [0, 3, 7, 9],
-      "7sus4": [0, 5, 7, 10],
-      "m(maj7)": [0, 3, 7, 11],
+  it("gives every chord name the format accepts its notes: all 35 roots on each of the fifteen qualities", () => {
+    // Worked out by hand, not from the scheduler's own tables. Each quality as the MIDI notes of the chord on C: the bass C2
+    // (36), then the chord from C3 (48) up.
+    const onC: Record<string, number[]> = {
+      "": [36, 48, 52, 55],
+      m: [36, 48, 51, 55],
+      dim: [36, 48, 51, 54],
+      aug: [36, 48, 52, 56],
+      "7": [36, 48, 52, 55, 58],
+      maj7: [36, 48, 52, 55, 59],
+      m7: [36, 48, 51, 55, 58],
+      dim7: [36, 48, 51, 54, 57],
+      m7b5: [36, 48, 51, 54, 58],
+      sus4: [36, 48, 53, 55],
+      sus2: [36, 48, 50, 55],
+      "6": [36, 48, 52, 55, 57],
+      m6: [36, 48, 51, 55, 57],
+      "7sus4": [36, 48, 53, 55, 58],
+      "m(maj7)": [36, 48, 51, 55, 59],
     };
-    const letters: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-    const shift: Record<string, number> = { bb: -2, b: -1, "": 0, "#": 1, "##": 2 };
+    // Each root as its pitch class, C = 0, counted by ear on a keyboard: a flat is one under, a double flat two under, and
+    // a note past B comes round to C.
+    const above: Record<string, number> = {
+      Cbb: 10,
+      Cb: 11,
+      C: 0,
+      "C#": 1,
+      "C##": 2,
+      Dbb: 0,
+      Db: 1,
+      D: 2,
+      "D#": 3,
+      "D##": 4,
+      Ebb: 2,
+      Eb: 3,
+      E: 4,
+      "E#": 5,
+      "E##": 6,
+      Fbb: 3,
+      Fb: 4,
+      F: 5,
+      "F#": 6,
+      "F##": 7,
+      Gbb: 5,
+      Gb: 6,
+      G: 7,
+      "G#": 8,
+      "G##": 9,
+      Abb: 7,
+      Ab: 8,
+      A: 9,
+      "A#": 10,
+      "A##": 11,
+      Bbb: 9,
+      Bb: 10,
+      B: 11,
+      "B#": 0,
+      "B##": 1,
+    };
+    // The tables above cover what the format accepts, no more and no less.
+    expect([...song2Constraints.chords.roots].sort()).toEqual(Object.keys(above).sort());
+    expect([...song2Constraints.chords.qualities].sort()).toEqual(Object.keys(onC).sort());
     const names = song2Constraints.chords.roots.flatMap((root) =>
       song2Constraints.chords.qualities.map((quality) => `${root}${quality}`),
     );
@@ -210,20 +251,14 @@ describe("the schedule of a synth preview", () => {
 
     const schedule = schedulePreview(read(song({ vocal: names.map((name) => `"${name}"C16|`) })));
 
-    const heard = chordsOf(schedule.events);
-    expect(heard.map(([name]) => name)).toEqual(names);
-    for (const [name, midis] of heard) {
-      const [, letter = "", accidental = "", quality = ""] = /^([A-G])(bb|b|##|#)?(.*)$/.exec(String(name)) ?? [];
-      const root = (letters[letter] ?? 0) + (shift[accidental] ?? 0);
-      const expected = (intervals[quality] ?? []).map((step) => (((root + step) % 12) + 12) % 12);
-      const classes = (midis as number[]).map((midi) => midi % 12);
-      // The bass is the root; above it the quality's notes, each once.
-      expect(classes[0], name as string).toBe(((root % 12) + 12) % 12);
-      expect(classes.slice(1), name as string).toEqual(expected);
-      expect((midis as number[]).slice(1).every((midi, at, upper) => at === 0 || midi > (upper[at - 1] ?? 0))).toBe(
-        true,
-      );
-    }
+    // A chord on another root is the chord on C moved up by that root's pitch class: every note of it, the bass too.
+    const expected = song2Constraints.chords.roots.flatMap((root) =>
+      song2Constraints.chords.qualities.map((quality) => [
+        `${root}${quality}`,
+        (onC[quality] ?? []).map((midi) => midi + (above[root] ?? Number.NaN)),
+      ]),
+    );
+    expect(chordsOf(schedule.events).map(([name, midis]) => [name, midis])).toEqual(expected);
   });
 
   it("plays Vocal and Ins together, each voice as it is written, in time order", () => {
