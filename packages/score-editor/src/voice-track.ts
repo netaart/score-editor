@@ -1,7 +1,6 @@
 // ABOUTME: The voice track view part: one voice's piano roll, with its head, its pitch column, its grid and a block for every note.
 // ABOUTME: A voice the score does not have draws nothing; a cut voice ends in the hatched tail. While editable it also takes clicks and taps.
 import {
-  barIndexAt,
   cutOf,
   gridRunsOf,
   gridTicks,
@@ -17,6 +16,7 @@ import { tieChain } from "./commands";
 import { create } from "./dom";
 import { handleEditingInput } from "./editing-input";
 import type { Messages } from "./i18n";
+import { createInsertionPointLine, type InsertionPointLine } from "./insertion-point";
 import { mountNoteFocus, type NoteFocus } from "./note-focus";
 import type { Note, Score } from "./score";
 import type { EditingSession, InsertionPoint } from "./session";
@@ -41,9 +41,9 @@ interface Drawn {
   readonly notes: ReadonlyArray<Note>;
   readonly blocks: Map<string, HTMLElement>;
   readonly owners: Map<Element, string>;
-  /** The notes drawn as selected now, and the insertion marker when there is one. */
+  readonly insertionPoint: InsertionPointLine;
+  /** The notes drawn as selected now. */
   framed: ReadonlySet<string>;
-  marker: HTMLElement | null;
 }
 
 function labelOf(drawn: Pick<Drawn, "score" | "t" | "joins">, note: Note, selected: boolean): string {
@@ -77,33 +77,14 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     return framed;
   }
 
-  function frame(id: string, on: boolean): void {
+  /** Marks a note's block as selected or not, in its look and in its accessible name. */
+  function markSelected(id: string, selected: boolean): void {
     const block = drawn?.blocks.get(id);
     const note = drawn?.notes.find((found) => found.id === id);
     if (!drawn || !block || !note) return;
-    if (on) block.dataset.selected = "";
+    if (selected) block.dataset.selected = "";
     else delete block.dataset.selected;
-    block.setAttribute("aria-label", labelOf(drawn, note, on));
-  }
-
-  function drawMarker(point: InsertionPoint | null): void {
-    if (!drawn) return;
-    const { lane, score, ticks, t } = drawn;
-    if (point === null || point.tick > ticks) {
-      drawn.marker?.remove();
-      drawn.marker = null;
-      return;
-    }
-    if (!drawn.marker) {
-      const marker = create(lane.ownerDocument, "div", "sce-insertion", lane);
-      marker.setAttribute("role", "separator");
-      marker.setAttribute("aria-orientation", "vertical");
-      drawn.marker = marker;
-    }
-    drawn.marker.style.setProperty("--t", String(point.tick));
-    const position =
-      point.tick >= ticks ? null : positionOf(score.bars, barIndexAt(score.bars, point.tick), point.tick);
-    drawn.marker.setAttribute("aria-label", t.insertionPoint(position));
+    block.setAttribute("aria-label", labelOf(drawn, note, selected));
   }
 
   function refresh(): void {
@@ -114,10 +95,10 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     root?.setAttribute("data-editable", String(editable));
     if (!drawn) return;
     const wanted = editable ? framedFor(selection) : new Set<string>();
-    for (const id of drawn.framed) if (!wanted.has(id)) frame(id, false);
-    for (const id of wanted) if (!drawn.framed.has(id)) frame(id, true);
+    for (const id of drawn.framed) if (!wanted.has(id)) markSelected(id, false);
+    for (const id of wanted) if (!drawn.framed.has(id)) markSelected(id, true);
     drawn.framed = wanted;
-    drawMarker(editable ? point : null);
+    drawn.insertionPoint.show(editable ? point : null);
     noteFocus?.sync(editable, selection);
   }
 
@@ -228,8 +209,8 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           notes,
           blocks: new Map(),
           owners: new Map(),
+          insertionPoint: createInsertionPointLine(lane, score, t),
           framed: new Set(),
-          marker: null,
         };
         const blocks = doc.createDocumentFragment();
         for (const [index, note] of notes.entries()) {

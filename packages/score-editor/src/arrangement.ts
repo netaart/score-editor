@@ -71,6 +71,11 @@ export function positionOf(bars: ReadonlyArray<Bar>, barIndex: number, start: nu
   return { bar: barIndex + 1, beat: rounded(1 + (start - (bar?.start ?? start)) / beatTicks), beatTicks };
 }
 
+/** Where an insertion point at `tick` stands in the bars, or null at the end of the score, where no bar has the next beat. */
+export function insertionPosition(score: Score, tick: number): BarPosition | null {
+  return tick >= gridTicks(score) ? null : positionOf(score.bars, barIndexAt(score.bars, tick), tick);
+}
+
 /** Length in the beats of the bar the note starts in. */
 export function lengthInBeats(duration: number, beatTicks: number): number {
   return rounded(duration / beatTicks);

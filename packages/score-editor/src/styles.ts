@@ -642,7 +642,7 @@ ${labelThinning()}
  * sticks just under the pinned track head, so it stays in view when the lane is scrolled past its own top. At either
  * end of the lane the line is kept whole inside it, where the pitch column and the focus ring would cover half of it.
  */
-.sce-root .sce-insertion {
+.sce-root .sce-insertion-point {
   position: absolute;
   z-index: 2;
   top: 0;
@@ -653,7 +653,7 @@ ${labelThinning()}
   background: var(--sce-_text);
   pointer-events: none;
 }
-.sce-root .sce-insertion::before {
+.sce-root .sce-insertion-point::before {
   content: "";
   position: sticky;
   top: calc(var(--sce-_head-top, 0px) + var(--sce-_band));

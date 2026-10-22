@@ -448,28 +448,28 @@ test.describe("read-only", () => {
     await press(note(page, C4));
     await press(lane(page), { x: 100, y: 4 });
     await press(note(page, E4));
-    const marker = slot(page, "vocal").getByRole("separator");
+    const point = slot(page, "vocal").getByRole("separator");
     await expect(selected(page, E4)).toBeVisible();
-    await expect(marker).toHaveCount(1);
+    await expect(point).toHaveCount(1);
 
     await harness.layout.setEditable(false);
     await expect(selected(page, E4)).toHaveCount(0);
-    await expect(marker).toHaveCount(0);
+    await expect(point).toHaveCount(0);
     await page.locator('[data-slot="vocal"] [role="region"]').focus();
     await page.keyboard.press("Delete");
     await expect(note(page, E4)).toBeVisible();
 
     await harness.layout.setEditable(true);
     await expect(selected(page, E4)).toBeVisible();
-    await expect(marker).toHaveCount(1);
+    await expect(point).toHaveCount(1);
   });
 });
 
 test.describe("the insertion point", () => {
-  /** Where the insertion marker stands, in pixels from the left edge of the lane. */
-  async function markerAt(page: Page) {
-    const marker = await box(slot(page, "vocal").getByRole("separator"));
-    return marker.x + marker.width / 2 - (await box(lane(page))).x;
+  /** Where the insertion point stands, in pixels from the left edge of the lane. */
+  async function insertionPointAt(page: Page) {
+    const point = await box(slot(page, "vocal").getByRole("separator"));
+    return point.x + point.width / 2 - (await box(lane(page))).x;
   }
 
   test("a click or tap on empty space drops it on the nearest beat line and clears the selection; a note keeps it", async ({
@@ -478,26 +478,26 @@ test.describe("the insertion point", () => {
     press,
   }) => {
     await openTrack(harness, vocalOnly("C4z4E4F4|G16|"));
-    const marker = slot(page, "vocal").getByRole("separator");
-    await expect(marker).toHaveCount(0);
+    const point = slot(page, "vocal").getByRole("separator");
+    await expect(point).toHaveCount(0);
 
     await press(note(page, C4));
     expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
     // Beats are 40 pixels wide at this zoom: 70 pixels in is nearer the line at 80 than the one at 40.
     await press(lane(page), { x: 70, y: 4 });
-    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 3");
-    expect(Math.abs((await markerAt(page)) - 80)).toBeLessThan(1.5);
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 3");
+    expect(Math.abs((await insertionPointAt(page)) - 80)).toBeLessThan(1.5);
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
     expect(await harness.layout.selection()).toEqual([]);
-    await expect(marker).toHaveCSS("width", "2px");
+    await expect(point).toHaveCSS("width", "2px");
 
     await press(note(page, E4));
     expect(await harness.layout.selection()).toEqual(["Vocal:512"]);
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
 
     await press(lane(page), { x: 12, y: 4 });
-    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 1");
-    expect(Math.abs(await markerAt(page))).toBeLessThan(1.5);
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 1");
+    expect(Math.abs(await insertionPointAt(page))).toBeLessThan(1.5);
   });
 
   test("Left and Right move it a beat, Home and End send it to the ends, and it is no step of the history", async ({
@@ -506,25 +506,25 @@ test.describe("the insertion point", () => {
     press,
   }) => {
     await openTrack(harness, vocalOnly("C4z4E4F4|G16|"));
-    const marker = slot(page, "vocal").getByRole("separator");
+    const point = slot(page, "vocal").getByRole("separator");
     await press(lane(page), { x: 70, y: 4 });
 
     await page.keyboard.press("ArrowRight");
-    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 4");
-    expect(Math.abs((await markerAt(page)) - 120)).toBeLessThan(1.5);
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 4");
+    expect(Math.abs((await insertionPointAt(page)) - 120)).toBeLessThan(1.5);
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("ArrowLeft");
-    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 2");
-    expect(Math.abs((await markerAt(page)) - 40)).toBeLessThan(1.5);
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 2");
+    expect(Math.abs((await insertionPointAt(page)) - 40)).toBeLessThan(1.5);
 
     await page.keyboard.press("End");
-    await expect(marker).toHaveAccessibleName("Insertion point, end of the score");
-    expect(Math.abs((await markerAt(page)) - 320)).toBeLessThan(1.5);
+    await expect(point).toHaveAccessibleName("Insertion point, end of the score");
+    expect(Math.abs((await insertionPointAt(page)) - 320)).toBeLessThan(1.5);
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 2048 });
     await page.keyboard.press("ArrowRight");
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 2048 });
     await page.keyboard.press("Home");
-    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 1");
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 1");
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 0 });
     expect(await harness.layout.canUndo()).toBe(false);
   });
@@ -536,12 +536,12 @@ test.describe("the insertion point", () => {
   }) => {
     await openTrack(harness, vocalOnly("C4z4E4F4|G16|"));
     await press(lane(page), { x: 70, y: 4 });
-    const marker = slot(page, "vocal").getByRole("separator");
+    const point = slot(page, "vocal").getByRole("separator");
     for (const key of ["Home", "End"]) {
       await page.keyboard.press(key);
-      await expect(marker).toBeVisible();
+      await expect(point).toBeVisible();
       const area = await box(lane(page));
-      const line = await box(marker);
+      const line = await box(point);
       expect(line.x, `${key}: left edge`).toBeGreaterThanOrEqual(area.x - 0.01);
       expect(line.x + line.width, `${key}: right edge`).toBeLessThanOrEqual(area.x + area.width + 0.01);
     }
@@ -550,15 +550,15 @@ test.describe("the insertion point", () => {
   test("the part scrolls to keep it in view as the keys carry it away", async ({ page, harness, press }) => {
     await openTrack(harness, vocalOnly(...Array(3).fill("C16|C16|C16|C16|")));
     const region = page.locator('[data-slot="vocal"] [role="region"]');
-    const marker = slot(page, "vocal").getByRole("separator");
+    const point = slot(page, "vocal").getByRole("separator");
     await press(lane(page), { x: 30, y: 4 });
-    await expect(marker).toBeVisible();
+    await expect(point).toBeVisible();
 
     await page.keyboard.press("End");
     await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(100);
     const inView = async () => {
       const shown = await box(region);
-      const at = await box(marker);
+      const at = await box(point);
       return at.x >= shown.x + 44 - 1 && at.x + at.width <= shown.x + shown.width + 1;
     };
     expect(await inView()).toBe(true);
@@ -568,7 +568,7 @@ test.describe("the insertion point", () => {
     expect(await inView()).toBe(true);
     // The point stays in view, so the key moves the point and the browser's own scrolling for the key stays off.
     await page.keyboard.press("ArrowRight");
-    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 2");
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 2");
     await page.waitForTimeout(200);
     expect(await region.evaluate((el) => el.scrollLeft)).toBe(0);
     for (let step = 0; step < 14; step++) await page.keyboard.press("ArrowRight");

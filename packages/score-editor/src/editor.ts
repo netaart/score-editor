@@ -126,7 +126,6 @@ export class Editor implements MountedEditor {
   }
 
   private applyEditable(): void {
-    this.root.toggleAttribute("data-readonly", !this.editable);
     this.session.setView({ editable: this.editable });
   }
 

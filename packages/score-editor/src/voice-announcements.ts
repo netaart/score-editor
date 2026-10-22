@@ -1,6 +1,6 @@
 // ABOUTME: What a voice track says to a screen reader: which of its notes were selected, where the insertion point is, what was deleted.
 // ABOUTME: It follows the session and reads only the session and the score; it never looks at another view part.
-import { barIndexAt, gridTicks, notesByVoice, pitchName, positionOf } from "./arrangement";
+import { insertionPosition, notesByVoice, pitchName, positionOf } from "./arrangement";
 import { messagesFor } from "./i18n";
 import type { LiveRegion } from "./live-region";
 import type { Score } from "./score";
@@ -67,11 +67,7 @@ export function announceVoice(
     }
     const { insertionPoint } = session;
     if (change.insertionPoint && insertionPoint !== null && score.voices[0] === voice) {
-      const { bars } = score;
-      const atEnd = insertionPoint.tick >= gridTicks(score);
-      live.say(
-        t.insertionPoint(atEnd ? null : positionOf(bars, barIndexAt(bars, insertionPoint.tick), insertionPoint.tick)),
-      );
+      live.say(t.insertionPoint(insertionPosition(score, insertionPoint.tick)));
     }
   });
   signal.addEventListener("abort", unsubscribe, { once: true });
