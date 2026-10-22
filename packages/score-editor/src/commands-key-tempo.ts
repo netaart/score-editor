@@ -228,6 +228,11 @@ export function runTranspose(score: Score, semitones: number, constraints: Diale
   return shiftScore(score, semitones, constraints, 0, null);
 }
 
+/**
+ * Set key is a transposition to the chosen key, not a signature-only rewrite: stories 45-46 and the spec name
+ * "set a new key" beside "transpose the whole score", and the point is to skip counting semitones. The shift is
+ * the shortest interval between the two tonics, so choosing a key moves the register as little as it can.
+ */
 export function runSetKey(
   score: Score,
   key: string,
