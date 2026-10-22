@@ -501,8 +501,34 @@ test.describe("the insertion point", () => {
     await page.keyboard.press("Home");
     await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBe(0);
     expect(await inView()).toBe(true);
+    // The point stays in view, so the key moves the point and the browser's own scrolling for the key stays off.
+    await page.keyboard.press("ArrowRight");
+    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 2");
+    await page.waitForTimeout(200);
+    expect(await region.evaluate((el) => el.scrollLeft)).toBe(0);
     for (let step = 0; step < 14; step++) await page.keyboard.press("ArrowRight");
     expect(await inView()).toBe(true);
+  });
+
+  test("keys typed in the open zoom menu stay with the menu and do not move the point or touch the score", async ({
+    page,
+    harness,
+    isMobile,
+    press,
+  }) => {
+    await openTrack(harness, vocalOnly("C4D4E4F4|G16|"));
+    await pressAt(isMobile, lane(page), { x: 70, y: 4 });
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
+    await press(toolbar(page).getByRole("button", { name: /^Zoom \d+%$/ }));
+    // The menu takes the focus once it has opened; keys before that would be typed into the zoom button.
+    await expect(toolbar(page).getByRole("menuitemradio", { checked: true })).toBeFocused();
+    const first = toolbar(page).getByRole("menuitemradio").first();
+
+    for (const keys of ["ArrowRight", "ArrowLeft", "End", "Home", "Control+z"]) await page.keyboard.press(keys);
+
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
+    expect(await harness.layout.canUndo()).toBe(false);
+    await expect(first).toBeFocused();
   });
 
   test("Left and Right keep scrolling the part while there is no insertion point", async ({ page, harness }) => {
