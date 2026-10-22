@@ -72,6 +72,29 @@ describe("the schedule of a synth preview", () => {
     ]);
   });
 
+  it("counts a rest at the end as part of the music: the preview lasts until the rest is over", () => {
+    // Bar 1: C D E F. Bar 2: a whole-bar rest. Eight quarter notes of time at half a second each: 4 s, not the 2 s of the notes.
+    const schedule = schedulePreview(read(song({ vocal: ["C4D4E4F4|z16|"] })));
+
+    expect(notesOf(schedule.events, "Vocal")).toHaveLength(4);
+    expect(schedule.length).toBe(4);
+  });
+
+  it("counts the rest at the end from where the preview starts, and has nothing to play when only the rest is left", () => {
+    // From the third beat: E and F are left (one second), then the rest bar (two seconds): 3 s.
+    const fromBeatThree = schedulePreview(read(song({ vocal: ["C4D4E4F4|z16|"] })), 512);
+    expect(notesOf(fromBeatThree.events, "Vocal").map(({ midi, at }) => [midi, at])).toEqual([
+      [64, 0],
+      [65, 0.5],
+    ]);
+    expect(fromBeatThree.length).toBe(3);
+
+    // From the start of the rest bar there is nothing to sound, so nothing to play, whatever the rest's length.
+    const fromTheRest = schedulePreview(read(song({ vocal: ["C4D4E4F4|z16|"] })), 1024);
+    expect(fromTheRest.events).toEqual([]);
+    expect(fromTheRest.length).toBe(0);
+  });
+
   it("plays a tied chain as one note from its first note to the end of its last, across a bar line too", () => {
     // Bar 1: C and C tied (a half note), then D tied over the bar line to a whole-note D in bar 2 (six quarters).
     const schedule = schedulePreview(read(song({ vocal: ["C4-C4D8-|D16|"] })));
