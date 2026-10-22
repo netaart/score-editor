@@ -2,6 +2,7 @@
 // ABOUTME: One piece/group pipeline serves both a complete score and one that still carries a cut.
 import type { Bar, Meter, Score } from "@neta-art/score-editor";
 import { type BarContent, barContentOf, type Song2Source, type Song2SourceBar, type Song2SourceLine } from "./parser";
+import { keepsCutTail } from "./write-chords";
 import { sameContent, writeBar } from "./writer";
 
 interface SourceBar {
@@ -197,11 +198,10 @@ function cutTailAt(score: Score, facts: SourceFacts, voice: string, index: numbe
   if (score.truncation === null || score.truncation.voice !== voice || score.truncation.bar !== index) return "";
   for (const line of facts.musicLines) {
     if (line.voice !== voice || line.cutTail === null) continue;
-    if (line.cutTail.kind === "x4") return line.cutTail.raw;
     const voiceNotes = score.notes
       .filter((note) => note.voice === voice)
       .sort((left, right) => left.start - right.start);
-    return voiceNotes[voiceNotes.length - 1]?.tie === true ? line.cutTail.raw : "";
+    return keepsCutTail(score, line.cutTail, voiceNotes[voiceNotes.length - 1]?.tie === true) ? line.cutTail.raw : "";
   }
   return "";
 }
