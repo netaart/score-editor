@@ -36,7 +36,7 @@ export interface Bar {
   readonly incomplete: boolean;
 }
 
-/** A section and the bars it covers. The unnamed part before the first marker has `name: null`. */
+/** A section and the bars it covers. The unnamed section before the first marker has `name: null`. */
 export interface Section {
   readonly name: string | null;
   /** 0-based index of its first bar. */

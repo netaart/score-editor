@@ -676,11 +676,11 @@ function chineseNotAScoreCommand(): string {
 }
 
 function englishSectionUnnamed(): string {
-  return "The unnamed opening music has no marker, so it can be deleted but not copied or moved.";
+  return "The unnamed section has no marker, so it can be deleted but not copied or moved.";
 }
 
 function chineseSectionUnnamed(): string {
-  return "开头没有名字的音乐没有段落标记，只能删除，不能复制或移动。";
+  return "无名段落没有段落标记，只能删除，不能复制或移动。";
 }
 
 function englishSectionMoveStart(params: DiagnosticParams): string {
@@ -700,11 +700,11 @@ function chineseSectionMoveEnd(params: DiagnosticParams): string {
 }
 
 function englishSectionBeforeUnnamed(): string {
-  return "A named section cannot move before the unnamed opening music, which has no marker and can only come first.";
+  return "A named section cannot move before the unnamed section, which has no marker and can only come first.";
 }
 
 function chineseSectionBeforeUnnamed(): string {
-  return "有名字的段落不能移到开头没有名字的音乐前面；那一段没有标记，只能放在最前面。";
+  return "有名字的段落不能移到无名段落前面；无名段落没有标记，只能放在最前面。";
 }
 
 function englishSectionNameEmpty(): string {
