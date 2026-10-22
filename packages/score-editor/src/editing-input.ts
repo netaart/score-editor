@@ -39,10 +39,13 @@ export interface EditingInputResult {
 const IGNORED: EditingInputResult = { handled: false, refused: [] };
 const HANDLED: EditingInputResult = { handled: true, refused: [] };
 
-/** The score the session reads, or null while its project cannot be read: then no input has anything to act on. */
+/**
+ * The score the session reads, or null while its project cannot be read or a view other than the arrangement is shown:
+ * then no selection, insertion point or delete has anything to act on, since the notes they name are not on screen.
+ */
 function readableScore(session: EditingSession): Score | null {
   const { reading } = session;
-  return reading.kind === "score" ? reading.score : null;
+  return reading.kind === "score" && session.activeView === "arrangement" ? reading.score : null;
 }
 
 /** Ctrl or Cmd with Z undoes and with Shift redoes; Ctrl with Y redoes. Null for any other key. */
