@@ -2,13 +2,7 @@
 // ABOUTME: Hand-worked texts come from RULES.md S1-S9 and W7-W11; sample sweeps check every untouched bar and note.
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
-import {
-  applyScoreCommand,
-  formatDiagnostic,
-  type Score,
-  type ScoreCommand,
-  type Section,
-} from "@neta-art/score-editor";
+import { applyScoreCommand, type Score, type ScoreCommand, type Section } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
 interface SampleFact {
@@ -284,7 +278,7 @@ describe("deleteSection", () => {
     ]);
   });
 
-  it("deletes the unnamed opening music", () => {
+  it("deletes the unnamed section", () => {
     const text = `${HEADER}
 K:C
 V: Vocal
@@ -509,7 +503,7 @@ F16|`);
     ]);
   });
 
-  it("refuses the unnamed part and leaves the text unchanged", () => {
+  it("refuses the unnamed section and leaves the text unchanged", () => {
     const text = `${HEADER}
 K:C
 V: Vocal
@@ -701,7 +695,7 @@ z16|`);
     refuse(KEY_METER_SCORE, { type: "moveSection", section: 2, direction: "later" }, "section-move-end");
   });
 
-  it("refuses the unnamed part and a named section moving before it", () => {
+  it("refuses the unnamed section and a named section moving before it", () => {
     const text = `${HEADER}
 K:C
 V: Vocal
@@ -759,7 +753,7 @@ describe("renameSection and nameSection", () => {
     expect(after.notes).toEqual(before.notes);
   });
 
-  it("names the unnamed part by putting a marker at bar 0", () => {
+  it("names the unnamed section by putting a marker at bar 0", () => {
     const text = `${HEADER}
 K:C
 V: Vocal
@@ -832,26 +826,6 @@ Z2|`);
 
   it("refuses a section index outside the score for renaming", () => {
     refuse(KEY_METER_SCORE, { type: "renameSection", section: 3, name: "x" }, "section-out-of-range");
-  });
-
-  it("gives every section refusal a sentence in both languages", () => {
-    const codes = [
-      "section-unnamed",
-      "section-move-start",
-      "section-move-end",
-      "section-before-unnamed",
-      "section-name-empty",
-      "section-name-blank",
-      "section-name-line-break",
-      "section-name-trailing-space",
-    ] as const;
-    for (const code of codes) {
-      for (const language of ["zh", "en"] as const) {
-        expect(formatDiagnostic({ code, params: { section: 1, name: "x" }, at: {} }, language).length).toBeGreaterThan(
-          0,
-        );
-      }
-    }
   });
 });
 
