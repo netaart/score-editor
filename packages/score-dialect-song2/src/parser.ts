@@ -229,6 +229,8 @@ export interface Song2Source {
   readonly truncation: Truncation | null;
   /** The block `K:` field lines the reader applied, in text order. A trailing cut field is not here. */
   readonly keyFields: ReadonlyArray<Song2SourceKeyField>;
+  /** The sections this text stated, so an edit that changes them can force the bar-grid writer. */
+  readonly sections: ReadonlyArray<Section>;
 }
 
 interface PendingBar {
@@ -1291,6 +1293,7 @@ class Song2Parser {
       unitDenominator: this.unitDenominator,
       truncation: this.truncation,
       keyFields: this.keyFields,
+      sections,
       musicLines: this.sourceLines.map((line) => ({
         line: line.line,
         voice: line.voice,

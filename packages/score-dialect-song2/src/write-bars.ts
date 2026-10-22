@@ -232,18 +232,40 @@ function buildPieces(
             if (!coveredAt(alignment, coverage, voice, index + offset)) usable = false;
           }
         }
+        const nextSection =
+          sourceBar === undefined
+            ? undefined
+            : score.sections.find(
+                (section) =>
+                  section.name !== null &&
+                  section.firstBar > index &&
+                  section.firstBar < index + (sourceBar as { segmentLength: number }).segmentLength,
+              )?.firstBar;
         if (
           usable &&
           sourceBar !== undefined &&
           segmentMatches(score, facts, voice, old, sourceBar.segmentLength, index)
         ) {
-          pieces.set(index, {
-            text: sourceBar.segmentRaw,
-            count: sourceBar.segmentLength,
-            inlineAtStart: sourceBar.record.inlineKeys.some((change) => change.at === sourceBar.record.content.start),
-          });
-          index += sourceBar.segmentLength;
-          continue;
+          const inlineAtStart = sourceBar.record.inlineKeys.some(
+            (change) => change.at === sourceBar.record.content.start,
+          );
+          if (nextSection === undefined) {
+            pieces.set(index, {
+              text: sourceBar.segmentRaw,
+              count: sourceBar.segmentLength,
+              inlineAtStart,
+            });
+            index += sourceBar.segmentLength;
+            continue;
+          }
+          // Keep the bytes before a new section marker when each written body is one bar.
+          const rawBodies = sourceBar.segmentRaw.split("|");
+          if (rawBodies.length === sourceBar.segmentLength) {
+            const count = nextSection - index;
+            pieces.set(index, { text: rawBodies.slice(0, count).join("|"), count, inlineAtStart });
+            index += count;
+            continue;
+          }
         }
       }
       pieces.set(index, {
