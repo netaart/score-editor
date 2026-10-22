@@ -67,4 +67,6 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// Built before the server listens, so the first test that draws a staff does not wait for the bundler.
+await buildAbcjs();
 server.listen(port, "127.0.0.1");
