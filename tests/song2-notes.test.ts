@@ -411,6 +411,24 @@ describe("the refusals of the note commands", () => {
     });
   });
 
+  it("points a writer refusal at the first note the command names", () => {
+    const throwing = {
+      ...song2Dialect,
+      serialize() {
+        throw new Error("writer refused");
+      },
+    };
+    const result = applyScoreCommand(throwing, SCORE, move(["Vocal:256"], 256, 0, 4));
+    expect(result).toEqual({
+      ok: false,
+      diagnostic: {
+        code: "write-mismatch",
+        params: {},
+        at: { voice: "Vocal", bar: 1, beat: 2, noteId: "Vocal:256" },
+      },
+    });
+  });
+
   it("refuses a non-integer time or pitch offset and changes nothing", () => {
     const text = scoreOf("C4D4E4F4|G16|");
     expect(refusedCode(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 1.5, 0)))).toBe("offset-not-integer");
