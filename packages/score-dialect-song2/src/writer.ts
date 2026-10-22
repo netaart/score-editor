@@ -13,6 +13,7 @@ import {
   type Song2SourceBar,
   signatureOf,
 } from "./parser";
+import { keepsCutTail } from "./write-chords";
 
 const TICKS_PER_QUARTER = 256;
 const DURATIONS: ReadonlyArray<number> = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48];
@@ -239,24 +240,22 @@ export function serializeSong2(score: Score): string {
   for (const musicLine of source.musicLines) {
     const tail = musicLine.cutTail;
     const last = lastNoteOf(score, musicLine.voice);
-    // RULES.md X17: an X4 remainder is kept byte for byte. An X5 remainder is kept only while the note
-    // before it still ties into it; once that tie is gone it would read as a finished note.
-    const keepTail = tail !== null && (tail.kind === "x4" || (last?.tie ?? false));
-    const force = tail !== null && tail.kind === "x5" && !keepTail;
-    let changed = force;
+    const keepTail = keepsCutTail(score, tail, last?.tie ?? false);
+    const dropTail = tail !== null && !keepTail;
+    let changed = dropTail;
     const pieces = musicLine.segments.map((segment, index) => {
       const partial = !musicLine.endsWithBarline && index === musicLine.segments.length - 1;
       const unchanged =
-        !force && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
+        !dropTail && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
       if (unchanged) return segment.raw;
       changed = true;
       const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator)).join("|");
       // A rewritten partial measure keeps its finished tokens and its cut remainder at their end.
-      return partial && keepTail ? `${rendered}${tail.raw}` : rendered;
+      return partial && keepTail && tail !== null ? `${rendered}${tail.raw}` : rendered;
     });
     if (!changed) continue;
     const rendered = `${pieces.join("|")}${musicLine.endsWithBarline ? "|" : ""}`;
-    if (force && rendered === "") {
+    if (dropTail && rendered === "") {
       dropped.add(musicLine.line);
       continue;
     }
