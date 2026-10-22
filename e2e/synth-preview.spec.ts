@@ -122,10 +122,15 @@ test.describe("the play control", () => {
     const caption = page.locator(".sce-synth-caption");
     await expect(caption).toHaveText("Synthetic preview, not the final sound");
     await expect(page.locator(".sce-synth-button")).toContainText("Preview");
+    await expect(page.locator(".sce-synth-button")).toHaveAttribute(
+      "aria-description",
+      "Synthetic preview, not the final sound",
+    );
 
     await harness.update({ language: "zh" });
     await expect(caption).toHaveText("合成试听，不代表成品效果");
     await expect(page.locator(".sce-synth-button")).toContainText("试听");
+    await expect(page.locator(".sce-synth-button")).toHaveAttribute("aria-description", "合成试听，不代表成品效果");
   });
 
   test("the caption stays in view while the preview plays, even in a toolbar that scrolls sideways", async ({

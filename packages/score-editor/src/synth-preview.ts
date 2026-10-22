@@ -44,6 +44,8 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
     t = messagesFor(language);
     group.lang = language;
     caption.textContent = t.previewCaption;
+    // Spoken with the button, so the warning reaches a person who never sees the caption, in a toolbar that scrolls.
+    button.setAttribute("aria-description", t.previewCaption);
     drawn = "";
   }
 
