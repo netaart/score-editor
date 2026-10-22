@@ -1,6 +1,6 @@
 // ABOUTME: Playwright fixtures of seam 5: a harness that drives the test page, a press that taps or clicks, and real touch input.
 // ABOUTME: Tests talk to the page only through window.harness and through what a user can see and do.
-import { test as base, type Locator, type Page } from "@playwright/test";
+import { test as base, type CDPSession, type Locator, type Page } from "@playwright/test";
 
 export interface Point {
   x: number;
@@ -272,6 +272,11 @@ export class Harness {
     return this.page.evaluate(() => window.harness.host.addProbe());
   }
 
+  /** A finger to put down, slide and lift by hand; close it when the test is done with it. */
+  finger(options: { shift?: boolean } = {}) {
+    return Finger.open(this.page, options);
+  }
+
   /**
    * A one-finger gesture from `from` to `to`, sent as real touch input so the browser decides scroll or not. The
    * finger rests before it lifts: lifting at speed starts a fling, and the next tap would only stop that.
@@ -290,6 +295,62 @@ export class Harness {
     await this.page.waitForTimeout(150);
     await touch("touchEnd");
     await cdp.detach();
+  }
+}
+
+/** One finger sent as real touch input, a step at a time, so a test can look at the page between the steps. */
+export class Finger {
+  private at: Point | null = null;
+
+  private constructor(
+    private readonly page: Page,
+    private readonly cdp: CDPSession,
+    private readonly modifiers: number,
+  ) {}
+
+  /** `shift` holds Shift on a keyboard that is attached to the touch screen, for the whole life of the finger. */
+  static async open(page: Page, options: { shift?: boolean } = {}) {
+    return new Finger(page, await page.context().newCDPSession(page), options.shift ? 8 : 0);
+  }
+
+  private send(type: "touchStart" | "touchMove" | "touchEnd", point?: Point) {
+    return this.cdp.send("Input.dispatchTouchEvent", {
+      type,
+      modifiers: this.modifiers,
+      touchPoints: point ? [{ x: point.x, y: point.y, id: 1 }] : [],
+    });
+  }
+
+  /** Puts the finger down at `point`, and keeps it there for `holdMs` before it does anything else. */
+  async down(point: Point, holdMs = 0) {
+    this.at = point;
+    await this.send("touchStart", point);
+    if (holdMs > 0) await this.page.waitForTimeout(holdMs);
+  }
+
+  /** Slides the finger to `point` in a few steps, as a finger does. */
+  async move(point: Point, steps = 8) {
+    const from = this.at;
+    if (!from) throw new Error("the finger is not down");
+    for (let step = 1; step <= steps; step++) {
+      await this.send("touchMove", {
+        x: from.x + ((point.x - from.x) * step) / steps,
+        y: from.y + ((point.y - from.y) * step) / steps,
+      });
+      await this.page.waitForTimeout(16);
+    }
+    this.at = point;
+  }
+
+  /** Rests, then lifts: lifting at speed would start a fling. */
+  async up() {
+    await this.page.waitForTimeout(100);
+    await this.send("touchEnd");
+    this.at = null;
+  }
+
+  async close() {
+    await this.cdp.detach();
   }
 }
 
