@@ -28,11 +28,11 @@ added; calling it twice is harmless.
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
 voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
-it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` ends the row with the view
-switch, names the shown view in the title, and leaves out the controls that only mean something on the arrangement
+it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
+switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
 (zoom and Delete) while another view is shown. The toolbar's row wraps when its element is narrower than its controls
-if it holds the preview control or the switch (the preview control and its caption take a line of their own, and the
-read-only badge and the switch go together to a line at the end), or scrolls sideways when it holds neither, so every
+if it holds the preview control or the switch (the read-only badge and the switch go together to a line of their own, and the
+preview control and its caption take the line after it), or scrolls sideways when it holds neither, so every
 control can still be reached.
 
 ## The text view, the staff view and the view switch
