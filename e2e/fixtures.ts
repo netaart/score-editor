@@ -36,6 +36,8 @@ interface PageSession {
   select(noteIds: string[]): void;
   setView(patch: Record<string, unknown>): void;
   setActiveView(name: string): void;
+  setRejectedText(next: { text: string; diagnostics: Array<{ code: string }> } | null): void;
+  checkScoreText(text: string): Array<{ code: string }>;
 }
 
 interface PageLayout {
@@ -46,7 +48,7 @@ interface PageLayout {
   slots: Record<string, HTMLElement>;
   shadowRoot: ShadowRoot | null;
   host: HTMLElement | null;
-  partNames: { all: string[]; axis: string[] };
+  partNames: { all: string[]; axis: string[]; views: string[] };
   retained: { root: Element; nodes: Node[] } | null;
   open(options?: Record<string, unknown>): Promise<void>;
   replace(options: Record<string, unknown>): Promise<void>;
@@ -208,6 +210,14 @@ export class Layout {
     });
   }
 
+  /** Says that the text view holds this text and the session did not take it, with what the dialect finds wrong with it. */
+  setRejectedText(text: string) {
+    return this.page.evaluate((value) => {
+      const session = window.harness.layout.live();
+      session.setRejectedText({ text: value, diagnostics: session.checkScoreText(value) });
+    }, text);
+  }
+
   /** Says, as a host does with its permissions, whether the user may edit. */
   setEditable(editable: boolean) {
     return this.page.evaluate((value) => window.harness.layout.live().setView({ editable: value }), editable);
@@ -319,7 +329,7 @@ export class Harness {
 export const test = base.extend<{
   harness: Harness;
   press: (target: Locator, position?: Point) => Promise<void>;
-  partNames: { all: string[]; axis: string[] };
+  partNames: { all: string[]; axis: string[]; views: string[] };
 }>({
   harness: async ({ page }, use) => {
     await page.goto("/");

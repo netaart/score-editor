@@ -53,6 +53,7 @@ export type {
   ViewState,
 } from "./session";
 export { createEditingSession, VIEW_NAMES } from "./session";
+export { mountStaleNotice } from "./stale-notice";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
 export type {
@@ -87,6 +88,7 @@ export type {
   ViewPart,
 } from "./types";
 export { NOTICE_CODES } from "./types";
+export { mountViewSwitch } from "./view-switch";
 export type { VoiceTrackOptions } from "./voice-track";
 export { mountVoiceTrack } from "./voice-track";
 export { mountZoomControl } from "./zoom-control";

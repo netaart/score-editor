@@ -145,7 +145,7 @@ export function mountZoomControl(el: HTMLElement, session: EditingSession): View
     for (const [preset, item] of menuItems) item.setAttribute("aria-checked", String(Math.abs(preset - zoom) < 1e-6));
     zoomOut.setAttribute("aria-disabled", String(stepZoom(zoom, "out") === null));
     zoomIn.setAttribute("aria-disabled", String(stepZoom(zoom, "in") === null));
-    group.hidden = session.reading.kind !== "score";
+    group.hidden = session.reading.kind !== "score" || session.activeView !== "arrangement";
   }
 
   draw();

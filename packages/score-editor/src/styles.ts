@@ -869,6 +869,66 @@ ${labelThinning()}
   }
 }
 
+/*
+ * The view switch ends the toolbar row: three icon buttons side by side that share their borders, the shown one filled
+ * and drawn heavier, so the state is carried by shape and weight and not by hue alone. Where the row is too narrow for
+ * all its controls, a toolbar that has the switch wraps, and the switch and the badge move to the next line together.
+ */
+.sce-root .sce-toolbar[data-views] {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.sce-root .sce-toolbar-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+.sce-root .sce-views {
+  display: inline-flex;
+  flex: none;
+}
+.sce-root .sce-view-button {
+  border-radius: 0;
+}
+.sce-root .sce-view-button + .sce-view-button {
+  margin-inline-start: -1px;
+}
+.sce-root .sce-view-button:first-child {
+  border-start-start-radius: var(--sce-_radius);
+  border-end-start-radius: var(--sce-_radius);
+}
+.sce-root .sce-view-button:last-child {
+  border-start-end-radius: var(--sce-_radius);
+  border-end-end-radius: var(--sce-_radius);
+}
+.sce-root .sce-view-button[aria-pressed="true"] {
+  z-index: 1;
+  border-color: var(--sce-_text);
+  background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
+}
+.sce-root .sce-view-button[aria-pressed="true"] .sce-icon {
+  stroke-width: 2px;
+}
+.sce-root .sce-view-staff .sce-icon {
+  stroke-width: 1px;
+}
+.sce-root .sce-view-staff[aria-pressed="true"] .sce-icon {
+  stroke-width: 1.5px;
+}
+.sce-root .sce-view-button:focus-visible {
+  z-index: 2;
+}
+
+/* The stale notice is a note like the cut notice, with a mark of its own in place of the hatch swatch. */
+.sce-root .sce-stale-notice {
+  border-inline-start: 3px solid var(--sce-_text);
+}
+.sce-root .sce-stale-notice::before {
+  content: none;
+}
+
 .sce-root .sce-sr-only {
   position: absolute;
   width: 1px;

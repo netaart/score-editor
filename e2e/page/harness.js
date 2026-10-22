@@ -10,9 +10,11 @@ import {
   mountChordTrack,
   mountCutNotice,
   mountProblemView,
+  mountStaleNotice,
   mountTextView,
   mountTimeRuler,
   mountToolbar,
+  mountViewSwitch,
   mountVoiceTrack,
   mountZoomControl,
 } from "/packages/score-editor/dist/index.js";
@@ -73,6 +75,9 @@ const LAYOUT_PARTS = {
  */
 const VIEW_PARTS = {
   text: (el, session) => mountTextView(el, session),
+  stale: (el, session) => mountStaleNotice(el, session),
+  switch: (el, session) => mountViewSwitch(el, session),
+  "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
 };
 
 const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };
@@ -144,7 +149,7 @@ const layout = {
   slots: {},
   shadowRoot: null,
   host: null,
-  partNames: { all: Object.keys(LAYOUT_PARTS), axis: AXIS_PART_NAMES },
+  partNames: { all: Object.keys(LAYOUT_PARTS), axis: AXIS_PART_NAMES, views: Object.keys(VIEW_PARTS) },
   /** The session of the open layout. */
   live() {
     if (!layout.session) throw new Error("no layout is open");

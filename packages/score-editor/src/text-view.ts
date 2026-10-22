@@ -63,6 +63,8 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
   list.setAttribute("role", "list");
   list.id = `sce-text-problems-${n}`;
 
+  const abort = new AbortController();
+  const { signal } = abort;
   let destroyed = false;
   let timer: number | null = null;
   /** True while this part's own dispatch is announced, so the project change it makes is not mistaken for another's. */
@@ -127,7 +129,7 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
       button.type = "button";
       button.textContent = sentence;
       const line = found[at]?.at.line;
-      if (line !== undefined) button.addEventListener("click", () => reveal(line));
+      if (line !== undefined) button.dataset.line = String(line);
     }
     if (more > 0) create(doc, "li", "sce-text-more", list).textContent = t.moreProblems(more);
     list.hidden = found.length === 0;
@@ -193,26 +195,41 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
     session.setRejectedText(result.ok ? null : { text, diagnostics: result.diagnostics });
   }
 
-  box.addEventListener("input", () => {
-    if (destroyed) return;
-    drawGutter(problems());
-    stopTimer();
-    timer = win.setTimeout(settle, TEXT_PAUSE_MS);
-  });
-  box.addEventListener("blur", () => {
-    if (destroyed) return;
-    settle();
-    // What was handed over is stored as the dialect writes it, which may differ from what was typed; show that now.
-    if (session.rejectedText === null && box.value !== session.project.score && !box.readOnly) {
-      setText(session.project.score);
-    }
-  });
+  box.addEventListener(
+    "input",
+    () => {
+      drawGutter(problems());
+      stopTimer();
+      timer = win.setTimeout(settle, TEXT_PAUSE_MS);
+    },
+    { signal },
+  );
+  box.addEventListener(
+    "blur",
+    () => {
+      settle();
+      // What was handed over is stored as the dialect writes it, which may differ from what was typed; show that now.
+      if (session.rejectedText === null && box.value !== session.project.score && !box.readOnly) {
+        setText(session.project.score);
+      }
+    },
+    { signal },
+  );
   box.addEventListener(
     "scroll",
     () => {
       gutter.scrollTop = box.scrollTop;
     },
-    { passive: true },
+    { passive: true, signal },
+  );
+  // One listener for the list: the buttons in it are drawn anew whenever the problems change.
+  list.addEventListener(
+    "click",
+    (event) => {
+      const line = Number((event.target as Element).closest<HTMLElement>("[data-line]")?.dataset.line);
+      if (Number.isInteger(line)) reveal(line);
+    },
+    { signal },
   );
 
   setText(session.project.score);
@@ -235,6 +252,7 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      abort.abort();
       stopTimer();
       unsubscribe();
       root.remove();

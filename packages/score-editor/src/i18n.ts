@@ -2,6 +2,7 @@
 // ABOUTME: The host maps nothing here: it passes "zh" or "en" and the package speaks for itself.
 import type { BarPosition, Cut } from "./arrangement";
 import type { Meter } from "./score";
+import type { ViewName } from "./session";
 import type { Language } from "./types";
 
 export interface Messages {
@@ -51,6 +52,10 @@ export interface Messages {
   noProblems: string;
   /** `kept`: the text is not in the project, which still has the last score that read. */
   problemCount(count: number, kept: boolean): string;
+  /** The view switch: the name of its group, the name of the staff view, and the stale notice. */
+  viewSwitch: string;
+  staff: string;
+  staleNotice: string;
 }
 
 const en: Messages = {
@@ -107,6 +112,10 @@ const en: Messages = {
   noProblems: "No problems",
   problemCount: (count, kept) =>
     `${count} ${count === 1 ? "problem" : "problems"}${kept ? ". The other views still show the last readable score." : ""}`,
+  viewSwitch: "View",
+  staff: "Staff",
+  staleNotice:
+    "The score text has a problem, so this view still shows the last score that could be read. Fix it in the text view.",
 };
 
 const zh: Messages = {
@@ -160,9 +169,17 @@ const zh: Messages = {
   problems: "问题",
   noProblems: "没有问题",
   problemCount: (count, kept) => `${count} 个问题${kept ? "。其他视图显示的仍是上一份能读的乐谱。" : ""}`,
+  viewSwitch: "视图",
+  staff: "五线谱",
+  staleNotice: "乐谱文本里有问题，所以这个视图显示的仍是上一份能读的乐谱。请在文本视图中修正。",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
+
+/** What a view is called: in the switch, as its tooltip, and as the toolbar's title while it is shown. */
+export function viewName(t: Messages, view: ViewName): string {
+  return view === "arrangement" ? t.title : view === "staff" ? t.staff : t.scoreText;
+}
 
 export function messagesFor(language: Language): Messages {
   return catalogs[language] ?? en;

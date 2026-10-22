@@ -1,13 +1,14 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge and the screen-reader hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
-import { create, requireDom } from "./dom";
+import { create, lineIcon, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
-import { messagesFor } from "./i18n";
+import { messagesFor, viewName } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
+import { mountViewSwitch } from "./view-switch";
 import { mountZoomControl } from "./zoom-control";
 
 export interface ToolbarOptions extends EditingPartOptions {
@@ -16,26 +17,12 @@ export interface ToolbarOptions extends EditingPartOptions {
    * this option the toolbar draws no hint, since a hint nothing refers to would only be noise.
    */
   hintId?: string;
-}
-
-const SVG = "http://www.w3.org/2000/svg";
-
-/**
- * A 16 by 16 line drawing. It is built of polylines, since the reset that isolates the parts reverts every CSS
- * property, and a path's `d` is one, where `points` is not; the stylesheet gives the lines their stroke.
- */
-function lineIcon(doc: Document, polylines: ReadonlyArray<string>): SVGSVGElement {
-  const icon = doc.createElementNS(SVG, "svg");
-  icon.setAttribute("class", "sce-icon");
-  icon.setAttribute("viewBox", "0 0 16 16");
-  icon.setAttribute("aria-hidden", "true");
-  icon.setAttribute("focusable", "false");
-  for (const points of polylines) {
-    const line = doc.createElementNS(SVG, "polyline");
-    line.setAttribute("points", points);
-    icon.appendChild(line);
-  }
-  return icon;
+  /**
+   * Whether to end the row with the view switch (`mountViewSwitch`), as the default editor does. The title then names the
+   * view that is shown, and the controls that only mean something on the arrangement are left out of the others. Without
+   * it the toolbar is the one it was before the views existed.
+   */
+  viewSwitch?: boolean;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -56,6 +43,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   el.appendChild(root);
 
   const row = create(doc, "div", "sce-toolbar", root);
+  if (options.viewSwitch) row.dataset.views = "";
   const title = create(doc, "span", "sce-title", row);
   const zoom = mountZoomControl(row, session);
   const history = create(doc, "div", "sce-history", row);
@@ -73,7 +61,10 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   create(doc, "span", "sce-spacer", row);
-  const badge = create(doc, "span", "sce-badge", row);
+  // The badge and the switch are one item of the row, so a narrow row moves them to the next line together.
+  const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : row;
+  const badge = create(doc, "span", "sce-badge", end);
+  const views = options.viewSwitch ? mountViewSwitch(end, session) : null;
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const live = createLiveRegion(root);
@@ -101,7 +92,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     language = session.view.language;
     t = messagesFor(language);
     root.lang = language;
-    title.textContent = t.title;
+    title.textContent = options.viewSwitch ? viewName(t, session.activeView) : t.title;
     badge.textContent = t.readOnly;
     history.setAttribute("aria-label", t.history);
     for (const [button, label, keys] of [
@@ -120,12 +111,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
     const deletable = canDeleteSelection(session);
-    const shown = [editable, readable, session.canUndo, session.canRedo, deletable].join();
+    const arrangement = !options.viewSwitch || session.activeView === "arrangement";
+    const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView].join();
     if (shown === drawn) return;
     drawn = shown;
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
+    if (options.viewSwitch) title.textContent = viewName(t, session.activeView);
     history.hidden = !editable || !readable;
-    remove.hidden = history.hidden;
+    remove.hidden = history.hidden || !arrangement;
     badge.hidden = editable;
     undo.setAttribute("aria-disabled", String(!session.canUndo));
     redo.setAttribute("aria-disabled", String(!session.canRedo));
@@ -142,6 +135,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       abort.abort();
       unsubscribe();
       zoom.destroy();
+      views?.destroy();
       root.remove();
       releaseStyles();
     },

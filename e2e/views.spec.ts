@@ -1,7 +1,7 @@
 // ABOUTME: Seam 5 for the staff view, the text view, the view switch and the stale notice: parts on one session, and the default editor.
 // ABOUTME: Tests type, click and tap as a user does, and read what the session holds, in desktop and phone projects.
-import type { Page } from "@playwright/test";
-import { expect, type Harness, test, vocalOnly } from "./fixtures";
+import type { CDPSession, Page } from "@playwright/test";
+import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 
@@ -250,5 +250,275 @@ test.describe("the text view", () => {
     await page.waitForTimeout(PAUSE_MS + 200);
     expect(await harness.layout.scoreText()).toBe(QUARTERS);
     expect(await harness.layout.canUndo()).toBe(false);
+  });
+});
+
+const staleNotice = (page: Page) => slot(page, "stale").getByRole("note");
+const STALE =
+  "The score text has a problem, so this view still shows the last score that could be read. Fix it in the text view.";
+
+test.describe("the stale notice", () => {
+  test("is silent while the project has what the box holds, says so when the text was refused, and goes when it reads again", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness, { parts: ["stale", "text", "vocal"] });
+    await expect(staleNotice(page)).toHaveCount(0);
+
+    await textBox(page).fill(BROKEN);
+    await expect(staleNotice(page)).toHaveText(STALE);
+
+    await textBox(page).fill(QUARTERS);
+    await expect(staleNotice(page)).toHaveCount(0);
+  });
+
+  test("says it in the session's language, and follows it when it changes", async ({ page, harness }) => {
+    await openText(harness, { parts: ["stale", "text", "vocal"], language: "zh" });
+    await slot(page, "text").getByRole("textbox", { name: "乐谱文本" }).fill(BROKEN);
+    await expect(staleNotice(page)).toHaveText(
+      "乐谱文本里有问题，所以这个视图显示的仍是上一份能读的乐谱。请在文本视图中修正。",
+    );
+
+    await harness.layout.setView({ language: "en" });
+    await expect(staleNotice(page)).toHaveText(STALE);
+  });
+
+  test("goes when the project changes from elsewhere, since the box then shows the project again", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness, { parts: ["stale", "text", "vocal"] });
+    await textBox(page).fill(BROKEN);
+    await expect(staleNotice(page)).toHaveText(STALE);
+
+    await harness.layout.dispatch({ type: "toRest", noteId: "Vocal:256" });
+
+    await expect(staleNotice(page)).toHaveCount(0);
+  });
+
+  test("is not drawn for a project that came with a score that cannot be read: the problem view says that", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: BROKEN }, parts: ["stale", "problem"] });
+
+    await expect(staleNotice(page)).toHaveCount(0);
+    await expect(page.getByRole("alert")).toBeVisible();
+  });
+
+  test("leaves nothing behind when it is destroyed, twice over", async ({ page, harness }) => {
+    await openText(harness, { parts: ["stale", "text", "vocal"] });
+
+    await harness.layout.destroyPart("stale", 2);
+    await textBox(page).fill(BROKEN);
+
+    await expect(slot(page, "stale")).toBeEmpty();
+  });
+});
+
+const viewSwitch = (page: Page) => slot(page, "switch").getByRole("group", { name: "View" });
+const viewButton = (page: Page, name: string) => viewSwitch(page).getByRole("button", { name, exact: true });
+
+test.describe("the view switch", () => {
+  test("offers the three views by name, with the shown one pressed", async ({ page, harness }) => {
+    await harness.layout.open({ parts: ["switch"] });
+
+    await expect(viewSwitch(page).getByRole("button")).toHaveCount(3);
+    await expect(viewButton(page, "Arrangement")).toHaveAttribute("aria-pressed", "true");
+    await expect(viewButton(page, "Staff")).toHaveAttribute("aria-pressed", "false");
+    await expect(viewButton(page, "Score text")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("shows another view when one is pressed, and the session says which", async ({ page, harness, press }) => {
+    await harness.layout.open({ parts: ["switch"] });
+
+    await press(viewButton(page, "Staff"));
+    expect(await harness.layout.activeView()).toBe("staff");
+    await expect(viewButton(page, "Staff")).toHaveAttribute("aria-pressed", "true");
+    await expect(viewButton(page, "Arrangement")).toHaveAttribute("aria-pressed", "false");
+
+    await press(viewButton(page, "Score text"));
+    expect(await harness.layout.activeView()).toBe("text");
+    await press(viewButton(page, "Arrangement"));
+    expect(await harness.layout.activeView()).toBe("arrangement");
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("follows a view set from outside, as a host's own switcher would set it", async ({ page, harness }) => {
+    await harness.layout.open({ parts: ["switch"] });
+
+    await harness.layout.setActiveView("text");
+
+    await expect(viewButton(page, "Score text")).toHaveAttribute("aria-pressed", "true");
+    await expect(viewButton(page, "Arrangement")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("can be reached and pressed with the keyboard", async ({ page, harness, isMobile }) => {
+    test.skip(isMobile, "keys are for the desktop project");
+    await harness.layout.open({ parts: ["switch"] });
+
+    await viewButton(page, "Staff").focus();
+    await page.keyboard.press("Enter");
+    expect(await harness.layout.activeView()).toBe("staff");
+    await viewButton(page, "Score text").focus();
+    await page.keyboard.press("Space");
+    expect(await harness.layout.activeView()).toBe("text");
+  });
+
+  test("works while the session is read-only", async ({ page, harness, press }) => {
+    await harness.layout.open({ parts: ["switch"], editable: false });
+
+    await press(viewButton(page, "Score text"));
+
+    expect(await harness.layout.activeView()).toBe("text");
+    await expect(viewButton(page, "Score text")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("names the views in the session's language, and follows it when it changes", async ({ page, harness }) => {
+    await harness.layout.open({ parts: ["switch"], language: "zh" });
+    const zh = slot(page, "switch").getByRole("group", { name: "视图" });
+    await expect(zh.getByRole("button", { name: "编曲视图", exact: true })).toBeVisible();
+    await expect(zh.getByRole("button", { name: "五线谱", exact: true })).toBeVisible();
+    await expect(zh.getByRole("button", { name: "乐谱文本", exact: true })).toBeVisible();
+
+    await harness.layout.setView({ language: "en" });
+    await expect(viewButton(page, "Staff")).toBeVisible();
+  });
+
+  test("leaves nothing behind when it is destroyed, twice over", async ({ page, harness }) => {
+    await harness.layout.open({ parts: ["switch"] });
+
+    await harness.layout.destroyPart("switch", 2);
+    await harness.layout.setActiveView("staff");
+
+    await expect(slot(page, "switch")).toBeEmpty();
+  });
+});
+
+/** Event listeners as the browser's debugger sees them: the way to find one that a destroy left behind. */
+function listenerCounter(cdp: CDPSession) {
+  const onObject = async (expression: string) => {
+    const { result } = await cdp.send("Runtime.evaluate", { expression });
+    if (!result.objectId) throw new Error(`no object for ${expression}`);
+    const { listeners } = await cdp.send("DOMDebugger.getEventListeners", { objectId: result.objectId });
+    return listeners.length;
+  };
+  return {
+    onGlobals: () =>
+      Promise.all(["window", "document", "document.documentElement", "document.body", "document.head"].map(onObject)),
+    /** The listeners on every node the layout retained. */
+    onRetained: async () => {
+      const nodes = "window.harness.layout.retained.nodes";
+      const { result: length } = await cdp.send("Runtime.evaluate", { expression: `${nodes}.length` });
+      let total = 0;
+      for (let index = 0; index < Number(length.value); index++) total += await onObject(`${nodes}[${index}]`);
+      return total;
+    },
+  };
+}
+
+test.describe("destroying the view parts", () => {
+  test("each one, destroyed on its own, leaves no node, no listener and no style sheet, and does not answer the session any more", async ({
+    page,
+    harness,
+    partNames,
+  }) => {
+    const cdp = await page.context().newCDPSession(page);
+    const listeners = listenerCounter(cdp);
+    const globals = await listeners.onGlobals();
+    const html = await page.evaluate(() => document.documentElement.outerHTML);
+    const sheets = (await harness.layout.sheets()).document;
+
+    for (const name of partNames.views) {
+      await harness.layout.open({ score: { text: QUARTERS }, parts: [name] });
+      expect((await harness.layout.sheets()).document, `${name} adds the one style sheet`).toBe(sheets + 1);
+      await harness.layout.retain(name);
+      // The notice only draws; the others have something to press, type in or scroll with.
+      if (name !== "stale") expect(await listeners.onRetained(), `${name} has listeners`).toBeGreaterThan(0);
+
+      await harness.layout.destroyPart(name, 2);
+      expect(await listeners.onRetained(), `${name} leaves listeners`).toBe(0);
+      await expect(slot(page, name).locator("*")).toHaveCount(0);
+      const retained = await harness.layout.retainedHtml();
+
+      // Everything that would redraw the part, and the part must not hear of it.
+      await harness.layout.setView({ language: "zh", editable: false });
+      await harness.layout.setActiveView("staff");
+      await harness.layout.setRejectedText(BROKEN);
+      await harness.layout.replace({ score: { vector: "reject-duration-five" } });
+      expect(await harness.layout.retainedHtml(), name).toBe(retained);
+
+      await harness.layout.close();
+      expect((await harness.layout.sheets()).document, `${name} gives its style sheet back`).toBe(sheets);
+    }
+    expect(await listeners.onGlobals(), "listeners on the page").toEqual(globals);
+    expect(await page.evaluate(() => document.documentElement.outerHTML), "nodes in the page").toBe(html);
+    await cdp.detach();
+  });
+});
+
+const toolbarWithViews = (page: Page) => slot(page, "toolbar-views");
+
+test.describe("the toolbar part with the view switch", () => {
+  test("ends the row with the switch, after the read-only badge, and keeps the switch while read-only", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ parts: ["toolbar-views", "vocal"], editable: false });
+
+    const badge = await box(toolbarWithViews(page).getByText("Read only", { exact: true }));
+    const switchAt = await box(toolbarWithViews(page).getByRole("group", { name: "View" }));
+    expect(switchAt.x).toBeGreaterThanOrEqual(badge.x + badge.width);
+    const row = await box(toolbarWithViews(page).locator(".sce-toolbar"));
+    expect(switchAt.x + switchAt.width).toBeLessThanOrEqual(row.x + row.width + 0.5);
+    expect(Math.abs(switchAt.y + switchAt.height / 2 - (badge.y + badge.height / 2))).toBeLessThan(6);
+  });
+
+  test("names the shown view in its title, and leaves out what only means something on the arrangement", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ parts: ["toolbar-views", "vocal"] });
+    const bar = toolbarWithViews(page);
+    await expect(bar.getByText("Arrangement", { exact: true })).toBeVisible();
+    await expect(bar.getByRole("group", { name: "Zoom" })).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Delete", exact: true })).toBeVisible();
+
+    await harness.layout.setActiveView("staff");
+    await expect(bar.getByText("Staff", { exact: true })).toBeVisible();
+    await expect(bar.getByText("Arrangement", { exact: true })).toHaveCount(0);
+    await expect(bar.getByRole("group", { name: "Zoom" })).toBeHidden();
+    await expect(bar.getByRole("button", { name: "Delete", exact: true })).toBeHidden();
+    // Undo and redo mean something in every view, since the text view and a host change the score too.
+    await expect(bar.getByRole("group", { name: "History" })).toBeVisible();
+
+    await harness.layout.setActiveView("text");
+    await expect(bar.getByText("Score text", { exact: true })).toBeVisible();
+
+    await harness.layout.setActiveView("arrangement");
+    await expect(bar.getByText("Arrangement", { exact: true })).toBeVisible();
+    await expect(bar.getByRole("group", { name: "Zoom" })).toBeVisible();
+    await expect(bar.getByRole("button", { name: "Delete", exact: true })).toBeVisible();
+  });
+
+  test("names the shown view in the session's language", async ({ page, harness }) => {
+    await harness.layout.open({ parts: ["toolbar-views", "vocal"], language: "zh" });
+
+    await harness.layout.setActiveView("staff");
+
+    await expect(toolbarWithViews(page).getByText("五线谱", { exact: true })).toBeVisible();
+  });
+
+  test("has no switch and keeps its title without the option, and the zoom control still hides in a view without a time axis", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ parts: ["toolbar", "vocal"] });
+
+    await harness.layout.setActiveView("staff");
+
+    await expect(slot(page, "toolbar").getByRole("group", { name: "View" })).toHaveCount(0);
+    await expect(slot(page, "toolbar").getByText("Arrangement", { exact: true })).toBeVisible();
+    await expect(slot(page, "toolbar").getByRole("group", { name: "Zoom" })).toBeHidden();
   });
 });
