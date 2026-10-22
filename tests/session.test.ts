@@ -383,9 +383,26 @@ describe("the insertion point", () => {
 
 describe("the view state parts share", () => {
   it("starts at the host's beat width, scrolled to the start, in the language it was given", () => {
-    expect(open().view).toEqual({ zoom: 1, scrollLeft: 0, language: "en" });
+    expect(open().view).toEqual({ zoom: 1, scrollLeft: 0, language: "en", editable: true });
     const zh = createEditingSession({ project, dialects, language: "zh" });
-    expect(zh.view).toEqual({ zoom: 1, scrollLeft: 0, language: "zh" });
+    expect(zh.view).toEqual({ zoom: 1, scrollLeft: 0, language: "zh", editable: true });
+  });
+
+  it("says whether the user may edit, starting from the option and changing like the rest of the view state", () => {
+    expect(createEditingSession({ project, dialects, editable: false }).view.editable).toBe(false);
+
+    const session = open();
+    const changes = listen(session);
+    session.setView({ editable: false });
+    expect(session.view).toEqual({ zoom: 1, scrollLeft: 0, language: "en", editable: false });
+    session.setView({ editable: false });
+    session.setView({ editable: true });
+
+    expect(changes).toEqual([
+      { cause: "view", project: false, selection: false, insertionPoint: false, view: true },
+      { cause: "view", project: false, selection: false, insertionPoint: false, view: true },
+    ]);
+    expect(session.canUndo).toBe(false);
   });
 
   it("changes by the keys given, announces one change, and says nothing when nothing differs", () => {
@@ -393,9 +410,9 @@ describe("the view state parts share", () => {
     const changes = listen(session);
 
     session.setView({ zoom: 2, scrollLeft: 300 });
-    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "en" });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "en", editable: true });
     session.setView({ language: "zh" });
-    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "zh" });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "zh", editable: true });
     session.setView({ zoom: 2, scrollLeft: 300, language: "zh" });
     session.setView({});
 
@@ -427,7 +444,7 @@ describe("the view state parts share", () => {
 
     expect(session.project.score).toBe(SCORE);
     expect(session.canUndo).toBe(false);
-    expect(session.view).toEqual({ zoom: 1.5, scrollLeft: 90, language: "zh" });
+    expect(session.view).toEqual({ zoom: 1.5, scrollLeft: 90, language: "zh", editable: true });
   });
 });
 
@@ -450,7 +467,7 @@ describe("replacing the project from outside", () => {
     expect(session.undo()).toBe(false);
     expect(session.selection).toEqual([]);
     expect(session.insertionPoint).toBeNull();
-    expect(session.view).toEqual({ zoom: 2, scrollLeft: 80, language: "en" });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 80, language: "en", editable: true });
     expect(changes).toEqual([{ cause: "replace", project: true, selection: true, insertionPoint: true, view: false }]);
   });
 
