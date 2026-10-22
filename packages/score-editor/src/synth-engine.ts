@@ -45,13 +45,17 @@ export function joinAudio(): AudioUse | null {
   users += 1;
   clearTimeout(idleTimer);
   const resumed = context.state === "running" ? Promise.resolve() : context.resume();
+  let giveUp: ReturnType<typeof setTimeout> | undefined;
+  const refused = new Promise<boolean>((settle) => {
+    giveUp = setTimeout(() => settle(false), RESUME_WAIT_MS);
+  });
   const ready = Promise.race([
     resumed.then(
       () => context.state === "running",
       () => false,
     ),
-    new Promise<boolean>((settle) => setTimeout(() => settle(false), RESUME_WAIT_MS)),
-  ]);
+    refused,
+  ]).finally(() => clearTimeout(giveUp));
   let left = false;
   return {
     context,
@@ -61,6 +65,7 @@ export function joinAudio(): AudioUse | null {
       left = true;
       users -= 1;
       if (users > 0) return;
+      // Not cleared by a destroy: this one timer is what lets go of the audio device after the last sound has faded.
       idleTimer = setTimeout(() => {
         if (users === 0 && context.state === "running") void context.suspend().catch(() => undefined);
       }, IDLE_MS);
@@ -107,13 +112,20 @@ function playTone(
   return oscillator;
 }
 
-/** A single pitch for a short time, through the shared context: the sound of a note preview. */
-export function playPitch(context: AudioContext, midi: number, length: number): void {
+/** A single pitch for a short time, through the shared context: the sound of a note preview. `onEnd` is called once it has died away. */
+export function playPitch(context: AudioContext, midi: number, length: number, onEnd: () => void): void {
   const out = context.createGain();
   out.gain.value = MASTER_GAIN;
   out.connect(context.destination);
   const tone = playTone(context, out, "triangle", midi, context.currentTime + 0.01, length, LEAD_LEVEL);
-  tone.addEventListener("ended", () => out.disconnect(), { once: true });
+  tone.addEventListener(
+    "ended",
+    () => {
+      out.disconnect();
+      onEnd();
+    },
+    { once: true },
+  );
 }
 
 export interface Sounding {
@@ -144,7 +156,14 @@ export function sound(context: AudioContext, schedule: PreviewSchedule, begin: n
     const when = begin + event.at;
     const track = (oscillator: OscillatorNode): void => {
       live.add(oscillator);
-      oscillator.addEventListener("ended", () => live.delete(oscillator), { once: true });
+      oscillator.addEventListener(
+        "ended",
+        () => {
+          live.delete(oscillator);
+          if (finished && live.size === 0) master.disconnect();
+        },
+        { once: true },
+      );
     };
     if (event.kind === "chord") {
       const level = CHORD_LEVEL / event.midis.length;
@@ -189,20 +208,9 @@ export function sound(context: AudioContext, schedule: PreviewSchedule, begin: n
       master.gain.setValueAtTime(master.gain.value, now);
       master.gain.linearRampToValueAtTime(0, now + 0.03);
     }
-    setTimeout(
-      () => {
-        for (const oscillator of live) {
-          try {
-            oscillator.stop();
-          } catch {
-            // Already stopped: nothing left to silence.
-          }
-        }
-        live.clear();
-        master.disconnect();
-      },
-      fade ? 60 : 0,
-    );
+    // The oscillators are stopped on the audio clock, so no timer outlives the stop; each one that ends lets go of the graph.
+    for (const oscillator of live) oscillator.stop(fade ? now + 0.04 : now);
+    if (live.size === 0) master.disconnect();
   }
 
   const timer = setInterval(topUp, TOP_UP_MS);

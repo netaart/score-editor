@@ -1,6 +1,6 @@
 // ABOUTME: The single-note preview: one MIDI pitch for a short time, made by an oscillator, for a view that sounds a note as the user draws it.
 // ABOUTME: It shares the audio context of the synth preview, so a page never holds more than one; it makes no request.
-import { type AudioUse, joinAudio, playPitch } from "./synth-engine";
+import { joinAudio, playPitch } from "./synth-engine";
 
 export interface PreviewNoteOptions {
   /** How long the note sounds, in seconds. Defaults to 0.35. */
@@ -9,16 +9,6 @@ export interface PreviewNoteOptions {
 
 const DEFAULT_DURATION = 0.35;
 const LONGEST = 10;
-
-async function sound(use: AudioUse, midi: number, duration: number): Promise<boolean> {
-  if (!(await use.ready)) {
-    use.leave();
-    return false;
-  }
-  playPitch(use.context, midi, duration);
-  setTimeout(() => use.leave(), duration * 1000 + 100);
-  return true;
-}
 
 /**
  * Sounds one pitch, a MIDI number from 0 to 127 (60 is middle C), for a short time. Resolves true once the note has been
@@ -32,5 +22,13 @@ export function previewNote(midi: number, options: PreviewNoteOptions = {}): Pro
   }
   const duration = Math.min(LONGEST, Math.max(0.02, options.duration ?? DEFAULT_DURATION));
   const use = joinAudio();
-  return use ? sound(use, midi, duration) : Promise.resolve(false);
+  if (!use) return Promise.resolve(false);
+  return use.ready.then((ready) => {
+    if (!ready) {
+      use.leave();
+      return false;
+    }
+    playPitch(use.context, midi, duration, () => use.leave());
+    return true;
+  });
 }
