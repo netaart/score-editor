@@ -28,6 +28,10 @@ export type PreviewEvent = PreviewNote | PreviewChord;
 /** What a preview plays: the events in time order, and how long it lasts. */
 export interface PreviewSchedule {
   readonly events: ReadonlyArray<PreviewEvent>;
+  /** The tick of the score at time zero: where the preview starts. */
+  readonly fromTick: number;
+  /** Seconds in one tick. Time is linear in ticks, so a position is `fromTick + seconds / secondsPerTick`. */
+  readonly secondsPerTick: number;
   /** Seconds from the start until the last event ends; 0 when there is nothing to play. */
   readonly length: number;
 }
@@ -131,5 +135,5 @@ export function schedulePreview(score: Score, fromTick = 0): PreviewSchedule {
   });
   events.sort((a, b) => a.at - b.at);
   const length = events.reduce((last, event) => Math.max(last, event.at + event.length), 0);
-  return { events, length };
+  return { events, fromTick, secondsPerTick: perTick, length };
 }

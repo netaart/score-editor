@@ -55,7 +55,11 @@ describe("the schedule of a synth preview", () => {
       [67, 2, 2],
     ]);
     expect(schedule.length).toBe(4);
+    // The seconds in one tick, so a player can turn the audio clock back into a position: 120 quarter notes of 256 ticks a minute.
+    expect(schedule.secondsPerTick).toBe(1 / 512);
+    expect(schedule.fromTick).toBe(0);
   });
+
   it("leaves a rest silent but counts its time, so the note after it starts on time", () => {
     // C, a quarter rest, E, F: the rest takes the second half-second.
     const schedule = schedulePreview(read(song({ vocal: ["C4z4E4F4|G16|"] })));
@@ -265,6 +269,7 @@ describe("the schedule of a synth preview", () => {
         ["Am", 1, 2],
       ]);
       expect(schedule.length).toBe(3);
+      expect(schedule.fromTick).toBe(512);
     });
 
     it("starting in the middle of a note does not sound that note again, but the chord in force is heard to its end", () => {
