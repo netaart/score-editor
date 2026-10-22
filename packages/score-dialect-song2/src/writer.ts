@@ -240,13 +240,18 @@ export function serializeSong2(score: Score): string {
   for (const musicLine of source.musicLines) {
     const tail = musicLine.cutTail;
     const last = lastNoteOf(score, musicLine.voice);
+    // RULES.md X17 and C8: an X4 remainder is kept byte for byte while it still belongs; an unfinished chord string
+    // goes with the last chord. An X5 remainder is kept only while the note before it still ties into it; once that
+    // tie is gone it would read as a finished note.
     const keepTail = keepsCutTail(score, tail, last?.tie ?? false);
     const dropTail = tail !== null && !keepTail;
-    let changed = dropTail;
+    const lastSegment = musicLine.segments.length - 1;
+    let changed = false;
     const pieces = musicLine.segments.map((segment, index) => {
-      const partial = !musicLine.endsWithBarline && index === musicLine.segments.length - 1;
+      const partial = !musicLine.endsWithBarline && index === lastSegment;
+      const forced = dropTail && partial;
       const unchanged =
-        !dropTail && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
+        !forced && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
       if (unchanged) return segment.raw;
       changed = true;
       const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator)).join("|");
