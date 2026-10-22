@@ -1,10 +1,12 @@
 // ABOUTME: The editing session: the song project, its undo history, the selection and the insertion point, and the UI state view parts share.
 // ABOUTME: Headless: it touches no DOM, so it imports and runs in Node and in a Worker like the rest of the headless layer.
 import { applyProjectCommand } from "./apply";
+import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry } from "./dialect";
 import type { Score, SongProject } from "./score";
+import type { Language } from "./types";
 
 /** What reading the project's score came to: a score, or the reason there is none. */
 export type ScoreReading =
@@ -17,11 +19,23 @@ export interface InsertionPoint {
   readonly tick: number;
 }
 
+/** The UI state that several view parts must show alike. It is not part of the document and not in the history. */
+export interface ViewState {
+  /** Zoom of the time axis; 1 is the host's beat width, and the range is 0.01 to 4. */
+  readonly zoom: number;
+  /** How far the time axis is scrolled to the left, in pixels at the current zoom. */
+  readonly scrollLeft: number;
+  /** The interface language of every part. */
+  readonly language: Language;
+}
+
 export interface SessionOptions {
   /** The song project to edit. */
   project: SongProject;
   /** The score dialects the session can read and write, built by the host with `createDialectRegistry`. */
   dialects: DialectRegistry;
+  /** The interface language of the parts bound to the session. Defaults to "en". */
+  language?: Language;
 }
 
 /** What a dispatch came to. A refused command carries its diagnostics and the project it left untouched. */
@@ -30,7 +44,7 @@ export type DispatchResult =
   | { readonly ok: false; readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> };
 
 /** What caused a change the session announces. */
-export type SessionChangeCause = "dispatch" | "undo" | "redo" | "select" | "insertion-point";
+export type SessionChangeCause = "dispatch" | "undo" | "redo" | "select" | "insertion-point" | "view" | "replace";
 
 /** One announced change: its cause, and which parts of the session's state it touched. */
 export interface SessionChange {
@@ -64,12 +78,23 @@ export interface EditingSession {
   readonly selection: ReadonlyArray<string>;
   /** The insertion point, or null when none is set. UI state: not in the history. */
   readonly insertionPoint: InsertionPoint | null;
+  /** The view state: zoom, horizontal scroll and language, shared by every part bound to the session. */
+  readonly view: ViewState;
   /** Applies one command to the project. A refused command changes nothing and returns its diagnostics. */
   dispatch(command: ScoreCommand): DispatchResult;
   /** Selects exactly these notes. Ids that name no note are left out. */
   select(noteIds: ReadonlyArray<string>): void;
   /** Puts the insertion point at `point`, or removes it with null. A tick must be a whole number, zero or more. */
   setInsertionPoint(point: InsertionPoint | null): void;
+  /** Changes the view state by the keys given. Zoom is kept within its range, scroll at zero or more. */
+  setView(patch: Partial<ViewState>): void;
+  /**
+   * Replaces the project from outside, as a host does with new data. This starts a new document: the history, the
+   * selection and the insertion point go, and the view state stays. Does nothing when every field is the same.
+   */
+  replaceProject(next: SongProject): void;
+  /** Reads the project with other dialects. The history stays. Does nothing for the registry already in use. */
+  replaceDialects(next: DialectRegistry): void;
   /** Goes back to the project before the last applied command. False, and nothing changes, when there is none. */
   undo(): boolean;
   /** Goes forward again after an `undo`. False, and nothing changes, when there is nothing to redo. */
@@ -81,15 +106,28 @@ export interface EditingSession {
   subscribe(listener: SessionListener): () => void;
 }
 
+function sameProject(a: SongProject, b: SongProject): boolean {
+  return (
+    a.style === b.style &&
+    a.lyrics === b.lyrics &&
+    a.score === b.score &&
+    a.scoreMode === b.scoreMode &&
+    a.seed === b.seed &&
+    a.modelId === b.modelId &&
+    a.sourceKey === b.sourceKey
+  );
+}
+
 export function createEditingSession(options: SessionOptions): EditingSession {
   let project = options.project;
   /** The history keeps whole song projects, oldest first; the current project is in neither list. */
   const past: SongProject[] = [];
   const future: SongProject[] = [];
-  const { dialects } = options;
+  let dialects = options.dialects;
   let selection: ReadonlyArray<string> = [];
   let insertionPoint: InsertionPoint | null = null;
-  let cached: { modelId: string; score: string; reading: ScoreReading } | null = null;
+  let view: ViewState = { zoom: 1, scrollLeft: 0, language: options.language ?? "en" };
+  let cached: { modelId: string; score: string; dialects: DialectRegistry; reading: ScoreReading } | null = null;
   const listeners: Array<{ call: SessionListener; active: boolean }> = [];
   const queue: SessionChange[] = [];
   let delivering = false;
@@ -117,7 +155,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   }
 
   function read(): ScoreReading {
-    if (cached?.modelId === project.modelId && cached.score === project.score) return cached.reading;
+    if (cached?.modelId === project.modelId && cached.score === project.score && cached.dialects === dialects) {
+      return cached.reading;
+    }
     const dialect = dialects.find(project.modelId);
     let reading: ScoreReading;
     if (!dialect) {
@@ -126,7 +166,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       const { score, diagnostics } = dialect.parse(project.score);
       reading = score ? { kind: "score", score } : { kind: "unreadable", diagnostics };
     }
-    cached = { modelId: project.modelId, score: project.score, reading };
+    cached = { modelId: project.modelId, score: project.score, dialects, reading };
     return reading;
   }
 
@@ -173,6 +213,45 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get selection() {
       return selection;
+    },
+    replaceProject(next) {
+      if (sameProject(project, next)) return;
+      const hadSelection = selection.length > 0;
+      const hadInsertionPoint = insertionPoint !== null;
+      past.length = 0;
+      future.length = 0;
+      project = next;
+      selection = [];
+      insertionPoint = null;
+      announce({
+        cause: "replace",
+        project: true,
+        selection: hadSelection,
+        insertionPoint: hadInsertionPoint,
+        view: false,
+      });
+    },
+    replaceDialects(next) {
+      if (next === dialects) return;
+      dialects = next;
+      projectChanged("replace");
+    },
+    get view() {
+      return view;
+    },
+    setView(patch) {
+      const zoom =
+        patch.zoom !== undefined && Number.isFinite(patch.zoom)
+          ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, patch.zoom))
+          : view.zoom;
+      const scrollLeft =
+        patch.scrollLeft !== undefined && Number.isFinite(patch.scrollLeft)
+          ? Math.max(0, patch.scrollLeft)
+          : view.scrollLeft;
+      const language = patch.language ?? view.language;
+      if (zoom === view.zoom && scrollLeft === view.scrollLeft && language === view.language) return;
+      view = { zoom, scrollLeft, language };
+      announce({ cause: "view", project: false, selection: false, insertionPoint: false, view: true });
     },
     get insertionPoint() {
       return insertionPoint;

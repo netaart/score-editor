@@ -42,6 +42,7 @@ export type {
   SessionChangeCause,
   SessionListener,
   SessionOptions,
+  ViewState,
 } from "./session";
 export { createEditingSession } from "./session";
 export type {

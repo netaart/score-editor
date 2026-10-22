@@ -356,3 +356,136 @@ describe("the insertion point", () => {
     expect(session.insertionPoint).toBeNull();
   });
 });
+
+describe("the view state parts share", () => {
+  it("starts at the host's beat width, scrolled to the start, in the language it was given", () => {
+    expect(open().view).toEqual({ zoom: 1, scrollLeft: 0, language: "en" });
+    const zh = createEditingSession({ project, dialects, language: "zh" });
+    expect(zh.view).toEqual({ zoom: 1, scrollLeft: 0, language: "zh" });
+  });
+
+  it("changes by the keys given, announces one change, and says nothing when nothing differs", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.setView({ zoom: 2, scrollLeft: 300 });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "en" });
+    session.setView({ language: "zh" });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "zh" });
+    session.setView({ zoom: 2, scrollLeft: 300, language: "zh" });
+    session.setView({});
+
+    expect(changes).toEqual([
+      { cause: "view", project: false, selection: false, insertionPoint: false, view: true },
+      { cause: "view", project: false, selection: false, insertionPoint: false, view: true },
+    ]);
+  });
+
+  it("keeps the zoom within the range the view draws and the scroll offset at zero or more", () => {
+    const session = open();
+    session.setView({ zoom: 100, scrollLeft: -5 });
+    expect(session.view).toMatchObject({ zoom: 4, scrollLeft: 0 });
+    session.setView({ zoom: 0 });
+    expect(session.view.zoom).toBe(0.01);
+    session.setView({ zoom: Number.NaN, scrollLeft: Number.NaN });
+    expect(session.view).toMatchObject({ zoom: 0.01, scrollLeft: 0 });
+  });
+
+  it("is outside the history: zooming and scrolling are no step to undo", () => {
+    const session = open();
+    session.setView({ zoom: 0.5, scrollLeft: 40 });
+    expect(session.canUndo).toBe(false);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    session.setView({ zoom: 1.5 });
+    session.setView({ scrollLeft: 90, language: "zh" });
+    expect(session.undo()).toBe(true);
+
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+    expect(session.view).toEqual({ zoom: 1.5, scrollLeft: 90, language: "zh" });
+  });
+});
+
+describe("replacing the project from outside", () => {
+  const other: SongProject = { ...project, score: `${HEADER}\nK:C\nV: Vocal\nA16|`, sourceKey: "another-song" };
+
+  it("starts a new document: history, selection and insertion point go, zoom and scroll stay", () => {
+    const session = open();
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    session.select(["Vocal:0"]);
+    session.setInsertionPoint({ tick: 256 });
+    session.setView({ zoom: 2, scrollLeft: 80 });
+    const changes = listen(session);
+
+    session.replaceProject(other);
+
+    expect(session.project).toBe(other);
+    expect(session.reading.kind === "score" && session.reading.score.notes.map((note) => note.id)).toEqual(["Vocal:0"]);
+    expect([session.canUndo, session.canRedo]).toEqual([false, false]);
+    expect(session.undo()).toBe(false);
+    expect(session.selection).toEqual([]);
+    expect(session.insertionPoint).toBeNull();
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 80, language: "en" });
+    expect(changes).toEqual([{ cause: "replace", project: true, selection: true, insertionPoint: true, view: false }]);
+  });
+
+  it("does nothing when the project it is given has the same fields as the current one", () => {
+    const session = open();
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    const changes = listen(session);
+
+    session.replaceProject({ ...session.project });
+
+    expect(changes).toEqual([]);
+    expect(session.canUndo).toBe(true);
+  });
+
+  it("keeps the reading when only a field the view does not draw differs", () => {
+    const session = open();
+    const reading = session.reading;
+    const changes = listen(session);
+
+    session.replaceProject({ ...project, style: "rock" });
+
+    expect(session.project.style).toBe("rock");
+    expect(session.reading).toBe(reading);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ cause: "replace", project: true });
+  });
+
+  it("reads again with other dialects and keeps the history", () => {
+    const session = open();
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    const changes = listen(session);
+    expect(session.reading.kind).toBe("score");
+
+    session.replaceDialects(createDialectRegistry([]));
+    expect(session.reading).toEqual({ kind: "no-dialect", modelId: "song2" });
+    expect(session.canUndo).toBe(true);
+    expect(changes).toEqual([
+      { cause: "replace", project: true, selection: false, insertionPoint: false, view: false },
+    ]);
+
+    session.replaceDialects(dialects);
+    expect(session.reading.kind).toBe("score");
+    session.replaceDialects(dialects);
+    expect(changes).toHaveLength(2);
+  });
+});
+
+describe("a listener that throws", () => {
+  it("does not keep the others from hearing the change; its error is thrown once they all have", () => {
+    const session = open();
+    const heard: string[] = [];
+    session.subscribe(() => {
+      throw new Error("a view broke");
+    });
+    session.subscribe((change) => heard.push(change.cause));
+
+    expect(() => session.select(["Vocal:0"])).toThrow("a view broke");
+
+    expect(heard).toEqual(["select"]);
+    expect(session.selection).toEqual(["Vocal:0"]);
+  });
+});
