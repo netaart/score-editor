@@ -11,6 +11,7 @@ import {
   type SongProject,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
+import { UNREADABLE_SCORE } from "./scores";
 
 interface SampleFact {
   file: string;
@@ -554,10 +555,7 @@ C16|`,
 K:C
 V: Vocal
 C4D4E4F4|G16|`;
-  const broken = `${HEADER}
-K:C
-V: Vocal
-C5|`;
+  const broken = UNREADABLE_SCORE;
 
   it("replaces the score text with a readable one and changes no other field", () => {
     const result = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: typed });

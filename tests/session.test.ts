@@ -10,6 +10,7 @@ import {
   type SongProject,
 } from "@neta-art/score-editor";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { UNREADABLE_SCORE } from "./scores";
 
 const HEADER = `X:1
 T:
@@ -638,10 +639,7 @@ describe("replacing the score text", () => {
 K:C
 V: Vocal
 C4D4E4F4|G16|C16|`;
-  const broken = `${HEADER}
-K:C
-V: Vocal
-C5|`;
+  const broken = UNREADABLE_SCORE;
 
   it("is one step of the history that undo and redo carry, and the project's other fields stay", () => {
     const session = open();
@@ -750,19 +748,14 @@ C5|`;
 });
 
 describe("checking a text without taking it", () => {
-  it("lists every way an unreadable text breaks the format, and none for a readable one", () => {
+  it("says what the dialect finds wrong with an unreadable text and where, and nothing for a readable one", () => {
     const session = open();
-    const twice = `${HEADER}
-K:C
-V: Vocal
-C5|G5|`;
     const changes = listen(session);
 
     expect(session.checkScoreText(SCORE_WITHOUT_D)).toEqual([]);
-    const found = session.checkScoreText(twice);
+    const found = session.checkScoreText(UNREADABLE_SCORE);
 
-    expect(found.length).toBeGreaterThan(0);
-    expect(found.every((diagnostic) => diagnostic.code === "duration" && diagnostic.at.line === 9)).toBe(true);
+    expect(found.map((diagnostic) => [diagnostic.code, diagnostic.at.line])).toEqual([["duration", 9]]);
     expect(session.project.score).toBe(SCORE);
     expect(session.canUndo).toBe(false);
     expect(changes).toEqual([]);
@@ -823,10 +816,7 @@ describe("which view is shown", () => {
 });
 
 describe("text a view could not hand over", () => {
-  const broken = `${HEADER}
-K:C
-V: Vocal
-C5|`;
+  const broken = UNREADABLE_SCORE;
 
   it("is none at first, is set with the text and what is wrong with it, and is announced", () => {
     const session = open();
