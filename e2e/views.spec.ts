@@ -224,6 +224,100 @@ test.describe("the text view", () => {
     expect(await harness.layout.rejectedText()).toBeNull();
   });
 
+  test("shows the project's text again when the project is replaced with the same score, dropping text it could not take", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness);
+    await textBox(page).fill(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+
+    await harness.layout.replace({ project: { style: "another style" } });
+
+    await expect(textBox(page)).toHaveValue(QUARTERS);
+    await expect(problems(page)).toHaveCount(0);
+    await expect(status(page)).toHaveText("No problems");
+    expect(await harness.layout.rejectedText()).toBeNull();
+  });
+
+  test("drops text it has not handed over when the project is replaced with the same score, instead of handing it to the new document", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness);
+    await page.clock.install();
+    await textBox(page).fill(QUARTERS_WITHOUT_D);
+
+    await harness.layout.replace({ project: { style: "another style" } });
+    await page.clock.runFor(PAUSE_MS + 200);
+
+    await expect(textBox(page)).toHaveValue(QUARTERS);
+    expect(await harness.layout.scoreText()).toBe(QUARTERS);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("shows the project's text again when the dialects are replaced, dropping text it could not take", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness);
+    await textBox(page).fill(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+
+    await harness.layout.replaceDialects();
+
+    await expect(textBox(page)).toHaveValue(QUARTERS);
+    await expect(problems(page)).toHaveCount(0);
+    expect(await harness.layout.rejectedText()).toBeNull();
+  });
+
+  test("shows the text the session holds as rejected, with what is wrong with it, when it is mounted again", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness);
+    await textBox(page).fill(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+
+    await harness.layout.destroyPart("text");
+    await harness.layout.mountPart("text");
+
+    await expect(textBox(page)).toHaveValue(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveText([
+      `The duration “5” is not allowed. (bar 1, line ${MUSIC_LINE})`,
+    ]);
+    await expect(status(page)).toHaveText("1 problem. The other views still show the last readable score.");
+  });
+
+  test("shows the project's text, with no problem, when it is mounted again after the project changed", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness);
+    await textBox(page).fill(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+
+    await harness.layout.destroyPart("text");
+    await harness.layout.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await harness.layout.mountPart("text");
+
+    await expect(textBox(page)).toHaveValue(QUARTERS_WITHOUT_D);
+    await expect(problems(page)).toHaveCount(0);
+    await expect(status(page)).toHaveText("No problems");
+  });
+
+  test("follows a rejected text that a host sets or clears", async ({ page, harness }) => {
+    await openText(harness);
+
+    await harness.layout.setRejectedText(BROKEN);
+    await expect(textBox(page)).toHaveValue(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+
+    await harness.layout.setRejectedText(null);
+    await expect(textBox(page)).toHaveValue(QUARTERS);
+    await expect(problems(page)).toHaveCount(0);
+  });
+
   test("is read-only with a sentence of its own when no dialect reads the project's model", async ({
     page,
     harness,
@@ -304,6 +398,20 @@ test.describe("the stale notice", () => {
 
     await expect(staleNotice(page)).toHaveCount(0);
     await expect(page.getByRole("alert")).toBeVisible();
+  });
+
+  test("is not drawn while the project has no readable score to be behind: a second unreadable text changes nothing there", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: BROKEN }, parts: ["stale", "text", "problem"] });
+
+    await textBox(page).fill(BROKEN.replace("C5D4E4F4|", "C4D4E4F5|"));
+    await expect.poll(() => harness.layout.rejectedText()).not.toBeNull();
+
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+    await expect(status(page)).toHaveText("1 problem");
+    await expect(staleNotice(page)).toHaveCount(0);
   });
 
   test("leaves nothing behind when it is destroyed, twice over", async ({ page, harness }) => {

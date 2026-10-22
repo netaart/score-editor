@@ -1,10 +1,12 @@
 // ABOUTME: The stale notice view part: the one sentence that says the text view holds text the project did not take.
 // ABOUTME: It is hidden while the project has the text the text view shows.
+
 import { create, requireDom } from "./dom";
 import { messagesFor } from "./i18n";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { ViewPart } from "./types";
+import { viewsBehindText } from "./view-rules";
 
 /**
  * Mounts the stale notice on `el`. A host puts it above the views that draw the project, which keep showing the last
@@ -24,7 +26,7 @@ export function mountStaleNotice(el: HTMLElement, session: EditingSession): View
   let drawn = "";
   function render(): void {
     const { language } = session.view;
-    const stale = session.rejectedText !== null;
+    const stale = viewsBehindText(session);
     const shown = `${language} ${stale}`;
     if (shown === drawn) return;
     drawn = shown;

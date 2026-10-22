@@ -1,11 +1,13 @@
 // ABOUTME: The text view part: the score text in a box the user edits, checked as it is typed, handed to the project when it reads.
 // ABOUTME: Text that cannot be read stays in the box with its problems listed, and the project keeps the last score that could.
+
 import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create, requireDom } from "./dom";
 import { messagesFor } from "./i18n";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
+import { viewsBehindText } from "./view-rules";
 
 /**
  * How long the box must stay untouched before what it holds is checked and, when it reads, handed to the project. A
@@ -69,7 +71,6 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
   let timer: number | null = null;
   /** True while this part's own dispatch is announced, so the project change it makes is not mistaken for another's. */
   let committing = false;
-  let knownScore = session.project.score;
   let drawnLines = 0;
   let drawnMarks = "";
   let drawnProblems = "";
@@ -150,7 +151,7 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
       if (session.rejectedText !== null) session.setRejectedText(null);
     }
     const found = problems();
-    const stale = session.rejectedText !== null;
+    const stale = viewsBehindText(session);
     const sentence =
       reading.kind === "no-dialect"
         ? t.noDialect(reading.modelId)
@@ -232,17 +233,24 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
     { signal },
   );
 
-  setText(session.project.score);
+  /** The text the session says the box holds: what it was refused, else the project's own. */
+  function held(): string {
+    return session.rejectedText?.text ?? session.project.score;
+  }
+
+  setText(held());
   render();
-  const unsubscribe = session.subscribe(() => {
+  const unsubscribe = session.subscribe((change) => {
     if (destroyed) return;
-    const score = session.project.score;
-    if (score !== knownScore) {
-      knownScore = score;
-      // The project moved under the box: an undo, a redo, new data. The box shows the project again.
-      if (!committing) {
+    if (!committing) {
+      if (change.project) {
+        // The project moved under the box: an undo, a redo, new data or new dialects. What the box held, typed or refused, goes.
         stopTimer();
-        setText(score);
+        setText(held());
+      } else if (change.cause === "rejected-text" && box.value !== held()) {
+        // Another part of the host set or cleared the rejected text: the box follows what the session holds.
+        stopTimer();
+        setText(held());
       }
     }
     render();

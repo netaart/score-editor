@@ -52,6 +52,7 @@ interface PageLayout {
   retained: { root: Element; nodes: Node[] } | null;
   open(options?: Record<string, unknown>): Promise<void>;
   replace(options: Record<string, unknown>): Promise<void>;
+  replaceDialects(): void;
   mountPart(name: string): void;
   destroyPart(name: string, times?: number): void;
   roots(): Record<string, string>;
@@ -214,12 +215,20 @@ export class Layout {
     });
   }
 
-  /** Says that the text view holds this text and the session did not take it, with what the dialect finds wrong with it. */
-  setRejectedText(text: string) {
+  /**
+   * Says that the text view holds this text and the session did not take it, with what the dialect finds wrong with it; null
+   * says it holds none.
+   */
+  setRejectedText(text: string | null) {
     return this.page.evaluate((value) => {
       const session = window.harness.layout.live();
-      session.setRejectedText({ text: value, diagnostics: session.checkScoreText(value) });
+      session.setRejectedText(value === null ? null : { text: value, diagnostics: session.checkScoreText(value) });
     }, text);
+  }
+
+  /** Reads the project with a new registry of the same dialects, the way a host that swaps its dialects does. */
+  replaceDialects() {
+    return this.page.evaluate(() => window.harness.layout.replaceDialects());
   }
 
   /** Says, as a host does with its permissions, whether the user may edit. */

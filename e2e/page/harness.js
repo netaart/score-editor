@@ -212,6 +212,10 @@ const layout = {
   async replace({ score, project: fields }) {
     layout.session.replaceProject(await projectFrom(layout.session.project, score, fields));
   },
+  /** Reads the project with a new registry of the same dialects, the way a host that swaps its dialects does. */
+  replaceDialects() {
+    layout.session.replaceDialects(createDialectRegistry([song2Dialect]));
+  },
   /** Mounts one more part on the open session, as a host does that adds a view later. */
   mountPart(name) {
     if (!layout.slots[name]) {
