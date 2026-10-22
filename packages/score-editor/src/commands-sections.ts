@@ -2,7 +2,7 @@
 // ABOUTME: They keep each bar's meter and each note's sounding pitch, and rebuild the key timeline at the new boundaries.
 import { commandRefusal } from "./command-refusal";
 import type { ScoreCommandResult } from "./commands";
-import { orderNotes } from "./commands-shared";
+import { hasChordsAfter, orderNotes } from "./commands-shared";
 import type { CommandDiagnosticCode, DiagnosticAt } from "./diagnostics";
 import {
   type Bar,
@@ -155,6 +155,17 @@ function keysFor(score: Score, placements: ReadonlyArray<Placement>, bars: Reado
     }
     keys.sort((left, right) => left.at - right.at);
   }
+  for (const bar of bars) {
+    if (bar.index === 0) continue;
+    const before = effectiveKey(
+      keys.filter((change) => change.at < bar.start),
+      bar.start,
+    );
+    if (before !== bar.key) continue;
+    for (let index = keys.length - 1; index >= 0; index -= 1) {
+      if ((keys[index] as KeyChange).at === bar.start) keys.splice(index, 1);
+    }
+  }
   return keys;
 }
 
@@ -174,7 +185,12 @@ function truncationAfterInsert(score: Score, at: number, count: number): Truncat
   return truncation.bar >= at ? { ...truncation, bar: truncation.bar + count } : truncation;
 }
 
-function buildScore(score: Score, blocks: ReadonlyArray<Block>, truncation: Truncation | null): ScoreCommandResult {
+function buildScore(
+  score: Score,
+  blocks: ReadonlyArray<Block>,
+  truncation: Truncation | null,
+  keys?: ReadonlyArray<KeyChange>,
+): ScoreCommandResult {
   const total = blocks.reduce((sum, block) => sum + block.bars.length, 0);
   if (total === 0) return commandRefusal("last-bar", { bar: 1 }, { bar: 1 });
 
@@ -246,14 +262,14 @@ function buildScore(score: Score, blocks: ReadonlyArray<Block>, truncation: Trun
     return section;
   });
 
-  const hasChords = score.hasChords && (chords.length > 0 || truncation?.short === true);
+  const hasChords = hasChordsAfter(chords, truncation);
 
   return {
     ok: true,
     score: {
       ...score,
       bars,
-      keys: keysFor(score, placements, bars),
+      keys: keys ?? keysFor(score, placements, bars),
       notes: notesWithBoundaries,
       chords,
       sections,
@@ -340,7 +356,7 @@ function renameSection(score: Score, index: number, name: string): ScoreCommandR
   if (failure !== null) return nameRefusal(failure, name, at);
   const blocks = blocksOf(score);
   blocks[index] = { name, bars: (blocks[index] as Block).bars };
-  return buildScore(score, blocks, score.truncation);
+  return buildScore(score, blocks, score.truncation, score.keys);
 }
 
 function nameSection(score: Score, bar: number, name: string): ScoreCommandResult {
@@ -366,7 +382,7 @@ function nameSection(score: Score, bar: number, name: string): ScoreCommandResul
       { name, bars: block.bars.slice(offset) },
     );
   }
-  return buildScore(score, blocks, score.truncation);
+  return buildScore(score, blocks, score.truncation, score.keys);
 }
 
 /** Applies the section commands: delete, duplicate, move, rename and naming a section at a bar. */

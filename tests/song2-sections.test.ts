@@ -26,6 +26,13 @@ Q:1/4=120
 V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
 V: Ins clef=treble name="Ins Melody" snm="Inst."`;
 
+const VOCAL_HEADER = `X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"`;
+
 const KEY_METER_SCORE = `${HEADER}
 K:C
 % intro
@@ -334,6 +341,80 @@ Z|`;
   });
 });
 
+it("writes the destination bar from the model when deleting the section that tied into it", () => {
+  const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+C16|
+% b
+V: Vocal
+^F16-|
+% c
+V: Vocal
+F16|`;
+  const output = apply(text, { type: "deleteSection", section: 1 });
+
+  expect(output).toBe(`${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+C16|
+% c
+V: Vocal
+^F16|`);
+  const after = parse(output);
+  check(after);
+  expect(after.notes.map((note) => [note.start, note.midi, note.tie])).toEqual([
+    [0, 60, false],
+    [1024, 66, false],
+  ]);
+});
+
+it("drops a short non-chord cut's hasChords after deleting the chord section", () => {
+  const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+"C"C16|
+% b
+V: Vocal
+D16|D8`;
+  const output = apply(text, { type: "deleteSection", section: 0 });
+
+  expect(output).toBe(`${VOCAL_HEADER}
+K:C
+% b
+V: Vocal
+D16|D8`);
+  const after = parse(output);
+  check(after);
+  expect(after.hasChords).toBe(false);
+  expect(after.truncation).toEqual({ voice: "Vocal", bar: 1, short: true });
+});
+
+it("keeps hasChords and the tail bytes when the surviving cut is an unfinished chord string", () => {
+  const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+"C"C16|
+% b
+V: Vocal
+D16|D8"G`;
+  const output = apply(text, { type: "deleteSection", section: 0 });
+
+  expect(output).toBe(`${VOCAL_HEADER}
+K:C
+% b
+V: Vocal
+D16|D8"G`);
+  const after = parse(output);
+  check(after);
+  expect(after.hasChords).toBe(true);
+  expect(after.truncation).toEqual({ voice: "Vocal", bar: 1, short: true, unfinishedChord: true });
+});
+
 const DUPLICATED_VERSE = `${HEADER}
 K:C
 % intro
@@ -395,6 +476,39 @@ describe("duplicateSection", () => {
     }
   });
 
+  it("clears the original's outgoing tie at the new copy boundary but keeps the copy's tie into the next section", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+^F16-|
+% b
+V: Vocal
+F16|`;
+    const output = apply(text, { type: "duplicateSection", section: 0 });
+
+    expect(output).toBe(`${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+^F16|
+% a
+V: Vocal
+^F16-|
+% b
+V: Vocal
+F16|`);
+    const after = parse(output);
+    check(after);
+    expect(
+      after.notes.filter((note) => note.voice === "Vocal").map((note) => [note.start, note.midi, note.tie]),
+    ).toEqual([
+      [0, 66, false],
+      [1024, 66, true],
+      [2048, 66, false],
+    ]);
+  });
+
   it("refuses the unnamed part and leaves the text unchanged", () => {
     const text = `${HEADER}
 K:C
@@ -452,12 +566,12 @@ Z2|
 V: Vocal
 A16|B16|
 V: Ins
-z16|z16|
+Z2|
 % b
 V: Vocal
 ^F16|G16|
 V: Ins
-z16|z16|`;
+Z2|`;
 
 describe("moveSection", () => {
   it("moves a section one place earlier and states the key and meter that change at the new boundary", () => {
@@ -487,6 +601,42 @@ describe("moveSection", () => {
       [3072, 71, false],
       [4096, 66, false],
       [5120, 67, false],
+    ]);
+  });
+
+  it("writes the destination bar when its incoming tie goes away but its position stays", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+C16|
+% b
+V: Vocal
+^F16-|
+% c
+V: Vocal
+F16|`;
+    const output = apply(text, { type: "moveSection", section: 1, direction: "earlier" });
+
+    expect(output).toBe(`${VOCAL_HEADER}
+K:C
+% b
+V: Vocal
+^F16|
+% a
+V: Vocal
+C16|
+% c
+V: Vocal
+^F16|`);
+    const after = parse(output);
+    check(after);
+    expect(
+      after.notes.filter((note) => note.voice === "Vocal").map((note) => [note.start, note.midi, note.tie]),
+    ).toEqual([
+      [0, 66, false],
+      [1024, 60, false],
+      [2048, 66, false],
     ]);
   });
 
@@ -528,17 +678,14 @@ K:G
 z16|
 % b
 V: Vocal
-K:G
 G16|
 V: Ins
-K:G
 z16|`);
     const after = parse(output);
     check(after);
     expect(after.keys).toEqual([
       { at: 0, key: "C" },
       { at: 1024, key: "G" },
-      { at: 2048, key: "G" },
     ]);
   });
 
@@ -652,12 +799,12 @@ K:C
 V: Vocal
 C16|D16|
 V: Ins
-z16|z16|
+Z2|
 % bridge
 V: Vocal
 E16|F16|
 V: Ins
-z16|z16|`);
+Z2|`);
     const after = parse(inside);
     check(after);
     expect(after.sections.map((section) => [section.name, section.firstBar, section.barCount])).toEqual([
@@ -779,7 +926,43 @@ describe("section commands on every sample", () => {
             expect(result.ok, `move ${section.name} ${direction} with a cut`).toBe(false);
           } else {
             expect(result.ok, `move ${section.name} ${direction}`).toBe(true);
-            if (result.ok) check(parse(result.text));
+            if (!result.ok) continue;
+            const after = parse(result.text);
+            check(after);
+            const neighbourSection = other as Section;
+            const involved = (bar: number) =>
+              (bar >= section.firstBar && bar < sectionEnd(section)) ||
+              (bar >= neighbourSection.firstBar && bar < sectionEnd(neighbourSection));
+            const involvedStart = Math.min(section.firstBar, neighbourSection.firstBar);
+            const involvedEnd = Math.max(sectionEnd(section), sectionEnd(neighbourSection));
+            const outgoingTie =
+              involvedStart > 0 && before.notes.some((note) => note.bar === involvedStart - 1 && note.tie);
+            const incomingTie = before.notes.some(
+              (note) =>
+                note.bar === involvedEnd &&
+                before.notes.some(
+                  (previous) =>
+                    previous.voice === note.voice && previous.tie && previous.start + previous.duration === note.start,
+                ),
+            );
+            const boundaryBar = (bar: number) =>
+              (outgoingTie && bar === involvedStart - 1) || (incomingTie && bar === involvedEnd);
+            const beforePieces = splitBars(text);
+            const afterPieces = splitBars(result.text);
+            for (const [key, piece] of beforePieces) {
+              const at = Number(key.split(":")[1]);
+              if (involved(at) || boundaryBar(at)) continue;
+              expect(afterPieces.get(key), `${fact.file} move ${section.name} ${direction} ${key}`).toBe(piece);
+            }
+            for (const note of before.notes) {
+              if (involved(note.bar)) continue;
+              const found = after.notes.find(
+                (candidate) => candidate.voice === note.voice && candidate.start === note.start,
+              );
+              expect(found?.midi, `${fact.file} move ${section.name} ${direction} ${note.id}`).toBe(note.midi);
+            }
+            expect(after.sections[index]?.name).toBe(neighbourSection.name);
+            expect(after.sections[neighbour]?.name).toBe(section.name);
           }
         }
       }

@@ -119,7 +119,6 @@ function align(score: Score, facts: SourceFacts, newEnd: number, oldEnd: number)
   let prefix = 0;
   while (prefix < newEnd && prefix < oldEnd && sameAt(score, prefix, prefix, facts)) prefix += 1;
 
-  let suffix = 0;
   const newLast = newEnd - 1;
   const oldLast = oldEnd - 1;
   const sourceContentAt = (index: number) => {
@@ -129,6 +128,7 @@ function align(score: Score, facts: SourceFacts, newEnd: number, oldEnd: number)
     }
     return undefined;
   };
+  let suffix = 0;
   const oldBar = oldLast >= 0 ? sourceContentAt(oldLast) : undefined;
   if (newLast >= prefix && oldBar !== undefined) {
     const delta = (score.bars[newLast] as Bar).start - oldBar.start;
@@ -146,6 +146,59 @@ function align(score: Score, facts: SourceFacts, newEnd: number, oldEnd: number)
   const oldAt: (number | undefined)[] = new Array(newEnd).fill(undefined);
   for (let index = 0; index < cappedPrefix; index += 1) oldAt[index] = index;
   for (let index = 0; index < suffix; index += 1) oldAt[newLast - index] = oldLast - index;
+
+  // A move keeps the bar count. Map a moved segment by its relative content, so its bytes move with it.
+  if (newEnd === oldEnd) {
+    const used = new Set<number>();
+    for (const oldIndex of oldAt) if (oldIndex !== undefined) used.add(oldIndex);
+    const candidates: { start: number; count: number; voice: string }[] = [];
+    const seen = new Set<string>();
+    for (const line of facts.musicLines) {
+      for (const segment of line.segments) {
+        const first = segment.bars[0]?.bar;
+        const count = segment.bars.length;
+        if (first === undefined || count === 0) continue;
+        const key = `${line.voice}:${first}:${count}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push({ start: first, count, voice: line.voice });
+      }
+    }
+    candidates.sort((left, right) => left.start - right.start || right.count - left.count);
+    const gapEnd = newEnd - suffix;
+    for (let index = cappedPrefix; index < gapEnd; index += 1) {
+      if (oldAt[index] !== undefined) continue;
+      for (const candidate of candidates) {
+        if (index + candidate.count > gapEnd || candidate.start + candidate.count > oldEnd) continue;
+        if (
+          score.sections.some(
+            (section) =>
+              section.name !== null && section.firstBar > index && section.firstBar < index + candidate.count,
+          )
+        ) {
+          continue;
+        }
+        let free = true;
+        for (let offset = 0; offset < candidate.count; offset += 1) {
+          if (oldAt[index + offset] !== undefined || used.has(candidate.start + offset)) free = false;
+        }
+        if (!free) continue;
+        let matches = true;
+        for (let offset = 0; offset < candidate.count; offset += 1) {
+          if (!contentMatches(score, facts, candidate.voice, candidate.start + offset, index + offset)) {
+            matches = false;
+          }
+        }
+        if (!matches) continue;
+        for (let offset = 0; offset < candidate.count; offset += 1) {
+          oldAt[index + offset] = candidate.start + offset;
+          used.add(candidate.start + offset);
+        }
+        break;
+      }
+    }
+  }
+
   return {
     prefix: cappedPrefix,
     suffix,
@@ -206,6 +259,19 @@ function cutTailAt(score: Score, facts: SourceFacts, voice: string, index: numbe
   return "";
 }
 
+/** The raw text for a run of a source segment, or null when the run cannot keep its bytes. */
+function reusedText(sourceBar: SourceBar, old: number, count: number): string | null {
+  const offset = old - sourceBar.segmentStart;
+  if (offset < 0 || offset + count > sourceBar.segmentLength) return null;
+  const whole = /^Z([234]?)$/.exec(sourceBar.segmentRaw.trim());
+  if (whole !== null && sourceBar.segmentLength === (whole[1] === undefined ? 1 : Number(whole[1]))) {
+    return count === 1 ? "Z" : `Z${count}`;
+  }
+  const bodies = sourceBar.segmentRaw.split("|");
+  if (bodies.length !== sourceBar.segmentLength) return null;
+  return bodies.slice(offset, offset + count).join("|");
+}
+
 function buildPieces(
   score: Score,
   facts: SourceFacts,
@@ -226,45 +292,34 @@ function buildPieces(
       const old = alignment.oldAt[index];
       if (old !== undefined) {
         const sourceBar = facts.byVoiceBar.get(keyOf(voice, old));
-        let usable = sourceBar !== undefined && sourceBar.segmentStart === old;
-        if (usable && sourceBar !== undefined) {
-          for (let offset = 0; offset < sourceBar.segmentLength; offset += 1) {
-            if (!coveredAt(alignment, coverage, voice, index + offset)) usable = false;
-          }
-        }
-        const nextSection =
-          sourceBar === undefined
-            ? undefined
-            : score.sections.find(
-                (section) =>
-                  section.name !== null &&
-                  section.firstBar > index &&
-                  section.firstBar < index + (sourceBar as { segmentLength: number }).segmentLength,
-              )?.firstBar;
-        if (
-          usable &&
-          sourceBar !== undefined &&
-          segmentMatches(score, facts, voice, old, sourceBar.segmentLength, index)
-        ) {
-          const inlineAtStart = sourceBar.record.inlineKeys.some(
-            (change) => change.at === sourceBar.record.content.start,
-          );
-          if (nextSection === undefined) {
-            pieces.set(index, {
-              text: sourceBar.segmentRaw,
-              count: sourceBar.segmentLength,
-              inlineAtStart,
-            });
-            index += sourceBar.segmentLength;
-            continue;
-          }
-          // Keep the bytes before a new section marker when each written body is one bar.
-          const rawBodies = sourceBar.segmentRaw.split("|");
-          if (rawBodies.length === sourceBar.segmentLength) {
-            const count = nextSection - index;
-            pieces.set(index, { text: rawBodies.slice(0, count).join("|"), count, inlineAtStart });
-            index += count;
-            continue;
+        if (sourceBar !== undefined) {
+          const segmentStart = sourceBar.segmentStart;
+          const segmentEnd = segmentStart + sourceBar.segmentLength;
+          if (old >= segmentStart && old < segmentEnd) {
+            const nextSection = score.sections.find(
+              (section) => section.name !== null && section.firstBar > index && section.firstBar < segmentEnd,
+            )?.firstBar;
+            const available = segmentEnd - old;
+            const sectionLimit = nextSection === undefined ? available : nextSection - index;
+            const count = Math.min(available, sectionLimit, newEnd - index);
+            let usable = count > 0;
+            for (let offset = 0; usable && offset < count; offset += 1) {
+              if (!coveredAt(alignment, coverage, voice, index + offset)) usable = false;
+            }
+            if (usable && segmentMatches(score, facts, voice, old, count, index)) {
+              const text = reusedText(sourceBar, old, count);
+              if (text !== null) {
+                const startBar = facts.byVoiceBar.get(keyOf(voice, old));
+                pieces.set(index, {
+                  text,
+                  count,
+                  inlineAtStart:
+                    startBar?.record.inlineKeys.some((change) => change.at === startBar.record.content.start) ?? false,
+                });
+                index += count;
+                continue;
+              }
+            }
           }
         }
       }
