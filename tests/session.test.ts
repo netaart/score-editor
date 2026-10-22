@@ -5,6 +5,7 @@ import {
   createDialectRegistry,
   createEditingSession,
   type EditingSession,
+  handleEditingInput,
   type SessionChange,
   type SongProject,
 } from "@neta-art/score-editor";
@@ -111,6 +112,8 @@ describe("a refused command", () => {
     const rest = session.dispatch({ type: "toRest", noteId: "Vocal:256" });
     expect(rest.ok).toBe(false);
     expect(rest.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["not-a-note"]);
+    // The D is the second quarter of bar 1: a person counts it as beat 2.
+    expect(rest.diagnostics[0]?.at).toEqual({ voice: "Vocal", bar: 1, beat: 2, noteId: "Vocal:256" });
     expect(session.project.score).toBe(SCORE_WITHOUT_D);
   });
 
@@ -135,6 +138,66 @@ C5|`;
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["no-dialect"]);
     expect(result.diagnostics[0]?.params).toEqual({ modelId: "other-model" });
     expect(session.project.score).toBe(SCORE);
+  });
+});
+
+describe("deleting the selection", () => {
+  const deleteKey = { type: "key", key: "Delete" } as const;
+
+  it("is one edit for notes of different chains: one history step, one announcement, one undo brings both back", () => {
+    const session = open();
+    session.select(["Vocal:256", "Vocal:768"]);
+    const changes = listen(session);
+
+    const result = handleEditingInput(session, deleteKey);
+
+    expect(result).toEqual({ handled: true, refused: [] });
+    expect(session.project.score).toBe(SCORE_WITHOUT_D_AND_F);
+    expect(changes).toEqual([
+      { cause: "dispatch", project: true, selection: false, insertionPoint: false, view: false },
+    ]);
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("takes a tie chain whose segments are all selected as one command, so the second segment refuses nothing", () => {
+    const tied = `${HEADER}
+K:D
+V: Vocal
+A4^F12-|F16|`;
+    const session = open({ score: tied });
+    session.select(["Vocal:256", "Vocal:1024"]);
+    const changes = listen(session);
+
+    expect(handleEditingInput(session, deleteKey)).toEqual({ handled: true, refused: [] });
+    expect(changes).toHaveLength(1);
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(tied);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("refuses the whole run when one of its notes is refused, leaving project, history and selection as they were", () => {
+    // The C of bar 2 is tied into a cut tail: writing it as a rest would turn the cut into a finished score.
+    const cut = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|C16-|B`;
+    const session = open({ score: cut });
+    session.select(["Vocal:256", "Vocal:1024"]);
+    const before = { project: session.project, selection: session.selection };
+    const changes = listen(session);
+
+    const result = handleEditingInput(session, deleteKey);
+
+    expect(result.handled).toBe(true);
+    expect(result.refused.map((diagnostic) => diagnostic.code)).toEqual(["write-mismatch"]);
+    expect(result.refused[0]?.at).toEqual({ voice: "Vocal", bar: 2, beat: 1, noteId: "Vocal:1024" });
+    expect(session.project).toEqual(before.project);
+    expect(session.selection).toEqual(before.selection);
+    expect(session.canUndo).toBe(false);
+    expect(session.canRedo).toBe(false);
+    expect(changes).toEqual([]);
   });
 });
 
@@ -383,9 +446,26 @@ describe("the insertion point", () => {
 
 describe("the view state parts share", () => {
   it("starts at the host's beat width, scrolled to the start, in the language it was given", () => {
-    expect(open().view).toEqual({ zoom: 1, scrollLeft: 0, language: "en" });
+    expect(open().view).toEqual({ zoom: 1, scrollLeft: 0, language: "en", editable: true });
     const zh = createEditingSession({ project, dialects, language: "zh" });
-    expect(zh.view).toEqual({ zoom: 1, scrollLeft: 0, language: "zh" });
+    expect(zh.view).toEqual({ zoom: 1, scrollLeft: 0, language: "zh", editable: true });
+  });
+
+  it("says whether the user may edit, starting from the option and changing like the rest of the view state", () => {
+    expect(createEditingSession({ project, dialects, editable: false }).view.editable).toBe(false);
+
+    const session = open();
+    const changes = listen(session);
+    session.setView({ editable: false });
+    expect(session.view).toEqual({ zoom: 1, scrollLeft: 0, language: "en", editable: false });
+    session.setView({ editable: false });
+    session.setView({ editable: true });
+
+    expect(changes).toEqual([
+      { cause: "view", project: false, selection: false, insertionPoint: false, view: true },
+      { cause: "view", project: false, selection: false, insertionPoint: false, view: true },
+    ]);
+    expect(session.canUndo).toBe(false);
   });
 
   it("changes by the keys given, announces one change, and says nothing when nothing differs", () => {
@@ -393,9 +473,9 @@ describe("the view state parts share", () => {
     const changes = listen(session);
 
     session.setView({ zoom: 2, scrollLeft: 300 });
-    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "en" });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "en", editable: true });
     session.setView({ language: "zh" });
-    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "zh" });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 300, language: "zh", editable: true });
     session.setView({ zoom: 2, scrollLeft: 300, language: "zh" });
     session.setView({});
 
@@ -427,7 +507,7 @@ describe("the view state parts share", () => {
 
     expect(session.project.score).toBe(SCORE);
     expect(session.canUndo).toBe(false);
-    expect(session.view).toEqual({ zoom: 1.5, scrollLeft: 90, language: "zh" });
+    expect(session.view).toEqual({ zoom: 1.5, scrollLeft: 90, language: "zh", editable: true });
   });
 });
 
@@ -450,7 +530,7 @@ describe("replacing the project from outside", () => {
     expect(session.undo()).toBe(false);
     expect(session.selection).toEqual([]);
     expect(session.insertionPoint).toBeNull();
-    expect(session.view).toEqual({ zoom: 2, scrollLeft: 80, language: "en" });
+    expect(session.view).toEqual({ zoom: 2, scrollLeft: 80, language: "en", editable: true });
     expect(changes).toEqual([{ cause: "replace", project: true, selection: true, insertionPoint: true, view: false }]);
   });
 

@@ -11,6 +11,7 @@ import {
   mountCutNotice,
   mountProblemView,
   mountTimeRuler,
+  mountToolbar,
   mountVoiceTrack,
   mountZoomControl,
 } from "/packages/score-editor/dist/index.js";
@@ -21,6 +22,8 @@ const TESTS = "/packages/score-dialect-song2/tests/";
 let editor = null;
 let project = null;
 let vectors = null;
+/** The notices the mounted editor sent to its host, in order. */
+const notices = [];
 
 /**
  * The score text a test asks for: `{ sample }` is a file of the dialect's samples, `{ vector }` the text of a
@@ -53,6 +56,7 @@ const blank = {
 
 /** The view parts of the layout page, by name, each with the function that mounts it on its slot. */
 const LAYOUT_PARTS = {
+  toolbar: (el, session) => mountToolbar(el, session),
   zoom: (el, session) => mountZoomControl(el, session),
   notice: (el, session) => mountCutNotice(el, session),
   ruler: (el, session) => mountTimeRuler(el, session),
@@ -73,6 +77,7 @@ function buildLayout(container) {
   container.innerHTML = `
     <div class="layout-grid">
       <div class="layout-slot" data-slot="zoom"></div>
+      <div class="layout-slot" data-slot="toolbar"></div>
       <div class="layout-slot" data-slot="notice"></div>
       <div class="layout-card layout-card-narrow">
         <div class="layout-slot" data-slot="ruler"></div><div class="layout-slot" data-slot="chords"></div>
@@ -86,8 +91,9 @@ function buildLayout(container) {
 
 /**
  * What a host page does around the parts, one named layout at a time: the zoom control in a clipped box under a toast
- * ("covered-zoom"), a banner of the host's in front of the top of the Vocal track ("overlapping-banner"), and the Ins
- * track further right than the others ("indented-track").
+ * ("covered-zoom"), a banner of the host's in front of the top of the Vocal track ("overlapping-banner"), the Ins
+ * track further right than the others ("indented-track"), and the toolbar in a box too narrow for its controls
+ * ("tight-toolbar").
  */
 const SCENES = {
   "covered-zoom"(container, slots) {
@@ -104,6 +110,9 @@ const SCENES = {
   },
   "indented-track"(container) {
     container.querySelector('[data-card="ins"]').classList.add("layout-indented");
+  },
+  "tight-toolbar"(_container, slots) {
+    slots.toolbar.classList.add("layout-tight");
   },
 };
 
@@ -134,6 +143,7 @@ const layout = {
     parts,
     shadow,
     scene,
+    editable,
   } = {}) {
     if (layout.session) throw new Error("a layout is already open");
     const base = await projectFrom(blank, score, fields);
@@ -155,7 +165,12 @@ const layout = {
     layout.host = host;
     layout.slots = buildLayout(container);
     if (scene) SCENES[scene](container, layout.slots);
-    layout.session = createEditingSession({ project: base, dialects, language });
+    layout.session = createEditingSession({
+      project: base,
+      dialects,
+      language,
+      ...(editable === undefined ? {} : { editable }),
+    });
     layout.parts = mountLayoutParts(layout.slots, layout.session, parts ?? Object.keys(LAYOUT_PARTS));
   },
   /** Replaces the project from outside, the way update does for the editor. */
@@ -183,7 +198,7 @@ const layout = {
     document.body.append(host);
     const slots = buildLayout(host);
     const { project, view } = layout.session;
-    const session = createEditingSession({ project, dialects, language: view.language });
+    const session = createEditingSession({ project, dialects, language: view.language, editable: view.editable });
     session.setView({ zoom: view.zoom });
     const parts = mountLayoutParts(slots, session, Object.keys(layout.parts));
     const html = Object.fromEntries(Object.keys(parts).map((name) => [name, slots[name].innerHTML]));
@@ -250,6 +265,7 @@ const hostPage = {
 window.harness = {
   stage,
   layout,
+  notices,
   host: hostPage,
   shadowRoot: null,
   /**
@@ -268,7 +284,14 @@ window.harness = {
       target.style.height = "420px";
       window.harness.shadowRoot.append(target);
     }
-    editor = mount(target, { language: "en", project, dialects, ...options });
+    notices.length = 0;
+    editor = mount(target, {
+      language: "en",
+      project,
+      dialects,
+      notify: (notice) => notices.push(notice),
+      ...options,
+    });
   },
   async update({ score, project: fields, ...options } = {}) {
     if (score !== undefined || fields !== undefined) {

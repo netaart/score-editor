@@ -90,4 +90,4 @@ tempo range, section marker, lyric rule, durations, meter rule and chord vocabul
 `MeterRule`). The editor narrows its interface by those declarations; see [dialect-registry.md](dialect-registry.md).
 
 `Language` is `"zh" | "en"`. `Notice` is a one-time message for the host's own toast system, `NoticeCode` its
-machine-readable reason, and `NOTICE_CODES` the closed list (empty in this version, so `notify` is never called yet).
+machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-refused"`, sent when the score would not take an edit the user asked for).

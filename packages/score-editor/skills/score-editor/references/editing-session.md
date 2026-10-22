@@ -17,10 +17,11 @@ const session = createEditingSession({
   project, // SongProject: the only document state
   dialects: createDialectRegistry([song2Dialect]),
   language: "en", // optional, "en" by default
+  editable: true, // optional, true by default
 });
 ```
 
-`SessionOptions` is `{ project, dialects, language? }`. `createEditingSession` returns an `EditingSession`.
+`SessionOptions` is `{ project, dialects, language?, editable? }`. `createEditingSession` returns an `EditingSession`.
 
 ## What it holds
 
@@ -30,7 +31,7 @@ const session = createEditingSession({
 | `reading` | A `ScoreReading`, cached until the score text, model or dialects change. |
 | `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
 | `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |
-| `view` | `ViewState`: `{ zoom, scrollLeft, language }`, shared by all parts. |
+| `view` | `ViewState`: `{ zoom, scrollLeft, language, editable }`, shared by all parts. `editable` says whether the user may change the score: parts offer editing controls and take selection and editing keys only while it is true. It does not stop `dispatch`; whoever drives the session directly decides what it sends. |
 | `canUndo`, `canRedo` | Whether the history has a step in that direction. |
 
 `ScoreReading` is one of `{ kind: "score", score }`, `{ kind: "unreadable", diagnostics }`, or
@@ -46,7 +47,7 @@ const session = createEditingSession({
 | `undo()` / `redo()` | Move one whole project step. Return false when there is none. |
 | `select(noteIds)` | Selects exactly these notes; ids that name no note are left out. |
 | `setInsertionPoint(point \| null)` | Sets the insertion point; `tick` is a whole number, zero or more. Throws `RangeError` otherwise. |
-| `setView(patch)` | Changes zoom, scroll or language by the given keys. Zoom is clamped to 0.01-4, scroll to zero or more. |
+| `setView(patch)` | Changes zoom, scroll, language or editable by the given keys. Zoom is clamped to 0.01-4, scroll to zero or more. |
 | `replaceProject(next)` | Starts a new document from outside: history, selection and insertion point go; view state stays. No-op when every field is the same. |
 | `replaceDialects(next)` | Reads the project with another registry. The history stays. No-op for the same registry. |
 | `subscribe(listener)` | Calls `listener(change)` after every change and returns the unsubscribe function. |

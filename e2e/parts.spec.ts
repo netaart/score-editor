@@ -1,11 +1,23 @@
 // ABOUTME: Seam 5 for the view parts: several parts mounted on one editing session, each on its own element of a layout the page builds.
 // ABOUTME: Covers drawing, dispatch, replacement, zoom and scroll shared through the session, style isolation, and what destroy leaves.
 import type { CDPSession, Locator, Page } from "@playwright/test";
-import { expect, type Harness, test } from "./fixtures";
+import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 /** The one element a part drew into its slot. */
 const partRoot = (page: Page, name: string) => slot(page, name).locator(":scope > *");
+
+/** Whatever a part draws for the score: its root without the empty live region every axis part keeps for what it says. */
+const drawnContent = (page: Page, name: string) => partRoot(page, name).locator('*:not([role="status"])');
+
+/** The roots as drawn, with what the parts say in their live regions taken out. */
+const unsaid = (roots: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(roots).map(([name, html]) => [
+      name,
+      html.replace(/(role="status" aria-live="polite">)[^<]*/g, "$1"),
+    ]),
+  );
 
 /** What a part on the time axis calls itself when it is a scroll surface of its own. */
 const REGION_NAMES: Record<string, string> = { ruler: "Time ruler", chords: "Chords", vocal: "Vocal", ins: "Ins" };
@@ -21,18 +33,6 @@ const zoomButton = (page: Page, name: "Zoom in" | "Zoom out") =>
   slot(page, "zoom").getByRole("button", { name, exact: true });
 const bars = (page: Page) => slot(page, "ruler").getByRole("list", { name: "Bars" });
 const chordItems = (page: Page) => slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem");
-
-async function box(target: Locator) {
-  const found = await target.boundingBox();
-  if (!found) throw new Error("nothing is drawn for the locator");
-  return found;
-}
-
-/** A Vocal-only song2 score in C major, 4/4, with the given music lines under one section. */
-function vocalOnly(...music: string[]): string {
-  const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
-  return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
-}
 
 // Notes of compact-three-sections, read off its score text: 2/4 bars at 40 pixels a beat are 80 pixels wide at 100%.
 const INS_BAR_1 = "F4, bar 1 beat 1, length 0.5 beats";
@@ -57,10 +57,19 @@ const scrollLeftOf = (page: Page, name: string) => scrollSurface(page, name).eva
 const maxScrollOf = (page: Page, name: string) =>
   scrollSurface(page, name).evaluate((el) => el.scrollWidth - el.clientWidth);
 
-/** Every part draws what a part mounted fresh on the same state would draw. Returns what they drew. */
-async function expectDrawnLikeFresh(harness: Harness) {
+/**
+ * Every part draws what a part mounted fresh on the same state would draw. Returns what they drew. A fresh session has
+ * no history, so while the live one has some its toolbar enables undo and the fresh one does not: `withHistory` leaves
+ * the toolbar out of the comparison, and only then.
+ */
+async function expectDrawnLikeFresh(harness: Harness, { withHistory = false } = {}) {
   const drawn = await harness.layout.roots();
-  expect(drawn).toEqual(await harness.layout.freshRoots());
+  const fresh = await harness.layout.freshRoots();
+  if (withHistory) {
+    delete drawn.toolbar;
+    delete fresh.toolbar;
+  }
+  expect(drawn).toEqual(fresh);
   return drawn;
 }
 
@@ -166,7 +175,7 @@ test.describe("a layout of view parts on one session", () => {
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toHaveCount(0);
     expect(await insNotes.count()).toBe(before.ins);
-    const drawnAfter = await expectDrawnLikeFresh(harness);
+    const drawnAfter = await expectDrawnLikeFresh(harness, { withHistory: true });
     expect(drawnAfter.vocal, "Vocal changed").not.toBe(drawnBefore.vocal);
     for (const name of ["zoom", "notice", "ruler", "chords", "ins", "problem"]) {
       expect(drawnAfter[name], `${name} is not touched by a change to Vocal`).toBe(drawnBefore[name]);
@@ -175,7 +184,10 @@ test.describe("a layout of view parts on one session", () => {
     expect(await harness.layout.undo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toBeVisible();
-    expect(await harness.layout.roots()).toEqual(drawnBefore);
+    const undone = await harness.layout.roots();
+    // The undo is said in the live region ("Restored ..."); what a part says is not what it draws.
+    expect(unsaid({ ...undone, toolbar: "" })).toEqual(unsaid({ ...drawnBefore, toolbar: "" }));
+    expect(undone.toolbar, "redo is there to press now").not.toBe(drawnBefore.toolbar);
     expect(await harness.layout.redo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
   });
@@ -216,7 +228,7 @@ test.describe("a layout of view parts on one session", () => {
     );
     await expect(slot(page, "zoom").getByRole("group", { name: "Zoom" })).toBeHidden();
     await expect(slot(page, "notice").getByRole("note")).toBeHidden();
-    for (const name of partNames.axis) await expect(partRoot(page, name).locator("*")).toHaveCount(0);
+    for (const name of partNames.axis) await expect(drawnContent(page, name)).toHaveCount(0);
 
     await harness.layout.replace({ score: { sample: "compact-three-sections" } });
     await expect(slot(page, "problem").getByRole("alert")).toHaveCount(0);
@@ -234,7 +246,7 @@ test.describe("a layout of view parts on one session", () => {
     await expect(slot(page, "problem").getByRole("alert")).toHaveText(
       "The score format of “other-model” isn't supported by this editor, so the score can't be shown.",
     );
-    for (const name of partNames.axis) await expect(partRoot(page, name).locator("*")).toHaveCount(0);
+    for (const name of partNames.axis) await expect(drawnContent(page, name)).toHaveCount(0);
     expect(await harness.layout.dispatch({ type: "toRest", noteId: "x" })).toMatchObject({
       ok: false,
       diagnostics: [{ code: "no-dialect" }],

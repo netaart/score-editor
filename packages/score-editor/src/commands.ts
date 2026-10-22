@@ -1,6 +1,7 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
-import type { Diagnostic } from "./diagnostics";
+import { positionOf } from "./arrangement";
+import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Score, Note as ScoreNote } from "./score";
 
 /** A dialect-agnostic edit of a Score. More commands join this union in later tickets. */
@@ -10,12 +11,24 @@ export type ScoreCommandResult =
   | { readonly ok: true; readonly score: Score }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
-function commandFailure(code: "note-not-found" | "not-a-note", id: string): ScoreCommandResult {
-  return { ok: false, diagnostic: { code, params: { noteId: id }, at: { noteId: id } } };
+/** Where a command acts, in the voice, bar and beat a person counts: the note it names, or only its id when there is none. */
+export function commandAt(score: Score, command: ScoreCommand): DiagnosticAt {
+  const note = score.notes.find((found) => found.id === command.noteId);
+  if (note === undefined) return { noteId: command.noteId };
+  const { bar, beat } = positionOf(score.bars, note.bar, note.start);
+  return { voice: note.voice, bar, beat, noteId: note.id };
+}
+
+function commandFailure(
+  code: "note-not-found" | "not-a-note",
+  score: Score,
+  command: ScoreCommand,
+): ScoreCommandResult {
+  return { ok: false, diagnostic: { code, params: { noteId: command.noteId }, at: commandAt(score, command) } };
 }
 
 /** The whole tie chain around a note: every note tied into it and every note it ties into. */
-function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): ScoreNote[] {
+export function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): ScoreNote[] {
   const voiceNotes = notes.filter((note) => note.voice === target.voice).sort((a, b) => a.start - b.start);
   const index = voiceNotes.findIndex((note) => note.id === target.id);
   let first = index;
@@ -25,10 +38,10 @@ function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): ScoreNote
   return voiceNotes.slice(first, last + 1);
 }
 
-function toRest(score: Score, id: string): ScoreCommandResult {
-  const target = score.notes.find((note) => note.id === id);
-  if (target === undefined) return commandFailure("note-not-found", id);
-  if (target.midi === null) return commandFailure("not-a-note", id);
+function toRest(score: Score, command: ScoreCommand): ScoreCommandResult {
+  const target = score.notes.find((note) => note.id === command.noteId);
+  if (target === undefined) return commandFailure("note-not-found", score, command);
+  if (target.midi === null) return commandFailure("not-a-note", score, command);
 
   const chain = new Set(tieChain(score.notes, target).map((note) => note.id));
   const notes = score.notes.map((note) => (chain.has(note.id) ? { ...note, midi: null, tie: false } : note));
@@ -39,6 +52,6 @@ function toRest(score: Score, id: string): ScoreCommandResult {
 export function runScoreCommand(score: Score, command: ScoreCommand): ScoreCommandResult {
   switch (command.type) {
     case "toRest":
-      return toRest(score, command.noteId);
+      return toRest(score, command);
   }
 }
