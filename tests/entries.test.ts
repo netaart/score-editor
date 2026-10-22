@@ -24,8 +24,12 @@ describe("package entries in a node environment", () => {
       "mountChordTrack",
       "mountCutNotice",
       "mountProblemView",
+      "mountStaffView",
+      "mountStaleNotice",
+      "mountTextView",
       "mountTimeRuler",
       "mountToolbar",
+      "mountViewSwitch",
       "mountVoiceTrack",
       "mountZoomControl",
       // What 0.1.0 exported.
@@ -43,8 +47,17 @@ describe("package entries in a node environment", () => {
   });
 
   it("refuses to mount a view part without a DOM instead of failing obscurely", async () => {
-    const { createDialectRegistry, createEditingSession, mountTimeRuler, mountToolbar, mountZoomControl } =
-      await import("@neta-art/score-editor");
+    const {
+      createDialectRegistry,
+      createEditingSession,
+      mountStaffView,
+      mountStaleNotice,
+      mountTextView,
+      mountTimeRuler,
+      mountToolbar,
+      mountViewSwitch,
+      mountZoomControl,
+    } = await import("@neta-art/score-editor");
     const project = {
       style: "",
       lyrics: "",
@@ -58,6 +71,10 @@ describe("package entries in a node environment", () => {
     expect(() => mountTimeRuler({} as HTMLElement, session)).toThrow(/browser/i);
     expect(() => mountToolbar({} as HTMLElement, session)).toThrow(/browser/i);
     expect(() => mountZoomControl({} as HTMLElement, session)).toThrow(/browser/i);
+    expect(() => mountStaffView({} as HTMLElement, session)).toThrow(/browser/i);
+    expect(() => mountStaleNotice({} as HTMLElement, session)).toThrow(/browser/i);
+    expect(() => mountTextView({} as HTMLElement, session)).toThrow(/browser/i);
+    expect(() => mountViewSwitch({} as HTMLElement, session)).toThrow(/browser/i);
   });
 
   it("imports the song2 dialect entry", async () => {

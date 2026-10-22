@@ -10,6 +10,7 @@ import {
   mountChordTrack,
   mountCutNotice,
   mountProblemView,
+  mountStaffView,
   mountStaleNotice,
   mountTextView,
   mountTimeRuler,
@@ -75,6 +76,7 @@ const LAYOUT_PARTS = {
  */
 const VIEW_PARTS = {
   text: (el, session) => mountTextView(el, session),
+  staff: (el, session) => mountStaffView(el, session),
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
@@ -89,6 +91,21 @@ const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
  * A layout of the host's own, nothing like the editor's: parts in cards of different widths, one slot for each. It is
  * styled by classes of host.css, since a strict style policy refuses inline style attributes.
  */
+function viewCards(names) {
+  return names
+    .filter((name) => name in VIEW_PARTS)
+    .map(
+      (name) => `<div class="layout-card layout-card-wide"><div class="layout-slot" data-slot="${name}"></div></div>`,
+    )
+    .join("");
+}
+
+/** The slots for view parts that are mounted after the layout was built, added at the end of its grid. */
+function buildSlots(container, names) {
+  container.querySelector(".layout-grid").insertAdjacentHTML("beforeend", viewCards(names));
+  return Object.fromEntries(names.map((name) => [name, container.querySelector(`[data-slot="${name}"]`)]));
+}
+
 function buildLayout(container, names = []) {
   container.innerHTML = `
     <div class="layout-grid">
@@ -101,13 +118,7 @@ function buildLayout(container, names = []) {
       <div class="layout-card layout-card-medium"><div class="layout-slot" data-slot="vocal"></div></div>
       <div class="layout-card layout-card-wide" data-card="ins"><div class="layout-slot" data-slot="ins"></div></div>
       <div class="layout-slot" data-slot="problem"></div>
-      ${names
-        .filter((name) => name in VIEW_PARTS)
-        .map(
-          (name) =>
-            `<div class="layout-card layout-card-wide"><div class="layout-slot" data-slot="${name}"></div></div>`,
-        )
-        .join("")}
+      ${viewCards(names)}
     </div>`;
   return Object.fromEntries([...container.querySelectorAll("[data-slot]")].map((el) => [el.dataset.slot, el]));
 }
@@ -203,6 +214,10 @@ const layout = {
   },
   /** Mounts one more part on the open session, as a host does that adds a view later. */
   mountPart(name) {
+    if (!layout.slots[name]) {
+      const container = layout.host.shadowRoot ?? layout.host;
+      layout.slots[name] = buildSlots(container, [name])[name];
+    }
     layout.parts[name] = PART_FACTORIES[name](layout.slots[name], layout.session);
   },
   /** Destroys one part, `times` times over: a second destroy must be harmless. */
@@ -259,6 +274,9 @@ const layout = {
 };
 
 const HOST_RULES = {
+  // A page with a rule for every svg, drawn over everything with !important.
+  "hostile-svg":
+    "svg, svg *, svg path, svg text { fill: red !important; stroke: red !important; font: italic 40px cursive !important; } svg { max-width: 50px !important; }",
   // A page with an !important rule on every element in the layout.
   important: "#layout-host span, #layout-host div { padding: 9px !important; color: red !important; }",
   // A page whose rules on plain elements are careless: they touch everything on the page that has no rule of its own.

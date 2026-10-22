@@ -56,6 +56,10 @@ export interface Messages {
   viewSwitch: string;
   staff: string;
   staleNotice: string;
+  /** The staff view: what its drawing is, and what it says while abcjs is on its way and when abcjs fails. */
+  staffDrawing: string;
+  staffLoading: string;
+  staffFailed: string;
 }
 
 const en: Messages = {
@@ -116,6 +120,9 @@ const en: Messages = {
   staff: "Staff",
   staleNotice:
     "The score text has a problem, so this view still shows the last score that could be read. Fix it in the text view.",
+  staffDrawing: "The score drawn on a staff",
+  staffLoading: "Loading the staff…",
+  staffFailed: "The staff couldn't be drawn. The other views still work.",
 };
 
 const zh: Messages = {
@@ -172,6 +179,9 @@ const zh: Messages = {
   viewSwitch: "视图",
   staff: "五线谱",
   staleNotice: "乐谱文本里有问题，所以这个视图显示的仍是上一份能读的乐谱。请在文本视图中修正。",
+  staffDrawing: "用五线谱画出的乐谱",
+  staffLoading: "正在载入五线谱…",
+  staffFailed: "五线谱画不出来。其他视图不受影响。",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

@@ -74,7 +74,11 @@ interface PageHarness {
   stage: HTMLElement;
   notices: PageNotice[];
   layout: PageLayout;
-  host: { addRules(kind: "important" | "hostile"): void; addProbe(): void; setColorScheme(scheme: string): void };
+  host: {
+    addRules(kind: "important" | "hostile" | "hostile-svg"): void;
+    addProbe(): void;
+    setColorScheme(scheme: string): void;
+  };
   shadowRoot: ShadowRoot | null;
   mount(options?: Record<string, unknown>): Promise<void>;
   update(options: Record<string, unknown>): Promise<void>;
@@ -274,7 +278,7 @@ export class Harness {
   }
 
   /** Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones. */
-  addHostRules(kind: "important" | "hostile") {
+  addHostRules(kind: "important" | "hostile" | "hostile-svg") {
     return this.page.evaluate((k) => window.harness.host.addRules(k), kind);
   }
 

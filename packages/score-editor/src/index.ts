@@ -53,6 +53,7 @@ export type {
   ViewState,
 } from "./session";
 export { createEditingSession, VIEW_NAMES } from "./session";
+export { mountStaffView } from "./staff-view";
 export { mountStaleNotice } from "./stale-notice";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";

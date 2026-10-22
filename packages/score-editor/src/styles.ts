@@ -929,6 +929,37 @@ ${labelThinning()}
   content: none;
 }
 
+/*
+ * The staff view: a box that scrolls, with the drawing in it. The drawing is abcjs's, inside a shadow root of its own, and
+ * takes this box's text colour. The scrollbar's room is kept, so the drawing's width does not change when it appears.
+ */
+.sce-root.sce-part-staff {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sce-root .sce-staff {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+  background: var(--sce-_bg);
+  scrollbar-gutter: stable;
+}
+.sce-root .sce-staff:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: -2px;
+}
+.sce-root .sce-staff-drawing {
+  display: block;
+  min-width: 240px;
+}
+.sce-root .sce-staff-message {
+  margin: 0 0 8px;
+  color: var(--sce-_muted);
+}
+
 .sce-root .sce-sr-only {
   position: absolute;
   width: 1px;

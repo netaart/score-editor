@@ -522,3 +522,332 @@ test.describe("the toolbar part with the view switch", () => {
     await expect(slot(page, "toolbar").getByRole("group", { name: "Zoom" })).toBeHidden();
   });
 });
+
+const staffSlot = (page: Page) => slot(page, "staff");
+const staffRegion = (page: Page) => staffSlot(page).getByRole("region", { name: "Staff" });
+const drawing = (page: Page) => staffSlot(page).getByRole("img", { name: "The score drawn on a staff" });
+/** What abcjs drew, by the classes it puts on its elements: they reach through the open shadow root the drawing sits in. */
+const drawnNotes = (page: Page) => staffSlot(page).locator("svg .abcjs-note");
+const drawnRests = (page: Page) => staffSlot(page).locator("svg .abcjs-rest");
+const ABCJS_URL = "**/e2e/page/vendor/abcjs.js";
+/** Bars that fit a phone's width, so the drawing can follow the width of its box; a bar of sixteenths needs more than that. */
+const AIRY = vocalOnly("C4D4E4F4|G4A4B4c4|C8D8|E16|", "C4D4E4F4|G4A4B4c4|");
+
+/** The colour and font abcjs's first note and first text are drawn with, as the browser computed them. */
+function drawnStyle(page: Page) {
+  return staffSlot(page)
+    .locator("svg")
+    .first()
+    .evaluate((svg) => {
+      const path = svg.querySelector("path");
+      const text = svg.querySelector("text");
+      const box = svg.getBoundingClientRect();
+      return {
+        fill: path ? getComputedStyle(path).fill : null,
+        stroke: path ? getComputedStyle(path).stroke : null,
+        font: text ? getComputedStyle(text).fontFamily : null,
+        width: box.width,
+        height: box.height,
+        owner: (svg.getRootNode() as ShadowRoot).host?.className ?? null,
+      };
+    });
+}
+
+/** The text colour the part computes for its own text: what the drawing has to follow. */
+function partColour(page: Page) {
+  return staffSlot(page)
+    .locator(".sce-part-staff")
+    .evaluate((el) => getComputedStyle(el).color);
+}
+
+test.describe("the staff view", () => {
+  test("draws the score on a staff, a note for each note of the score, in a drawing of its own", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+
+    await expect(drawnNotes(page)).toHaveCount(5);
+    await expect(drawing(page)).toBeVisible();
+    const drawn = await drawnStyle(page);
+    expect(drawn.owner, "the drawing sits in a shadow root under the part").toBe("sce-staff-drawing");
+    expect(drawn.width).toBeGreaterThan(200);
+    expect(drawn.height).toBeGreaterThan(40);
+    const region = await box(staffRegion(page));
+    expect(drawn.width).toBeLessThanOrEqual(region.width);
+  });
+
+  test("follows the project: an edit, an undo, and a score replaced from outside", async ({ page, harness }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    await harness.layout.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await expect(drawnNotes(page)).toHaveCount(4);
+    await expect(drawnRests(page)).toHaveCount(1);
+
+    await harness.layout.undo();
+    await expect(drawnNotes(page)).toHaveCount(5);
+    await expect(drawnRests(page)).toHaveCount(0);
+
+    await harness.layout.replace({ score: { text: vocalOnly("C8D8|") } });
+    await expect(drawnNotes(page)).toHaveCount(2);
+  });
+
+  test("keeps showing the last score that read while the text view holds text that does not, and draws the fix", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff", "text"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    await textBox(page).fill(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+    await page.waitForTimeout(PAUSE_MS + 200);
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    await textBox(page).fill(QUARTERS_WITHOUT_D);
+    await expect(drawnNotes(page)).toHaveCount(4);
+  });
+
+  test("draws nothing for a score that cannot be read, and draws it once the text is fixed", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: BROKEN }, parts: ["staff", "text"] });
+
+    await expect(staffRegion(page)).toBeVisible();
+    await expect(staffSlot(page).locator("svg")).toHaveCount(0);
+
+    await textBox(page).fill(QUARTERS);
+    await expect(drawnNotes(page)).toHaveCount(5);
+  });
+
+  test("is drawn the same while the session is read-only, and a click or tap on the drawing changes nothing", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    await press(drawing(page), { x: 60, y: 40 });
+
+    expect(await harness.layout.selection()).toEqual([]);
+    expect(await harness.layout.insertionPoint()).toBeNull();
+    expect(await harness.layout.canUndo()).toBe(false);
+    await expect(drawnNotes(page)).toHaveCount(5);
+  });
+
+  test("scrolls with the keyboard when the drawing is wider than its box: the region can take the focus", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    await staffRegion(page).focus();
+
+    await expect(staffRegion(page)).toBeFocused();
+  });
+
+  test("draws again at the width it has when its box changes", async ({ page, harness, isMobile }) => {
+    test.skip(isMobile, "the width is set once, on the desktop project");
+    await harness.layout.open({ score: { text: AIRY }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(19);
+    const wide = (await drawnStyle(page)).width;
+
+    await page.setViewportSize({ width: 360, height: 800 });
+
+    await expect.poll(async () => (await drawnStyle(page)).width).toBeLessThan(wide);
+    const region = await box(staffRegion(page));
+    expect((await drawnStyle(page)).width).toBeLessThanOrEqual(region.width);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect.poll(async () => (await drawnStyle(page)).width).toBeGreaterThan(400);
+  });
+
+  test("fits a phone's width, and a bar too dense for it scrolls inside the view and not the page", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "the phone project");
+    await harness.layout.open({ score: { text: AIRY }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(19);
+    const region = await box(staffRegion(page));
+    expect((await drawnStyle(page)).width).toBeLessThanOrEqual(region.width);
+    await harness.layout.close();
+
+    await harness.layout.open({ score: { sample: "compact-three-sections" }, parts: ["staff"] });
+    await expect(drawnNotes(page).first()).toBeAttached();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test("says in the session's language what it is, and follows it when it changes", async ({ page, harness }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], language: "zh" });
+
+    await expect(staffSlot(page).getByRole("region", { name: "五线谱" })).toBeVisible();
+    await expect(staffSlot(page).getByRole("img", { name: "用五线谱画出的乐谱" })).toBeVisible();
+
+    await harness.layout.setView({ language: "en" });
+    await expect(drawing(page)).toBeVisible();
+    await expect(staffRegion(page)).toBeVisible();
+  });
+
+  test("says it is loading until abcjs arrives, then draws", async ({ page, harness }) => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(ABCJS_URL, async (route) => {
+      await gate;
+      await route.continue();
+    });
+
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(staffSlot(page).getByRole("status")).toHaveText("Loading the staff…");
+    await expect(staffSlot(page).locator("svg")).toHaveCount(0);
+
+    release();
+    await expect(drawnNotes(page)).toHaveCount(5);
+    await expect(staffSlot(page).getByRole("status")).toHaveCount(0);
+  });
+
+  test("says so when abcjs cannot be loaded, and the other views work on", async ({ page, harness }) => {
+    await page.route(ABCJS_URL, (route) => route.abort());
+
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff", "text", "vocal"] });
+
+    await expect(staffSlot(page).getByRole("alert")).toHaveText(
+      "The staff couldn't be drawn. The other views still work.",
+    );
+    await expect(vocalNote(page, D4)).toBeVisible();
+    await textBox(page).fill(QUARTERS_WITHOUT_D);
+    await expect(vocalNote(page, D4)).toHaveCount(0);
+  });
+
+  test("does not draw into itself after it was destroyed while abcjs was still on its way", async ({
+    page,
+    harness,
+  }) => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(ABCJS_URL, async (route) => {
+      await gate;
+      await route.continue();
+    });
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await harness.layout.retain("staff");
+
+    await harness.layout.destroyPart("staff");
+    release();
+    await page.waitForTimeout(500);
+
+    const drawnAfter = await page.evaluate(() => {
+      const holder = window.harness.layout.retained?.nodes.find((node) => (node as Element).shadowRoot) as
+        | Element
+        | undefined;
+      return holder?.shadowRoot?.querySelectorAll("svg").length ?? -1;
+    });
+    expect(drawnAfter).toBe(0);
+  });
+
+  test("asks for abcjs only when a staff view is mounted, and once for all of them", async ({ page, harness }) => {
+    const requests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().endsWith("/vendor/abcjs.js")) requests.push(request.url());
+    });
+
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["text", "vocal"] });
+    await harness.layout.setActiveView("staff");
+    await page.waitForTimeout(300);
+    expect(requests, "nothing asked for abcjs while no staff view was mounted").toHaveLength(0);
+
+    await harness.layout.mountPart("staff");
+    await expect(drawnNotes(page)).toHaveCount(5);
+    expect(requests).toHaveLength(1);
+
+    await harness.layout.close();
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+    expect(requests, "the second staff view reuses the module").toHaveLength(1);
+  });
+});
+
+test.describe("style isolation of the staff view", () => {
+  test.skip(({ isMobile }) => isMobile, "styling is checked once, on the desktop project");
+  const HOSTILE_SVG = "hostile-svg";
+
+  test("takes the part's text colour in the light and the dark scheme", async ({ page, harness }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+    const light = await partColour(page);
+    expect((await drawnStyle(page)).fill).toBe(light);
+
+    await harness.setColorScheme("dark");
+    await expect.poll(() => partColour(page)).not.toBe(light);
+    expect((await drawnStyle(page)).fill).toBe(await partColour(page));
+  });
+
+  test("takes the colour a host maps for the part's text", async ({ page, harness }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await harness.layout.setTheme({ "--sce-color-text": "rgb(10, 120, 200)" });
+
+    await expect(drawnNotes(page)).toHaveCount(5);
+    expect((await drawnStyle(page)).fill).toBe("rgb(10, 120, 200)");
+  });
+
+  test("is out of reach of a page's rules for svg, even !important ones, with and without a shadow root of the host", async ({
+    page,
+    harness,
+  }) => {
+    await harness.addHostRules(HOSTILE_SVG);
+    for (const shadow of [false, true]) {
+      await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], shadow });
+      await expect(drawnNotes(page)).toHaveCount(5);
+
+      const drawn = await drawnStyle(page);
+      expect(drawn.fill, `fill, shadow ${shadow}`).toBe(await partColour(page));
+      expect(drawn.font, `font, shadow ${shadow}`).not.toContain("cursive");
+      expect(drawn.width, `width, shadow ${shadow}`).toBeGreaterThan(200);
+      await harness.layout.close();
+    }
+  });
+
+  test("is drawn under a strict style policy, where a style element that abcjs adds is blocked", async ({
+    page,
+    harness,
+  }) => {
+    await page.route("**/", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        response,
+        headers: { ...response.headers(), "content-security-policy": "style-src 'self'" },
+      });
+    });
+    await page.goto("/");
+
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+
+    await expect(drawnNotes(page)).toHaveCount(5);
+    const drawn = await drawnStyle(page);
+    expect(drawn.fill).toBe(await partColour(page));
+    expect(drawn.width).toBeGreaterThan(200);
+  });
+
+  test("puts no svg and no style element into the page itself, and leaves the page as it was once the layout is closed", async ({
+    page,
+    harness,
+  }) => {
+    const html = await page.evaluate(() => document.documentElement.outerHTML);
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    expect(await page.evaluate(() => document.body.querySelectorAll("svg").length), "svg in the page").toBe(0);
+    expect(await page.evaluate(() => document.head.querySelectorAll("style").length), "style in the head").toBe(0);
+
+    await harness.layout.close();
+    expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(html);
+  });
+});
