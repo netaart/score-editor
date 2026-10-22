@@ -79,6 +79,10 @@ components:
     padding: "0 10px 0 8px"
   menu-item-coarse:
     height: "40px"
+  playhead:
+    width: "1px"
+  synth-caption:
+    max-width: "12em"
 ---
 
 # Design System: Score Editor
@@ -145,7 +149,7 @@ Derived values used by the build: black-key row shading and the tint of every se
 
 **The Borrowed Colour Rule.** The package never names a colour outside the variable contract and its neutral defaults. A new surface takes its colour from an existing variable or a derivation from bg and text.
 
-**The One Accent Rule.** Accent marks focus and the checked menu dot; the note colour defaults to the same value. Nothing else is tinted.
+**The One Accent Rule.** Accent marks focus and the checked menu dot; the note colour defaults to the same value. Nothing else is tinted: the playhead of the synth preview is the text colour, like the insertion point.
 
 ## Typography
 
@@ -216,14 +220,14 @@ The panel previews with `previewTool` or `session.previewTool`: the returned pro
 
 ### View parts
 
-The arrangement is built from view parts bound to one editing session: the toolbar, the zoom control, the cut notice, the problem view, the time ruler, the chord track and one voice track for each voice. A host can mount any of them on its own element; the default editor mounts all of them in the layout described above. Every part's root carries the same context as the editor's root (the theme variables, the reset, the text size) and is a stacking context of its own, so a part is styled and isolated alike wherever it stands; the decisions are in [the spike](docs/spike.md). The root is a `div.sce-root.sce-part`. Inside the default editor it draws no box (`display: contents`), so the layout above is the layout of the parts; mounted alone it is a block as wide as its element.
+The arrangement is built from view parts bound to one editing session: the toolbar, the zoom control, the cut notice, the problem view, the time ruler, the chord track, one voice track for each voice and the synth preview control. A host can mount any of them on its own element; the default editor mounts all of them in the layout described above. Every part's root carries the same context as the editor's root (the theme variables, the reset, the text size) and is a stacking context of its own, so a part is styled and isolated alike wherever it stands; the decisions are in [the spike](docs/spike.md). The root is a `div.sce-root.sce-part`. Inside the default editor it draws no box (`display: contents`), so the layout above is the layout of the parts; mounted alone it is a block as wide as its element.
 
 - **The time axis.** The ruler, the chord track and a voice track share the session's zoom and horizontal scroll. Zoom writes the same width formula as above on every part in one pass, and only then scrolls them, so the document lays out once. Mounted alone, each of the three is its own horizontal scroll surface (`overflow-x: auto`) whose scroll offset the session sets and whose user scrolling the session takes back, so parts of different widths scroll together and each stops at its own end without pulling the others back. The ruler and the chord track hide their scrollbar; a track shows it. A part that draws is a focusable region with a name, so Tab reaches it. Each of the three also keeps one polite live region (see Announcements) that survives every redraw. Zoom actions (the menu, the steps, "Fit whole song") measure the first part on the axis; control plus the wheel and the plus and minus keys measure the part that received them. The default editor puts all of its parts in one scroller and gives it to each as the `scroller` option, so none of them is a scroll surface there.
 - **Pinning.** The default editor pins its header block, which holds the ruler and the chord track, above the tracks, and its track heads pin under that block.
 
 ### Toolbar
 
-A view part of its own (`mountToolbar`); in the default editor it is the first row and draws no box of its own. Surface-tone strip, minimum 40px high, 1px line under it. Title at the start in 600 weight, the zoom group (minus button, zoom value button with a chevron, plus button), the history group (undo and redo) and the Delete button while the session is editable, a flexible spacer, and at the end the read-only badge while it is not. The title is the one thing that gives way in a narrow host (it is cut with an ellipsis); when the controls still do not fit, the row scrolls sideways (`overflow-x: auto`, scrollbar hidden), so every control can be reached by finger or by Tab down to a 190px box; no control is squeezed below its size (the icon buttons keep 28px, 36px on touch) to make room. The history group and the Delete button are hidden with the editing, and with the view when it is not shown (an unreadable score, no dialect). The screen-reader hint is the one sentence a view's `aria-describedby` points to; it is in the toolbar part, drawn only when the host gives it an id, and names the editing keys only while the session is editable.
+A view part of its own (`mountToolbar`); in the default editor it is the first row and draws no box of its own. Surface-tone strip, minimum 40px high, 1px line under it. Title at the start in 600 weight, the zoom group (minus button, zoom value button with a chevron, plus button), the history group (undo and redo) and the Delete button while the session is editable, a flexible spacer, and at the end the read-only badge while it is not. The title is the one thing that gives way in a narrow host (it is cut with an ellipsis); when the controls still do not fit, the row scrolls sideways (`overflow-x: auto`, scrollbar hidden), so every control can be reached by finger or by Tab down to a 190px box; no control is squeezed below its size (the icon buttons keep 28px, 36px on touch) to make room. The history group and the Delete button are hidden with the editing, and with the view when it is not shown (an unreadable score, no dialect). The screen-reader hint is the one sentence a view's `aria-describedby` points to; it is in the toolbar part, drawn only when the host gives it an id, and names the editing keys only while the session is editable. The synth preview control is the last item of the row, after the badge, unless the host turns it off with `synthPreview: false` (see Synth preview).
 
 ### Undo, redo and Delete
 
@@ -301,7 +305,45 @@ What a screen reader cannot see in the drawing is said in words, in the session'
 
 ### Motion
 
-None. No transition or animation exists, so nothing needs a reduced-motion alternative. Zoom, scroll, selection and the insertion point change the view directly.
+None. No transition or animation exists, so nothing needs a reduced-motion alternative. Zoom, scroll, selection and the insertion point change the view directly. The one thing that moves by itself is the playhead of the synth preview, and it is not an animation: it is a readout of where the sound is, set from the audio clock on every frame, with no transition or easing, and present only while the person has asked for sound. A reduced-motion setting therefore changes nothing about it.
+
+### Synth preview
+
+One button and a caption, in a view part of their own (`mountSynthPreview`) that the default toolbar also holds. In the toolbar they are the last items of the row, after the read-only badge: the badge keeps the place it had in a narrow host (it is still whole in a 320px box), and the control is one scroll away from it. The button is built as the other buttons are, 28px high (36px coarse), the same ground fill, 1px strong line and 4px radius, with a 16px line icon in a 1.5px stroke, drawn as polylines (a right-pointing triangle to play, a square to stop), and the word beside it, "Preview" or "Stop" (试听, 停止), so a person who does not read a play triangle as music finds it. The word has a minimum width, so the caption does not move when the word changes. It takes the focus ring and the hover of any button; a press, Enter or Space toggles it, and a second press stops.
+
+The caption is always there, not only while it plays: "Synthetic preview, not the final sound" (合成试听，不代表成品效果). It is muted text at label size, at most 12em wide so it takes two short lines and the toolbar row stays 40px; it breaks at its comma (`text-wrap: balance`; in Chinese `word-break: keep-all`), and is never cut or hidden. It is also the button's `aria-description`, so a screen reader says it with the button even when a scrolled toolbar keeps the text out of sight. When the preview starts, the caption is scrolled into view, so the words that say the sound is not the song are on screen while it plays. In a 412px phone the button is in view in read-only mode and one swipe away while editing (the same reach as Delete); the caption is cut by the edge at rest and is not hidden.
+
+The control is not an editing control, so it is there in read-only mode, and it is hidden only while the session has no readable score. Its states: stopped, playing, not supported (the browser has no Web Audio: `aria-disabled` and muted like a history button with nothing to do, the reason in its tooltip and said when it is pressed), and, said in words only, "nothing to play from here" and "the browser did not allow sound, press Preview again". The words are said by a polite live region, which is the toolbar's own when the toolbar holds the control and the part's own when it stands alone, in the session's language: where the preview starts ("Playing the preview from bar 1 beat 3"), that it stopped, and why it did not start.
+
+### Playhead
+
+A line through the whole height of every voice lane at the tick being played: 1px in the text colour with a 1px edge in the ground colour on each side, so it reads over a note as well as over the lane. It is told from the insertion point by shape, not colour: the insertion point is 2px with a flag, the playhead 1px with none, and both can be on screen at once. It is one node, hidden from assistive technology, ignores the pointer, and is the text colour like the insertion point and the selection frame, so no accent is spent on it. It is drawn from the tick the player publishes (see below), at a position in percent of the lane like everything on the time axis, and is removed when the preview stops or the position passes the end of the lane.
+
+It follows the song by turning the page: when the line passes the right edge of the view, the view scrolls so that the line is near the left, as a score is turned, not by scrolling continuously, which would move every note under the eye while the song is read. When the preview starts, the start is brought into view first. If the user scrolls or zooms the line out of view, the view is theirs and is left alone until they bring the line back into it.
+
+The position is read from the audio clock on every animation frame (the clock's time less the device's output latency, so the line is where the sound is, not where it was scheduled), so it has no transition or easing and never drifts from the sound. It is not kept in the session's `view`: that state is what parts share and notify on when the user changes it, and the playhead changes on every frame and is not the user's setting, so putting it there would notify every part sixty times a second and change what the state means. The player (`previewPlayer(session)`) is its one source; it has its own small subscription, and a voice track reads only the published tick. A view of a host's own subscribes to the same player.
+
+### Autoplay, audio focus and what was verified
+
+The synth preview is the one thing in the package that makes sound, so it has the browser's rules to follow. This section is the record of what was checked, on what, and how.
+
+**The rule the code follows.** A browser lets a page start sound only after a user gesture. The player creates the page's audio context and calls `resume()` synchronously inside the click, tap or key handler that asks for the preview, before any `await`, and starts nothing if the context is not running after that (the control then says the browser did not allow sound and the next press works). All sound shares one audio context, which is suspended again about 0.3s after the last sound, so an idle editor holds no audio device. Nothing is started at load, at mount or from a timer.
+
+**Verified directly.**
+- Chromium 156.0.8078.4, headless, driven by Playwright (the browser's console message for the blocked case is "The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page."). A context created and resumed in a page that has had no gesture stays `suspended` and `new Audio().play()` is rejected with `NotAllowedError`; inside a click `resume()` resolves, the state is `running` and the clock advances (0.30s over a short wait).
+- The editor on that Chromium, in `e2e/synth-preview.spec.ts`, desktop and phone: a preview started from a click made by a script (no gesture) ends as "blocked", says so and plays nothing; the next real press plays. Playwright's trace recording gives the page a user activation, which would hide the blocked case, so that spec runs without traces.
+- A page `<audio>` element that is already playing keeps playing when the preview starts, and both are heard (the audio element is not paused, its position advances; the audio context is `running`). Suspending the audio context does not pause the element either.
+- The `play` event reaches a capturing listener on the document for `<audio>` and `<video>` elements in the page's own document, and not for an element that is not in the document (`new Audio()`), nor one inside a shadow root. The preview stops when such an event arrives, and the editor's test checks that it does.
+- No network request: Playwright's request events from the moment the editor is mounted to the stop of a preview that plays the melody, a second voice and chords, and to a single-note preview, show none; every request of the page, load included, is to its own origin.
+- The unsupported path: with `AudioContext` removed before the page's scripts run, the control is muted with the reason, says so when pressed and plays nothing.
+
+**Verified only indirectly.**
+- WebKit. Playwright's WebKit 27.2 for Windows was installed and run: it has neither `AudioContext` nor `webkitAudioContext`, and `<audio>` playback fails with `NotSupportedError`, so it can show the unsupported path and nothing about Web Audio autoplay, and it is not iOS Safari. What is known of Safari comes from MDN's autoplay guide, which says playback of audio that is started by a script before any user interaction is generally blocked, and that the Web Audio start rule is the same as for media; the code follows that rule by starting inside the gesture. MDN says nothing of Safari's own Web Audio rules, so that part rests on the practice of starting inside the gesture, not on a reading of Safari.
+- Audio focus. The W3C Audio Session API (a working draft) gives an `AudioContext` the default session type "ambient", which "is mixable with other types of audio", and an `HTMLMediaElement` "playback", which should not mix with other playback audio and may pause other audio. The package does not set `navigator.audioSession.type`, so a browser that implements it treats the preview as ambient. Chromium 156 does not implement it (`navigator.audioSession` is `undefined`), so this is read from the specification and not observed.
+
+**Not verified.** iOS Safari, macOS Safari and Firefox, on any device; Android audio focus; the system's silent switch on a phone; headed Chromium with real speakers (the headless browser is muted, so what was checked is that the audio clock runs and the nodes are made, not that the sound is right, which is not tested automatically); a host with its own audio player that holds an audio session of its own. A person with an iPhone should press Preview once on a page with its own audio playing and say what they hear.
+
+**What the preview does about other sound.** It ignores it when it starts: it does not pause, duck or take over a host's audio, because that audio is the host's and an ambient, mixable sound is what the specification gives a context by default; and the evidence above is that the two play together without harm. It yields when another element starts: when an `<audio>` or `<video>` element in the page's document starts to play while the preview plays, the preview stops, because a media element is the stronger kind of audio in the specification ("playback" over "ambient"), a person who starts a track or a video did not mean the preview to go on over it, and a rough synthetic rendering is the one to give way. A host whose audio is in a shadow root, an iframe or a detached `new Audio()` is not heard by the preview, and can call `previewPlayer(session).stop()` itself.
 
 ## Do's and Don'ts
 
@@ -318,6 +360,7 @@ None. No transition or animation exists, so nothing needs a reduced-motion alter
 - **Do** build an icon from polylines or other attribute-geometry shapes in an inline SVG; a path's `d` is reverted by the reset.
 - **Do** put any new floating layer in a native popover so it reaches the top layer.
 - **Do** prefix every class with `sce-`, inject styles once per container, and release them on destroy.
+- **Do** start sound only inside a user gesture, say wherever it is offered that it is a synthetic preview, and stop it when its owner goes.
 
 ### Don't:
 
@@ -329,4 +372,5 @@ None. No transition or animation exists, so nothing needs a reduced-motion alter
 - **Don't** rely on a host's cascade. Style isolation is a constraint on all future work: the root resets everything (`all: initial`), descendants revert (`all: revert`) under a doubled `.sce-root.sce-root` selector so a host rule such as `.page div` does not reach in, and component rules are written under `.sce-root`. Notes are the one exception: they reset only the few properties they need by hand, because reverting every note made first render about three times slower. A new note-like element that is created in the thousands must follow the notes, not the rest.
 - **Don't** publish or depend on `--sce-_*` variables outside the stylesheet.
 - **Don't** import styles as a CSS file or leave anything behind: the stylesheet is a string, delivered as a constructed stylesheet (a style element only where that is unavailable, since a strict style policy blocks injected style elements) into the document or the host's shadow root, and removed with the last editor.
+- **Don't** draw the playhead with a transition, an accent or a flag, or keep its position in the session's view state; it is a readout of the audio clock.
 - **Don't** count on isolation against ID selectors or `!important` rules in the host's page when the editor sits in the page itself: they reach in. A host with such rules mounts the editor inside a shadow root.
