@@ -644,6 +644,53 @@ test.describe("a finger", () => {
     expect(await harness.layout.selection()).toEqual([]);
   });
 
+  test("rests on empty space while the track is drawn again: the hold is not recognised, so nothing buzzes and no box is armed", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    const buzzes = await harness.recordVibrations();
+    await press(note(page, C4));
+    const finger = await harness.finger();
+    try {
+      await finger.down(await spot(page, 2, 2));
+      // The host sends a new score before the hold is over, so the notes the finger rests among are not these any more.
+      await harness.layout.replace({ score: { text: vocalOnly("C4D4E4F4|G16|C16|") } });
+      await page.waitForTimeout(550);
+      expect(await buzzes()).toEqual([]);
+      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
+  });
+
+  test("gives the box up when a second finger touches down: nothing is selected, and the first finger's release adds nothing", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await harness.layout.select([IDS.F4]);
+    const { from, to } = await aroundCAndD(page);
+    const finger = await harness.finger();
+    try {
+      await finger.down(from, 550);
+      await finger.move(to);
+      await expect(theBox(page)).toBeVisible();
+      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(1);
+
+      await finger.addSecond(await spot(page, 300, 4));
+
+      await expect(theBox(page)).toHaveCount(0);
+      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
+    expect(await harness.layout.selection()).toEqual([IDS.F4]);
+  });
+
   test("shows where the box will start as soon as the hold is recognised: a marker bigger than a fingertip, which the slide turns into the box", async ({
     page,
     harness,
@@ -675,17 +722,7 @@ test.describe("a finger", () => {
 
   test("buzzes once when the hold is recognised, where the device can", async ({ page, harness, press }) => {
     await openTrack(harness);
-    await page.evaluate(() => {
-      const buzzes: unknown[] = [];
-      Object.assign(window, { buzzes });
-      Object.assign(navigator, {
-        vibrate: (pattern: unknown) => {
-          buzzes.push(pattern);
-          return true;
-        },
-      });
-    });
-    const buzzes = () => page.evaluate(() => (window as unknown as { buzzes: unknown[] }).buzzes);
+    const buzzes = await harness.recordVibrations();
     // Browsers allow a buzz only after the page has been touched once.
     await press(note(page, C4));
     expect(await buzzes()).toEqual([]);

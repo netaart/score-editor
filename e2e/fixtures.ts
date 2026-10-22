@@ -272,6 +272,25 @@ export class Harness {
     return this.page.evaluate(() => window.harness.host.addProbe());
   }
 
+  /**
+   * Stands in for the device's buzz and keeps what the page asked of it. A browser buzzes only for a page that has been
+   * touched, so the test touches the page first. Gives back a way to read the patterns asked for so far.
+   */
+  async recordVibrations(): Promise<() => Promise<unknown[]>> {
+    await this.page.evaluate(() => {
+      const asked: unknown[] = [];
+      Object.assign(window, { vibrationsAsked: asked });
+      Object.assign(navigator, {
+        vibrate: (pattern: unknown) => {
+          asked.push(pattern);
+          return true;
+        },
+      });
+    });
+    return () =>
+      this.page.evaluate(() => (window as unknown as { vibrationsAsked: unknown[] }).vibrationsAsked.slice());
+  }
+
   /** A finger to put down, slide and lift by hand; close it when the test is done with it. */
   finger(options: { shift?: boolean } = {}) {
     return Finger.open(this.page, options);
@@ -340,6 +359,20 @@ export class Finger {
       await this.page.waitForTimeout(16);
     }
     this.at = point;
+  }
+
+  /** Puts a second finger down at `point`, while the first stays where it is. */
+  async addSecond(point: Point) {
+    const first = this.at;
+    if (!first) throw new Error("the finger is not down");
+    await this.cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      modifiers: this.modifiers,
+      touchPoints: [
+        { x: first.x, y: first.y, id: 1 },
+        { x: point.x, y: point.y, id: 2 },
+      ],
+    });
   }
 
   /** Rests, then lifts: lifting at speed would start a fling. */
