@@ -57,10 +57,13 @@ const scrollLeftOf = (page: Page, name: string) => scrollSurface(page, name).eva
 const maxScrollOf = (page: Page, name: string) =>
   scrollSurface(page, name).evaluate((el) => el.scrollWidth - el.clientWidth);
 
+/** The toolbar draws the history, which a part mounted fresh on the same project does not have, so it is left out. */
+const withoutToolbar = ({ toolbar: _history, ...others }: Record<string, string>) => others;
+
 /** Every part draws what a part mounted fresh on the same state would draw. Returns what they drew. */
 async function expectDrawnLikeFresh(harness: Harness) {
   const drawn = await harness.layout.roots();
-  expect(drawn).toEqual(await harness.layout.freshRoots());
+  expect(withoutToolbar(drawn)).toEqual(withoutToolbar(await harness.layout.freshRoots()));
   return drawn;
 }
 
@@ -175,7 +178,7 @@ test.describe("a layout of view parts on one session", () => {
     expect(await harness.layout.undo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toBeVisible();
-    expect(await harness.layout.roots()).toEqual(drawnBefore);
+    expect(withoutToolbar(await harness.layout.roots())).toEqual(withoutToolbar(drawnBefore));
     expect(await harness.layout.redo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
   });

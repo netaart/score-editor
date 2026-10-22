@@ -38,6 +38,13 @@ export interface AxisSpec {
   region(t: Messages): string;
   /** Builds the part's content into `canvas`, or returns null when the score has nothing for this part. */
   build(canvas: HTMLElement, score: Score, t: Messages, language: Language): BuiltAxis | null;
+  /** Wires what the part does on its root, once, before the first draw. Its listeners go with `signal`. */
+  attach?(root: HTMLElement, signal: AbortSignal): void;
+  /**
+   * Shows what the session holds beyond the score, such as the selection. It runs after every draw and after every
+   * other change of the session, so it must be cheap when nothing it shows has changed.
+   */
+  refresh?(): void;
 }
 
 /** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
@@ -83,6 +90,7 @@ export function mountAxisPart(
   const releaseStyles = acquireStyles(host);
   const root = create(doc, "div", `sce-root sce-part sce-axis sce-part-${spec.kind}`);
   host.appendChild(root);
+  spec.attach?.(root, abort.signal);
   const ownSurface = options.scroller === undefined;
   const surface = options.scroller ?? root;
   if (!ownSurface) root.classList.add("sce-in-scroller");
@@ -136,6 +144,7 @@ export function mountAxisPart(
     }
     if (ownSurface) markAsRegion(built !== null, t);
     axis.place();
+    spec.refresh?.();
   }
 
   /** A part that scrolls itself must be reachable and named for a keyboard or a screen reader, as a region is. */
@@ -155,6 +164,7 @@ export function mountAxisPart(
   render();
   const unsubscribe = session.subscribe(() => {
     if (session.reading !== reading || session.view.language !== language) render();
+    else spec.refresh?.();
   });
 
   return {

@@ -55,6 +55,16 @@ function rounded(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** The index of the bar `tick` falls in: the last bar that starts at or before it, or the first bar. */
+export function barIndexAt(bars: ReadonlyArray<Bar>, tick: number): number {
+  let index = 0;
+  for (const bar of bars) {
+    if (bar.start > tick) break;
+    index = bar.index;
+  }
+  return index;
+}
+
 export function positionOf(bars: ReadonlyArray<Bar>, barIndex: number, start: number): BarPosition {
   const bar = bars[barIndex];
   const beatTicks = bar ? WHOLE_NOTE_TICKS / bar.meter.denominator : WHOLE_NOTE_TICKS / 4;

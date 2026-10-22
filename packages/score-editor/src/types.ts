@@ -1,5 +1,6 @@
 // ABOUTME: The public types of @neta-art/score-editor: mount options, host callbacks and the dialect constraints.
 // ABOUTME: Almost type-only, so importing it costs nothing at runtime and dialect packages can depend on it safely.
+import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry } from "./dialect";
 import type { SongProject } from "./score";
 
@@ -25,8 +26,17 @@ export interface Notice {
   message: string;
 }
 
+/** What a part that takes the user's editing keys accepts besides its element and its session. */
+export interface EditingPartOptions {
+  /**
+   * Called with the diagnostics when a command the user's keys caused is refused and nothing changed. Without it the
+   * refusal is silent.
+   */
+  onRefused?: (diagnostics: ReadonlyArray<Diagnostic>) => void;
+}
+
 /** What every view part on the time axis takes besides its element and its session. */
-export interface AxisPartOptions {
+export interface AxisPartOptions extends EditingPartOptions {
   /**
    * The element that scrolls the part in time, when the host puts several parts in one scroller, as the default editor
    * does. Without it the part is its own scroll surface.

@@ -12,6 +12,9 @@ export interface Messages {
   zoomOut: string;
   zoomFit: string;
   readOnly: string;
+  history: string;
+  undo: string;
+  redo: string;
   bars: string;
   timeRuler: string;
   sections: string;
@@ -28,7 +31,9 @@ export interface Messages {
   meterText(meter: Meter): string;
   meterName(meter: Meter): string;
   keyText(key: string): string;
-  noteLabel(pitch: string, position: BarPosition, length: number, tiedToNext: boolean): string;
+  noteLabel(pitch: string, position: BarPosition, length: number, tiedToNext: boolean, selected: boolean): string;
+  /** The name of the insertion point; `position` is null at the end of the score, where no bar has the next beat. */
+  insertionPoint(position: BarPosition | null): string;
 }
 
 const en: Messages = {
@@ -39,6 +44,9 @@ const en: Messages = {
   zoomOut: "Zoom out",
   zoomFit: "Fit whole song",
   readOnly: "Read only",
+  history: "History",
+  undo: "Undo",
+  redo: "Redo",
   bars: "Bars",
   timeRuler: "Time ruler",
   sections: "Sections",
@@ -61,10 +69,13 @@ const en: Messages = {
   meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
   meterName: ({ numerator, denominator }) => `Meter ${numerator}/${denominator}`,
   keyText: (key) => `Key ${key}`,
-  noteLabel(pitch, { bar, beat }, length, tiedToNext) {
+  noteLabel(pitch, { bar, beat }, length, tiedToNext, selected) {
     const tie = tiedToNext ? ", tied to the next note" : "";
-    return `${pitch}, bar ${bar} beat ${beat}, length ${length} ${length === 1 ? "beat" : "beats"}${tie}`;
+    const chosen = selected ? ", selected" : "";
+    return `${pitch}, bar ${bar} beat ${beat}, length ${length} ${length === 1 ? "beat" : "beats"}${tie}${chosen}`;
   },
+  insertionPoint: (position) =>
+    position ? `Insertion point, bar ${position.bar} beat ${position.beat}` : "Insertion point, end of the score",
 };
 
 const zh: Messages = {
@@ -75,6 +86,9 @@ const zh: Messages = {
   zoomOut: "缩小",
   zoomFit: "适合整首歌",
   readOnly: "只读",
+  history: "历史",
+  undo: "撤销",
+  redo: "重做",
   bars: "小节",
   timeRuler: "时间尺",
   sections: "段落",
@@ -96,9 +110,12 @@ const zh: Messages = {
   meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
   meterName: ({ numerator, denominator }) => `拍号 ${numerator}/${denominator}`,
   keyText: (key) => `调号 ${key}`,
-  noteLabel(pitch, { bar, beat }, length, tiedToNext) {
-    return `${pitch}，第 ${bar} 小节第 ${beat} 拍，长 ${length} 拍${tiedToNext ? "，连到下一个音" : ""}`;
+  noteLabel(pitch, { bar, beat }, length, tiedToNext, selected) {
+    const tie = tiedToNext ? "，连到下一个音" : "";
+    return `${pitch}，第 ${bar} 小节第 ${beat} 拍，长 ${length} 拍${tie}${selected ? "，已选中" : ""}`;
   },
+  insertionPoint: (position) =>
+    position ? `插入点，第 ${position.bar} 小节第 ${position.beat} 拍` : "插入点，乐谱末尾",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

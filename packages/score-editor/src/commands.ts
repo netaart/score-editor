@@ -15,7 +15,7 @@ function commandFailure(code: "note-not-found" | "not-a-note", id: string): Scor
 }
 
 /** The whole tie chain around a note: every note tied into it and every note it ties into. */
-function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): ScoreNote[] {
+export function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): ScoreNote[] {
   const voiceNotes = notes.filter((note) => note.voice === target.voice).sort((a, b) => a.start - b.start);
   const index = voiceNotes.findIndex((note) => note.id === target.id);
   let first = index;

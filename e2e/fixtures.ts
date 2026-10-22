@@ -9,7 +9,10 @@ export interface Point {
 
 /** The editing session as the test page exposes it to the helpers below. */
 interface PageSession {
-  view: { zoom: number; scrollLeft: number; language: string };
+  project: { score: string };
+  selection: string[];
+  insertionPoint: { tick: number } | null;
+  view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
   reading: { kind: string; score?: { notes: Array<{ id: string; voice: string; midi: number | null }> } };
   canUndo: boolean;
   dispatch(command: unknown): { ok: boolean; diagnostics: Array<{ code: string }> };
@@ -41,8 +44,16 @@ interface PageLayout {
   close(): void;
 }
 
+/** A one-time message the mounted editor sent to its host. */
+export interface PageNotice {
+  code: string;
+  level: string;
+  message: string;
+}
+
 interface PageHarness {
   stage: HTMLElement;
+  notices: PageNotice[];
   layout: PageLayout;
   host: { addRules(kind: "important" | "hostile"): void; addProbe(): void; setColorScheme(scheme: string): void };
   shadowRoot: ShadowRoot | null;
@@ -61,7 +72,10 @@ declare global {
 export class Layout {
   constructor(private readonly page: Page) {}
 
-  /** `score`, `language`, `project` and `shadow` as for mount; `parts` names the parts to mount; `scene` a host layout. */
+  /**
+   * `score`, `language`, `project`, `editable` and `shadow` as for mount; `parts` names the parts to mount; `scene` a host
+   * layout.
+   */
   open(options: Record<string, unknown> = {}) {
     return this.page.evaluate((o) => window.harness.layout.open(o), options);
   }
@@ -134,6 +148,29 @@ export class Layout {
     return this.page.evaluate(() => ({ ...window.harness.layout.live().view }));
   }
 
+  /** The ids of the selected notes, as the session holds them. */
+  selection() {
+    return this.page.evaluate(() => [...window.harness.layout.live().selection]);
+  }
+
+  /** The insertion point, as the session holds it. */
+  insertionPoint() {
+    return this.page.evaluate(() => {
+      const { insertionPoint } = window.harness.layout.live();
+      return insertionPoint === null ? null : { ...insertionPoint };
+    });
+  }
+
+  /** The score text of the session's project. */
+  scoreText() {
+    return this.page.evaluate(() => window.harness.layout.live().project.score);
+  }
+
+  /** Says, as a host does with its permissions, whether the user may edit. */
+  setEditable(editable: boolean) {
+    return this.page.evaluate((value) => window.harness.layout.live().setView({ editable: value }), editable);
+  }
+
   setView(patch: Record<string, unknown>) {
     return this.page.evaluate((p) => window.harness.layout.live().setView(p), patch);
   }
@@ -192,6 +229,11 @@ export class Harness {
   /** Switches the page's `color-scheme`, as a host with a dark mode does. */
   setColorScheme(scheme: "dark" | "light") {
     return this.page.evaluate((value) => window.harness.host.setColorScheme(value), scheme);
+  }
+
+  /** The notices the mounted editor has sent to its host so far, in order. */
+  notices() {
+    return this.page.evaluate(() => window.harness.notices.map((notice) => ({ ...notice })));
   }
 
   /** Waits for the browser to render `count` frames, which is when scroll events reach the page. */
