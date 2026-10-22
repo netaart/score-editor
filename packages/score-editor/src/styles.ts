@@ -628,7 +628,10 @@ ${labelThinning()}
   border-bottom-left-radius: 0;
 }
 
-/* The insertion point: a line through the lane, heavier and darker than a bar line, with a flag at its top. */
+/*
+ * The insertion point: a line through the lane, heavier and darker than a bar line, with a flag at its top. The flag
+ * sticks just under the pinned track head, so it stays in view when the lane is scrolled past its own top.
+ */
 .sce-root .sce-insertion {
   position: absolute;
   z-index: 2;
@@ -642,9 +645,10 @@ ${labelThinning()}
 }
 .sce-root .sce-insertion::before {
   content: "";
-  position: absolute;
-  top: 0;
-  left: -4px;
+  position: sticky;
+  top: calc(var(--sce-_head-top, 0px) + var(--sce-_band));
+  display: block;
+  margin-left: -4px;
   border: 5px solid transparent;
   border-top-color: var(--sce-_text);
   border-bottom-width: 0;

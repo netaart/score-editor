@@ -1268,6 +1268,47 @@ test.describe("editing in the default editor", () => {
     await expect(page.getByText("Read only", { exact: true })).toBeHidden();
   });
 
+  test("the insertion point's flag stays in view under the pinned track head when the lane is scrolled past its top", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    // Three octaves of range make a lane taller than the editor, so the lane can be scrolled past its own top.
+    await harness.mount({ score: { text: vocalOnly("C,4C4c4c'4|") } });
+    const lane = page.getByRole("list", { name: "Vocal" });
+    const view = page.getByRole("region", { name: "Arrangement" });
+    await view.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    const row = await box(noteNamed(page, /^C4,/));
+    await pressAt(isMobile, lane, { x: 100, y: row.y + row.height / 2 - (await box(lane)).y });
+    const point = page.getByRole("separator", { name: /^Insertion point/ });
+    await expect(point).toHaveCount(1);
+    const head = await box(page.locator(".sce-track-head"));
+    const line = await box(point);
+    expect(line.y, "the lane's own top is scrolled out of sight").toBeLessThan(head.y);
+
+    const dark = (rgb: number[]) => Math.max(...rgb.slice(0, 3)) < 80;
+    const readPixel = async (x: number, y: number) => {
+      const png = await page.screenshot({ clip: { x: Math.floor(x), y: Math.floor(y), width: 1, height: 1 } });
+      return page.evaluate(async (base64) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${base64}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const context = canvas.getContext("2d");
+        context?.drawImage(image, 0, 0);
+        return Array.from(context?.getImageData(0, 0, 1, 1).data ?? []);
+      }, png.toString("base64"));
+    };
+    // The flag is a wedge about 10px wide at its top: the pixel on each side of the line, just under the head, is its.
+    const under = head.y + head.height + 1;
+    expect(dark(await readPixel(line.x - 1, under))).toBe(true);
+    expect(dark(await readPixel(line.x + line.width, under))).toBe(true);
+  });
+
   test("tells the host once, in the current language, when the score would not take a delete", async ({
     page,
     harness,
