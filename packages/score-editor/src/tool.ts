@@ -68,7 +68,7 @@ export interface ScoreTool {
   readonly name: ToolText;
   /** An alternative spelling for hosts that read a tool's display name under this key. */
   readonly displayName?: ToolText;
-  readonly parameters: ReadonlyArray<ToolParameter>;
+  readonly parameters?: ReadonlyArray<ToolParameter>;
   readonly commands: ToolCommandBuilder;
   /** An alternative spelling for a builder; `commands` is the one the registry and session call. */
   readonly build?: ToolCommandBuilder;
@@ -307,3 +307,10 @@ export function previewTool(
 
 /** The same preview under the name that pairs with `ScoreTool`. */
 export const previewScoreTool = previewTool;
+
+/** Names a host may use for the same registry and result types. */
+export type ScoreToolRegistry = ToolRegistry;
+export type ToolRunResult = ToolResult;
+export type ToolPreviewResult = ToolResult;
+export type ToolParamValue = ToolParameterValue;
+export type ToolParamValues = ToolParameterValues;
