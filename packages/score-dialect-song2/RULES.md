@@ -64,7 +64,7 @@ The header is fixed. It has exactly seven lines when `Ins` is absent and exactly
 
 **H4 — unit line.** Line 4 MUST match `L:1/[1-9][0-9]{0,5}` exactly. The denominator MUST be a power of two no greater than 1024. `L:1/1`, `L:1/1024`, and every power of two between them are accepted; `L:1/0`, `L:1/3`, `L:1/2048`, `L:2/16`, and a denominator with a leading zero are rejected with `header` field `L`. Reading result: one unit is `4/d` quarter notes.
 
-**H5 — tempo line.** Line 5 MUST match `Q:1/4=[1-9][0-9]*` exactly. The value is a positive integer BPM with no leading zero and no other characters. Reading imposes no upper bound; the tempo does not affect any position or duration. Anything else is rejected with `header` field `Q`. A writer MUST emit a value from 20 through 400 inclusive, the product tempo range. Reading result: the integer tempo.
+**H5 — tempo line.** Line 5 MUST match `Q:1/4=[1-9][0-9]*` exactly. The value is a positive integer BPM with no leading zero and no other characters. Reading imposes no upper bound; the tempo does not affect any position or duration. Anything else is rejected with `header` field `Q`. A writer MUST write a new tempo value from 20 through 400 inclusive, the product tempo range; an untouched `Q:` line keeps the bytes it was read with, even when its value is outside that range. Reading result: the integer tempo.
 
 **H6 — Vocal definition.** Line 6 MUST be exactly:
 
@@ -337,7 +337,7 @@ A writer that implements these rules MUST produce text that reads back to the sa
 
 **W1 — line endings and whitespace.** Write LF line endings only, no CR, no byte-order mark, no trailing spaces or tabs, and no blank lines except optionally one final LF after the last line. Do not rely on a reader’s trimming.
 
-**W2 — header.** Write the fixed header in order: `X:1`, `T:`, `M:<n>/<d>`, `L:1/<d>`, `Q:1/4=<bpm>`, the exact `Vocal` definition, optionally the exact `Ins` definition, and `K:<key>`. Write no other header field. Write `bpm` from 20 through 400. Write only a key from H9 and a meter and unit from H3 and H4.
+**W2 — header.** Write the fixed header in order: `X:1`, `T:`, `M:<n>/<d>`, `L:1/<d>`, `Q:1/4=<bpm>`, the exact `Vocal` definition, optionally the exact `Ins` definition, and `K:<key>`. Write no other header field. Write a new `bpm` from 20 through 400; keep an unchanged `Q:` line exactly as read (H5). Write only a key from H9 and a meter and unit from H3 and H4.
 
 **W3 — voices and groups.** Write `Vocal` first and, if used, `Ins` second in the header. In the body write one `Vocal` block and then, if `Ins` is present, one `Ins` block per group. Never write `Ins` before `Vocal`, never write an `Ins` block in a Vocal-only score, and never omit a required `Ins` block.
 
@@ -362,6 +362,8 @@ A writer that implements these rules MUST produce text that reads back to the sa
 **W13 — pitch spelling.** For a sharp key, C major, or A minor, spell chromatic notes with sharps; for a flat key, spell them with flats; use double accidentals only when the spelling requires them. Keep every sounding pitch within MIDI 0–127.
 
 **W14 — complete scores only.** A writer that produces a new score MUST write a complete score with every block and closing barline; it MUST NOT emit a cut tail. A writer that edits a cut score keeps its cut: an unchanged cut tail is emitted byte for byte (X17); bars before it MAY be rewritten under W2–W13; a rewritten partial measure keeps its finished tokens and its X4 remainder, and keeps an X5 remainder only while the tie into it is unchanged. An edit after which the text would read with a different cut, or with none, is not writable.
+
+**W15 — the two cut repairs end the cut.** A command that repairs a cut is not an ordinary edit under W14. `fill` pads every voice that stops before the score's last measure with rests, through that measure, so the text reads complete. `delete` removes the incomplete measure in every voice that has one, with its unfinished bytes, and removes the measure itself when no voice keeps material in it; it refuses when another voice still uses the measure. Both leave a complete score with no cut. Every rest is written in D1 values, splitting a longer length into consecutive rests.
 
 ## Reading diagnostic codes
 

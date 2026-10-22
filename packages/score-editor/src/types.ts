@@ -88,8 +88,12 @@ export interface MeterRule {
   readonly symbolic: boolean;
 }
 
-/** The chord names a dialect accepts: root spellings, quality suffixes and whether a slash bass is allowed. */
+/**
+ * The chord names a dialect accepts. A root is a key spelling: a letter A-G, then #, ##, b or bb. A chord name
+ * is a root, one quality, and optionally / and a bass root; the core reads this spelling to transpose.
+ */
 export interface ChordVocabulary {
+  /** Roots in the key spelling, such as `C`, `F#` or `Bbb`. */
   readonly roots: ReadonlyArray<string>;
   /** Suffixes after the root. The empty string is a major triad. */
   readonly qualities: ReadonlyArray<string>;
@@ -102,7 +106,7 @@ export interface ChordVocabulary {
 export interface DialectConstraints {
   /** The voices of a score, in display order. */
   voices: ReadonlyArray<{ name: string; required: boolean; allowsChords: boolean }>;
-  /** Keys a score may use, spelled as the dialect writes them. */
+  /** Keys a score may use: a letter A-G, then #, ##, b or bb, then m for a minor key. */
   keys: { major: ReadonlyArray<string>; minor: ReadonlyArray<string> };
   /** The tempo unit the dialect writes and its inclusive range. */
   tempo: { unit: string; min: number; max: number };

@@ -30,6 +30,12 @@
     "hasChords": true
   },
   {
+    "file": "key-changes.abc",
+    "truncated": false,
+    "voices": ["Vocal", "Ins"],
+    "hasChords": true
+  },
+  {
     "file": "melody-cut-tail.abc",
     "truncated": true,
     "voices": ["Vocal", "Ins"],
