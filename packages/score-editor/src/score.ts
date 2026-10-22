@@ -92,6 +92,11 @@ export interface Score {
   /** True when the text carries any chord token, finished or unfinished. */
   readonly hasChords: boolean;
   readonly source: unknown;
+  /**
+   * The score's written duration unit in ticks: one number after a note lasts this many ticks. A command that writes a
+   * new length takes the duration numbers from the dialect's constraints and this unit from the score it edits.
+   */
+  readonly unitTicks: number;
 }
 
 /** The song project that carries a score. Lyric-line binding comes in a later ticket. */

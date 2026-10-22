@@ -62,6 +62,11 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "note-before-start",
+  "note-past-end",
+  "note-too-short",
+  "grid-not-allowed",
+  "offset-not-integer",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -141,6 +146,11 @@ interface Catalog {
   readonly sectionNameBlank: Text;
   readonly sectionNameLineBreak: Text;
   readonly sectionNameTrailingSpace: Text;
+  readonly noteBeforeStart: Text;
+  readonly notePastEnd: Text;
+  readonly noteTooShort: Text;
+  readonly gridNotAllowed: Text;
+  readonly offsetNotInteger: Text;
   readonly styleNoBpm: Text;
   readonly melodyWithChords: Text;
 }
@@ -739,6 +749,46 @@ function chineseSectionNameTrailingSpace(): string {
   return "段落名不能以空格或制表符结尾，因为乐谱格式会去掉它。";
 }
 
+function englishNoteBeforeStart(): string {
+  return "The note would start before the beginning of the score.";
+}
+
+function chineseNoteBeforeStart(): string {
+  return "音符会被移到乐谱开头之前。";
+}
+
+function englishNotePastEnd(): string {
+  return "The note would end past the end of the score.";
+}
+
+function chineseNotePastEnd(): string {
+  return "音符的结尾会超出乐谱的末尾。";
+}
+
+function englishNoteTooShort(params: DiagnosticParams): string {
+  return `A note cannot be shorter than one grid step of ${value(params, "grid")}.`;
+}
+
+function chineseNoteTooShort(params: DiagnosticParams): string {
+  return `音符不能短于 ${value(params, "grid")} 网格的一步。`;
+}
+
+function englishGridNotAllowed(params: DiagnosticParams): string {
+  return `The ${value(params, "grid")}${value(params, "dotted") === "true" ? " dotted" : ""} grid is not one this score can write.`;
+}
+
+function chineseGridNotAllowed(params: DiagnosticParams): string {
+  return `这份乐谱写不出 ${value(params, "grid")}${value(params, "dotted") === "true" ? " 附点" : ""}的网格。`;
+}
+
+function englishOffsetNotInteger(params: DiagnosticParams): string {
+  return `The ${value(params, "field")} offset must be a whole number.`;
+}
+
+function chineseOffsetNotInteger(params: DiagnosticParams): string {
+  return `${value(params, "field") === "pitch" ? "音高" : "时间"}偏移必须是整数。`;
+}
+
 function englishStyleNoBpm(): string {
   return "The style text has no BPM, so it was left as it is.";
 }
@@ -803,6 +853,11 @@ const en: Catalog = {
   sectionNameBlank: englishSectionNameBlank,
   sectionNameLineBreak: englishSectionNameLineBreak,
   sectionNameTrailingSpace: englishSectionNameTrailingSpace,
+  noteBeforeStart: englishNoteBeforeStart,
+  notePastEnd: englishNotePastEnd,
+  noteTooShort: englishNoteTooShort,
+  gridNotAllowed: englishGridNotAllowed,
+  offsetNotInteger: englishOffsetNotInteger,
   styleNoBpm: englishStyleNoBpm,
   melodyWithChords: englishMelodyWithChords,
 };
@@ -855,6 +910,11 @@ const zh: Catalog = {
   sectionNameBlank: chineseSectionNameBlank,
   sectionNameLineBreak: chineseSectionNameLineBreak,
   sectionNameTrailingSpace: chineseSectionNameTrailingSpace,
+  noteBeforeStart: chineseNoteBeforeStart,
+  notePastEnd: chineseNotePastEnd,
+  noteTooShort: chineseNoteTooShort,
+  gridNotAllowed: chineseGridNotAllowed,
+  offsetNotInteger: chineseOffsetNotInteger,
   styleNoBpm: chineseStyleNoBpm,
   melodyWithChords: chineseMelodyWithChords,
 };
@@ -958,6 +1018,16 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.sectionNameLineBreak(diagnostic.params);
     case "section-name-trailing-space":
       return catalog.sectionNameTrailingSpace(diagnostic.params);
+    case "note-before-start":
+      return catalog.noteBeforeStart(diagnostic.params);
+    case "note-past-end":
+      return catalog.notePastEnd(diagnostic.params);
+    case "note-too-short":
+      return catalog.noteTooShort(diagnostic.params);
+    case "grid-not-allowed":
+      return catalog.gridNotAllowed(diagnostic.params);
+    case "offset-not-integer":
+      return catalog.offsetNotInteger(diagnostic.params);
     case "style-no-bpm":
       return catalog.styleNoBpm(diagnostic.params);
     case "melody-with-chords":

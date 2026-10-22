@@ -63,6 +63,11 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "note-before-start",
+  "note-past-end",
+  "note-too-short",
+  "grid-not-allowed",
+  "offset-not-integer",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = ["style-no-bpm", "melody-with-chords"];

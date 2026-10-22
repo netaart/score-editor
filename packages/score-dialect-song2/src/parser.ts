@@ -1350,6 +1350,7 @@ class Song2Parser {
       truncation,
       hasChords: this.hasChords,
       source,
+      unitTicks: (4 * TICKS_PER_QUARTER) / this.unitDenominator,
     };
   }
 
