@@ -578,6 +578,22 @@ test.describe("a finger", () => {
     }
   });
 
+  test("rests on empty space while the editor turns read-only: no box is armed", async ({ page, harness }) => {
+    await openTrack(harness);
+    const finger = await harness.finger();
+    try {
+      await finger.down(await spot(page, 2, 2));
+      await harness.layout.setEditable(false);
+      await page.waitForTimeout(600);
+      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
+    await harness.layout.setEditable(true);
+    expect(await harness.layout.selection()).toEqual([]);
+  });
+
   test("holds on a note, moves away, and leaves the selection as it was", async ({ page, harness, press }) => {
     await openTrack(harness, vocalOnly(...Array(3).fill("C4D4E4F4|")));
     await press(note(page, C4));

@@ -200,6 +200,11 @@ export function installLanePointer(
   function rest(g: Gesture): void {
     g.hold = undefined;
     if (gesture !== g || g.phase !== "pressed") return;
+    // The lane may have been redrawn, or the editor made read-only, while the finger rested.
+    if (!session.view.editable || options.lane() !== g.geometry) {
+      finish();
+      return;
+    }
     // A long press on a touch screen can open the browser's own menu; the hold is the press's meaning here.
     root.addEventListener("contextmenu", (event) => event.preventDefault(), { signal: g.ends.signal });
     if (g.noteId !== undefined) {
