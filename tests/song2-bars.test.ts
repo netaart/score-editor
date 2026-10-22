@@ -771,6 +771,128 @@ describe("every sample", () => {
   }
 });
 
+describe("review reproduction cases", () => {
+  it("inserts a rest in 5/8 by splitting it into writable values", () => {
+    const text = `X:1
+T:
+M:5/8
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+K:C
+V: Vocal
+C8D2|`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "insertBar", bar: 0 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const output = parse(result.text);
+    check(output);
+    const inserted = output.notes.filter((note) => note.bar === 0);
+    expect(inserted.length).toBeGreaterThan(0);
+    expect(inserted.every((note) => note.midi === null)).toBe(true);
+    expect(inserted.reduce((sum, note) => sum + note.duration, 0)).toBe(640);
+  });
+
+  it("splits a note crossing a new 3/4 bar line into writable tied pieces", () => {
+    const text = `X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+K:C
+V: Vocal
+C2D3E8F3|`;
+    const result = applyScoreCommand(song2Dialect, text, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 3, denominator: 4 },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const output = parse(result.text);
+    check(output);
+    const allowed = new Set([1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48].map((units) => units * 64));
+    expect(output.notes.every((note) => allowed.has(note.duration))).toBe(true);
+  });
+
+  it("removes the last section and its marker when its only bar is the cut", () => {
+    const text = `X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+K:C
+% a
+V: Vocal
+C16|
+% b
+V: Vocal
+D8^`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "deleteTruncatedBar" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+K:C
+% a
+V: Vocal
+C16|`);
+    const output = parse(result.text);
+    check(output);
+    expect(output.truncation).toBeNull();
+  });
+
+  it("keeps a rewritten partial measure's X4 remainder when a bar before it is deleted", () => {
+    const text = `X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+K:C
+V: Vocal
+C16|C8-"G`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "deleteBars", from: 0, count: 1 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+K:C
+V: Vocal
+C8"G`);
+    const output = parse(result.text);
+    check(output);
+    expect(output.truncation).toEqual({ voice: "Vocal", bar: 0, short: true });
+    expect(output.hasChords).toBe(true);
+  });
+
+  it("refuses to delete every bar with last-bar", () => {
+    const result = applyScoreCommand(song2Dialect, KEY_METER_SCORE, {
+      type: "deleteBars",
+      from: 0,
+      count: parse(KEY_METER_SCORE).bars.length,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("last-bar");
+  });
+});
+
 describe("failure branches", () => {
   const cutSample = `${HEADER}
 K:C
