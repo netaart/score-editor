@@ -22,6 +22,7 @@ describe("package entries in a node environment", () => {
       "mountCutNotice",
       "mountProblemView",
       "mountTimeRuler",
+      "mountToolbar",
       "mountVoiceTrack",
       "mountZoomControl",
       // What 0.1.0 exported.
@@ -39,9 +40,8 @@ describe("package entries in a node environment", () => {
   });
 
   it("refuses to mount a view part without a DOM instead of failing obscurely", async () => {
-    const { createDialectRegistry, createEditingSession, mountTimeRuler, mountZoomControl } = await import(
-      "@neta-art/score-editor"
-    );
+    const { createDialectRegistry, createEditingSession, mountTimeRuler, mountToolbar, mountZoomControl } =
+      await import("@neta-art/score-editor");
     const project = {
       style: "",
       lyrics: "",
@@ -53,6 +53,7 @@ describe("package entries in a node environment", () => {
     } as const;
     const session = createEditingSession({ project, dialects: createDialectRegistry([]) });
     expect(() => mountTimeRuler({} as HTMLElement, session)).toThrow(/browser/i);
+    expect(() => mountToolbar({} as HTMLElement, session)).toThrow(/browser/i);
     expect(() => mountZoomControl({} as HTMLElement, session)).toThrow(/browser/i);
   });
 
