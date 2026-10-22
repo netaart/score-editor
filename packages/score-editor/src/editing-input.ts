@@ -2,7 +2,8 @@
 // ABOUTME: The view parts turn their events into these inputs, so a host's own views get the same keys and clicks.
 import { beatLineAfter, beatLineBefore, gridTicks, nearestBeatLine } from "./arrangement";
 import type { Diagnostic } from "./diagnostics";
-import type { EditingSession } from "./session";
+import type { Score } from "./score";
+import type { EditingSession, InsertionPoint } from "./session";
 
 /** A key press with the modifiers that were held. */
 export interface EditingKeyInput {
@@ -34,28 +35,41 @@ export interface EditingInputResult {
 const IGNORED: EditingInputResult = { handled: false, refused: [] };
 const HANDLED: EditingInputResult = { handled: true, refused: [] };
 
-/** Ctrl or Cmd with Z undoes and with Shift redoes; Ctrl with Y redoes. True when the key was one of these. */
-function historyKey(session: EditingSession, input: EditingKeyInput): boolean {
-  if (input.altKey === true || (input.ctrlKey !== true && input.metaKey !== true)) return false;
+/** The score the session reads, or null while its project cannot be read: then no input has anything to act on. */
+function readableScore(session: EditingSession): Score | null {
+  const { reading } = session;
+  return reading.kind === "score" ? reading.score : null;
+}
+
+/** Ctrl or Cmd with Z undoes and with Shift redoes; Ctrl with Y redoes. Null for any other key. */
+function historyActionOf(input: EditingKeyInput): "undo" | "redo" | null {
+  if (input.altKey === true || (input.ctrlKey !== true && input.metaKey !== true)) return null;
   const letter = input.key.toLowerCase();
-  if (letter === "z") {
-    if (input.shiftKey === true) session.redo();
-    else session.undo();
-    return true;
-  }
-  if (letter === "y" && input.ctrlKey === true && input.metaKey !== true && input.shiftKey !== true) {
-    session.redo();
-    return true;
-  }
-  return false;
+  if (letter === "z") return input.shiftKey === true ? "redo" : "undo";
+  if (letter === "y" && input.ctrlKey === true && input.metaKey !== true && input.shiftKey !== true) return "redo";
+  return null;
+}
+
+/**
+ * Where an insertion point key sends the point, in ticks, or null when the key is not one or has nothing to act on:
+ * Left and Right step to the neighbouring beat line and need a point, Home and End go to the ends of the score.
+ */
+function insertionPointTargetOf(score: Score, point: InsertionPoint | null, input: EditingKeyInput): number | null {
+  if (input.ctrlKey === true || input.metaKey === true || input.shiftKey === true || input.altKey === true) return null;
+  if (input.key === "Home") return 0;
+  if (input.key === "End") return gridTicks(score);
+  if (point === null) return null;
+  if (input.key === "ArrowLeft") return beatLineBefore(score.bars, point.tick);
+  if (input.key === "ArrowRight") return beatLineAfter(score.bars, point.tick);
+  return null;
 }
 
 /** The selected ids that still name a pitched note, read now: an earlier command may have turned some into rests. */
 function selectedNotes(session: EditingSession): string[] {
-  const { reading, selection } = session;
-  if (reading.kind !== "score") return [];
-  const pitched = new Set(reading.score.notes.filter((note) => note.midi !== null).map((note) => note.id));
-  return selection.filter((id) => pitched.has(id));
+  const score = readableScore(session);
+  if (score === null) return [];
+  const pitched = new Set(score.notes.filter((note) => note.midi !== null).map((note) => note.id));
+  return session.selection.filter((id) => pitched.has(id));
 }
 
 /**
@@ -75,37 +89,32 @@ function deleteSelection(session: EditingSession): EditingInputResult {
 }
 
 function clickNote(session: EditingSession, noteId: string): EditingInputResult {
-  const { reading } = session;
-  const note = reading.kind === "score" ? reading.score.notes.find((found) => found.id === noteId) : undefined;
+  const note = readableScore(session)?.notes.find((found) => found.id === noteId);
   if (note === undefined || note.midi === null) return IGNORED;
   session.select([noteId]);
   return HANDLED;
 }
 
 function clickEmpty(session: EditingSession, tick: number): EditingInputResult {
-  const { reading } = session;
-  if (reading.kind !== "score" || !Number.isFinite(tick)) return IGNORED;
+  const score = readableScore(session);
+  if (score === null || !Number.isFinite(tick)) return IGNORED;
   session.select([]);
-  session.setInsertionPoint({ tick: nearestBeatLine(reading.score.bars, tick) });
+  session.setInsertionPoint({ tick: nearestBeatLine(score.bars, tick) });
   return HANDLED;
 }
 
-/** Left and Right step the insertion point to the neighbouring beat line, Home and End send it to the ends. */
-function moveInsertionPoint(session: EditingSession, input: EditingKeyInput): boolean {
-  if (input.ctrlKey === true || input.metaKey === true || input.shiftKey === true || input.altKey === true)
-    return false;
-  const { reading, insertionPoint } = session;
-  if (reading.kind !== "score") return false;
-  const { bars } = reading.score;
-  let tick: number;
-  if (input.key === "Home") tick = 0;
-  else if (input.key === "End") tick = gridTicks(reading.score);
-  else if (insertionPoint === null) return false;
-  else if (input.key === "ArrowLeft") tick = beatLineBefore(bars, insertionPoint.tick);
-  else if (input.key === "ArrowRight") tick = beatLineAfter(bars, insertionPoint.tick);
-  else return false;
+function pressKey(session: EditingSession, input: EditingKeyInput): EditingInputResult {
+  if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(session);
+  const history = historyActionOf(input);
+  if (history !== null) {
+    session[history]();
+    return HANDLED;
+  }
+  const score = readableScore(session);
+  const tick = score === null ? null : insertionPointTargetOf(score, session.insertionPoint, input);
+  if (tick === null) return IGNORED;
   session.setInsertionPoint({ tick });
-  return true;
+  return HANDLED;
 }
 
 /**
@@ -113,8 +122,12 @@ function moveInsertionPoint(session: EditingSession, input: EditingKeyInput): bo
  */
 export function handleEditingInput(session: EditingSession, input: EditingInput): EditingInputResult {
   if (!session.view.editable) return IGNORED;
-  if (input.type === "click-note") return clickNote(session, input.noteId);
-  if (input.type === "click-empty") return clickEmpty(session, input.tick);
-  if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(session);
-  return historyKey(session, input) || moveInsertionPoint(session, input) ? HANDLED : IGNORED;
+  switch (input.type) {
+    case "click-note":
+      return clickNote(session, input.noteId);
+    case "click-empty":
+      return clickEmpty(session, input.tick);
+    case "key":
+      return pressKey(session, input);
+  }
 }
