@@ -17,8 +17,12 @@ interface SongProject {
   seed: number | null;
   modelId: string; // must match the dialect id, such as "song2"
   sourceKey: string;
+  lyricLines?: LyricLine[]; // absent: the layout comes from lyrics and the score
 }
 ```
+
+`LyricLine` is `{ text, phrase }`, where `LyricPhrase` is `{ firstBar, barCount }`; `phrase: null` puts the line in
+the unaligned area. Only that binding is stored; syllables, note onsets and the match are computed.
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, `voices`, `bars`, `keys`, `sections`, `notes`, `chords`, `truncation`,
@@ -87,6 +91,27 @@ if (reading.score) {
 A host that stores scores can use this path without mounting anything. To write a whole model instead of one command,
 call `song2Dialect.serialize(score)` and keep the project otherwise unchanged; call `song2Dialect.check(score)` to see
 whether the written text reads back as the same model.
+
+## Lyrics
+
+`lyricLinesOf(project, score)` returns `project.lyricLines` when present and otherwise computes the layout from the
+legacy text with `layoutLyrics(score, project.lyrics)`: a `[name]` line picks the first unused section with that name
+and its lines go one per bar, lines before the first label go into the unnamed opening section or the first section,
+and lines that do not fit go to the unaligned area. The layout is not written into the project. `alignedLyricLines` and
+`unalignedLyricLines` split a line list by its area.
+
+`joinLyrics(score, lines)` writes the joined text in section order, labels each named section and leaves unaligned
+lines out. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`; `LYRICS_MAX_CHARACTERS` is 2000 and
+`lyricCharacterCount` counts Unicode code points, line breaks included.
+
+`lyricSyllables` and `syllableCount` count Han and kana one each, Latin by vowel groups (a `-` splits by hand), digits
+and other letters one each, and ignore spaces and punctuation. `noteOnsets(score, phrase)` gives the `Vocal` notes in
+a phrase that are not rests or tie continuations. `alignLyricLine(score, line)` returns `LyricAlignment` with the
+syllables, onsets, whether the counts are equal, and one `LyricSyllableNote` per syllable when they are.
+
+A score command through `applyProjectCommand` remaps stored lines: a deleted section takes its lines, a copied section
+copies them, a moved section moves them, and bar commands shift their bindings. A project without `lyricLines`, and
+every result of `applyScoreCommand`, is unchanged by this.
 
 ## The dialect and its constraints
 
