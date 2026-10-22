@@ -7,6 +7,9 @@ const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`)
 /** The one element a part drew into its slot. */
 const partRoot = (page: Page, name: string) => slot(page, name).locator(":scope > *");
 
+/** Whatever a part draws for the score: its root without the empty live region every axis part keeps for what it says. */
+const drawnContent = (page: Page, name: string) => partRoot(page, name).locator('*:not([role="status"])');
+
 /** What a part on the time axis calls itself when it is a scroll surface of its own. */
 const REGION_NAMES: Record<string, string> = { ruler: "Time ruler", chords: "Chords", vocal: "Vocal", ins: "Ins" };
 function scrollSurface(page: Page, name: string): Locator {
@@ -207,7 +210,7 @@ test.describe("a layout of view parts on one session", () => {
     );
     await expect(slot(page, "zoom").getByRole("group", { name: "Zoom" })).toBeHidden();
     await expect(slot(page, "notice").getByRole("note")).toBeHidden();
-    for (const name of partNames.axis) await expect(partRoot(page, name).locator("*")).toHaveCount(0);
+    for (const name of partNames.axis) await expect(drawnContent(page, name)).toHaveCount(0);
 
     await harness.layout.replace({ score: { sample: "compact-three-sections" } });
     await expect(slot(page, "problem").getByRole("alert")).toHaveCount(0);
@@ -225,7 +228,7 @@ test.describe("a layout of view parts on one session", () => {
     await expect(slot(page, "problem").getByRole("alert")).toHaveText(
       "The score format of “other-model” isn't supported by this editor, so the score can't be shown.",
     );
-    for (const name of partNames.axis) await expect(partRoot(page, name).locator("*")).toHaveCount(0);
+    for (const name of partNames.axis) await expect(drawnContent(page, name)).toHaveCount(0);
     expect(await harness.layout.dispatch({ type: "toRest", noteId: "x" })).toMatchObject({
       ok: false,
       diagnostics: [{ code: "no-dialect" }],

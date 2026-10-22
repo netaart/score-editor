@@ -20,6 +20,7 @@ import type { Messages } from "./i18n";
 import type { Note, Score } from "./score";
 import type { EditingSession, InsertionPoint } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
+import { announceVoice } from "./voice-announcements";
 
 export interface VoiceTrackOptions extends AxisPartOptions {
   /** The voice to draw, as the dialect names it, such as `Vocal`. */
@@ -142,8 +143,9 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       kind: "voice-track",
       who: "mountVoiceTrack",
       region: () => voice,
-      attach(own, signal) {
+      attach(own, signal, live) {
         root = own;
+        announceVoice(session, voice, live, signal);
         own.setAttribute("data-editable", String(session.view.editable));
         let down: { id: number; x: number; y: number } | null = null;
         own.addEventListener(

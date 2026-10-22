@@ -608,3 +608,111 @@ test.describe("the insertion point", () => {
     expect(await harness.layout.insertionPoint()).toBeNull();
   });
 });
+
+test.describe("announcements for screen readers", () => {
+  /** The polite live region a part keeps for what it did, read the way an assistive technology reads it. */
+  const said = (page: Page, part: string) => slot(page, part).getByRole("status");
+  const REFUSED =
+    "This change can't be written into the score safely, so the score was left as it was. (bar 1, beat 1)";
+
+  test("a voice track says what was selected, where the insertion point moved and that a delete happened", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await expect(said(page, "vocal")).toHaveText("");
+
+    await press(note(page, D4));
+    await expect(said(page, "vocal")).toHaveText("Selected D4, bar 1 beat 2");
+
+    await press(lane(page), { x: 70, y: 4 });
+    await expect(said(page, "vocal")).toHaveText("Insertion point, bar 1 beat 3");
+    await page.keyboard.press("ArrowRight");
+    await expect(said(page, "vocal")).toHaveText("Insertion point, bar 1 beat 4");
+    await page.keyboard.press("End");
+    await expect(said(page, "vocal")).toHaveText("Insertion point, end of the score");
+
+    await press(note(page, D4));
+    await page.keyboard.press("Delete");
+    await expect(note(page, D4)).toHaveCount(0);
+    await expect(said(page, "vocal")).toHaveText("Deleted D4, bar 1 beat 2");
+  });
+
+  test("keeps one region through the redraw a delete causes, and the words it was given stay", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    const region = said(page, "vocal");
+    const handle = await region.elementHandle();
+
+    await press(note(page, D4));
+    await page.keyboard.press("Delete");
+    await expect(note(page, D4)).toHaveCount(0);
+    await expect(region).toHaveText("Deleted D4, bar 1 beat 2");
+    expect(await handle?.evaluate((el) => el.isConnected)).toBe(true);
+  });
+
+  test("says how many notes a delete took, and how many were selected", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await harness.layout.select(["Vocal:256", "Vocal:768"]);
+    await expect(said(page, "vocal")).toHaveText("Selected 2 notes");
+
+    await press(deleteButton(page));
+    await expect(said(page, "vocal")).toHaveText("Deleted 2 notes");
+  });
+
+  test("speaks the session's language", async ({ page, harness, press }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["toolbar", "vocal"], language: "zh" });
+    await press(note(page, "D4，第 1 小节第 2 拍，长 1 拍"));
+    await expect(said(page, "vocal")).toHaveText("已选中 D4，第 1 小节第 2 拍");
+    await page.keyboard.press("Delete");
+    await expect(said(page, "vocal")).toHaveText("已删除 D4，第 1 小节第 2 拍");
+    await press(lane(page), { x: 70, y: 4 });
+    await expect(said(page, "vocal")).toHaveText("插入点，第 1 小节第 3 拍");
+  });
+
+  test("says why a delete was refused and where: the track for the key, the toolbar for its button", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    // The first note is tied into a cut tail: writing it as a rest would turn the cut into a complete score.
+    await openTrack(harness, vocalOnly("C16-|B"));
+    await press(slot(page, "vocal").getByRole("listitem").first());
+    await page.keyboard.press("Delete");
+    await expect(said(page, "vocal")).toHaveText(REFUSED);
+    await expect(said(page, "toolbar")).toHaveText("");
+
+    await harness.layout.setView({ language: "zh" });
+    await press(toolbar(page).getByRole("button", { name: "删除", exact: true }));
+    await expect(said(page, "toolbar")).toHaveText("这个改动没法安全地写进乐谱，乐谱保持原样。（第 1 小节，第 1 拍）");
+  });
+
+  test("a track speaks for its own notes, and the first voice speaks for the insertion point", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.layout.open({ score: { sample: "compact-three-sections" }, parts: ["vocal", "ins"] });
+
+    await press(slot(page, "ins").getByRole("listitem", { name: "F4, bar 1 beat 1, length 0.5 beats", exact: true }));
+    await expect(said(page, "ins")).toHaveText("Selected F4, bar 1 beat 1");
+    await expect(said(page, "vocal")).toHaveText("");
+
+    await press(slot(page, "ins").getByRole("list", { name: "Ins" }), { x: 90, y: 4 });
+    await expect(said(page, "vocal")).toHaveText("Insertion point, bar 2 beat 1");
+    await expect(said(page, "ins")).toHaveText("Selected F4, bar 1 beat 1");
+  });
+
+  test("says nothing while the session is read-only", async ({ page, harness }) => {
+    await openTrack(harness, QUARTERS, { editable: false });
+    await harness.layout.select(["Vocal:256"]);
+    await harness.layout.setEditable(true);
+    await harness.layout.setEditable(false);
+    await harness.layout.select(["Vocal:512"]);
+    await expect(said(page, "vocal")).toHaveText("");
+  });
+});
