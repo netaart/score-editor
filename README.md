@@ -1,6 +1,6 @@
 # score-editor
 
-A browser score editor for song projects, shared by its host apps. Work in progress: today it shows a song's score as a read-only arrangement view.
+A browser score editor for song projects, shared by its host apps. Work in progress: today it shows a song's score as an arrangement view and takes the first edits (select a note, turn it into a rest, undo and redo).
 
 Two packages, versioned and published together:
 

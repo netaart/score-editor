@@ -2,7 +2,7 @@
 
 A browser score editor for song projects. A host app mounts it onto an element, maps its own theme through CSS variables, and receives one-time messages through a callback. No framework is exposed.
 
-Work in progress: today the package shows a song project's score as a read-only arrangement: a ruler with bar numbers, section bands, key and meter marks, a chord track, and one piano-roll track per voice, with zoom and scrolling. Editing arrives in a later version.
+Work in progress: today the package shows a song project's score as an arrangement: a ruler with bar numbers, section bands, key and meter marks, a chord track, and one piano-roll track per voice, with zoom and scrolling. The first edits are in: select a note, turn it into a rest with Delete, undo and redo, and drop an insertion point on a beat line and move it with the keys. The rest of editing arrives in later versions.
 
 ```ts
 import { createDialectRegistry, mount } from "@neta-art/score-editor";
@@ -12,7 +12,7 @@ const editor = mount(element, {
   language: "en", // "zh" or "en"
   project, // a SongProject: the score text and the model ID are read
   dialects: createDialectRegistry([song2Dialect]), // the formats this editor can read
-  notify: (notice) => showToast(notice.message), // already in the current language; no message exists yet
+  notify: (notice) => showToast(notice.message), // already in the current language; `notice.code` is one of `NOTICE_CODES`
 });
 
 editor.update({ project: nextProject }); // only the given keys change; language-only changes keep the view
@@ -20,7 +20,8 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 ```
 
 - A score that cannot be read shows the dialect's diagnostics in the interface language instead of the view. A project whose model has no dialect in the registry shows one short sentence.
-- `editable` (default `true`) has no effect on what can be done yet: the view is read-only either way, and `editable: false` shows a read-only badge.
+- `editable` (default `true`) says whether the user may change the score. While it is true the toolbar has undo and redo, a click or tap selects a note or drops the insertion point, and Delete (or Backspace), Ctrl or Cmd plus Z, Ctrl or Cmd plus Shift plus Z, Ctrl plus Y, Left, Right, Home and End act. While it is false none of that exists: no editing control, no selection frame, no insertion point, and the keys do nothing; the toolbar shows a read-only badge instead. `update({ editable })` switches it without remounting, and a selection made before comes back with it.
+- A command the user's keys caused that the score would not take (the dialect refuses to write the result) changes nothing and reaches `notify` once as `{ code: "command-refused", level: "warning", message }`, in the interface language.
 - Importing the package runs nothing that touches the DOM, so a server render can import it. `mount` and the view parts' mount functions need a browser and throw a clear error elsewhere; call them from client-side code. `createEditingSession` needs none.
 - The edit layer is dialect-agnostic: `applyScoreCommand(dialect, text, command)` and `applyProjectCommand(dialect, project, command)` apply one command to the shared score model, write it with the dialect, and run `dialect.check`. A failure returns a diagnostic and changes nothing.
 - Styles: every class is prefixed `sce-`. The host maps its theme onto `--sce-color-bg`, `--sce-color-text`, `--sce-color-accent` and a few more; unmapped colours fall back to neutral defaults derived from the mapped ones. The full list is in [DESIGN.md](../../DESIGN.md).
@@ -37,6 +38,7 @@ import {
   createEditingSession,
   mountChordTrack,
   mountTimeRuler,
+  mountToolbar,
   mountVoiceTrack,
   mountZoomControl,
 } from "@neta-art/score-editor";
@@ -48,7 +50,7 @@ const session = createEditingSession({
 });
 
 const parts = [
-  mountZoomControl(toolbarElement, session),
+  mountToolbar(toolbarElement, session, { onRefused: (diagnostics) => report(diagnostics) }),
   mountTimeRuler(rulerElement, session),
   mountChordTrack(chordsElement, session),
   mountVoiceTrack(vocalElement, session, { voice: "Vocal" }),
@@ -56,6 +58,7 @@ const parts = [
 
 const done = session.dispatch({ type: "toRest", noteId }); // { ok, project, diagnostics }: a refused command returns the project it left untouched
 session.undo(); // the whole project before that command
+session.setView({ editable: false }); // every part follows: no editing control, no selection, no keys
 const stop = session.subscribe((change) => save(session.project)); // change.cause: "dispatch", "undo", "view", ...
 
 for (const part of parts) part.destroy(); // each removes its own listeners, nodes and share of the stylesheet
@@ -63,8 +66,11 @@ stop();
 ```
 
 - The session is headless: it touches no DOM, so it runs in Node and in a worker. `dispatch` applies a command through `applyProjectCommand`; a refused command changes nothing and returns its diagnostics. The history keeps whole song projects. Selection (note ids), insertion point, zoom, scroll and language are not in the history. `replaceProject` starts a new document from outside, the way `update({ project })` does.
-- Parts: `mountZoomControl`, `mountCutNotice`, `mountProblemView`, `mountTimeRuler`, `mountChordTrack` and `mountVoiceTrack(el, session, { voice })`. Each returns `{ destroy() }`, and a second `destroy` does nothing. Each part is styled and isolated as `mount` is, and the zoom menu uses the popover layer; the decisions are in [docs/spike.md](../../docs/spike.md).
+- Parts: `mountToolbar`, `mountZoomControl`, `mountCutNotice`, `mountProblemView`, `mountTimeRuler`, `mountChordTrack` and `mountVoiceTrack(el, session, { voice })`. Each returns `{ destroy() }`, and a second `destroy` does nothing. Each part is styled and isolated as `mount` is, and the zoom menu uses the popover layer; the decisions are in [docs/spike.md](../../docs/spike.md).
 - The ruler, the chord track and a voice track scroll in time on their own element, each by its own width. Each is a named region that Tab reaches, and the plus and minus keys zoom around the middle of the one that has the focus. Pass `{ scroller }` as the last argument to put several of them in one scroller of your own, as `mount` does. A part mounted late starts at the session's zoom and scroll.
-- `mount` builds one session and assembles these parts in a toolbar, a scroller and a problem view; its options and what `update` does are unchanged.
+- The toolbar part holds the title, the zoom control, undo and redo (while `session.view.editable` is true), the read-only badge (while it is not) and, when you pass `{ hintId }`, a screen-reader hint with that id for a view's `aria-describedby`. Its row scrolls sideways when your element is narrower than its controls. Undo and redo are the session's `undo()` and `redo()`.
+- Selection and the insertion point live in the session, not in a part: `session.selection` holds note ids and `session.insertionPoint` a tick, and neither is in the history. A voice track draws them and takes the clicks and taps. The editing keys (Delete, Backspace, Ctrl or Cmd plus Z, Ctrl or Cmd plus Shift plus Z, Ctrl plus Y, Left, Right, Home, End) are heard by a part while the focus is inside it; a part that handles one keeps it from the browser, and a part given `{ onRefused }` hears the diagnostics of a refused command. Left and Right keep scrolling while there is no insertion point; Home and End always place one.
+- Not tied to the DOM: `handleEditingInput(session, input)` takes a key, a click on a note or a click on empty space as plain data and does what the parts do, so a host with its own input handling can reuse it. It returns `{ handled, refused }`.
+- `mount` builds one session and assembles these parts in a toolbar, a scroller and a problem view; its options are unchanged, and `editable` and `notify` do what the first list says.
 
 MIT licensed.
