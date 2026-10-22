@@ -94,7 +94,19 @@ export interface Score {
   readonly source: unknown;
 }
 
-/** The song project that carries a score. Lyric-line binding comes in a later ticket. */
+/** A phrase: a run of consecutive bars, inside one section. `firstBar` is a 0-based bar index. */
+export interface LyricPhrase {
+  readonly firstBar: number;
+  readonly barCount: number;
+}
+
+/** One lyric line. `phrase` is `null` for a line in the unaligned area. */
+export interface LyricLine {
+  readonly text: string;
+  readonly phrase: LyricPhrase | null;
+}
+
+/** The song project that carries a score. The lyric fields are optional so a project built by 0.1.0 still opens. */
 export interface SongProject {
   readonly style: string;
   readonly lyrics: string;
@@ -103,6 +115,8 @@ export interface SongProject {
   readonly seed: number | null;
   readonly modelId: string;
   readonly sourceKey: string;
+  /** The stored lyric lines and their phrase bindings; absent means the layout is computed from `lyrics`. */
+  readonly lyricLines?: ReadonlyArray<LyricLine>;
 }
 
 export function noteId(voice: string, start: number): string {
