@@ -23,7 +23,7 @@ Playwright needs its Chromium once: `pnpm exec playwright install chromium`. `PL
 Three seams, and no others:
 
 - Importing each package entry in a node environment (`tests/entries.test.ts`), the editing session driven through the entry with real commands (`tests/session.test.ts`), and custom tools driven through the entry (`tests/tools.test.ts`).
-- The dialect's `parse` and `serialize`, the registry and `formatDiagnostic`, through the package entries (`tests/song2-*.test.ts`).
+- The dialect's `parse` and `serialize`, the registry and `formatDiagnostic`, and every score command applied with the song2 dialect, through the package entries (`tests/song2-*.test.ts`).
 - The mounted editor, and view parts mounted on one editing session in a layout of the page's own, in real Chromium, driven only through `window.harness` on the test page (`e2e/page/harness.js`) and through what a user can see and do: `e2e/mount.spec.ts` for the mounted editor and `update`, `e2e/parts.spec.ts` for parts on one session and their lifetime, `e2e/editing.spec.ts` for editing in the parts (select, delete, undo, the insertion point, the toolbar, what is said to a screen reader), `e2e/skill.spec.ts` for the shipped skill examples. A case lives in one of them, and a helper two of them use lives in `e2e/fixtures.ts`. The page is the bare host: it builds the dialect registry and fetches the test scores itself. Prefer locators by role, name and text over class names.
 
 New behaviour gets a failing test at one of these seams first. After a change that makes a test pass, break the change on purpose once and see the test fail.
@@ -41,7 +41,7 @@ To look at the page by hand: `node e2e/serve.mjs`, then open `/?demo` (add `&lan
 - Later UI is built as view parts bound to the editing session: a part mounts on an element of the host's layout, takes the session, draws from what the session holds, re-renders from its notifications, and keeps the isolation `mount()` gives. It does not read another part or reach into the default editor. The default editor is one arrangement of such parts. See [the package README](packages/score-editor/README.md#the-editing-session-and-view-parts) and [DESIGN.md](DESIGN.md#view-parts).
 - A change that adds a public export or a view part updates the editor skill in the same change ([packages/score-editor/skills/score-editor](packages/score-editor/skills/score-editor)).
 - The skill and both examples pin the package version; 0.1.0 predates the new API, and the release bump changes the version and those pins in one commit, enforced by `pnpm check:skill`.
-- Dependency versions are pinned exactly. Commits are small and named by type: `feat`, `test`, `chore`, `docs`.
+- Dependency versions are pinned exactly. Commits are small and named by type: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`.
 - UI work goes through the design tooling's review steps (critique, audit, polish) and is checked in the rendered result at desktop and phone widths.
 
 ## This is a public repository

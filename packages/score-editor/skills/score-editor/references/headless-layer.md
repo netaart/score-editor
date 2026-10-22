@@ -51,22 +51,25 @@ if (!score) {
 ```
 
 `Diagnostic` is `{ code, params, at }`; codes carry no prose. `formatDiagnostic(diagnostic, "en" | "zh")` turns one
-into a sentence. `READING_DIAGNOSTIC_CODES` and `COMMAND_DIAGNOSTIC_CODES` are the closed sets; their element types are
-`ReadingDiagnosticCode`, `CommandDiagnosticCode` and the union `DiagnosticCode`. `DiagnosticAt` and `DiagnosticParams`
-describe where it points and the values its text needs.
+into a sentence. `READING_DIAGNOSTIC_CODES`, `COMMAND_DIAGNOSTIC_CODES` and `NOTICE_DIAGNOSTIC_CODES` are the closed
+sets; their element types are `ReadingDiagnosticCode`, `CommandDiagnosticCode`, `NoticeDiagnosticCode` and the union
+`DiagnosticCode`. `DiagnosticAt` and `DiagnosticParams` describe where it points and the values its text needs.
 
 ## Write one command back
 
-Every edit ends in the same command layer. `ScoreCommand` is the dialect-agnostic union of edits; today it has
-`{ type: "toRest", noteId }` and `{ type: "toRests", noteIds }`, which turns the tie chain of every named note into rests as one
-edit: every id is checked first, the first that names no note or a rest refuses the whole command, and the dialect writes
-and checks once. A score command runs on the model (`Score`), then the dialect writes it and runs `check`.
+Every edit ends in the same command layer. `ScoreCommand` is the dialect-agnostic union of score edits and
+`ProjectCommand` the union of song-project edits; the package README lists each command and its refusal codes. A score
+command runs on the model (`Score`), then the dialect writes it and runs `check`.
 
 - `applyScoreCommand(dialect, text, command)` returns `ApplyScoreResult`: `{ ok: true, text }` or
   `{ ok: false, diagnostic }`. A command that cannot be applied, a write/read-back mismatch, or any `check` failure
-  returns the diagnostic and no new text.
-- `applyProjectCommand(dialect, project, command)` returns `ApplyProjectResult`: `{ project, diagnostics }`. Only
-  `project.score` can change, and it does not change on a failure.
+  returns the diagnostic and no new text. It refuses a `ProjectCommand`.
+- `applyProjectCommand(dialect, project, command)` returns `ApplyProjectResult`: `{ project, diagnostics }`. It takes
+  either union; only the score text or the project's own fields can change, and nothing changes on a refusal.
+
+`applyProjectCommand` also runs the song-project rules and can return a notice with the changed project. `checkProject`
+reports those notices for a project as it stands, `isNoticeDiagnostic` tells a notice from a refusal, and
+`NOTICE_DIAGNOSTIC_CODES` lists the notice codes.
 
 ```ts
 import { applyProjectCommand } from "@neta-art/score-editor";

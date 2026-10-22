@@ -1,8 +1,14 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
 import { positionOf } from "./arrangement";
+import { commandRefusal } from "./command-refusal";
+import { runBarCommand } from "./commands-bars";
+import { setChord } from "./commands-chords";
+import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./commands-key-tempo";
+import { runTruncationCommand } from "./commands-truncation";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
-import type { Score, Note as ScoreNote } from "./score";
+import type { Meter, Score, Note as ScoreNote } from "./score";
+import type { DialectConstraints } from "./types";
 
 /**
  * A dialect-agnostic edit of a Score. More commands join this union in later tickets.
@@ -12,21 +18,23 @@ import type { Score, Note as ScoreNote } from "./score";
  */
 export type ScoreCommand =
   | { readonly type: "toRest"; readonly noteId: string }
-  | { readonly type: "toRests"; readonly noteIds: ReadonlyArray<string> };
+  | { readonly type: "toRests"; readonly noteIds: ReadonlyArray<string> }
+  | { readonly type: "setChord"; readonly noteId: string; readonly name: string }
+  | { readonly type: "insertBar"; readonly bar: number }
+  | { readonly type: "deleteBars"; readonly from: number; readonly count: number }
+  | { readonly type: "setSectionMeter"; readonly section: number; readonly meter: Meter }
+  | { readonly type: "fillTruncatedBar" }
+  | { readonly type: "deleteTruncatedBar" }
+  | { readonly type: "transpose"; readonly semitones: number }
+  | { readonly type: "setKey"; readonly key: string; readonly from?: number }
+  | { readonly type: "setTempo"; readonly bpm: number }
+  | { readonly type: "removeChords" };
+
+export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
 export type ScoreCommandResult =
   | { readonly ok: true; readonly score: Score }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
-
-/** The ids of the notes a command names, in the order it names them. */
-function namedIds(command: ScoreCommand): ReadonlyArray<string> {
-  switch (command.type) {
-    case "toRest":
-      return [command.noteId];
-    case "toRests":
-      return command.noteIds;
-  }
-}
 
 /** Where a note is, in the voice, bar and beat a person counts; only its id when the score has no such note. */
 function noteAt(score: Score, noteId: string): DiagnosticAt {
@@ -36,14 +44,17 @@ function noteAt(score: Score, noteId: string): DiagnosticAt {
   return { voice: note.voice, bar, beat, noteId: note.id };
 }
 
-/** Where a command acts: the first note it names, or nowhere in particular when it names none. */
+/**
+ * Where a command acts, in the voice, bar and beat a person counts: the note it names, the first of them when it names
+ * several, or nothing for a command without one.
+ */
 export function commandAt(score: Score, command: ScoreCommand): DiagnosticAt {
-  const first = namedIds(command)[0];
-  return first === undefined ? {} : noteAt(score, first);
+  const noteId = "noteId" in command ? command.noteId : "noteIds" in command ? command.noteIds[0] : undefined;
+  return noteId === undefined ? {} : noteAt(score, noteId);
 }
 
 function commandFailure(code: "note-not-found" | "not-a-note", score: Score, noteId: string): ScoreCommandResult {
-  return { ok: false, diagnostic: { code, params: { noteId }, at: noteAt(score, noteId) } };
+  return commandRefusal(code, { noteId }, noteAt(score, noteId));
 }
 
 /** The whole tie chain around a note: every note tied into it and every note it ties into. */
@@ -80,11 +91,32 @@ function toRests(score: Score, noteIds: ReadonlyArray<string>): ScoreCommandResu
 }
 
 /** Applies one score command to a model. It never writes text and never touches a DOM. */
-export function runScoreCommand(score: Score, command: ScoreCommand): ScoreCommandResult {
+export function runScoreCommand(
+  score: Score,
+  command: ScoreCommand,
+  constraints: DialectConstraints,
+): ScoreCommandResult {
   switch (command.type) {
     case "toRest":
       return toRests(score, [command.noteId]);
     case "toRests":
       return toRests(score, command.noteIds);
+    case "setChord":
+      return setChord(score, command.noteId, command.name, constraints);
+    case "insertBar":
+    case "deleteBars":
+    case "setSectionMeter":
+      return runBarCommand(score, command, constraints);
+    case "fillTruncatedBar":
+    case "deleteTruncatedBar":
+      return runTruncationCommand(score, command, constraints);
+    case "transpose":
+      return runTranspose(score, command.semitones, constraints);
+    case "setKey":
+      return runSetKey(score, command.key, command.from, constraints);
+    case "setTempo":
+      return runSetTempo(score, command.bpm, constraints);
+    case "removeChords":
+      return runRemoveChords(score);
   }
 }

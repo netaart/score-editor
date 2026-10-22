@@ -17,9 +17,11 @@ change. The tests in the repository check that the list stays complete.
 | `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
-| `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult`. |
-| `applyProjectCommand` | core | Applies one command to a `SongProject`; returns `ApplyProjectResult`. |
+| `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
+| `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
+| `checkProject` | core | Reports the song-project notices of a project as it stands, without changing it. |
 | `formatDiagnostic` | core | Turns a `Diagnostic` into a sentence in `en` or `zh`. |
+| `isNoticeDiagnostic` | core | Says whether a diagnostic is a notice, so a changed project is not mistaken for a refusal. |
 | `noteId` | core | Builds a note id from voice and start tick. |
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
@@ -33,7 +35,8 @@ change. The tests in the repository check that the list stays complete.
 | `TICKS_PER_QUARTER` | core | 256; the tick unit of the shared model. |
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
-| `NOTICE_CODES` | core | The closed notice codes; today `"command-refused"`. |
+| `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`). |
+| `NOTICE_CODES` | core | The closed host message codes; today `"command-refused"`. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |
 | `song2Dialect` | song2 | The `ScoreDialect` for `song2`: parse, serialize and check. |
@@ -53,7 +56,8 @@ change. The tests in the repository check that the list stays complete.
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus any diagnostics, or the untouched project and a refusal. |
 | `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape, its causes, and the listener type. |
-| `ScoreCommand` | The dialect-agnostic edit union; today `{ type: "toRest", noteId }` and `{ type: "toRests", noteIds }` (several notes as one edit, all or none). |
+| `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
+| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand`; each command is listed in the package README. |
 
 ## Score model types
 
@@ -70,9 +74,10 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- |
 | `Diagnostic` | `{ code, params, at }`; carries no prose. |
 | `DiagnosticAt`, `DiagnosticParams` | Where a diagnostic points and the values its text needs. |
-| `DiagnosticCode` | The union of every reading and command code. |
+| `DiagnosticCode` | The union of every reading, command and notice code. |
 | `ReadingDiagnosticCode` | An element of `READING_DIAGNOSTIC_CODES`. |
 | `CommandDiagnosticCode` | An element of `COMMAND_DIAGNOSTIC_CODES`. |
+| `NoticeDiagnosticCode` | An element of `NOTICE_DIAGNOSTIC_CODES`. |
 
 ## Dialect types
 
