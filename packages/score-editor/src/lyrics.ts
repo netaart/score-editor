@@ -96,10 +96,7 @@ export function layoutLyrics(score: Score, lyrics: string): LyricLine[] {
   };
 
   const preamble = groups[0] as LegacyGroup;
-  if (preamble.lines.length > 0 && score.sections.length > 0) {
-    const unnamed = score.sections.findIndex((section) => section.name === null);
-    place(unnamed >= 0 ? unnamed : 0, preamble);
-  }
+  if (preamble.lines.length > 0 && score.sections[0] !== undefined) place(0, preamble);
 
   for (const group of groups.slice(1)) {
     const index = score.sections.findIndex((section, candidate) => !used.has(candidate) && section.name === group.name);
@@ -159,11 +156,8 @@ export function lyricCharacterCount(text: string): number {
 }
 
 const LATIN = /\p{Script=Latin}/u;
-const HAN = /\p{Script=Han}/u;
-const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
 const LETTER = /[\p{L}\p{N}]/u;
 const MARK = /\p{M}/u;
-const DIGIT = /^[0-9]$/;
 const VOWELS = "aeiou";
 
 function isLatinLetter(char: string): boolean {
@@ -238,7 +232,7 @@ export function lyricSyllables(text: string): string[] {
       index = end;
       continue;
     }
-    if (HAN.test(char) || KANA.test(char) || DIGIT.test(char) || LETTER.test(char)) {
+    if (LETTER.test(char)) {
       let end = index + char.length;
       let unit = char;
       while (end < text.length) {

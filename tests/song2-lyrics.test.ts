@@ -235,7 +235,7 @@ describe("note onsets and alignment", () => {
     expect(unequal.onsets).toHaveLength(3);
   });
 
-  it("gives an unaligned line no onsets and no match", () => {
+  it("gives an unaligned line no onsets and an unequal count", () => {
     const alignment = alignLyricLine(parse(TIE_SCORE), { text: "一二", phrase: null });
     expect(alignment.onsets).toEqual([]);
     expect(alignment.equal).toBe(false);
@@ -356,7 +356,7 @@ C16|`;
 });
 
 describe("bar commands carry stored lines", () => {
-  it("shifts a phrase after a bar inserted before it", () => {
+  it("spans an inserted bar inside a phrase and shifts the phrase after it", () => {
     const result = apply(withLines(LINES), { type: "insertBar", bar: 3 });
     expect(result.lyricLines).toEqual([
       { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
@@ -392,7 +392,7 @@ describe("bar commands carry stored lines", () => {
     ]);
   });
 
-  it("shifts lines after a deleted truncated bar and keeps them when the bar is filled", () => {
+  it("keeps lines through a filled cut and drops the cut bar's line on delete", () => {
     const cut = parse(CUT_SCORE);
     const lines: LyricLine[] = [
       { text: "complete", phrase: { firstBar: 0, barCount: 2 } },

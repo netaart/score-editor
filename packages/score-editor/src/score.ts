@@ -106,7 +106,7 @@ export interface LyricLine {
   readonly phrase: LyricPhrase | null;
 }
 
-/** The song project that carries a score. The lyric fields are optional so a project built by 0.1.0 still opens. */
+/** The song project that carries a score. The lyric field is optional so a project built by 0.1.0 still opens. */
 export interface SongProject {
   readonly style: string;
   readonly lyrics: string;
