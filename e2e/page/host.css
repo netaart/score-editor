@@ -5,6 +5,71 @@ body {
   margin: 0;
   font-family: Georgia, serif;
 }
+/* The layout of the view parts tests: cards of different widths, styled here because inline styles may be refused. */
+.layout-grid,
+.layout-card,
+.layout-slot {
+  font:
+    13px Georgia,
+    serif;
+}
+.layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+}
+.layout-card {
+  position: relative;
+}
+.layout-card-narrow {
+  width: min(560px, 100%);
+}
+.layout-card-medium {
+  width: min(420px, 100%);
+}
+.layout-card-wide {
+  width: min(700px, 100%);
+}
+.layout-offscreen {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  width: 900px;
+}
+.layout-indented {
+  margin-left: 120px;
+}
+.layout-clipped {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 50px;
+  z-index: 1000;
+  overflow: hidden;
+  transform: translateZ(0);
+  background: #ddd;
+}
+.layout-toast {
+  position: fixed;
+  left: 0;
+  top: 30px;
+  width: 100vw;
+  height: 300px;
+  z-index: 2147483647;
+  background: rgba(255, 0, 0, 0.4);
+}
+.layout-banner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 40px;
+  z-index: 1;
+  background: #c33;
+  color: #fff;
+}
 #stage {
   display: block;
   height: 420px;

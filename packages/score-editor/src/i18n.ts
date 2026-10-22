@@ -4,7 +4,7 @@ import type { BarPosition, Cut } from "./arrangement";
 import type { Meter } from "./score";
 import type { Language } from "./types";
 
-interface Messages {
+export interface Messages {
   title: string;
   hint: string;
   zoom: string;
@@ -13,6 +13,7 @@ interface Messages {
   zoomFit: string;
   readOnly: string;
   bars: string;
+  timeRuler: string;
   sections: string;
   unnamedSection: string;
   chords: string;
@@ -39,6 +40,7 @@ const en: Messages = {
   zoomFit: "Fit whole song",
   readOnly: "Read only",
   bars: "Bars",
+  timeRuler: "Time ruler",
   sections: "Sections",
   unnamedSection: "Unnamed",
   chords: "Chords",
@@ -74,6 +76,7 @@ const zh: Messages = {
   zoomFit: "适合整首歌",
   readOnly: "只读",
   bars: "小节",
+  timeRuler: "时间尺",
   sections: "段落",
   unnamedSection: "未命名",
   chords: "和弦",

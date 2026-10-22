@@ -1,4 +1,4 @@
-// ABOUTME: The editor's stylesheet as a string, injected by mount() and removed again by destroy().
+// ABOUTME: The stylesheet of the editor and its view parts as a string, injected by mount() and by each part, and removed again by destroy().
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
 import { TICKS_PER_QUARTER } from "./score";
@@ -26,10 +26,17 @@ function labelThinning(): string {
   return rules.join("\n");
 }
 
+/** One kind of grid line, drawn as a gradient: a one pixel line at the start of every period of `beats` beats. */
+function gridLines(color: string, beats: string): string {
+  return `repeating-linear-gradient(to right, var(${color}) 0 1px, transparent 1px calc(var(--sce-_beat) * var(${beats})))`;
+}
+
 const css = `
 /* The doubled class lifts specificity above the typical host rule such as ".page div". */
 .sce-root.sce-root {
   all: initial;
+  position: relative;
+  isolation: isolate;
   --sce-_bg: var(--sce-color-bg, light-dark(#ffffff, #1b1c1f));
   --sce-_text: var(--sce-color-text, light-dark(#18181b, #ececee));
   /* Unmapped greys are derived from the two that are mapped, so a host that maps only these stays readable. */
@@ -50,13 +57,6 @@ const css = `
   --sce-_chords: round(2em, 1px);
   --sce-_top: calc(var(--sce-_ruler) + 2 * var(--sce-_band) + var(--sce-_chords));
 
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 288px;
-  overflow: hidden;
   background: var(--sce-_bg);
   color: var(--sce-_text);
   font-family: var(--sce-font-family, inherit);
@@ -71,6 +71,40 @@ const css = `
   .sce-root.sce-root {
     --sce-_row: var(--sce-row-height, 24px);
   }
+}
+
+.sce-editor.sce-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 288px;
+  overflow: hidden;
+  /* Where the track heads pin: right under the header block that the editor pins above the tracks. */
+  --sce-_head-top: var(--sce-_top);
+}
+.sce-part.sce-part {
+  display: block;
+}
+.sce-editor .sce-part.sce-part {
+  display: contents;
+}
+.sce-root.sce-axis {
+  overflow-x: auto;
+  direction: ltr;
+  touch-action: pan-x pan-y pinch-zoom;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sce-root.sce-part-time-ruler,
+.sce-root.sce-part-chord-track {
+  scrollbar-width: none;
+}
+.sce-root.sce-axis:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: -2px;
+}
+.sce-root.sce-in-scroller {
+  overflow: visible;
 }
 
 /*
@@ -271,8 +305,11 @@ const css = `
  * restyle on each step: about 70 ms at 1500 notes, against about 3 ms this way.
  */
 .sce-root .sce-canvas {
-  position: relative;
   width: calc(var(--sce-_keys) + var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+}
+/* The editor's own content block: as tall as all the parts together, so the header can pin for the whole scroll. */
+.sce-root .sce-content {
+  position: relative;
 }
 
 .sce-root .sce-row {
@@ -436,7 +473,7 @@ ${labelThinning()}
 }
 .sce-root .sce-track-head {
   position: sticky;
-  top: var(--sce-_top);
+  top: var(--sce-_head-top, 0px);
   z-index: 4;
   display: flex;
   align-items: center;
@@ -496,6 +533,16 @@ ${labelThinning()}
   left: calc(var(--t) / var(--sce-ticks) * 100%);
   width: calc(var(--d) / var(--sce-ticks) * 100%);
   pointer-events: none;
+}
+/* The part sets which lines show (data-lines) and how far apart they are (--bar-beats, --beat-beats). */
+.sce-root .sce-grid[data-lines~="bar"] {
+  background-image: ${gridLines("--sce-_line-strong", "--bar-beats")};
+}
+.sce-root .sce-grid[data-lines~="bar"][data-lines~="beat"] {
+  background-image: ${gridLines("--sce-_line-strong", "--bar-beats")}, ${gridLines("--sce-_line", "--beat-beats")};
+}
+.sce-root .sce-grid[data-lines="beat"] {
+  background-image: ${gridLines("--sce-_line", "--beat-beats")};
 }
 /* The part of a cut voice that the text never reached: hatched, so a gap is not mistaken for a rest. */
 .sce-root .sce-cut {

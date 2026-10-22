@@ -21,9 +21,9 @@ Playwright needs its Chromium once: `pnpm exec playwright install chromium`. `PL
 
 Three seams, and no others:
 
-- Importing each package entry in a node environment (`tests/entries.test.ts`).
+- Importing each package entry in a node environment (`tests/entries.test.ts`), and the editing session driven through the entry with real commands (`tests/session.test.ts`).
 - The dialect's `parse` and `serialize`, the registry and `formatDiagnostic`, through the package entries (`tests/song2-*.test.ts`).
-- The mounted editor in real Chromium, driven only through `window.harness` on the test page (`e2e/page/harness.js`) and through what a user can see and do (`e2e/mount.spec.ts`). The page is the bare host: it builds the dialect registry and fetches the test scores itself. Prefer locators by role, name and text over class names.
+- The mounted editor, and view parts mounted on one editing session in a layout of the page's own, in real Chromium, driven only through `window.harness` on the test page (`e2e/page/harness.js`) and through what a user can see and do (`e2e/mount.spec.ts`, `e2e/parts.spec.ts`). The page is the bare host: it builds the dialect registry and fetches the test scores itself. Prefer locators by role, name and text over class names.
 
 New behaviour gets a failing test at one of these seams first. After a change that makes a test pass, break the change on purpose once and see the test fail.
 
@@ -36,7 +36,8 @@ To look at the page by hand: `node e2e/serve.mjs`, then open `/?demo` (add `&lan
 - Browser packages: no Node types, no `bin`, no runtime dependencies. Entries have no side effects at import.
 - Every new source file starts with two `// ABOUTME:` lines saying what the file is and what it is for. Comments elsewhere only when they record a durable reason.
 - Every class is prefixed `sce-`; every public variable is `--sce-*`. A new colour comes from the variable contract in `DESIGN.md` or a derivation of it. Keep per-node CSS cheap (see the spike note).
-- Everything the editor adds (listeners, nodes, stylesheets) is registered so `destroy()` removes it.
+- Everything the editor adds (listeners, nodes, stylesheets) is registered so `destroy()` removes it, and so does every view part's own `destroy()`.
+- Later UI is built as view parts bound to the editing session: a part mounts on an element of the host's layout, takes the session, draws from what the session holds, re-renders from its notifications, and keeps the isolation `mount()` gives. It does not read another part or reach into the default editor. The default editor is one arrangement of such parts. See [the package README](packages/score-editor/README.md#the-editing-session-and-view-parts) and [DESIGN.md](DESIGN.md#view-parts).
 - Dependency versions are pinned exactly. Commits are small and named by type: `feat`, `test`, `chore`, `docs`.
 - UI work goes through the design tooling's review steps (critique, audit, polish) and is checked in the rendered result at desktop and phone widths.
 

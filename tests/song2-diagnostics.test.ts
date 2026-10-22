@@ -24,7 +24,7 @@ const READING_CODES: ReadingDiagnosticCode[] = [
   "empty-line",
 ];
 
-const COMMAND_CODES: CommandDiagnosticCode[] = ["note-not-found", "not-a-note", "write-mismatch"];
+const COMMAND_CODES: CommandDiagnosticCode[] = ["note-not-found", "not-a-note", "write-mismatch", "no-dialect"];
 
 describe("diagnostics", () => {
   it("has exactly the reading codes RULES.md lists and the command codes of the edit layer", () => {
@@ -53,6 +53,13 @@ describe("diagnostics", () => {
       );
       expect(missing).toContain("Vocal:0");
       expect(rest).toContain("Vocal:0");
+    }
+  });
+
+  it("tells the user which model has no score format in this editor", () => {
+    for (const language of ["zh", "en"] as const) {
+      const text = formatDiagnostic({ code: "no-dialect", params: { modelId: "other-model" }, at: {} }, language);
+      expect(text).toContain("other-model");
     }
   });
 

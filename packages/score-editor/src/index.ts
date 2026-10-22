@@ -1,9 +1,11 @@
 // ABOUTME: Main entry of @neta-art/score-editor. Importing it has no side effects and touches no DOM.
-// ABOUTME: Only a call to mount() creates nodes or listeners.
+// ABOUTME: Only a call to mount() or to a view part's mount function creates nodes or listeners; the editing session touches no DOM.
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
+export { mountChordTrack } from "./chord-track";
 export type { ScoreCommand } from "./commands";
+export { mountCutNotice } from "./cut-notice";
 export type {
   CommandDiagnosticCode,
   Diagnostic,
@@ -20,6 +22,7 @@ export {
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
 export { createDialectRegistry } from "./dialect";
 export { mount } from "./mount";
+export { mountProblemView } from "./problem-view";
 export type {
   Bar,
   Chord,
@@ -34,6 +37,20 @@ export type {
 } from "./score";
 export { noteId, TICKS_PER_QUARTER } from "./score";
 export type {
+  DispatchResult,
+  EditingSession,
+  InsertionPoint,
+  ScoreReading,
+  SessionChange,
+  SessionChangeCause,
+  SessionListener,
+  SessionOptions,
+  ViewState,
+} from "./session";
+export { createEditingSession } from "./session";
+export { mountTimeRuler } from "./time-ruler";
+export type {
+  AxisPartOptions,
   ChordVocabulary,
   DialectConstraints,
   DurationSet,
@@ -43,5 +60,9 @@ export type {
   MountOptions,
   Notice,
   NoticeCode,
+  ViewPart,
 } from "./types";
 export { NOTICE_CODES } from "./types";
+export type { VoiceTrackOptions } from "./voice-track";
+export { mountVoiceTrack } from "./voice-track";
+export { mountZoomControl } from "./zoom-control";

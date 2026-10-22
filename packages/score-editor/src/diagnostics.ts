@@ -19,8 +19,11 @@ export const READING_DIAGNOSTIC_CODES = [
 
 export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
 
-/** The codes the dialect-agnostic edit layer reports when a command cannot be applied or checked. */
-export const COMMAND_DIAGNOSTIC_CODES = ["note-not-found", "not-a-note", "write-mismatch"] as const;
+/**
+ * The codes a command is refused with: the dialect-agnostic edit layer reports the first three when a command cannot be
+ * applied or checked, and `session.dispatch` reports `no-dialect` for a model the registry has no dialect for.
+ */
+export const COMMAND_DIAGNOSTIC_CODES = ["note-not-found", "not-a-note", "write-mismatch", "no-dialect"] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
 
@@ -59,6 +62,7 @@ interface Catalog {
   readonly noteNotFound: Text;
   readonly notANote: Text;
   readonly writeMismatch: Text;
+  readonly noDialect: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -306,6 +310,14 @@ function chineseWriteMismatch(params: DiagnosticParams): string {
     : `写回后的乐谱读回来和改动后的乐谱不一致，${field} 字段不同。`;
 }
 
+function englishNoDialect(params: DiagnosticParams): string {
+  return `The score format of${quoted(value(params, "modelId"))} isn't supported by this editor, so the score can't be changed.`;
+}
+
+function chineseNoDialect(params: DiagnosticParams): string {
+  return `这个编辑器不支持${quoted(value(params, "modelId"))}的乐谱格式，所以无法修改这份乐谱。`;
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -321,6 +333,7 @@ const en: Catalog = {
   noteNotFound: englishNoteNotFound,
   notANote: englishNotANote,
   writeMismatch: englishWriteMismatch,
+  noDialect: englishNoDialect,
 };
 
 const zh: Catalog = {
@@ -338,6 +351,7 @@ const zh: Catalog = {
   noteNotFound: chineseNoteNotFound,
   notANote: chineseNotANote,
   writeMismatch: chineseWriteMismatch,
+  noDialect: chineseNoDialect,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -373,6 +387,8 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.notANote(diagnostic.params);
     case "write-mismatch":
       return catalog.writeMismatch(diagnostic.params);
+    case "no-dialect":
+      return catalog.noDialect(diagnostic.params);
     default:
       return "";
   }

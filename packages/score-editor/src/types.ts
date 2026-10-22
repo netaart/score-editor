@@ -22,6 +22,15 @@ export interface Notice {
   message: string;
 }
 
+/** What every view part on the time axis takes besides its element and its session. */
+export interface AxisPartOptions {
+  /**
+   * The element that scrolls the part in time, when the host puts several parts in one scroller, as the default editor
+   * does. Without it the part is its own scroll surface.
+   */
+  scroller?: HTMLElement;
+}
+
 export interface MountOptions {
   /** Interface language. */
   language: Language;
@@ -42,6 +51,15 @@ export interface MountedEditor {
   /** Applies new options. Only the given keys change. Does nothing after `destroy`. */
   update(options: Partial<MountOptions>): void;
   /** Removes every listener and node the editor added. Safe to call twice. */
+  destroy(): void;
+}
+
+/**
+ * A view part mounted on an element and bound to one editing session. It draws from the session and redraws when the
+ * session announces a change, in the session's language.
+ */
+export interface ViewPart {
+  /** Removes every listener, node and stylesheet the part added. Safe to call twice. */
   destroy(): void;
 }
 
