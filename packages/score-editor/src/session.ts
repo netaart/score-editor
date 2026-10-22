@@ -2,9 +2,11 @@
 // ABOUTME: Headless: it touches no DOM, so it imports and runs in Node and in a Worker like the rest of the headless layer.
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
+import type { ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
+import { readScoreText } from "./score-text";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
 import type { Language } from "./types";
@@ -35,6 +37,18 @@ export interface ViewState {
   readonly editable: boolean;
 }
 
+/** The views of the default editor, in the order its switcher lists them. A host that draws its own switcher offers these. */
+export const VIEW_NAMES = ["arrangement", "staff", "text"] as const;
+
+/** Which view is shown: the arrangement of tracks, the staff drawn by abcjs, or the score text. */
+export type ViewName = (typeof VIEW_NAMES)[number];
+
+/** Text a view offered as the score that the session did not take, with what is wrong with it. UI state: not in the history. */
+export interface RejectedText {
+  readonly text: string;
+  readonly diagnostics: ReadonlyArray<Diagnostic>;
+}
+
 export interface SessionOptions {
   /** The song project to edit. */
   project: SongProject;
@@ -44,6 +58,8 @@ export interface SessionOptions {
   language?: Language;
   /** Whether the user may edit. Defaults to true; see `ViewState.editable`. */
   editable?: boolean;
+  /** The view shown first. Defaults to "arrangement". */
+  activeView?: ViewName;
 }
 
 /** What a dispatch came to. A refused command carries its diagnostics and the project it left untouched. */
@@ -52,9 +68,21 @@ export type DispatchResult =
   | { readonly ok: false; readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> };
 
 /** What caused a change the session announces. */
-export type SessionChangeCause = "dispatch" | "undo" | "redo" | "select" | "insertion-point" | "view" | "replace";
+export type SessionChangeCause =
+  | "dispatch"
+  | "undo"
+  | "redo"
+  | "select"
+  | "insertion-point"
+  | "view"
+  | "replace"
+  | "active-view"
+  | "rejected-text";
 
-/** One announced change: its cause, and which parts of the session's state it touched. */
+/**
+ * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view or of
+ * the rejected text touches none of the five and is told by its cause alone.
+ */
 export interface SessionChange {
   readonly cause: SessionChangeCause;
   /** The song project (and with it the undo history) changed. */
@@ -89,10 +117,26 @@ export interface EditingSession {
   /** The view state: zoom, horizontal scroll, language and whether the user may edit, shared by every part bound to the session. */
   readonly view: ViewState;
   /**
+   * Which view is shown. UI state like the selection: not in the history and not a field of `view`. The default editor shows
+   * this view; a host that lays its own views out reads it to show the same one, or sets it from its own switcher.
+   */
+  readonly activeView: ViewName;
+  /**
+   * Text the text view holds that the session did not take, because it cannot be read; null while the text view holds
+   * nothing of the kind. While there is some, the project keeps the last readable score and the views that draw it are
+   * stale. A change of the project drops it, since the text view then shows the project's score again.
+   */
+  readonly rejectedText: RejectedText | null;
+  /**
    * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
    * diagnostics; a command that leaves the project as it was adds no step and announces nothing.
    */
-  dispatch(command: ScoreCommand): DispatchResult;
+  dispatch(command: ScoreCommand | ProjectCommand): DispatchResult;
+  /**
+   * What the project's dialect makes of `text` as the score, without changing or announcing anything: every diagnostic it
+   * would be refused with, in reading order, and none when `dispatch` of `replaceScoreText` would take it.
+   */
+  checkScoreText(text: string): ReadonlyArray<Diagnostic>;
   /**
    * Runs a tool on the session: validates its parameters, builds its commands, and applies all of them as one history
    * step through the same command path as `dispatch`. One failing step refuses the whole run and leaves project and
@@ -105,6 +149,10 @@ export interface EditingSession {
   select(noteIds: ReadonlyArray<string>): void;
   /** Puts the insertion point at `point`, or removes it with null. A tick must be a whole number, zero or more. */
   setInsertionPoint(point: InsertionPoint | null): void;
+  /** Shows another view. Throws a RangeError for a name that is not in `VIEW_NAMES`. */
+  setActiveView(name: ViewName): void;
+  /** Says which text the text view holds that was not taken, or that it holds none (null). Does nothing when the text is the same. */
+  setRejectedText(next: RejectedText | null): void;
   /** Changes the view state by the keys given. Zoom is kept within its range, scroll at zero or more. */
   setView(patch: Partial<ViewState>): void;
   /**
@@ -153,6 +201,8 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   let dialects = options.dialects;
   let selection: ReadonlyArray<string> = [];
   let insertionPoint: InsertionPoint | null = null;
+  let activeView: ViewName = options.activeView ?? "arrangement";
+  let rejectedText: RejectedText | null = null;
   let view: ViewState = {
     zoom: 1,
     scrollLeft: 0,
@@ -220,6 +270,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     const kept = idsStillInScore(selection);
     const selectionChanged = !sameIds(kept, selection);
     selection = kept;
+    rejectedText = null;
     announce(cause, { project: true, selection: selectionChanged });
   }
 
@@ -231,7 +282,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   }
 
   /** The one path a list of commands takes into the history: all apply, or none does. */
-  function applyCommands(commands: ReadonlyArray<ScoreCommand>): DispatchResult {
+  function applyCommands(commands: ReadonlyArray<ScoreCommand | ProjectCommand>): DispatchResult {
     return withDialect<DispatchResult>(
       (dialect) => {
         const applied = applyCommandList(dialect, project, commands);
@@ -268,6 +319,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       project = next;
       selection = [];
       insertionPoint = null;
+      rejectedText = null;
       announce("replace", { project: true, selection: hadSelection, insertionPoint: hadInsertionPoint });
     },
     replaceDialects(next) {
@@ -302,6 +354,32 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get insertionPoint() {
       return insertionPoint;
+    },
+    get activeView() {
+      return activeView;
+    },
+    setActiveView(name) {
+      if (!VIEW_NAMES.includes(name)) throw new RangeError(`No view is called "${String(name)}".`);
+      if (name === activeView) return;
+      activeView = name;
+      announce("active-view", {});
+    },
+    get rejectedText() {
+      return rejectedText;
+    },
+    setRejectedText(next) {
+      if (next === null ? rejectedText === null : rejectedText?.text === next.text) return;
+      rejectedText = next;
+      announce("rejected-text", {});
+    },
+    checkScoreText(text) {
+      return withDialect<ReadonlyArray<Diagnostic>>(
+        (dialect) => {
+          const read = readScoreText(dialect, text);
+          return read.ok ? [] : read.diagnostics;
+        },
+        (modelId) => [noDialectDiagnostic(modelId)],
+      );
     },
     setInsertionPoint(point) {
       if (point !== null && !(Number.isInteger(point.tick) && point.tick >= 0)) {

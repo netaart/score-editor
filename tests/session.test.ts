@@ -632,3 +632,226 @@ describe("a listener that throws", () => {
     expect(() => microtasks[0]?.()).toThrow("a view broke");
   });
 });
+
+describe("replacing the score text", () => {
+  const typed = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|G16|C16|`;
+  const broken = `${HEADER}
+K:C
+V: Vocal
+C5|`;
+
+  it("is one step of the history that undo and redo carry, and the project's other fields stay", () => {
+    const session = open();
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "replaceScoreText", text: typed });
+
+    expect(result).toMatchObject({ ok: true, diagnostics: [] });
+    expect(session.project).toEqual({ ...project, score: typed });
+    expect(session.reading.kind === "score" && session.reading.score.bars.length).toBe(3);
+    expect(changes).toEqual([
+      { cause: "dispatch", project: true, selection: false, insertionPoint: false, view: false },
+    ]);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual(project);
+    expect(session.canUndo).toBe(false);
+    expect(session.redo()).toBe(true);
+    expect(session.project.score).toBe(typed);
+  });
+
+  it("is refused for an unreadable text: nothing changes, no step, nothing is announced", () => {
+    const session = open();
+    const changes = listen(session);
+    const before = session.project;
+
+    const result = session.dispatch({ type: "replaceScoreText", text: broken });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["duration"]);
+    expect(result.project).toBe(before);
+    expect(session.project).toBe(before);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("adds no step when the text is the one the project already has", () => {
+    const session = open();
+    const changes = listen(session);
+
+    expect(session.dispatch({ type: "replaceScoreText", text: SCORE }).ok).toBe(true);
+
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("is also no step when the text is the same but for its line endings", () => {
+    const session = open();
+
+    session.dispatch({ type: "replaceScoreText", text: SCORE.replace(/\n/g, "\r\n") });
+
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("drops a selected note that the new text no longer has, as any edit does", () => {
+    const session = open();
+    session.select(["Vocal:256", "Vocal:768"]);
+
+    session.dispatch({ type: "replaceScoreText", text: `${HEADER}\nK:C\nV: Vocal\nC8D8|G16|` });
+
+    expect(session.selection).toEqual([]);
+  });
+
+  it("lets a project whose own score cannot be read be fixed from the text", () => {
+    const session = open({ score: broken });
+    expect(session.reading.kind).toBe("unreadable");
+
+    expect(session.dispatch({ type: "replaceScoreText", text: typed }).ok).toBe(true);
+
+    expect(session.reading.kind).toBe("score");
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(broken);
+  });
+});
+
+describe("checking a text without taking it", () => {
+  it("lists every way an unreadable text breaks the format, and none for a readable one", () => {
+    const session = open();
+    const twice = `${HEADER}
+K:C
+V: Vocal
+C5|G5|`;
+    const changes = listen(session);
+
+    expect(session.checkScoreText(SCORE_WITHOUT_D)).toEqual([]);
+    const found = session.checkScoreText(twice);
+
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every((diagnostic) => diagnostic.code === "duration" && diagnostic.at.line === 9)).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("names the missing dialect for a model nothing reads", () => {
+    const session = open({ modelId: "other-model" });
+
+    expect(session.checkScoreText(SCORE).map((diagnostic) => diagnostic.code)).toEqual(["no-dialect"]);
+  });
+});
+
+describe("which view is shown", () => {
+  it("is the arrangement view until a host or the user says otherwise, and starts from the option", () => {
+    expect(open().activeView).toBe("arrangement");
+    expect(createEditingSession({ project, dialects, activeView: "text" }).activeView).toBe("text");
+  });
+
+  it("changes like the rest of the UI state: one announcement, none when it stays, and nothing in the history", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.setActiveView("staff");
+    session.setActiveView("staff");
+    session.setActiveView("text");
+
+    expect(session.activeView).toBe("text");
+    expect(changes).toEqual([
+      { cause: "active-view", project: false, selection: false, insertionPoint: false, view: false },
+      { cause: "active-view", project: false, selection: false, insertionPoint: false, view: false },
+    ]);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("is not a field of the view state, which keeps the four it had", () => {
+    const session = open();
+    session.setActiveView("staff");
+
+    expect(session.view).toEqual({ zoom: 1, scrollLeft: 0, language: "en", editable: true });
+  });
+
+  it("stays when the project is replaced from outside, and refuses a name no view has", () => {
+    const session = open();
+    session.setActiveView("text");
+
+    session.replaceProject({ ...project, sourceKey: "another-song", score: SCORE_WITHOUT_D });
+
+    expect(session.activeView).toBe("text");
+    expect(() => session.setActiveView("lyrics" as never)).toThrow(RangeError);
+    expect(session.activeView).toBe("text");
+  });
+
+  it("is listed for hosts that draw their own switcher", async () => {
+    const { VIEW_NAMES } = await import("@neta-art/score-editor");
+
+    expect([...VIEW_NAMES]).toEqual(["arrangement", "staff", "text"]);
+  });
+});
+
+describe("text a view could not hand over", () => {
+  const broken = `${HEADER}
+K:C
+V: Vocal
+C5|`;
+
+  it("is none at first, is set with the text and what is wrong with it, and is announced", () => {
+    const session = open();
+    const changes = listen(session);
+    expect(session.rejectedText).toBeNull();
+
+    const diagnostics = session.checkScoreText(broken);
+    session.setRejectedText({ text: broken, diagnostics });
+
+    expect(session.rejectedText).toEqual({ text: broken, diagnostics });
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([
+      { cause: "rejected-text", project: false, selection: false, insertionPoint: false, view: false },
+    ]);
+
+    session.setRejectedText(null);
+    expect(session.rejectedText).toBeNull();
+    session.setRejectedText(null);
+    expect(changes.map((change) => change.cause)).toEqual(["rejected-text", "rejected-text"]);
+  });
+
+  it("says nothing when it is set to what it already is", () => {
+    const session = open();
+    const diagnostics = session.checkScoreText(broken);
+    session.setRejectedText({ text: broken, diagnostics });
+    const changes = listen(session);
+
+    session.setRejectedText({ text: broken, diagnostics });
+
+    expect(changes).toEqual([]);
+  });
+
+  it("goes when the project changes under it: an edit, an undo, a redo, new data or new dialects", () => {
+    const hold = (session: EditingSession) =>
+      session.setRejectedText({ text: broken, diagnostics: session.checkScoreText(broken) });
+    const session = open();
+
+    hold(session);
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.undo();
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.redo();
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.replaceProject({ ...project, sourceKey: "another-song" });
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.replaceDialects(createDialectRegistry([song2Dialect]));
+    expect(session.rejectedText).toBeNull();
+  });
+});

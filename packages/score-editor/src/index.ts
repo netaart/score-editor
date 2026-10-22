@@ -5,6 +5,7 @@ export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
 export { mountChordTrack } from "./chord-track";
 export type { ScoreCommand } from "./commands";
+export type { ProjectCommand } from "./commands-project";
 export { mountCutNotice } from "./cut-notice";
 export type {
   CommandDiagnosticCode,
@@ -42,14 +43,16 @@ export type {
   DispatchResult,
   EditingSession,
   InsertionPoint,
+  RejectedText,
   ScoreReading,
   SessionChange,
   SessionChangeCause,
   SessionListener,
   SessionOptions,
+  ViewName,
   ViewState,
 } from "./session";
-export { createEditingSession } from "./session";
+export { createEditingSession, VIEW_NAMES } from "./session";
 export { mountTimeRuler } from "./time-ruler";
 export type {
   BooleanToolParameter,

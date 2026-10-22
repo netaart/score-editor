@@ -536,3 +536,82 @@ C16|z8E4^`);
     check(parse(result.text));
   });
 });
+
+describe("replaceScoreText through applyProjectCommand", () => {
+  const project: SongProject = {
+    style: "pop",
+    lyrics: "la",
+    score: `${HEADER}
+K:C
+V: Vocal
+C16|`,
+    scoreMode: "full",
+    seed: 7,
+    modelId: "song2",
+    sourceKey: "source",
+  };
+  const typed = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|G16|`;
+  const broken = `${HEADER}
+K:C
+V: Vocal
+C5|`;
+
+  it("replaces the score text with a readable one and changes no other field", () => {
+    const result = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: typed });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.project).toEqual({ ...project, score: typed });
+  });
+
+  it("refuses an unreadable text with the reading diagnostic and returns the project it was given", () => {
+    const result = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: broken });
+
+    expect(result.project).toBe(project);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["duration"]);
+    expect(result.diagnostics[0]?.at.line).toBe(9);
+  });
+
+  it("is the way out of a project whose own score cannot be read", () => {
+    const stuck: SongProject = { ...project, score: broken };
+
+    expect(applyProjectCommand(song2Dialect, stuck, { type: "replaceScoreText", text: typed }).project.score).toBe(
+      typed,
+    );
+    expect(applyProjectCommand(song2Dialect, stuck, { type: "replaceScoreText", text: "" }).project).toBe(stuck);
+  });
+
+  it("stores line endings as the dialect writes them: LF only", () => {
+    const result = applyProjectCommand(song2Dialect, project, {
+      type: "replaceScoreText",
+      text: typed.replace(/\n/g, "\r\n"),
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.project.score).toBe(typed);
+  });
+
+  it("keeps a cut score as the text wrote it", () => {
+    const cut = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|G8`;
+    const result = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: cut });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.project.score).toBe(cut);
+  });
+
+  it("says in zh and en where the text broke", () => {
+    const [diagnostic] = applyProjectCommand(song2Dialect, project, {
+      type: "replaceScoreText",
+      text: broken,
+    }).diagnostics;
+    if (diagnostic === undefined) throw new Error("the broken text was taken");
+
+    expect(formatDiagnostic(diagnostic, "en")).toMatch(/line 9/);
+    expect(formatDiagnostic(diagnostic, "zh")).toMatch(/第 9 行/);
+  });
+});

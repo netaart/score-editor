@@ -2,6 +2,7 @@
 // ABOUTME: Tools never touch a session or the DOM; the session and the preview apply the commands their function returns.
 import { applyProjectCommand } from "./apply";
 import type { ScoreCommand } from "./commands";
+import type { ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { SongProject } from "./score";
@@ -244,7 +245,7 @@ export function noDialectDiagnostic(modelId: string): Diagnostic {
 export function applyCommandList(
   dialect: ScoreDialect,
   project: SongProject,
-  commands: ReadonlyArray<ScoreCommand>,
+  commands: ReadonlyArray<ScoreCommand | ProjectCommand>,
 ): { readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> } {
   let next = project;
   for (const command of commands) {
