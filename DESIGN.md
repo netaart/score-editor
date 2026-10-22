@@ -194,6 +194,12 @@ Flat by default, tonal layering for depth: the toolbar, header rows, track head 
 
 Small, even corners. The base radius is 4px and comes from `--sce-radius`. Notes use the smaller of the radius and 3px. The popover uses the radius plus 2px. The read-only badge is a full pill (999px). All borders are 1px hairlines in the line colours; a note's border is 1px in a darker mix of the note colour. The zoom value button's chevron is a 5px rotated border corner, and the minus and plus buttons draw 10px by 2px bars with 1px ends, both in CSS and not glyphs, so no font is involved. The checked menu dot is a 6px circle.
 
+## Custom tools
+
+Custom tools are not view parts: they are pure data and a function, exported from the package entry, that the tool panel (a later view part) reads beside the editing session. The panel draws a tool's `name` in the session's language and one control per declared parameter: a number field with the declared `min`/`max`/`step`, a checkbox for a boolean, a menu of the declared `values` for a choice, and a text field for text. A parameter without a `label` shows its `name`. Every control starts at the declaration's `default`, so a tool can always run.
+
+The panel previews with `previewTool` or `session.previewTool`: the returned project is the result, and a `tool-parameter` or step diagnostic is shown in the same inline place a refused command is. Previewing never writes to the session, so moving a control and reopening the panel cannot change the document or its history. Running calls `session.runTool`, which is one history step and therefore one undo; the panel returns to the preview after it. The registry is the only list the panel reads, so a host registers a tool once and the panel shows it without another wiring step. The tool layer adds no colours, sizes or nodes of its own; the panel uses the controls, focus ring and diagnostic text the rest of this document already specifies.
+
 ## Components
 
 ### View parts

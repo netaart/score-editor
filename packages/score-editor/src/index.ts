@@ -50,6 +50,22 @@ export type {
 export { createEditingSession } from "./session";
 export { mountTimeRuler } from "./time-ruler";
 export type {
+  BooleanToolParameter,
+  ChoiceToolParameter,
+  NumberToolParameter,
+  ScoreTool,
+  TextToolParameter,
+  ToolCommandBuilder,
+  ToolParameter,
+  ToolParameterCheck,
+  ToolParameterValue,
+  ToolParameterValues,
+  ToolRegistry,
+  ToolResult,
+  ToolText,
+} from "./tool";
+export { createToolRegistry, previewTool, validateToolParameters } from "./tool";
+export type {
   AxisPartOptions,
   ChordVocabulary,
   DialectConstraints,
