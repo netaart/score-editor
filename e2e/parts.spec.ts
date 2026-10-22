@@ -160,7 +160,7 @@ test.describe("a layout of view parts on one session", () => {
     const before = { vocal: await vocalNotes.count(), ins: await insNotes.count() };
     const drawnBefore = await expectDrawnLikeFresh(harness);
 
-    // toRest is the one command the edit layer has, and it changes one voice.
+    // toRest is the one command the headless layer has, and it changes one voice.
     const done = await harness.layout.dispatch({ type: "toRest", noteId: await harness.layout.firstVocalNoteId() });
     expect(done.ok).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal - 1);

@@ -23,6 +23,9 @@ importers:
       '@types/node':
         specifier: 22.19.19
         version: 22.19.19
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       tsdown:
         specifier: 0.15.12
         version: 0.15.12(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(typescript@5.9.3)

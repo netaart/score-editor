@@ -14,7 +14,7 @@
     "typographyMeta": {
       "base": {
         "displayName": "Base",
-        "purpose": "Inherited host font at keyword size small; buttons, menu items, the cut sentence and the problem panel."
+        "purpose": "Inherited host font at keyword size small; buttons, menu items, the cut sentence and the problem view."
       },
       "title": { "displayName": "Title", "purpose": "Toolbar title, the zoom value and chord names, weight 600." },
       "label": {

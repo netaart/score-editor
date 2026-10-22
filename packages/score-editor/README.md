@@ -4,6 +4,8 @@ A browser score editor for song projects. A host app mounts it onto an element, 
 
 Work in progress: today the package shows a song project's score as an arrangement: a ruler with bar numbers, section bands, key and meter marks, a chord track, and one piano-roll track per voice, with zoom and scrolling. The first edits are in: select a note (by pointer or by keyboard), turn it into a rest with the Delete key or the Delete button, undo and redo, and drop an insertion point on a beat line and move it with the keys. The rest of editing arrives in later versions.
 
+## Mount
+
 ```ts
 import { createDialectRegistry, mount } from "@neta-art/score-editor";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
@@ -23,7 +25,7 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 - `editable` (default `true`) says whether the user may change the score. While it is true the toolbar has undo, redo and Delete, a click or tap selects a note or drops the insertion point, Tab reaches the notes, and Delete (or Backspace), Ctrl or Cmd plus Z, Ctrl or Cmd plus Shift plus Z, Ctrl plus Y, Left, Right, Home, End, Enter and Space act. While it is false none of that exists: no editing control, no selection frame, no insertion point, and the keys do nothing; the toolbar shows a read-only badge instead. `update({ editable })` switches it without remounting, and a selection made before comes back with it.
 - A command the user's keys caused that the score would not take (the dialect refuses to write the result) changes nothing and reaches `notify` once as `{ code: "command-refused", level: "warning", message }`, in the interface language.
 - Importing the package runs nothing that touches the DOM, so a server render can import it. `mount` and the view parts' mount functions need a browser and throw a clear error elsewhere; call them from client-side code. `createEditingSession` needs none.
-- The edit layer is dialect-agnostic: `applyScoreCommand(dialect, text, command)` and `applyProjectCommand(dialect, project, command)` apply one command to the shared score model, write it with the dialect, and run `dialect.check`. A failure returns a diagnostic and changes nothing.
+- The headless layer is dialect-agnostic: `applyScoreCommand(dialect, text, command)` and `applyProjectCommand(dialect, project, command)` apply one command to the shared score model, write it with the dialect, and run `dialect.check`. A failure returns a diagnostic and changes nothing.
 - Styles: every class is prefixed `sce-`. The host maps its theme onto `--sce-color-bg`, `--sce-color-text`, `--sce-color-accent` and a few more; unmapped colours fall back to neutral defaults derived from the mapped ones. The full list is in [DESIGN.md](../../DESIGN.md).
 - A host whose own CSS uses ID selectors or `!important` on plain elements should mount the editor inside a shadow root. See [docs/spike.md](../../docs/spike.md).
 - The package assumes a browser with native popovers, `:has()` and `light-dark()`. Only Chromium has been run so far.
@@ -89,7 +91,7 @@ import {
   type ToolParameter,
 } from "@neta-art/score-editor";
 
-const every: ToolParameter = { name: "every", type: "number", min: 1, max: 8, default: 2 };
+const every: ToolParameter = { name: "every", type: "number", min: 2, max: 8, default: 2 };
 
 const restEveryNth: ScoreTool = {
   id: "rest-every-nth",
@@ -116,5 +118,9 @@ const result = session.runTool(restEveryNth, { every: 2 });
 - `previewTool` and `session.previewTool` return `{ ok, project, diagnostics, commands }` without changing the session: no dispatch, no history step, no notification. The project is the tool's result, or the project it started from when a step fails.
 - `session.runTool` checks the parameters, builds the commands once, and applies them through the same command path as `dispatch`. All commands are one history step: one undo goes back to the project before the run, one redo reapplies it. If any step fails its `check`, the run is refused, the result carries that step's diagnostic, and project and history stay as they were.
 - Every export here is additive to the 0.1.0 entry and the editing-session entry; `commands`, `parameters` and `name` are the shape the registry and session read. The tool panel in a later ticket reads the registry's declarations to draw its controls and preview.
+
+## Editor skill
+
+`skills/score-editor/` is the editor skill, an Agent Skills bundle that ships in this package: `SKILL.md` routes an agent to one reference per layer and extension point, and `assets/` holds two runnable examples (a static page that imports from esm.sh, and a pnpm project bundled with esbuild). Start at [skills/score-editor/SKILL.md](skills/score-editor/SKILL.md). `pnpm check:skill` fails when a public export is missing from the skill, and the browser tests run both examples against the local build.
 
 MIT licensed.
