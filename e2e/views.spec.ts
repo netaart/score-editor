@@ -86,11 +86,11 @@ test.describe("the text view", () => {
     await openText(harness);
     // Each apostrophe raises the first note by an octave and leaves a score that reads, so a part that handed text over
     // at every key would make two steps here and not one.
-    await textBox(page).evaluate((el: HTMLTextAreaElement) => {
-      const after = el.value.indexOf("C4D4E4F4|") + 1;
-      el.focus();
-      el.setSelectionRange(after, after);
-    });
+    await textBox(page).click();
+    await page.keyboard.press("Control+Home");
+    for (let line = 1; line < MUSIC_LINE; line++) await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Home");
+    await page.keyboard.press("ArrowRight");
 
     await page.keyboard.type("''");
 
@@ -118,6 +118,7 @@ test.describe("the text view", () => {
     harness,
   }) => {
     await openText(harness);
+    await page.clock.install();
 
     await textBox(page).fill(BROKEN);
 
@@ -128,7 +129,7 @@ test.describe("the text view", () => {
     await expect(status(page)).toHaveText("1 problem. The other views still show the last readable score.");
     await expect(slot(page, "text").locator('.sce-gutter-line[data-problem="true"]')).toHaveText(String(MUSIC_LINE));
     expect(await harness.layout.rejectedText()).toEqual({ text: BROKEN, codes: ["duration"] });
-    await page.waitForTimeout(PAUSE_MS + 200);
+    await page.clock.runFor(PAUSE_MS + 200);
     expect(await harness.layout.scoreText()).toBe(QUARTERS);
     expect(await harness.layout.canUndo()).toBe(false);
     await expect(vocalNote(page, D4)).toBeVisible();
@@ -191,12 +192,13 @@ test.describe("the text view", () => {
     harness,
   }) => {
     await openText(harness, { editable: false });
+    await page.clock.install();
 
     await expect(textBox(page)).toHaveAttribute("readonly", "");
     await textBox(page).focus();
     await page.keyboard.press("Control+End");
     await page.keyboard.type("V: Vocal\nC16|\n");
-    await page.waitForTimeout(PAUSE_MS + 200);
+    await page.clock.runFor(PAUSE_MS + 200);
     await expect(textBox(page)).toHaveValue(QUARTERS);
     expect(await harness.layout.scoreText()).toBe(QUARTERS);
 
@@ -558,6 +560,11 @@ const drawing = (page: Page) => staffSlot(page).getByRole("img", { name: "The sc
 const drawnNotes = (page: Page) => staffSlot(page).locator("svg .abcjs-note");
 const drawnRests = (page: Page) => staffSlot(page).locator("svg .abcjs-rest");
 const ABCJS_URL = "**/e2e/page/vendor/abcjs.js";
+/** Two frames: whatever a change started in the page, such as a request for abcjs, has been started by then. */
+const framesPass = (page: Page) =>
+  page.evaluate(
+    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+  );
 /** Bars that fit a phone's width, so the drawing can follow the width of its box; a bar of sixteenths needs more than that. */
 const AIRY = vocalOnly("C4D4E4F4|G4A4B4c4|C8D8|E16|", "C4D4E4F4|G4A4B4c4|");
 
@@ -625,10 +632,11 @@ test.describe("the staff view", () => {
   }) => {
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff", "text"] });
     await expect(drawnNotes(page)).toHaveCount(5);
+    await page.clock.install();
 
     await textBox(page).fill(BROKEN);
     await expect(problems(page).getByRole("listitem")).toHaveCount(1);
-    await page.waitForTimeout(PAUSE_MS + 200);
+    await page.clock.runFor(PAUSE_MS + 200);
     await expect(drawnNotes(page)).toHaveCount(5);
 
     await textBox(page).fill(QUARTERS_WITHOUT_D);
@@ -664,16 +672,23 @@ test.describe("the staff view", () => {
     await expect(drawnNotes(page)).toHaveCount(5);
   });
 
-  test("scrolls with the keyboard when the drawing is wider than its box: the region can take the focus", async ({
+  test("scrolls with the keyboard when the drawing is wider than its box: the region takes the focus and the arrow moves it", async ({
     page,
     harness,
+    isMobile,
   }) => {
+    test.skip(isMobile, "a keyboard, checked on the desktop project");
+    await page.setViewportSize({ width: 260, height: 800 });
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
     await expect(drawnNotes(page)).toHaveCount(5);
+    const [needed, shown] = await staffRegion(page).evaluate((el) => [el.scrollWidth, el.clientWidth]);
+    expect(needed, "the drawing is wider than its box").toBeGreaterThan(shown);
 
     await staffRegion(page).focus();
-
     await expect(staffRegion(page)).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+
+    await expect.poll(() => staffRegion(page).evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
   });
 
   test("draws again at the width it has when its box changes", async ({ page, harness, isMobile }) => {
@@ -691,20 +706,27 @@ test.describe("the staff view", () => {
     await expect.poll(async () => (await drawnStyle(page)).width).toBeGreaterThan(400);
   });
 
-  test("fits a phone's width, and a bar too dense for it scrolls inside the view and not the page", async ({
+  test("a box narrower than the narrowest staff scrolls inside the view and not the page", async ({
     page,
     harness,
     isMobile,
   }) => {
+    test.skip(isMobile, "the width is set once, on the desktop project");
+    await page.setViewportSize({ width: 240, height: 800 });
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    const [needed, shown] = await staffRegion(page).evaluate((el) => [el.scrollWidth, el.clientWidth]);
+    expect(needed, "the drawing is wider than its box").toBeGreaterThan(shown);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test("fits a phone's width", async ({ page, harness, isMobile }) => {
     test.skip(!isMobile, "the phone project");
     await harness.layout.open({ score: { text: AIRY }, parts: ["staff"] });
     await expect(drawnNotes(page)).toHaveCount(19);
     const region = await box(staffRegion(page));
     expect((await drawnStyle(page)).width).toBeLessThanOrEqual(region.width);
-    await harness.layout.close();
-
-    await harness.layout.open({ score: { sample: "compact-three-sections" }, parts: ["staff"] });
-    await expect(drawnNotes(page).first()).toBeAttached();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 
@@ -768,7 +790,8 @@ test.describe("the staff view", () => {
 
     await harness.layout.destroyPart("staff");
     release();
-    await page.waitForTimeout(500);
+    // The same module again: it settles when abcjs has been evaluated, which is after the destroyed part's own wait on it.
+    await page.evaluate(() => import("abcjs" as string));
 
     const drawnAfter = await page.evaluate(() => {
       const holder = window.harness.layout.retained?.nodes.find((node) => (node as Element).shadowRoot) as
@@ -787,7 +810,7 @@ test.describe("the staff view", () => {
 
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["text", "vocal"] });
     await harness.layout.setActiveView("staff");
-    await page.waitForTimeout(300);
+    await framesPass(page);
     expect(requests, "nothing asked for abcjs while no staff view was mounted").toHaveLength(0);
 
     await harness.layout.mountPart("staff");
@@ -1029,7 +1052,7 @@ test.describe("the three views of the default editor", () => {
     await harness.mount({ score: { text: QUARTERS } });
     await press(viewTab(page, "Score text"));
     await press(viewTab(page, "Arrangement"));
-    await page.waitForTimeout(300);
+    await framesPass(page);
     expect(requests, "no staff view was asked for").toHaveLength(0);
 
     await press(viewTab(page, "Staff"));
@@ -1109,6 +1132,33 @@ test.describe("the three views of the default editor", () => {
     await expect(editorText(page)).toHaveValue(QUARTERS_WITHOUT_D);
   });
 
+  test("leaves Ctrl plus Z in the box to the browser: it undoes the typing in the box and not the project", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "a keyboard, checked on the desktop project");
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+    await editorText(page).fill(QUARTERS_WITHOUT_D);
+    await press(viewTab(page, "Arrangement"));
+    await expect(note(page, D4)).toHaveCount(0);
+    await press(viewTab(page, "Score text"));
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "false");
+
+    await editorText(page).click();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type("x");
+    await expect(editorText(page)).toHaveValue(`${QUARTERS_WITHOUT_D}x`);
+    await page.keyboard.press("Control+z");
+
+    await expect(editorText(page)).toHaveValue(QUARTERS_WITHOUT_D);
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "false");
+    await press(viewTab(page, "Arrangement"));
+    await expect(note(page, D4)).toHaveCount(0);
+  });
+
   test("drops the text it could not take when an undo changes the score under it", async ({ page, harness, press }) => {
     await harness.mount({ score: { text: QUARTERS } });
     await press(viewTab(page, "Score text"));
@@ -1153,10 +1203,11 @@ test.describe("the three views of the default editor", () => {
     await press(viewTab(page, "Score text"));
     await expect(editorText(page)).toHaveAttribute("readonly", "");
     await expect(editorText(page)).toHaveValue(QUARTERS);
+    await page.clock.install();
     await editorText(page).focus();
     await page.keyboard.press("Control+End");
     await page.keyboard.type("V: Vocal");
-    await page.waitForTimeout(PAUSE_MS + 200);
+    await page.clock.runFor(PAUSE_MS + 200);
     await expect(editorText(page)).toHaveValue(QUARTERS);
 
     await press(viewTab(page, "Staff"));
@@ -1225,12 +1276,25 @@ test.describe("the three views of the default editor", () => {
     await expect(page.getByRole("alert")).toHaveCount(0);
   });
 
-  test("keeps where the arrangement was scrolled to while another view is shown", async ({ page, harness, press }) => {
+  /** Scrolls the arrangement in time with the wheel, as a person with a mouse does. */
+  async function wheelInTime(page: Page) {
+    const frame = await box(arrangement(page));
+    await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
+    await page.mouse.wheel(600, 0);
+    await expect.poll(() => arrangement(page).evaluate((el) => el.scrollLeft)).toBeGreaterThan(300);
+  }
+
+  test("keeps where the arrangement was scrolled to while another view is shown", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the wheel is a mouse gesture, checked on the desktop project");
     await harness.mount({ score: { synthetic: { bars: 128, notes: 1500 } } });
     const scroller = arrangement(page);
-    await scroller.evaluate((el) => el.scrollTo(400, 60));
+    await wheelInTime(page);
     const before = await scroller.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
-    expect(before.left).toBeGreaterThan(300);
 
     await press(viewTab(page, "Score text"));
     await press(viewTab(page, "Arrangement"));
@@ -1243,9 +1307,11 @@ test.describe("the three views of the default editor", () => {
     page,
     harness,
     press,
+    isMobile,
   }) => {
+    test.skip(isMobile, "the wheel is a mouse gesture, checked on the desktop project");
     await harness.mount({ score: { synthetic: { bars: 128, notes: 1500 } } });
-    await arrangement(page).evaluate((el) => el.scrollTo(400, 60));
+    await wheelInTime(page);
     await press(viewTab(page, "Staff"));
 
     await harness.update({ score: { synthetic: { bars: 96, notes: 900 } } });
