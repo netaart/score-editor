@@ -150,6 +150,12 @@ z4z4E4F4|G16|`,
   });
 });
 
+/** G is tied into a note of the cut tail: writing it as a rest would make the cut a complete score. */
+const CUT = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|G16-|B`;
+
 describe("toRests writes once and checks once", () => {
   /** The song2 dialect with its calls counted, so the number of writes and checks can be read. */
   function counted() {
@@ -182,15 +188,20 @@ describe("toRests writes once and checks once", () => {
     expect(result.ok).toBe(true);
     expect(calls).toEqual({ parse: 1, serialize: 1, check: 1 });
   });
+
+  it("checks the score once when the check refuses it, however many notes the command names", () => {
+    const { calls, dialect } = counted();
+    const result = applyScoreCommand(dialect, CUT, {
+      type: "toRests",
+      noteIds: ["Vocal:0", "Vocal:256", "Vocal:512", "Vocal:768", "Vocal:1024"],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(calls).toEqual({ parse: 1, serialize: 1, check: 1 });
+  });
 });
 
 describe("toRests refused by the check", () => {
-  /** G is tied into a note of the cut tail: writing it as a rest would make the cut a complete score. */
-  const CUT = `${HEADER}
-K:C
-V: Vocal
-C4D4E4F4|G16-|B`;
-
   it("is refused as a whole, with the score left as it was", () => {
     const result = applyScoreCommand(song2Dialect, CUT, { type: "toRests", noteIds: ["Vocal:0", "Vocal:1024"] });
 
@@ -199,17 +210,17 @@ C4D4E4F4|G16-|B`;
     expect(result.diagnostic.code).toBe("write-mismatch");
   });
 
-  it("points at the note the score would not take, not at the first note of the command", () => {
+  it("points at the first note the command names when the check names no place of its own", () => {
     const result = applyScoreCommand(song2Dialect, CUT, {
       type: "toRests",
-      noteIds: ["Vocal:0", "Vocal:256", "Vocal:1024"],
+      noteIds: ["Vocal:256", "Vocal:1024", "Vocal:0"],
     });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.diagnostic.at).toEqual({ voice: "Vocal", bar: 2, beat: 1, noteId: "Vocal:1024" });
+    expect(result.diagnostic.at).toEqual({ voice: "Vocal", bar: 1, beat: 2, noteId: "Vocal:256" });
     expect(formatDiagnostic(result.diagnostic, "en")).toBe(
-      "This change can't be written into the score safely, so the score was left as it was. (bar 2, beat 1)",
+      "This change can't be written into the score safely, so the score was left as it was. (bar 1, beat 2)",
     );
   });
 });
@@ -311,7 +322,7 @@ function oneByOne(text: string, ids: string[]) {
 /**
  * Turns the notes named by `ids` into rests with one command, and holds the result to what is asked of the command for one note:
  * it reads, untouched bars are the same bytes, untouched notes keep their pitch and start, every target is a rest. A
- * refused set changes nothing and points at the note where the notes taken in order stop passing the check.
+ * refused set changes nothing and points at the first note of the command.
  */
 function exerciseSet(label: string, name: string, text: string, ids: string[]): void {
   const input = parse(text);
@@ -324,16 +335,7 @@ function exerciseSet(label: string, name: string, text: string, ids: string[]): 
   if (!result.ok) {
     counts.refused += 1;
     expect(result.diagnostic.code, `${label}: code`).toBe("write-mismatch");
-    const at = ids.indexOf(result.diagnostic.at.noteId ?? "");
-    expect(at, `${label}: the refusal points at a note of the command`).toBeGreaterThanOrEqual(0);
-    expect(
-      applyScoreCommand(song2Dialect, text, { type: "toRests", noteIds: ids.slice(0, at + 1) }).ok,
-      `${label}: the notes up to the one it points at are refused`,
-    ).toBe(false);
-    expect(
-      applyScoreCommand(song2Dialect, text, { type: "toRests", noteIds: ids.slice(0, at) }).ok,
-      `${label}: the notes before it are taken`,
-    ).toBe(true);
+    expect(result.diagnostic.at.noteId, `${label}: the refusal points at the first note of the command`).toBe(ids[0]);
     const project: SongProject = {
       style: "",
       lyrics: "",

@@ -192,7 +192,7 @@ C4D4E4F4|C16-|B`;
 
     expect(result.handled).toBe(true);
     expect(result.refused.map((diagnostic) => diagnostic.code)).toEqual(["write-mismatch"]);
-    expect(result.refused[0]?.at).toEqual({ voice: "Vocal", bar: 2, beat: 1, noteId: "Vocal:1024" });
+    expect(result.refused[0]?.at).toEqual({ voice: "Vocal", bar: 1, beat: 2, noteId: "Vocal:256" });
     expect(session.project).toEqual(before.project);
     expect(session.selection).toEqual(before.selection);
     expect(session.canUndo).toBe(false);

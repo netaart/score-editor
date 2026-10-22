@@ -83,9 +83,12 @@ export function invertSelection(session: EditingSession, score: Score): EditingI
   return HANDLED;
 }
 
-/** Clears the selection. Nothing is handled when no pitched note is selected: there is nothing to clear that can be seen. */
-export function clearSelection(session: EditingSession, score: Score): EditingInputResult {
-  if (selectedIds(score, session.selection).size === 0) return IGNORED;
+/**
+ * Clears the selection. Nothing is handled when it is empty, which leaves Escape to the host. A selection that holds only
+ * the ids of rests, which is what Delete leaves, is not empty: it is cleared though nothing shows it.
+ */
+export function clearSelection(session: EditingSession): EditingInputResult {
+  if (session.selection.length === 0) return IGNORED;
   session.select([]);
   return HANDLED;
 }

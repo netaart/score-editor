@@ -52,7 +52,10 @@ function listen(session: EditingSession): SessionChange[] {
 
 describe("Delete on several selected notes", () => {
   /** The dialect with its writes and checks counted, to read how often a delete touches the score text. */
-  function openCounting(): { session: EditingSession; calls: { serialize: number; check: number } } {
+  function openCounting(score: string = SCORE): {
+    session: EditingSession;
+    calls: { serialize: number; check: number };
+  } {
     const calls = { serialize: 0, check: 0 };
     const counting = {
       ...song2Dialect,
@@ -65,7 +68,10 @@ describe("Delete on several selected notes", () => {
         return song2Dialect.check(...args);
       },
     };
-    const session = createEditingSession({ project, dialects: createDialectRegistry([counting]) });
+    const session = createEditingSession({
+      project: { ...project, score },
+      dialects: createDialectRegistry([counting]),
+    });
     return { session, calls };
   }
 
@@ -84,6 +90,40 @@ z4D4z4z4|z16|`);
     expect(session.undo()).toBe(true);
     expect(session.project.score).toBe(SCORE);
     expect(session.canUndo).toBe(false);
+  });
+
+  describe("when the score would not take it", () => {
+    /** The G of bar 2 is tied into a cut tail: written as a rest, it would turn the cut into a finished score. */
+    const CUT = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|G16-|B`;
+
+    it("changes neither the score nor the selection, reports the code, and records no history", () => {
+      const { session, calls } = openCounting(CUT);
+      session.select(["Vocal:1024", "Vocal:256", "Vocal:0"]);
+      const before = { project: session.project, selection: session.selection };
+      const changes = listen(session);
+
+      const result = handleEditingInput(session, { type: "delete" });
+
+      expect(result.handled).toBe(true);
+      expect(result.refused.map((diagnostic) => diagnostic.code)).toEqual(["write-mismatch"]);
+      expect(session.project).toEqual(before.project);
+      expect(session.selection).toEqual(before.selection);
+      expect(session.canUndo).toBe(false);
+      expect(changes).toEqual([]);
+      expect(calls.check).toBe(1);
+    });
+
+    it("points at the first of the selected notes in the score, whatever order they were selected in", () => {
+      const { session } = openCounting(CUT);
+      session.select(["Vocal:1024", "Vocal:256", "Vocal:0"]);
+
+      const result = handleEditingInput(session, { type: "delete" });
+
+      expect(result.refused[0]?.at).toEqual({ voice: "Vocal", bar: 1, beat: 1, noteId: "Vocal:0" });
+    });
   });
 });
 
@@ -251,15 +291,25 @@ describe("Escape", () => {
     expect(session.insertionPoint).toEqual({ tick: 512 });
   });
 
-  it("is not handled when no note is selected, so a host layer can take it to close itself", () => {
+  it("is not handled when the selection is empty, so a host layer can take it to close itself", () => {
     const session = open();
     expect(handleEditingInput(session, key("Escape"))).toEqual({ handled: false, refused: [] });
 
     session.select(["Vocal:256"]);
-    handleEditingInput(session, key("Delete"));
-    expect(session.selection).toEqual(["Vocal:256"]);
+    handleEditingInput(session, key("Escape"));
     expect(handleEditingInput(session, key("Escape"))).toEqual({ handled: false, refused: [] });
-    expect(session.selection).toEqual(["Vocal:256"]);
+  });
+
+  it("clears what Delete leaves selected: the ids of notes that are rests now", () => {
+    const session = open();
+    session.select(["Vocal:256", "Vocal:768"]);
+    handleEditingInput(session, key("Delete"));
+    expect(session.selection).toEqual(["Vocal:256", "Vocal:768"]);
+
+    expect(handleEditingInput(session, key("Escape"))).toEqual({ handled: true, refused: [] });
+
+    expect(session.selection).toEqual([]);
+    expect(handleEditingInput(session, key("Escape"))).toEqual({ handled: false, refused: [] });
   });
 
   it("is not taken with a modifier", () => {

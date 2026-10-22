@@ -88,10 +88,14 @@ function insertionPointTargetOf(score: Score, point: InsertionPoint | null, inpu
   return null;
 }
 
-/** The selected ids that name a pitched note in `score`. A rest keeps its id, so the selection can still hold one. */
+/**
+ * The selected ids that name a pitched note in `score`, in the order of the score. A rest keeps its id, so the selection
+ * can still hold one. The order is the score's, not the order the notes were picked in, so what a refusal points at does
+ * not depend on it.
+ */
 function pitchedSelection(score: Score, selection: ReadonlyArray<string>): string[] {
-  const pitched = new Set(score.notes.filter((note) => note.midi !== null).map((note) => note.id));
-  return selection.filter((id) => pitched.has(id));
+  const selected = new Set(selection);
+  return score.notes.filter((note) => note.midi !== null && selected.has(note.id)).map((note) => note.id);
 }
 
 /**
@@ -181,7 +185,7 @@ export function handleEditingInput(session: EditingSession, input: EditingInput)
     case "invert-selection":
       return selectWith(session, (score) => invertSelection(session, score));
     case "clear-selection":
-      return selectWith(session, (score) => clearSelection(session, score));
+      return selectWith(session, () => clearSelection(session));
     case "key":
       return pressKey(session, input);
   }
