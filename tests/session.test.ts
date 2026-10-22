@@ -142,6 +142,91 @@ C5|`;
   });
 });
 
+describe("a command that comes back with a notice", () => {
+  /** The score of the tests above, with the chord C on the first note. Chords are for the full score mode only. */
+  const WITH_CHORDS = `${HEADER}
+K:C
+V: Vocal
+"C"C4D4E4F4|G16|`;
+  const AT_100 = SCORE.replace("Q:1/4=120", "Q:1/4=100");
+
+  it("takes a tempo change for a style without a BPM as one step and carries the notice", () => {
+    const session = open({ style: "warm pop" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "setTempo", bpm: 100 });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+    expect(result.project).toBe(session.project);
+    expect(session.project).toEqual({ ...project, style: "warm pop", score: AT_100 });
+    expect(changes.map((change) => [change.cause, change.project])).toEqual([["dispatch", true]]);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("takes a replacement of the score text into a melody project that has chords, and carries the notice", () => {
+    const session = open({ scoreMode: "melody" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "replaceScoreText", text: WITH_CHORDS });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
+    expect(session.project.score).toBe(WITH_CHORDS);
+    expect(session.rejectedText).toBeNull();
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      cause: "dispatch",
+      project: true,
+      command: { type: "replaceScoreText", text: WITH_CHORDS },
+    });
+
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("carries the notice of a command that leaves the project as it was, and adds no step", () => {
+    const session = open({ style: "warm pop" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "setTempo", bpm: 120 });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("refuses with the refusal alone when the project would otherwise carry a notice", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+
+    const result = session.dispatch({ type: "toRest", noteId: "Vocal:999" });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["note-not-found"]);
+    expect(session.project.score).toBe(WITH_CHORDS);
+  });
+
+  it("lets an ordinary edit of a melody project that holds chords through, with the notice", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+
+    const result = session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
+    expect(session.project.score).toBe(`${HEADER}
+K:C
+V: Vocal
+"C"C4z4E4F4|G16|`);
+    expect(session.canUndo).toBe(true);
+  });
+});
+
 describe("deleting the selection", () => {
   const deleteKey = { type: "key", key: "Delete" } as const;
 
@@ -720,7 +805,9 @@ V: Vocal
 
     expect(checked.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
     expect(result.diagnostics).toEqual(checked);
-    expect(result.ok).toBe(checked.length === 0);
+    // The text carries a notice, not a refusal: the session took it.
+    expect(result.ok).toBe(true);
+    expect(session.project.score).toBe(withChords);
   });
 
   it("names its command on the change, which a command on the notes does not: that is told by the project alone", () => {

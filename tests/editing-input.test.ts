@@ -79,6 +79,30 @@ C4z4E4F4|G16|`);
   });
 });
 
+describe("Delete in a melody project whose score holds chords", () => {
+  const WITH_CHORDS = `${HEADER}
+K:C
+V: Vocal
+"C"C4D4E4F4|G16|`;
+
+  it("is not refused for the notice the project carries, and is one step to undo", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+    session.select(["Vocal:256"]);
+    const changes = listen(session);
+
+    const result = handleEditingInput(session, key("Delete"));
+
+    expect(result).toEqual({ handled: true, refused: [] });
+    expect(session.project.score).toBe(`${HEADER}
+K:C
+V: Vocal
+"C"C4z4E4F4|G16|`);
+    expect(changes.map((change) => change.cause)).toEqual(["dispatch"]);
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(WITH_CHORDS);
+  });
+});
+
 describe("Delete and Backspace in detail", () => {
   it("treat Backspace as Delete", () => {
     const session = open();

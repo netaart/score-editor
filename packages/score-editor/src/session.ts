@@ -1,7 +1,6 @@
 // ABOUTME: The editing session: the song project, its undo history, the selection and the insertion point, and the UI state view parts share.
 // ABOUTME: Headless: it touches no DOM, so it imports and runs in Node and in a Worker like the rest of the headless layer.
 
-import { applyProjectCommand } from "./apply";
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
 import { isProjectCommand, type ProjectCommand } from "./commands-project";
@@ -63,9 +62,13 @@ export interface SessionOptions {
   activeView?: ViewName;
 }
 
-/** What a dispatch came to. A refused command carries its diagnostics and the project it left untouched. */
+/**
+ * What a dispatch came to. A refused command carries its diagnostics and the project it left untouched. A command the
+ * session took can still carry notices (`isNoticeDiagnostic`): the project is changed and usable, and the notice says
+ * something the user should know about it, such as a style without a BPM after a tempo change. A notice is not a refusal.
+ */
 export type DispatchResult =
-  | { readonly ok: true; readonly project: SongProject; readonly diagnostics: readonly [] }
+  | { readonly ok: true; readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> }
   | { readonly ok: false; readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> };
 
 /** What caused a change the session announces. */
@@ -136,19 +139,23 @@ export interface EditingSession {
   readonly rejectedText: RejectedText | null;
   /**
    * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
-   * diagnostics; a command that leaves the project as it was adds no step and announces nothing.
+   * diagnostics; a command that leaves the project as it was adds no step and announces nothing. A command that comes
+   * back with notices only is taken: the project changes as one step, and the result is `ok` with the notices in
+   * `diagnostics`.
    */
   dispatch(command: ScoreCommand | ProjectCommand): DispatchResult;
   /**
-   * What `dispatch` of `replaceScoreText` with `text` would say, without changing or announcing anything: the diagnostics
-   * it would be refused with, and none when it would take the text. The check is that command's own path, the song-project
-   * rules included, so the two cannot disagree.
+   * What `dispatch` of `replaceScoreText` with `text` would say, without changing or announcing anything: the
+   * diagnostics it would be refused with, the notices it would be taken with, and none when it would take the text
+   * plainly. `isNoticeDiagnostic` tells the two apart; a result with no other diagnostic is a text the session takes. The
+   * check is that command's own path, the song-project rules included, so the two cannot disagree.
    */
   checkScoreText(text: string): ReadonlyArray<Diagnostic>;
   /**
    * Runs a tool on the session: validates its parameters, builds its commands, and applies all of them as one history
    * step through the same command path as `dispatch`. One failing step refuses the whole run and leaves project and
-   * history unchanged.
+   * history unchanged. A step that comes back with a notice does not fail the run: the run is `ok` and carries the
+   * notices, each once.
    */
   runTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
   /** The project a tool would make from the current project and selection, without changing or announcing anything. */
@@ -297,9 +304,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     return withDialect<DispatchResult>(
       (dialect) => {
         const applied = applyCommandList(dialect, project, commands);
-        if (applied.diagnostics.length > 0) return { ok: false, project, diagnostics: applied.diagnostics };
+        if (!applied.ok) return { ok: false, project, diagnostics: applied.diagnostics };
         if (!sameProject(project, applied.project)) commit(applied.project, "dispatch", named);
-        return { ok: true, project, diagnostics: [] };
+        return { ok: true, project, diagnostics: applied.diagnostics };
       },
       (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),
     );
@@ -385,7 +392,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     checkScoreText(text) {
       return withDialect<ReadonlyArray<Diagnostic>>(
-        (dialect) => applyProjectCommand(dialect, project, { type: "replaceScoreText", text }).diagnostics,
+        (dialect) => applyCommandList(dialect, project, [{ type: "replaceScoreText", text }]).diagnostics,
         (modelId) => [noDialectDiagnostic(modelId)],
       );
     },

@@ -129,7 +129,7 @@ function deleteSelection(session: EditingSession): EditingInputResult {
   const score = readableScore(session);
   if (score === null || pitchedSelection(score, session.selection).length === 0) return IGNORED;
   const result = session.runTool(deleteTool(score));
-  return { handled: true, refused: result.diagnostics };
+  return { handled: true, refused: result.ok ? [] : result.diagnostics };
 }
 
 function clickNote(session: EditingSession, noteId: string): EditingInputResult {

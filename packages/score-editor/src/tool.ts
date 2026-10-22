@@ -3,7 +3,7 @@
 import { applyProjectCommand } from "./apply";
 import type { ScoreCommand } from "./commands";
 import type { ProjectCommand } from "./commands-project";
-import type { Diagnostic } from "./diagnostics";
+import { type Diagnostic, isNoticeDiagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { SongProject } from "./score";
 import type { Language } from "./types";
@@ -211,12 +211,16 @@ export function validateToolParameters(tool: ScoreTool, values: ToolParameterVal
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, values: filled };
 }
 
-/** What a preview or a run came to: the project the commands make, or the diagnostic of the step that refused. */
+/**
+ * What a preview or a run came to: the project the commands make, or the diagnostic of the step that refused. A run that
+ * took the commands can still carry notices, the diagnostics `isNoticeDiagnostic` names; they describe the project it
+ * made, which is usable, and are not a refusal.
+ */
 export type ToolResult =
   | {
       readonly ok: true;
       readonly project: SongProject;
-      readonly diagnostics: readonly [];
+      readonly diagnostics: ReadonlyArray<Diagnostic>;
       readonly commands: ReadonlyArray<ScoreCommand>;
     }
   | {
@@ -241,19 +245,43 @@ export function noDialectDiagnostic(modelId: string): Diagnostic {
   return { code: "no-dialect", params: { modelId }, at: {} };
 }
 
-/** Applies a list of commands to a local project, stopping at the first refusal and leaving the input untouched. */
+/**
+ * What a list of commands came to. When `ok`, `project` is the project they make and `diagnostics` holds the notices of
+ * the steps, each once, in the order they came. Otherwise `project` is the project as it was and `diagnostics` holds the
+ * refusal of the step that failed; a notice is not carried with a refusal, since it describes a project that was not made.
+ */
+export interface CommandListResult {
+  readonly ok: boolean;
+  readonly project: SongProject;
+  readonly diagnostics: ReadonlyArray<Diagnostic>;
+}
+
+/**
+ * Applies a list of commands to a local project. A notice does not stop the list: the changed project is kept, the notice
+ * is collected, and the next command goes on from it. Any other diagnostic refuses the whole list and leaves the input
+ * untouched.
+ */
 export function applyCommandList(
   dialect: ScoreDialect,
   project: SongProject,
   commands: ReadonlyArray<ScoreCommand | ProjectCommand>,
-): { readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> } {
+): CommandListResult {
   let next = project;
+  const notices: Diagnostic[] = [];
+  const seen = new Set<string>();
   for (const command of commands) {
     const applied = applyProjectCommand(dialect, next, command);
-    if (applied.diagnostics.length > 0) return { project, diagnostics: applied.diagnostics };
+    const refusals = applied.diagnostics.filter((diagnostic) => !isNoticeDiagnostic(diagnostic));
+    if (refusals.length > 0) return { ok: false, project, diagnostics: refusals };
     next = applied.project;
+    for (const notice of applied.diagnostics) {
+      const key = JSON.stringify([notice.code, notice.params, notice.at]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      notices.push(notice);
+    }
   }
-  return { project: next, diagnostics: [] };
+  return { ok: true, project: next, diagnostics: notices };
 }
 
 function failure(
@@ -279,8 +307,8 @@ export function applyToolRequest(
   if (dialect === undefined) return failure(request.project, [noDialectDiagnostic(request.project.modelId)], commands);
 
   const applied = applyCommandList(dialect, request.project, commands);
-  if (applied.diagnostics.length > 0) return failure(request.project, applied.diagnostics, commands);
-  return { ok: true, project: applied.project, diagnostics: [], commands };
+  if (!applied.ok) return failure(request.project, applied.diagnostics, commands);
+  return { ok: true, project: applied.project, diagnostics: applied.diagnostics, commands };
 }
 
 /** What running a tool would make, computed without a session. Invalid parameters and a failing step return diagnostics. */
