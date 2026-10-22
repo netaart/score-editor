@@ -1,5 +1,8 @@
 // ABOUTME: Imports both published package entries in a plain node environment.
 // ABOUTME: Guards the rule that makes server-side imports in host apps safe: no side effects, no DOM at import time.
+import { execFileSync } from "node:child_process";
+import module, { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 describe("package entries in a node environment", () => {
@@ -76,4 +79,47 @@ describe("package entries in a node environment", () => {
     const options = { language: "en", project, dialects: createDialectRegistry([]) } as const;
     expect(() => mount({} as HTMLElement, options)).toThrow(/browser/i);
   });
+});
+
+describe("abcjs stays out of the entries", () => {
+  const root = new URL("../", import.meta.url);
+  const entries = ["packages/score-editor/dist/index.js", "packages/score-dialect-song2/dist/index.js"].map(
+    (path) => new URL(path, root).href,
+  );
+  const abcjs = pathToFileURL(createRequire(new URL("packages/score-editor/package.json", root)).resolve("abcjs")).href;
+
+  /**
+   * A plain Node process, with no DOM, imports the built entries and then abcjs itself, and reports how many modules of
+   * abcjs its resolution hook saw after each. Where nothing is shared with this test, the entries are loaded as a server
+   * loads them, and the second figure shows the hook can see abcjs when it is loaded.
+   */
+  function modulesOfAbcjsSeen(): { afterEntries: number; afterAbcjs: number } {
+    const script = `
+      import module from "node:module";
+      const resolved = [];
+      module.registerHooks({
+        resolve(specifier, context, nextResolve) {
+          const result = nextResolve(specifier, context);
+          resolved.push(result.url);
+          return result;
+        },
+      });
+      const seen = () => resolved.filter((url) => url.includes("/abcjs/")).length;
+      for (const entry of ${JSON.stringify(entries)}) await import(entry);
+      const afterEntries = seen();
+      await import(${JSON.stringify(abcjs)});
+      console.log(JSON.stringify({ afterEntries, afterAbcjs: seen() }));
+    `;
+    return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8" }));
+  }
+
+  it.skipIf(typeof module.registerHooks !== "function")(
+    "is not loaded by importing either package entry, which only a view part's mount asks for",
+    () => {
+      const { afterEntries, afterAbcjs } = modulesOfAbcjsSeen();
+
+      expect(afterAbcjs, "the check can see abcjs when it is loaded").toBeGreaterThan(0);
+      expect(afterEntries).toBe(0);
+    },
+  );
 });
