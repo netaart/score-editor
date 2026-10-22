@@ -87,7 +87,15 @@ export function sameContent(left: BarContent, right: BarContent): boolean {
   for (let index = 0; index < left.notes.length; index += 1) {
     const a = left.notes[index] as BarContent["notes"][number];
     const b = right.notes[index] as BarContent["notes"][number];
-    if (a.start !== b.start || a.duration !== b.duration || a.midi !== b.midi || a.tie !== b.tie) return false;
+    if (
+      a.start !== b.start ||
+      a.duration !== b.duration ||
+      a.midi !== b.midi ||
+      a.tie !== b.tie ||
+      a.tiedFromPrevious !== b.tiedFromPrevious
+    ) {
+      return false;
+    }
   }
   for (let index = 0; index < left.chords.length; index += 1) {
     const a = left.chords[index] as BarContent["chords"][number];

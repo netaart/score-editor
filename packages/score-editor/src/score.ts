@@ -73,6 +73,8 @@ export interface Truncation {
   /** 0-based. It may equal the bar count when the cut is before a new bar rather than inside one. */
   readonly bar: number;
   readonly short: boolean;
+  /** True only when the cut ends inside an unfinished chord string (RULES.md C8 and X4). */
+  readonly unfinishedChord?: true;
 }
 
 /** A parsed score. `source` is dialect-private data the core never reads; the dialect uses it to write unchanged text. */

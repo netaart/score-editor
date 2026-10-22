@@ -7,6 +7,6 @@ import type { Song2CutTail } from "./parser";
 export function keepsCutTail(score: Score, tail: Song2CutTail | null, lastNoteTied: boolean): boolean {
   if (tail === null) return false;
   if (tail.kind === "x5") return lastNoteTied;
-  if (tail.kind === "x4-chord") return score.hasChords;
+  if (tail.kind === "x4-chord") return score.truncation?.unfinishedChord === true;
   return true;
 }
