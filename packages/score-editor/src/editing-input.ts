@@ -1,9 +1,11 @@
 // ABOUTME: The editing input layer: what a key or a click means for an editing session, with no DOM and no event objects.
 // ABOUTME: The view parts turn their events into these inputs, so a host's own views get the same keys and clicks.
 import { beatLineAfter, beatLineBefore, gridTicks, nearestBeatLine } from "./arrangement";
+import { type ScoreCommand, tieChain } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { Score } from "./score";
 import type { EditingSession, InsertionPoint } from "./session";
+import type { ScoreTool } from "./tool";
 
 /** A key press with the modifiers that were held. */
 export interface EditingKeyInput {
@@ -64,28 +66,42 @@ function insertionPointTargetOf(score: Score, point: InsertionPoint | null, inpu
   return null;
 }
 
-/** The selected ids that still name a pitched note, read now: an earlier command may have turned some into rests. */
-function selectedNotes(session: EditingSession): string[] {
-  const score = readableScore(session);
-  if (score === null) return [];
+/** The selected ids that name a pitched note in `score`. A rest keeps its id, so the selection can still hold one. */
+function pitchedSelection(score: Score, selection: ReadonlyArray<string>): string[] {
   const pitched = new Set(score.notes.filter((note) => note.midi !== null).map((note) => note.id));
-  return session.selection.filter((id) => pitched.has(id));
+  return selection.filter((id) => pitched.has(id));
 }
 
 /**
- * Turns each selected note into a rest. A tie chain turns as a whole, so one command can take the other selected
- * segments of its chain with it: the selection is read again after every command.
+ * Delete as a tool, so the session runs it through the one path every tool takes: all of it applies as one history
+ * step, or none of it does. A tie chain turns into rests as a whole, so it takes one command, whichever of its
+ * segments are selected.
  */
+function deleteTool(score: Score): ScoreTool {
+  return {
+    id: "delete",
+    name: { en: "Delete", zh: "删除" },
+    commands(_project, selection) {
+      const covered = new Set<string>();
+      const commands: ScoreCommand[] = [];
+      for (const id of pitchedSelection(score, selection)) {
+        if (covered.has(id)) continue;
+        const note = score.notes.find((found) => found.id === id);
+        if (note === undefined) continue;
+        for (const member of tieChain(score.notes, note)) covered.add(member.id);
+        commands.push({ type: "toRest", noteId: id });
+      }
+      return commands;
+    },
+  };
+}
+
+/** Turns the selected notes into rests, as one edit. Nothing is handled when no selected note is pitched. */
 function deleteSelection(session: EditingSession): EditingInputResult {
-  const refused: Diagnostic[] = [];
-  const tried = new Set<string>();
-  const untried = () => selectedNotes(session).find((id) => !tried.has(id));
-  for (let noteId = untried(); noteId !== undefined; noteId = untried()) {
-    tried.add(noteId);
-    const result = session.dispatch({ type: "toRest", noteId });
-    if (!result.ok) refused.push(...result.diagnostics);
-  }
-  return { handled: tried.size > 0, refused };
+  const score = readableScore(session);
+  if (score === null || pitchedSelection(score, session.selection).length === 0) return IGNORED;
+  const result = session.runTool(deleteTool(score));
+  return { handled: true, refused: result.diagnostics };
 }
 
 function clickNote(session: EditingSession, noteId: string): EditingInputResult {

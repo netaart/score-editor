@@ -5,6 +5,7 @@ import {
   createDialectRegistry,
   createEditingSession,
   type EditingSession,
+  handleEditingInput,
   type SessionChange,
   type SongProject,
 } from "@neta-art/score-editor";
@@ -137,6 +138,66 @@ C5|`;
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["no-dialect"]);
     expect(result.diagnostics[0]?.params).toEqual({ modelId: "other-model" });
     expect(session.project.score).toBe(SCORE);
+  });
+});
+
+describe("deleting the selection", () => {
+  const deleteKey = { type: "key", key: "Delete" } as const;
+
+  it("is one edit for notes of different chains: one history step, one announcement, one undo brings both back", () => {
+    const session = open();
+    session.select(["Vocal:256", "Vocal:768"]);
+    const changes = listen(session);
+
+    const result = handleEditingInput(session, deleteKey);
+
+    expect(result).toEqual({ handled: true, refused: [] });
+    expect(session.project.score).toBe(SCORE_WITHOUT_D_AND_F);
+    expect(changes).toEqual([
+      { cause: "dispatch", project: true, selection: false, insertionPoint: false, view: false },
+    ]);
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("takes a tie chain whose segments are all selected as one command, so the second segment refuses nothing", () => {
+    const tied = `${HEADER}
+K:D
+V: Vocal
+A4^F12-|F16|`;
+    const session = open({ score: tied });
+    session.select(["Vocal:256", "Vocal:1024"]);
+    const changes = listen(session);
+
+    expect(handleEditingInput(session, deleteKey)).toEqual({ handled: true, refused: [] });
+    expect(changes).toHaveLength(1);
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(tied);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("refuses the whole run when one of its notes is refused, leaving project, history and selection as they were", () => {
+    // The C of bar 2 is tied into a cut tail: writing it as a rest would turn the cut into a finished score.
+    const cut = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|C16-|B`;
+    const session = open({ score: cut });
+    session.select(["Vocal:256", "Vocal:1024"]);
+    const before = { project: session.project, selection: session.selection };
+    const changes = listen(session);
+
+    const result = handleEditingInput(session, deleteKey);
+
+    expect(result.handled).toBe(true);
+    expect(result.refused.map((diagnostic) => diagnostic.code)).toEqual(["write-mismatch"]);
+    expect(result.refused[0]?.at).toEqual({ voice: "Vocal", bar: 2, beat: 1, noteId: "Vocal:1024" });
+    expect(session.project).toEqual(before.project);
+    expect(session.selection).toEqual(before.selection);
+    expect(session.canUndo).toBe(false);
+    expect(session.canRedo).toBe(false);
+    expect(changes).toEqual([]);
   });
 });
 
