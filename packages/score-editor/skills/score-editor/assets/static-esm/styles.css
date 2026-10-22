@@ -13,6 +13,7 @@ body {
 
 .skill-example {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   max-width: 960px;
   margin: 0 auto;
@@ -38,6 +39,12 @@ body {
   border: 1px solid #d4d4d8;
   border-radius: 8px;
   background: #ffffff;
+}
+
+/* The editor's toolbar scrolls sideways inside the width it is given; a flex item may shrink to that width, so it must not widen the page. */
+.skill-toolbar [data-slot="toolbar"] {
+  flex: 1 1 20rem;
+  min-width: 0;
 }
 
 .skill-actions {
