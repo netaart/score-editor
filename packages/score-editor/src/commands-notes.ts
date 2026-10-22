@@ -289,8 +289,16 @@ function repairTies(score: Score, notes: Note[], affected: ReadonlySet<string>):
  * Splits the one event that covers `at` into pieces the dialect can write, so the writer has a token boundary there;
  * the pieces stay tied while they sound the same note.
  */
-function splitEventAt(notes: Note[], at: number, score: Score, durations: DurationSet): boolean {
-  const index = notes.findIndex((note) => note.start < at && at < note.start + note.duration);
+function splitEventAt(
+  notes: Note[],
+  at: number,
+  score: Score,
+  durations: DurationSet,
+  voice?: string,
+): boolean {
+  const index = notes.findIndex(
+    (note) => (voice === undefined || note.voice === voice) && note.start < at && at < note.start + note.duration,
+  );
   if (index < 0) return false;
   const event = notes[index] as Note;
   const pieces: Note[] = [];
@@ -315,7 +323,11 @@ function splitEventAt(notes: Note[], at: number, score: Score, durations: Durati
 /** Splits every event that a mid-bar key change now falls inside, so `[K:...]` has a token boundary (W7). */
 function splitAtKeyChanges(score: Score, notes: Note[], durations: DurationSet): Note[] {
   for (const change of score.keys) {
-    if (change.at > 0) splitEventAt(notes, change.at, score, durations);
+    if (change.at <= 0) continue;
+    // A key change is shared by both voices, so every event still crossing it needs a boundary, not just the first.
+    while (splitEventAt(notes, change.at, score, durations)) {
+      // The split removes the crossing, and the next call finds another voice's event if one is still there.
+    }
   }
   return notes;
 }
@@ -325,7 +337,7 @@ function placeChords(score: Score, notes: Note[], durations: DurationSet): { not
   const next = [...notes];
   const chords = score.chords.map((chord) => {
     let event = next.find((note) => note.voice === "Vocal" && note.start === chord.start);
-    if (event === undefined && splitEventAt(next, chord.start, score, durations)) {
+    if (event === undefined && splitEventAt(next, chord.start, score, durations, "Vocal")) {
       event = next.find((note) => note.voice === "Vocal" && note.start === chord.start);
     }
     return { ...chord, noteId: event?.id ?? null };
