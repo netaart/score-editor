@@ -181,11 +181,6 @@ export class Layout {
     return this.page.evaluate((ids) => window.harness.layout.live().select(ids), noteIds);
   }
 
-  /** Puts the insertion point at a tick through the session, as a host would. */
-  setInsertionPoint(point: { tick: number } | null) {
-    return this.page.evaluate((p) => window.harness.layout.live().setInsertionPoint(p), point);
-  }
-
   /** The insertion point, as the session holds it. */
   insertionPoint() {
     return this.page.evaluate(() => {
@@ -252,11 +247,6 @@ export class Harness {
 
   destroy() {
     return this.page.evaluate(() => window.harness.destroy());
-  }
-
-  /** Calls the single-note preview export the way a host does, from inside the page; resolves what it resolved. */
-  previewNote(midi: number, options?: { duration?: number }) {
-    return this.page.evaluate(([m, o]) => window.harness.previewNote(m, o), [midi, options] as const);
   }
 
   /** Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones. */

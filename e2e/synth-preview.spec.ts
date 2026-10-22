@@ -1,6 +1,6 @@
 // ABOUTME: Seam 5 for the synth preview: the play control, the playhead, where the sound starts, read-only, and that no request is made.
 // ABOUTME: Real Chromium plays real Web Audio; a spy on the audio constructor records what is sounded. Whether it sounds right is not tested.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { box, expect, Harness, test, vocalOnly } from "./fixtures";
 
 /** What the spy on the page's audio constructor has recorded. */
@@ -87,9 +87,9 @@ function trackTimers() {
 }
 
 /** Opens the test page with the audio spy installed, before any of the page's own scripts run. */
-async function visit(page: Page, init: () => void = spyOnAudio, path = "/") {
+async function visit(page: Page, init: () => void = spyOnAudio) {
   await page.addInitScript(init);
-  await page.goto(path);
+  await page.goto("/");
   return new Harness(page);
 }
 
@@ -105,6 +105,16 @@ const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`)
 const previewButton = (page: Page) => page.getByRole("button", { name: /^(Preview|Stop)$/ });
 const playhead = (page: Page) => page.locator(".sce-playhead");
 const lane = (page: Page) => page.getByRole("list", { name: "Vocal" });
+/** The caption is plain text beside the button and has no role, so it is found by its class, here and nowhere else. */
+const caption = (scope: Page | Locator) => scope.locator(".sce-synth-caption");
+
+/** Puts the insertion point at a tick through the session, as a host would. */
+const setInsertionPoint = (page: Page, point: { tick: number } | null) =>
+  page.evaluate((p) => window.harness.layout.live().setInsertionPoint(p), point);
+
+/** Calls the single-note preview export the way a host does, from inside the page; resolves what it resolved. */
+const previewNote = (page: Page, midi: number, options?: { duration?: number }) =>
+  page.evaluate(([m, o]) => window.harness.previewNote(m, o), [midi, options] as const);
 
 /** Where the playhead stands, in pixels from the left edge of the Vocal lane. */
 async function playheadAt(page: Page) {
@@ -154,18 +164,16 @@ test.describe("the play control", () => {
 
   test("says in both languages that the sound is synthetic and not the finished song", async ({ page, harness }) => {
     await harness.mount();
-    const caption = page.locator(".sce-synth-caption");
-    await expect(caption).toHaveText("Synthetic preview, not the final sound");
-    await expect(page.locator(".sce-synth-button")).toContainText("Preview");
-    await expect(page.locator(".sce-synth-button")).toHaveAttribute(
-      "aria-description",
-      "Synthetic preview, not the final sound",
-    );
+    const words = caption(page);
+    await expect(words).toHaveText("Synthetic preview, not the final sound");
+    await expect(previewButton(page)).toHaveAttribute("aria-description", "Synthetic preview, not the final sound");
 
     await harness.update({ language: "zh" });
-    await expect(caption).toHaveText("合成试听，不代表成品效果");
-    await expect(page.locator(".sce-synth-button")).toContainText("试听");
-    await expect(page.locator(".sce-synth-button")).toHaveAttribute("aria-description", "合成试听，不代表成品效果");
+    await expect(words).toHaveText("合成试听，不代表成品效果");
+    await expect(page.getByRole("button", { name: "试听" })).toHaveAttribute(
+      "aria-description",
+      "合成试听，不代表成品效果",
+    );
   });
 
   test("a browser with no Web Audio gets a control that says so, and no preview", async ({ page, isMobile }) => {
@@ -174,7 +182,7 @@ test.describe("the play control", () => {
     const button = slot(page, "synth").getByRole("button");
     await expect(button).toHaveAttribute("aria-disabled", "true");
     await expect(button).toHaveAttribute("title", "This browser can’t play the preview");
-    await expect(slot(page, "synth").locator(".sce-synth-caption")).toHaveText("This browser can’t play the preview");
+    await expect(caption(slot(page, "synth"))).toHaveText("This browser can’t play the preview");
 
     // The control is aria-disabled so that it stays focusable and can say why; Playwright treats that as disabled.
     await (isMobile ? button.tap({ force: true }) : button.click({ force: true }));
@@ -188,9 +196,9 @@ test.describe("the play control", () => {
     await openLayout(harness, vocalOnly("z16|"));
     await press(slot(page, "synth").getByRole("button"));
     await expect(slot(page, "synth").getByRole("status")).toHaveText("There is nothing to play from here");
-    const caption = slot(page, "synth").locator(".sce-synth-caption");
-    await expect(caption).toHaveText("There is nothing to play from here");
-    await expect(caption, "the caption comes back").toHaveText("Synthetic preview, not the final sound", {
+    const words = caption(slot(page, "synth"));
+    await expect(words).toHaveText("There is nothing to play from here");
+    await expect(words, "the caption comes back").toHaveText("Synthetic preview, not the final sound", {
       timeout: 7000,
     });
     await expect(slot(page, "synth").getByRole("button")).toHaveText("Preview");
@@ -210,17 +218,14 @@ test.describe("the caption at rest on a narrow screen", () => {
       const harness = await visit(page);
       await harness.mount({ score: { text: QUARTERS }, editable });
       await expect(previewButton(page)).toBeInViewport({ ratio: 1 });
-      await expect(page.locator(".sce-synth-caption")).toHaveText("Synthetic preview, not the final sound");
-      await expect(
-        page.locator(".sce-synth-caption"),
-        "a caption that is out of the toolbar's box is cut",
-      ).toBeInViewport({
+      await expect(caption(page)).toHaveText("Synthetic preview, not the final sound");
+      await expect(caption(page), "a caption that is out of the toolbar's box is cut").toBeInViewport({
         ratio: 1,
       });
 
       await press(previewButton(page));
       await expect(previewButton(page)).toHaveText("Stop");
-      await expect(page.locator(".sce-synth-caption"), "and it stays so while it plays").toBeInViewport({ ratio: 1 });
+      await expect(caption(page), "and it stays so while it plays").toBeInViewport({ ratio: 1 });
     });
   }
 });
@@ -246,14 +251,14 @@ test.describe("without a user gesture", () => {
     await expect(page.getByRole("status").filter({ hasText: "Blocked by the browser" })).toHaveText(
       "Blocked by the browser. Press Preview again.",
     );
-    await expect(page.locator(".sce-synth-caption")).toHaveText("Blocked by the browser. Press Preview again.");
+    await expect(caption(page)).toHaveText("Blocked by the browser. Press Preview again.");
     await expect(previewButton(page)).toHaveText("Preview");
     await expect(playhead(page)).toHaveCount(0);
 
     // A real press is a gesture, and the control plays.
     await press(previewButton(page));
     await expect(previewButton(page)).toHaveText("Stop");
-    await expect(page.locator(".sce-synth-caption")).toHaveText("Synthetic preview, not the final sound");
+    await expect(caption(page)).toHaveText("Synthetic preview, not the final sound");
     // One line in each of the two voice tracks of the demo score.
     await expect(playhead(page)).toHaveCount(2);
   });
@@ -420,7 +425,7 @@ test.describe("where the preview starts", () => {
     const harness = await visit(page);
     await openLayout(harness);
     // The third bar starts at 320 pixels: bar 3 beat 3 is two bars and two beats in.
-    await harness.layout.setInsertionPoint({ tick: 2 * 1024 + 512 });
+    await setInsertionPoint(page, { tick: 2 * 1024 + 512 });
     await press(slot(page, "synth").getByRole("button"));
     await expect(playhead(page)).toHaveCount(1);
     expect(await playheadAt(page)).toBeGreaterThanOrEqual(320 + 79);
@@ -547,7 +552,7 @@ test.describe("requests", () => {
       .toBe(3);
     await press(previewButton(page));
     await expect(previewButton(page)).toHaveText("Preview");
-    expect(await harness.previewNote(64)).toBe(true);
+    expect(await previewNote(page, 64)).toBe(true);
     await page.waitForTimeout(700);
 
     expect(requests.slice(loaded), "no request from the mount to the stop").toEqual([]);
@@ -567,32 +572,32 @@ test.describe("the single-note preview", () => {
   };
 
   test("sounds one pitch for about a third of a second, or as long as it is asked to", async ({ page }) => {
-    const harness = await visit(page);
-    expect(await harness.previewNote(69)).toBe(true);
+    await visit(page);
+    expect(await previewNote(page, 69)).toBe(true);
     let tone = await lastTone(page);
     expect(tone.hz).toBeCloseTo(440, 1);
     expect(tone.until - tone.at, "0.35 seconds and the tail that lets the release finish").toBeCloseTo(0.37, 3);
     expect((await audio(page)).tones).toHaveLength(1);
 
-    expect(await harness.previewNote(60, { duration: 1 })).toBe(true);
+    expect(await previewNote(page, 60, { duration: 1 })).toBe(true);
     tone = await lastTone(page);
     expect(tone.hz).toBeCloseTo(261.63, 1);
     expect(tone.until - tone.at).toBeCloseTo(1.02, 3);
   });
 
   test("keeps a duration between a fiftieth of a second and ten seconds", async ({ page }) => {
-    const harness = await visit(page);
-    await harness.previewNote(60, { duration: 0 });
+    await visit(page);
+    await previewNote(page, 60, { duration: 0 });
     const shortest = await lastTone(page);
     expect(shortest.until - shortest.at).toBeCloseTo(0.04, 3);
-    await harness.previewNote(60, { duration: 600 });
+    await previewNote(page, 60, { duration: 600 });
     const longest = await lastTone(page);
     expect(longest.until - longest.at).toBeCloseTo(10.02, 3);
   });
 
   test("lets go of the audio device once the note has died away", async ({ page }) => {
-    const harness = await visit(page);
-    await harness.previewNote(72, { duration: 0.1 });
+    await visit(page);
+    await previewNote(page, 72, { duration: 0.1 });
     expect((await audio(page)).contexts.map((context) => context.state)).toEqual(["running"]);
     await expect
       .poll(async () => (await audio(page)).contexts.map((context) => context.state), { timeout: 4000 })
@@ -605,7 +610,7 @@ test.describe("the single-note preview", () => {
     await press(slot(page, "synth").getByRole("button"));
     await expect(playhead(page)).toHaveCount(1);
 
-    await harness.previewNote(60, { duration: 0.1 });
+    await previewNote(page, 60, { duration: 0.1 });
     await page.waitForTimeout(700);
     const { contexts } = await audio(page);
     expect(
@@ -624,7 +629,7 @@ test.describe("the single-note preview", () => {
     const button = slot(page, "synth").getByRole("button");
     await press(button);
     await expect(playhead(page)).toHaveCount(1);
-    await harness.previewNote(60, { duration: 4 });
+    await previewNote(page, 60, { duration: 4 });
 
     await press(button);
     await expect(playhead(page)).toHaveCount(0);
@@ -640,7 +645,7 @@ test.describe("the preview player of a session", () => {
   test("a host reads where it plays and stops it, and the control follows", async ({ page, press }) => {
     const harness = await visit(page);
     await openLayout(harness);
-    await harness.layout.setInsertionPoint({ tick: 512 });
+    await setInsertionPoint(page, { tick: 512 });
     expect(await page.evaluate(() => window.harness.previewPlayer().playing)).toBe(false);
 
     await press(slot(page, "synth").getByRole("button"));
