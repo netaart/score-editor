@@ -367,6 +367,28 @@ test.describe("the box", () => {
     await expect(note(page, `${F4}, selected`)).toBeVisible();
   });
 
+  test("keeps a heavier dashed outline and no wash where the system forces its colours", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await openTrack(harness);
+    const { from, to } = await aroundCAndD(page);
+    const pointer = await pointerOf(page, harness, isMobile);
+    try {
+      await pointer.down(from);
+      await pointer.move(to);
+      await expect(theBox(page)).toBeVisible();
+      await expect(theBox(page)).toHaveCSS("border-top-style", "dashed");
+      await expect(theBox(page)).toHaveCSS("border-top-width", "2px");
+      await expect(theBox(page)).toHaveCSS("background-color", /^rgba\(\d+, \d+, \d+, 0\)$/);
+      await pointer.up();
+    } finally {
+      await pointer.close();
+    }
+  });
+
   test("stops at the edge of the lane when the pointer goes past it, on every side", async ({
     page,
     harness,
@@ -591,6 +613,80 @@ test.describe("a finger", () => {
       await finger.close();
     }
     await harness.layout.setEditable(true);
+    expect(await harness.layout.selection()).toEqual([]);
+  });
+
+  test("shows where the box will start as soon as the hold is recognised: a marker bigger than a fingertip, which the slide turns into the box", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    const at = await spot(page, 60, 6);
+    const finger = await harness.finger();
+    try {
+      await finger.down(at, 250);
+      await expect(theBox(page)).toHaveCount(0);
+
+      await page.waitForTimeout(300);
+      const marker = await box(theBox(page));
+      expect(marker.width).toBeGreaterThanOrEqual(55);
+      expect(marker.height).toBeGreaterThanOrEqual(55);
+      expect(Math.abs(marker.x + marker.width / 2 - at.x)).toBeLessThan(2);
+      expect(Math.abs(marker.y + marker.height / 2 - at.y)).toBeLessThan(2);
+
+      await finger.move({ x: at.x + 90, y: at.y + 70 });
+      await expect(page.locator(".sce-box[data-anchor]")).toHaveCount(0);
+      const drawn = await box(theBox(page));
+      expect(Math.abs(drawn.width - 90)).toBeLessThan(3);
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
+    await expect(theBox(page)).toHaveCount(0);
+  });
+
+  test("buzzes once when the hold is recognised, where the device can", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await page.evaluate(() => {
+      const buzzes: unknown[] = [];
+      Object.assign(window, { buzzes });
+      Object.assign(navigator, {
+        vibrate: (pattern: unknown) => {
+          buzzes.push(pattern);
+          return true;
+        },
+      });
+    });
+    const buzzes = () => page.evaluate(() => (window as unknown as { buzzes: unknown[] }).buzzes);
+    // Browsers allow a buzz only after the page has been touched once.
+    await press(note(page, C4));
+    expect(await buzzes()).toEqual([]);
+
+    const finger = await harness.finger();
+    try {
+      await finger.down(await spot(page, 60, 6), 250);
+      expect(await buzzes()).toEqual([]);
+      await page.waitForTimeout(300);
+      expect(await buzzes()).toEqual([10]);
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
+  });
+
+  test("lets a thumb drift a little while it rests: the hold is still a hold", async ({ page, harness }) => {
+    await openTrack(harness);
+    const at = await spot(page, 60, 6);
+    const finger = await harness.finger();
+    try {
+      await finger.down(at);
+      await finger.move({ x: at.x + 8, y: at.y }, 2);
+      await page.waitForTimeout(500);
+      await expect(page.locator(".sce-box[data-anchor]")).toBeVisible();
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
     expect(await harness.layout.selection()).toEqual([]);
   });
 
@@ -892,5 +988,16 @@ test.describe("the assembled editor", () => {
     expect(await harness.notices()).toEqual([]);
     await expect(page.locator(".sce-box")).toHaveCount(0);
     await expect(voices(page, SELECTED).first()).toBeVisible();
+  });
+  test("tells a screen reader how to select several notes, in both languages", async ({ page, harness }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(
+      /Shift-click or Shift-tap.*Drag across empty space.*touch and hold.*Ctrl and A.*Escape/s,
+    );
+
+    await harness.update({ language: "zh" });
+    await expect(page.getByRole("region", { name: "编曲视图" })).toHaveAccessibleDescription(
+      /Shift.*在空白处拖动.*长按.*Ctrl 加 A.*Esc/s,
+    );
   });
 });

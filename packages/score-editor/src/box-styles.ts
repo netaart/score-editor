@@ -17,8 +17,24 @@ export const boxCss = `
   background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
   pointer-events: none;
 }
-/* While a box is open, or a finger has rested to start one, the whole lane is a little darker, so a hand over the corner still sees it. */
+/*
+ * A finger that has rested on empty lane long enough has no box yet and covers the place it rests on, so the box is shown
+ * as a square larger than a fingertip around that place until the finger slides.
+ */
+.sce-root .sce-box[data-anchor] {
+  min-width: 56px;
+  min-height: 56px;
+  margin: -28px 0 0 -28px;
+}
+/* While a box is open, or a finger has rested to start one, the whole lane is a little tinted, so it is seen away from the hand. */
 .sce-root .sce-lane[data-boxing] {
-  background-color: color-mix(in srgb, var(--sce-_text) 4%, transparent);
+  background-color: color-mix(in srgb, var(--sce-_text) 6%, transparent);
+}
+/* Where the system forces its colours the wash goes and the outline keeps the box: heavier, in the system text colour. */
+@media (forced-colors: active) {
+  .sce-root .sce-box {
+    border: 2px dashed CanvasText;
+    background: transparent;
+  }
 }
 `;

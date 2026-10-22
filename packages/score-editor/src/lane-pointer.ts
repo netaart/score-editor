@@ -11,6 +11,9 @@ const SLOP = 6;
 /** How long a finger rests on the lane before the hold means something: a toggle on a note, a box on empty space. */
 const HOLD_MS = 400;
 
+/** How far a resting finger may drift, in pixels, and still be resting: a thumb is not as still as a mouse. */
+const TOUCH_SLOP = 10;
+
 /** What a lane drew, which is all the gestures need to know about it. */
 export interface LaneGeometry {
   /** The element whose width is the whole score in ticks and whose height is all the pitch rows. */
@@ -181,12 +184,23 @@ export function installLanePointer(
     g.boxed = shown;
   }
 
+  /** The box element, at the anchor and with no size yet; a resting finger sees it as a marker (`data-anchor`). */
+  function startBox(g: Gesture): HTMLElement {
+    const el = create(g.geometry.lane.ownerDocument, "div", "sce-box", g.geometry.lane);
+    el.setAttribute("aria-hidden", "true");
+    el.style.setProperty("--t", String(g.anchor.tick));
+    el.style.setProperty("--d", "0");
+    el.style.setProperty("--r", String(g.anchor.row));
+    el.style.setProperty("--h", "0");
+    return el;
+  }
+
   function open(g: Gesture): void {
     clearTimeout(g.hold);
     g.phase = "boxing";
     g.geometry.lane.dataset.boxing = "";
-    g.box = create(g.geometry.lane.ownerDocument, "div", "sce-box", g.geometry.lane);
-    g.box.setAttribute("aria-hidden", "true");
+    g.box ??= startBox(g);
+    g.box.removeAttribute("data-anchor");
     if (!g.touch) {
       try {
         root.setPointerCapture(g.id);
@@ -214,7 +228,17 @@ export function installLanePointer(
     }
     g.phase = "armed";
     g.geometry.lane.dataset.boxing = "";
+    // The finger hides the lane where it rests, so the hold is shown by a marker larger than a fingertip, and felt.
+    g.box = startBox(g);
+    g.box.setAttribute("data-anchor", "");
+    buzz();
     watch(g);
+  }
+
+  /** A short buzz where the device has one and the page has been touched before, which browsers insist on. */
+  function buzz(): void {
+    const device = root.ownerDocument.defaultView?.navigator;
+    if (device && device.userActivation?.hasBeenActive !== false) device.vibrate?.(10);
   }
 
   /** A click or tap that came to nothing else. */
@@ -283,7 +307,7 @@ export function installLanePointer(
         draw(g);
         return;
       }
-      if (g.phase === "done" || Math.hypot(g.last.x - g.x, g.last.y - g.y) <= SLOP) return;
+      if (g.phase === "done" || Math.hypot(g.last.x - g.x, g.last.y - g.y) <= (g.touch ? TOUCH_SLOP : SLOP)) return;
       if (g.phase === "armed" || (g.phase === "pressed" && !g.touch && g.noteId === undefined)) {
         if (g.phase === "pressed") watch(g);
         open(g);
