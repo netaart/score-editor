@@ -1313,6 +1313,9 @@ test.describe("the three views of the default editor", () => {
 
     await press(viewTab(page, "Score text"));
     await editorText(page).fill(QUARTERS);
+    // The project takes the text and the toolbar gains its history and preview controls, which at a phone's width moves the
+    // switch to another line; a person who waits for that before tapping it taps where it is.
+    await expect(undoButton(page)).toBeVisible();
     await press(viewTab(page, "Staff"));
     await expect(staffNotes(page)).toHaveCount(5);
     await expect(page.getByRole("alert")).toHaveCount(0);
