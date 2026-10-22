@@ -19,9 +19,10 @@ added; calling it twice is harmless.
 | `mountTimeRuler(el, session, options?)` | Bar numbers, section bands, and key/meter/cut marks. | `AxisPartOptions` |
 | `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line. | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
+| `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused? }`:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, synthPreview?: boolean }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below. The toolbar's row scrolls sideways when its
 element is narrower than its controls, so every control can still be reached.
@@ -158,3 +159,50 @@ view.addEventListener("keydown", (event) => {
   if (refused.length > 0) showProblems(refused);
 });
 ```
+
+## The synth preview
+
+Use this when a person should hear the score: a rough rendering of the melody and chords made in the page by
+oscillators, with a playhead. It makes no network request and needs no sample library. It is not the finished song, and
+the control says so beside itself, in the session's language ("Synthetic preview, not the final sound").
+
+| Export | What it is |
+| --- | --- |
+| `mountSynthPreview(el, session)` | A view part: a Preview / Stop button with its caption. Shown in read-only mode too; hidden only while the session has no readable score. |
+| `previewPlayer(session)` | The session's one `PreviewPlayer`: `playing`, `tick`, `from`, `start()`, `stop()`, `subscribe(listener)`. |
+| `previewNote(midi, options?)` | One pitch for a short time, for a view that sounds a note as the user picks or draws it. Takes `PreviewNoteOptions`, `{ duration? }` in seconds. |
+
+`mountToolbar` holds the same control by default, after the read-only badge. Mount `mountSynthPreview` yourself, and
+pass `{ synthPreview: false }` in `ToolbarOptions`, when the host wants the control in a place of its own.
+
+```ts
+import { mountSynthPreview, mountToolbar, mountVoiceTrack, previewNote, previewPlayer } from "@neta-art/score-editor";
+import type { PreviewStart } from "@neta-art/score-editor";
+
+mountToolbar(toolbarEl, session, { synthPreview: false });
+mountSynthPreview(transportEl, session); // the control, with its caption
+mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws the playhead by itself, from the player
+
+const player = previewPlayer(session);
+const unsubscribe = player.subscribe(() => console.log(player.playing, player.tick)); // after every frame it moves in
+button.addEventListener("click", async () => {
+  const result: PreviewStart = await player.start(); // "started" | "nothing-to-play" | "unsupported" | "blocked" | "cancelled"
+  if (result === "blocked") showHint("The browser did not allow sound.");
+});
+noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once it sounded; false without Web Audio
+```
+
+- The preview plays `Vocal`, `Ins` and the chord of each span, from the insertion point, or from the start when there
+  is none or the session is not editable. Tempo and meter are the score's own. It stops at the end of the music, when
+  the project changes, when the browser interrupts the audio, and when an `<audio>` or `<video>` element in the page's
+  document starts playing. It does not pause sound the page already plays.
+- Start sound only inside a user gesture: call `player.start()` and `previewNote()` synchronously from a click, tap or
+  key handler, before any `await`. A browser that refuses gives `"blocked"` from `start()` and `false` from
+  `previewNote()`; one with no Web Audio gives `"unsupported"` and `false`. `previewNote` throws a `RangeError` for a pitch
+  that is not a whole number from 0 to 127. All sound shares one audio context, which is suspended when nothing plays.
+- The player holds the playback position; the session's `view` does not, because the position changes every frame and
+  the view state is for what parts share and notify on. Voice tracks bound to the session subscribe to the player and
+  draw the playhead; a view of your own does the same with `player.tick`, which is a tick of the score and is null while
+  nothing plays. `PreviewStart` is the string union `start()` resolves.
+- `previewPlayer(session)` touches no audio until `start()`. Destroying the last control that holds the player stops it.
+- The headless half, `schedulePreview`, is in [headless-layer.md](headless-layer.md#the-preview-schedule).

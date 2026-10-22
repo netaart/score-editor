@@ -25,6 +25,10 @@ change. The tests in the repository check that the list stays complete.
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
 | `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete) to a session; returns `EditingInputResult`. |
+| `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
+| `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
+| `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
+| `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
 
 ## Constants and values
 
@@ -98,7 +102,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, synthPreview? }` for the toolbar. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, or a delete. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
@@ -118,3 +122,15 @@ change. The tests in the repository check that the list stays complete.
 | `ToolParameterCheck` | The validated values, or the `tool-parameter` diagnostics. |
 | `ToolResult` | `{ ok, project, diagnostics, commands }` from a preview or a run. |
 | `ToolRegistry` | `register`, `list` and `find` for the host's tools. |
+
+## Preview types
+
+| Export | What it is |
+| --- | --- |
+| `PreviewPlayer` | `{ playing, tick, from, start(), stop(), subscribe(listener) }`. |
+| `PreviewStart` | What `start()` resolves: `"started"`, `"nothing-to-play"`, `"unsupported"`, `"blocked"` or `"cancelled"`. |
+| `PreviewNoteOptions` | `{ duration? }` in seconds for `previewNote`. |
+| `PreviewSchedule` | `{ events, fromTick, secondsPerTick, length }`. |
+| `PreviewEvent` | A `PreviewNote` or a `PreviewChord`. |
+| `PreviewNote` | `{ kind: "note", voice, midi, at, length }`. |
+| `PreviewChord` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |

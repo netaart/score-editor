@@ -24,7 +24,7 @@ export { createDialectRegistry } from "./dialect";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
 export { mount } from "./mount";
-// The synth preview (ticket 11).
+// The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
 export { previewNote } from "./preview-note";
 export type { PreviewPlayer, PreviewStart } from "./preview-player";
