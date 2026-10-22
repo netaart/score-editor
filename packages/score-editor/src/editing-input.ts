@@ -1,11 +1,13 @@
 // ABOUTME: The editing input layer: what a key or a click means for an editing session, with no DOM and no event objects.
 // ABOUTME: The view parts turn their events into these inputs, so a host's own views get the same keys and clicks.
+
 import { beatLineAfter, beatLineBefore, gridTicks, nearestBeatLine } from "./arrangement";
 import { type ScoreCommand, tieChain } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { Score } from "./score";
 import type { EditingSession, InsertionPoint } from "./session";
 import type { ScoreTool } from "./tool";
+import { arrangementShown } from "./view-rules";
 
 /** A key press with the modifiers that were held. */
 export interface EditingKeyInput {
@@ -45,7 +47,7 @@ const HANDLED: EditingInputResult = { handled: true, refused: [] };
  */
 function readableScore(session: EditingSession): Score | null {
   const { reading } = session;
-  return reading.kind === "score" && session.activeView === "arrangement" ? reading.score : null;
+  return reading.kind === "score" && arrangementShown(session) ? reading.score : null;
 }
 
 /** Ctrl or Cmd with Z undoes and with Shift redoes; Ctrl with Y redoes. Null for any other key. */

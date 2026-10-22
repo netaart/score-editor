@@ -25,6 +25,7 @@ import { mountTextView } from "./text-view";
 import { mountTimeRuler } from "./time-ruler";
 import { mountToolbar } from "./toolbar";
 import type { Language, MountedEditor, MountOptions, ViewPart } from "./types";
+import { arrangementShown } from "./view-rules";
 import { mountVoiceTrack } from "./voice-track";
 
 let instanceCount = 0;
@@ -191,7 +192,7 @@ export class Editor implements MountedEditor {
    */
   private showView(): void {
     const view = this.session.activeView;
-    const arrangement = view === "arrangement" && this.reading.kind === "score";
+    const arrangement = arrangementShown(this.session) && this.reading.kind === "score";
     const returning = this.shownView !== "arrangement" && view === "arrangement";
     this.shownView = view;
     this.scroller.hidden = !arrangement;

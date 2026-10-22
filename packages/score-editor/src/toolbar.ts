@@ -1,5 +1,6 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge and the screen-reader hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
+
 import { create, lineIcon, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
@@ -8,6 +9,7 @@ import { createLiveRegion, sayRefusals } from "./live-region";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
+import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
 import { mountZoomControl } from "./zoom-control";
 
@@ -111,7 +113,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
     const deletable = canDeleteSelection(session);
-    const arrangement = !options.viewSwitch || session.activeView === "arrangement";
+    const arrangement = !options.viewSwitch || arrangementShown(session);
     const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView].join();
     if (shown === drawn) return;
     drawn = shown;

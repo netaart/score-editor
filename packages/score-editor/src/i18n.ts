@@ -188,7 +188,7 @@ const catalogs: Record<Language, Messages> = { en, zh };
 
 /** What a view is called: in the switch, as its tooltip, and as the toolbar's title while it is shown. */
 export function viewName(t: Messages, view: ViewName): string {
-  return view === "arrangement" ? t.title : view === "staff" ? t.staff : t.scoreText;
+  return { arrangement: t.title, staff: t.staff, text: t.scoreText }[view];
 }
 
 export function messagesFor(language: Language): Messages {
