@@ -211,6 +211,8 @@ export interface Song2Source {
   /** The denominator of the `L:1/d` line, so a duration can be written in the format's units. */
   readonly unitDenominator: number;
   readonly musicLines: ReadonlyArray<Song2SourceLine>;
+  /** The cut this text had when it was read. The writer compares it with the model's cut after an edit. */
+  readonly truncation: Truncation | null;
 }
 
 interface PendingBar {
@@ -1262,6 +1264,7 @@ class Song2Parser {
     const source: Song2Source = {
       text: this.normalized,
       unitDenominator: this.unitDenominator,
+      truncation: this.truncation,
       musicLines: this.sourceLines.map((line) => ({
         line: line.line,
         voice: line.voice,

@@ -1,10 +1,18 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
+import { runBarsCommand } from "./commands-bars";
 import type { Diagnostic } from "./diagnostics";
-import type { Score, Note as ScoreNote } from "./score";
+import type { Meter, Score, Note as ScoreNote } from "./score";
+import type { MeterRule } from "./types";
 
 /** A dialect-agnostic edit of a Score. More commands join this union in later tickets. */
-export type ScoreCommand = { readonly type: "toRest"; readonly noteId: string };
+export type ScoreCommand =
+  | { readonly type: "toRest"; readonly noteId: string }
+  | { readonly type: "insertBar"; readonly bar: number }
+  | { readonly type: "deleteBars"; readonly from: number; readonly count: number }
+  | { readonly type: "setSectionMeter"; readonly section: number; readonly meter: Meter }
+  | { readonly type: "fillTruncatedBar" }
+  | { readonly type: "deleteTruncatedBar" };
 
 export type ScoreCommandResult =
   | { readonly ok: true; readonly score: Score }
@@ -36,9 +44,15 @@ function toRest(score: Score, id: string): ScoreCommandResult {
 }
 
 /** Applies one score command to a model. It never writes text and never touches a DOM. */
-export function runScoreCommand(score: Score, command: ScoreCommand): ScoreCommandResult {
+export function runScoreCommand(score: Score, command: ScoreCommand, meterRule: MeterRule): ScoreCommandResult {
   switch (command.type) {
     case "toRest":
       return toRest(score, command.noteId);
+    case "insertBar":
+    case "deleteBars":
+    case "setSectionMeter":
+    case "fillTruncatedBar":
+    case "deleteTruncatedBar":
+      return runBarsCommand(score, command, meterRule);
   }
 }

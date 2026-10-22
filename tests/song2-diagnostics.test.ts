@@ -30,6 +30,15 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "write-mismatch",
   "no-dialect",
   "tool-parameter",
+  "bar-out-of-range",
+  "section-out-of-range",
+  "meter-not-allowed",
+  "no-truncation",
+  "no-incomplete-bar",
+  "tie-across-bar",
+  "truncated-tail",
+  "meter-does-not-fit",
+  "last-bar",
 ];
 
 describe("diagnostics", () => {

@@ -25,10 +25,15 @@ export function applyScoreCommand(dialect: ScoreDialect, text: string, command: 
     return { ok: false, diagnostic: parsed.diagnostics[0] ?? fallbackDiagnostic() };
   }
 
-  const applied = runScoreCommand(parsed.score, command);
+  const applied = runScoreCommand(parsed.score, command, dialect.constraints.meter);
   if (!applied.ok) return applied;
 
-  const written = dialect.serialize(applied.score);
+  let written: string;
+  try {
+    written = dialect.serialize(applied.score);
+  } catch {
+    return { ok: false, diagnostic: { code: "write-mismatch", params: {}, at: {} } };
+  }
   const diagnostics = dialect.check(applied.score);
   if (diagnostics.length > 0) return { ok: false, diagnostic: diagnostics[0] as Diagnostic };
   return { ok: true, text: written };
