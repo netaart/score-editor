@@ -24,8 +24,13 @@ function blockAt(score: Score, bar: number): string {
   return sectionBlock(Math.max(0, sectionIndexAt(score, bar)));
 }
 
-/** The bar mapping of the three section commands that rearrange whole section blocks. */
-function sectionChoices(score: Score, command: ScoreCommand): BlockChoice[] | null {
+type StructuralCommand = Extract<ScoreCommand, { type: "deleteSection" | "duplicateSection" | "moveSection" }>;
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled score command: ${JSON.stringify(value)}`);
+}
+
+function choicesFor(score: Score, command: StructuralCommand): BlockChoice[] {
   const choices = score.sections.map((_section, index) => ({ oldSection: index, block: sectionBlock(index) }));
   switch (command.type) {
     case "deleteSection":
@@ -41,13 +46,13 @@ function sectionChoices(score: Score, command: ScoreCommand): BlockChoice[] | nu
       const neighbour = command.direction === "earlier" ? command.section - 1 : command.section + 1;
       const current = choices[command.section];
       const other = choices[neighbour];
-      if (current === undefined || other === undefined) return null;
+      if (current === undefined || other === undefined) throw new Error("a section move names no neighbour");
       choices[command.section] = other;
       choices[neighbour] = current;
       return choices;
     }
     default:
-      return null;
+      return assertNever(command);
   }
 }
 
@@ -70,60 +75,109 @@ function structuralPlacements(score: Score, after: Score, choices: ReadonlyArray
   return placements;
 }
 
-/** One description of how the command maps every old bar to its new bar (or to none). */
-function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPlacement[] {
-  const choices = sectionChoices(score, command);
-  if (choices !== null) return structuralPlacements(score, after, choices);
+function addPlacement(score: Score, after: Score, placements: BarPlacement[], oldBar: number, newBar: number): void {
+  if (after.bars[newBar] === undefined) return;
+  placements.push({ oldBar, newBar, block: blockAt(score, oldBar) });
+}
 
+function identityPlacements(score: Score): BarPlacement[] {
   const placements: BarPlacement[] = [];
-  const push = (oldBar: number, newBar: number | null): void => {
-    if (newBar === null || after.bars[newBar] === undefined) return;
-    placements.push({ oldBar, newBar, block: blockAt(score, oldBar) });
-  };
+  for (const bar of score.bars) addPlacement(score, score, placements, bar.index, bar.index);
+  return placements;
+}
 
-  if (command.type === "setSectionMeter") {
-    const section = score.sections[command.section];
-    const newSection = after.sections[command.section];
-    const delta = after.bars.length - score.bars.length;
-    for (const bar of score.bars) {
-      if (section === undefined || bar.index < section.firstBar) {
-        push(bar.index, bar.index);
-      } else if (bar.index < section.firstBar + section.barCount) {
-        if (newSection !== undefined) {
-          for (let index = newSection.firstBar; index < newSection.firstBar + newSection.barCount; index += 1) {
-            const candidate = after.bars[index];
-            if (candidate === undefined) continue;
-            if (candidate.start < bar.start + bar.length && bar.start < candidate.start + candidate.length) {
-              push(bar.index, index);
-            }
-          }
-        }
-      } else {
-        push(bar.index, bar.index + delta);
-      }
-    }
-    return placements;
-  }
-
+function insertedBarPlacements(
+  score: Score,
+  after: Score,
+  command: Extract<ScoreCommand, { type: "insertBar" }>,
+): BarPlacement[] {
+  const placements: BarPlacement[] = [];
   for (const bar of score.bars) {
-    switch (command.type) {
-      case "insertBar":
-        push(bar.index, bar.index < command.bar ? bar.index : bar.index + 1);
-        break;
-      case "deleteBars":
-        if (bar.index >= command.from && bar.index < command.from + command.count) break;
-        push(bar.index, bar.index < command.from ? bar.index : bar.index - command.count);
-        break;
-      case "deleteTruncatedBar": {
-        const cut = score.truncation?.bar ?? score.bars.length;
-        if (bar.index < cut) push(bar.index, bar.index);
-        break;
+    const newBar = bar.index < command.bar ? bar.index : bar.index + 1;
+    addPlacement(score, after, placements, bar.index, newBar);
+  }
+  return placements;
+}
+
+function deletedBarPlacements(
+  score: Score,
+  after: Score,
+  command: Extract<ScoreCommand, { type: "deleteBars" }>,
+): BarPlacement[] {
+  const placements: BarPlacement[] = [];
+  for (const bar of score.bars) {
+    if (bar.index >= command.from && bar.index < command.from + command.count) continue;
+    const newBar = bar.index < command.from ? bar.index : bar.index - command.count;
+    addPlacement(score, after, placements, bar.index, newBar);
+  }
+  return placements;
+}
+
+function truncatedBarPlacements(score: Score, after: Score): BarPlacement[] {
+  const placements: BarPlacement[] = [];
+  const cut = score.truncation?.bar ?? score.bars.length;
+  for (const bar of score.bars) {
+    if (bar.index < cut) addPlacement(score, after, placements, bar.index, bar.index);
+  }
+  return placements;
+}
+
+function meterPlacements(
+  score: Score,
+  after: Score,
+  command: Extract<ScoreCommand, { type: "setSectionMeter" }>,
+): BarPlacement[] {
+  const placements: BarPlacement[] = [];
+  const section = score.sections[command.section];
+  const newSection = after.sections[command.section];
+  const delta = after.bars.length - score.bars.length;
+  for (const bar of score.bars) {
+    if (section === undefined || bar.index < section.firstBar) {
+      addPlacement(score, after, placements, bar.index, bar.index);
+    } else if (bar.index < section.firstBar + section.barCount) {
+      if (newSection === undefined) continue;
+      for (let index = newSection.firstBar; index < newSection.firstBar + newSection.barCount; index += 1) {
+        const candidate = after.bars[index];
+        if (candidate === undefined) continue;
+        if (candidate.start < bar.start + bar.length && bar.start < candidate.start + candidate.length) {
+          addPlacement(score, after, placements, bar.index, index);
+        }
       }
-      default:
-        push(bar.index, bar.index);
+    } else {
+      addPlacement(score, after, placements, bar.index, bar.index + delta);
     }
   }
   return placements;
+}
+
+/** One description of how the command maps every old bar to its new bar (or to none). */
+function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPlacement[] {
+  switch (command.type) {
+    case "deleteSection":
+    case "duplicateSection":
+    case "moveSection":
+      return structuralPlacements(score, after, choicesFor(score, command));
+    case "setSectionMeter":
+      return meterPlacements(score, after, command);
+    case "insertBar":
+      return insertedBarPlacements(score, after, command);
+    case "deleteBars":
+      return deletedBarPlacements(score, after, command);
+    case "deleteTruncatedBar":
+      return truncatedBarPlacements(score, after);
+    case "toRest":
+    case "setChord":
+    case "fillTruncatedBar":
+    case "transpose":
+    case "setKey":
+    case "setTempo":
+    case "removeChords":
+    case "renameSection":
+    case "nameSection":
+      return identityPlacements(score);
+    default:
+      return assertNever(command);
+  }
 }
 
 function groupByBlock(placements: ReadonlyArray<BarPlacement>): BarPlacement[][] {
