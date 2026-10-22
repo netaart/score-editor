@@ -34,6 +34,17 @@ export type {
 } from "./score";
 export { noteId, TICKS_PER_QUARTER } from "./score";
 export type {
+  DispatchResult,
+  EditingSession,
+  InsertionPoint,
+  ScoreReading,
+  SessionChange,
+  SessionChangeCause,
+  SessionListener,
+  SessionOptions,
+} from "./session";
+export { createEditingSession } from "./session";
+export type {
   ChordVocabulary,
   DialectConstraints,
   DurationSet,
