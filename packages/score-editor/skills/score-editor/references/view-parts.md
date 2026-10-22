@@ -52,8 +52,8 @@ The staff view draws `session.project.score` with abcjs, which the part loads wi
 mounted: importing the package loads none of it, and `abcjs` is the package's one runtime dependency. Until it
 arrives the part says it is loading; if it cannot be loaded the part says so and the other parts go on working. The
 drawing sits in a shadow root of its own inside the part, so the host's CSS for `svg`, `text` and `path` does not
-reach it and it adds no rule to the page. It takes the colour of the part's text. A dense bar can be wider than the
-box; the part scrolls inside its own region and not the page. A score that cannot be read is not drawn.
+reach it and it adds no rule to the page. It takes the colour of the part's text. The drawing is never narrower than
+240px; in a narrower box the part scrolls inside its own region and not the page. A score that cannot be read is not drawn.
 
 ```ts
 const views = {

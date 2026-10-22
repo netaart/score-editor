@@ -953,7 +953,6 @@ ${labelThinning()}
 }
 .sce-root .sce-staff-drawing {
   display: block;
-  min-width: 240px;
 }
 .sce-root .sce-staff-message {
   margin: 0 0 8px;

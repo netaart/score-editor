@@ -64,6 +64,7 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): ViewPa
   const message = create(doc, "p", "sce-staff-message", scroller);
   const holder = create(doc, "div", "sce-staff-drawing", scroller);
   holder.setAttribute("role", "img");
+  holder.style.minWidth = `${MIN_STAFF_WIDTH}px`;
   const shadow = holder.attachShadow({ mode: "open" });
   styleDrawing(doc, shadow);
   const target = doc.createElement("div");
