@@ -832,4 +832,49 @@ test.describe("the assembled editor", () => {
     ).toBeVisible();
     expect(await harness.notices()).toEqual([]);
   });
+  test("a finger that rests on empty space and slides draws a box and does not scroll the editor", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "a finger needs a touch screen");
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const scroller = page.getByRole("region", { name: "Arrangement" });
+    const vocal = page.getByRole("list", { name: "Vocal" });
+    await expect(vocal).toBeVisible();
+    const position = () => scroller.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+    const before = await position();
+    const frame = await box(scroller);
+    const laneArea = await box(vocal);
+    // The four bars of the intro are rests: the lane is empty where the finger goes down, and the box reaches the verse.
+    // The editor pins a header over the lane, so the first free spot is found by looking at what is on the screen.
+    const x = Math.max(laneArea.x, frame.x + 60) + 10;
+    const free = await page.evaluate(
+      ({ at, from, until }) => {
+        for (let y = from; y < until; y += 4) {
+          if (document.elementFromPoint(at, y)?.closest(".sce-lane")) return y;
+        }
+        return null;
+      },
+      { at: x, from: Math.max(laneArea.y, frame.y), until: frame.y + frame.height },
+    );
+    expect(free).not.toBeNull();
+    const from = { x, y: (free ?? 0) + 8 };
+    const to = { x: frame.x + frame.width - 6, y: Math.min(laneArea.y + laneArea.height, frame.y + frame.height) - 6 };
+
+    const finger = await harness.finger();
+    try {
+      await finger.down(from, 550);
+      await finger.move(to);
+      await expect(page.locator(".sce-box")).toBeVisible();
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
+
+    expect(await position()).toEqual(before);
+    expect(await harness.notices()).toEqual([]);
+    await expect(page.locator(".sce-box")).toHaveCount(0);
+    await expect(voices(page, SELECTED).first()).toBeVisible();
+  });
 });
