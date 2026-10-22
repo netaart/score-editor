@@ -24,8 +24,9 @@ added; calling it twice is harmless.
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
 voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, synthPreview?: boolean }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
-it the toolbar draws no hint); `onRefused` is described under editing below. The toolbar's row scrolls sideways when its
-element is narrower than its controls, so every control can still be reached.
+it the toolbar draws no hint); `onRefused` is described under editing below. The toolbar's row wraps when its
+element is narrower than its controls (the preview control and its caption take the second line), or scrolls sideways when
+the toolbar has no preview control, so every control can still be reached.
 
 ## How the parts share the time axis
 

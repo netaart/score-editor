@@ -41,7 +41,7 @@ body {
   background: #ffffff;
 }
 
-/* The toolbar scrolls sideways in a box narrower than its controls, but only when the box is allowed to be narrow. */
+/* The toolbar wraps in a box narrower than its controls, but only when the box is allowed to be narrow. */
 .skill-toolbar > [data-slot="toolbar"] {
   min-width: 0;
 }
