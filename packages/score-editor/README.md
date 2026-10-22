@@ -194,6 +194,45 @@ const { events, length } = schedulePreview(score, 512); // notes and chords in s
 - `previewNote(midi, { duration })` is the single-note preview, for a view that sounds a note as the user draws or selects it: a whole MIDI number from 0 to 127 (a `RangeError` otherwise), for 0.35 seconds unless `duration` says otherwise, kept between 0.02 and 10 seconds. It resolves `true` once the note sounded.
 - `schedulePreview(score, fromTick = 0)` is the headless half: a pure function from a `Score` to `{ events, fromTick, secondsPerTick, length }`, where an event is a note (`voice`, `midi`) or a chord (`name`, `midis`, bass first) with `at` and `length` in seconds. It runs in Node and in a worker.
 
+## Drafts
+
+The headless draft keeper saves a session's project through a host store, restores it on open, and inherits lyric lines into a regenerated song. It works in Node with no DOM, like the session. Wiring it into `mount`, the conflict prompt and the on-screen failure message is the editor's UI half; a host that builds its own layout uses the keeper directly.
+
+```ts
+import { contentHash, createDraftKeeper } from "@neta-art/score-editor";
+
+const keeper = createDraftKeeper({
+  session, // the editing session
+  store, // a DraftStore: read, versioned write, versioned remove, list
+  original: project, // the source project; the keeper never changes it
+  notify: (notice) => showToast(notice.message), // draft-source-changed, draft-save-failed
+});
+
+await keeper.ready; // opening and inheritance are done
+keeper.subscribe(({ status }) => showConflict(status === "conflict")); // "opening" | "ready" | "conflict" | "destroyed"
+await keeper.overwrite(); // the conflict way out that keeps this window's project
+await keeper.loadTheirs(); // the one that takes the other window's draft
+await keeper.handoff(); // "written" | "unchanged" | "conflict" | "failed"
+await keeper.restoreOriginal(); // the original back, history reset, draft removed
+keeper.destroy(); // stops the timer and the subscription, and starts a pending write once
+```
+
+A draft is JSON text, written and read by `draftText` and `readDraft`: a format version (`DRAFT_FORMAT_VERSION`, today `1`), the source key, the content hash of the original's lyrics and score, the draft's project (style, joined `lyrics`, lyric lines with their phrases, score text, score mode and seed), the content hash at the last handoff or null, and the update time in milliseconds. A text of another version, or one that does not have that shape, reads as no draft. The joined `lyrics` text is beyond the format's list, so a restored project is byte for byte the one the user left.
+
+`contentHash(lyrics, score)` is SHA-256 over the UTF-8 bytes of `JSON.stringify([lyrics, score])`, as lowercase hex, with no normalisation. It uses `globalThis.crypto.subtle`, which browsers, Workers and Node from 19 on have (Node 24 in this repository), so the same function makes the source and the handoff hashes.
+
+The host's `DraftStore` takes keys and text; where a key maps (a file, a path, a record) is the host's business. `read(key)` answers `{ text, version }` or null. `write(key, text, expected)` and `remove(key, expected)` answer `{ ok: true, version }` or `{ ok: false, reason: "conflict" | "failed" }`; `expected` is the version last read or written, or null to create. `list()` gives the keys that hold a draft. A host without deletion may keep a tombstone, as long as `read` answers null and `list` leaves the key out.
+
+- **Open.** A draft for the original's key whose source hash matches is put into the session. A stale one is removed and `draft-source-changed` says the original changed. No draft is normal and silent. A stale own draft stops there; it does not also inherit from another song.
+- **Inherit.** With no own draft, the keeper reads the listed drafts (at most 50, in the host's order) and takes the matching `handoffHash` with the latest update time, then puts the original with that draft's joined lyrics and lyric lines into the session. Fifty bounds the work on a device with many drafts; a handoff is recent by nature, and a larger store is still read in order. The inherited project is kept under the new source key after the debounce, with no handoff hash of its own.
+- **Keep.** About one second after the last project change, the draft is written; selection, view and insertion-point changes write nothing. A project equal to the original, in every field the draft stores and in its effective lyric lines, removes the draft instead, and writes nothing when there is none.
+- **Conflict.** A versioned write or removal answered with a conflict stops further writes and sets the status to `conflict`. `overwrite()` reads their version and writes ours over it; `loadTheirs()` reads their draft and replaces the session's project. A successful action returns the status to `ready`.
+- **Failure.** A write that is not a conflict sends `draft-save-failed`; the next project change tries again.
+- **Restore the original.** `restoreOriginal()` uses `replaceProject`, so the history, selection and insertion point go with the edits the draft recorded; there is no history step back to a draft that no longer exists. The draft is removed, reading their version first if another window wrote meanwhile.
+- **Handoff.** `handoff()` hashes the current joined lyrics and score, cancels the pending write and saves at once with that handoff hash. When the project equals the original there is nothing to inherit, so no draft is written and the result is `"unchanged"`.
+- **Destroy.** `destroy()` stops the timer and the subscription and starts one pending write, because unmounting is also how a route change leaves the editor. It does not wait for the write.
+- The keeper calls the store only with the original's source key for writes and removals; inheritance reads other keys and never writes them. No path changes the original project.
+
 ## Editor skill
 
 `skills/score-editor/` is the editor skill, an Agent Skills bundle that ships in this package: `SKILL.md` routes an agent to one reference per layer and extension point, and `assets/` holds two runnable examples (a static page that imports from esm.sh, and a pnpm project bundled with esbuild). Start at [skills/score-editor/SKILL.md](skills/score-editor/SKILL.md). `pnpm check:skill` fails when a public export is missing from the skill, and the browser tests run both examples against the local build.

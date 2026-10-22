@@ -171,6 +171,23 @@ const ownerGroups = {
     "previewTool",
     "validateToolParameters",
   ],
+  "references/drafts.md": [
+    "DRAFT_FORMAT_VERSION",
+    "DraftHandoffResult",
+    "DraftKeeper",
+    "DraftKeeperChange",
+    "DraftKeeperOptions",
+    "DraftKeeperStatus",
+    "DraftProject",
+    "DraftStore",
+    "DraftStoreEntry",
+    "DraftWriteResult",
+    "ScoreDraft",
+    "contentHash",
+    "createDraftKeeper",
+    "draftText",
+    "readDraft",
+  ],
   "references/dialect-registry.md": ["DialectRegistry", "song2Constraints", "song2Dialect", "song2Id"],
 };
 const ownerOf = new Map();

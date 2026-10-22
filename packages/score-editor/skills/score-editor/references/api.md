@@ -41,6 +41,10 @@ change. The tests in the repository check that the list stays complete.
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
 | `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
+| `contentHash` | core | The lowercase SHA-256 of the UTF-8 bytes of `JSON.stringify([lyrics, score])`. |
+| `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
+| `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
+| `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
 
 ## Constants and values
 
@@ -51,7 +55,8 @@ change. The tests in the repository check that the list stays complete.
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
 | `LYRICS_MAX_CHARACTERS` | core | 2000; the limit song2 generation accepts for the joined `lyrics` text. |
-| `NOTICE_CODES` | core | The closed host message codes; today `"command-refused"`. |
+| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`. |
+| `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |
 | `song2Dialect` | song2 | The `ScoreDialect` for `song2`: parse, serialize and check. |
@@ -152,3 +157,18 @@ change. The tests in the repository check that the list stays complete.
 | `PreviewEvent` | A `PreviewNoteEvent` or a `PreviewChordEvent`. |
 | `PreviewNoteEvent` | `{ kind: "note", voice, midi, at, length }`. |
 | `PreviewChordEvent` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |
+
+## Draft types
+
+| Export | What it is |
+| --- | --- |
+| `ScoreDraft` | One saved edit: version, source key, source hash, `DraftProject`, handoff hash and update time. |
+| `DraftProject` | The project fields a draft keeps: style, joined `lyrics`, `lyricLines`, score text, score mode and seed. |
+| `DraftStore` | The host's storage: `read`, versioned `write`, versioned `remove`, `list`. |
+| `DraftStoreEntry` | `{ text, version }`; the version is opaque and only handed back. |
+| `DraftWriteResult` | `{ ok: true, version }` or `{ ok: false, reason: "conflict" \| "failed" }`. |
+| `DraftKeeper` | `status`, `ready`, `subscribe`, `overwrite`, `loadTheirs`, `restoreOriginal`, `handoff`, `destroy`. |
+| `DraftKeeperOptions` | `{ session, store, original, notify?, now?, debounceMs? }`. |
+| `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
+| `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
+| `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
