@@ -32,7 +32,7 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 
 ## Commands
 
-`applyScoreCommand` takes one `ScoreCommand` and changes the score text; it refuses a `ProjectCommand`. `applyProjectCommand` takes a `ScoreCommand` or a `ProjectCommand`, the one-word name of the second union, for edits to the project itself. A refusal is what the headless layer above describes; a notice is a diagnostic too, but it comes with the changed project, and `isNoticeDiagnostic` tells it from a refusal.
+`applyScoreCommand` takes one `ScoreCommand` and changes the score text; it refuses a `ProjectCommand`. `applyProjectCommand` takes a `ScoreCommand` or a `ProjectCommand`, the one-word name of the second union, for edits to the project itself. A refusal is what the headless layer above describes; a notice is the third, non-failure diagnostic class, and it comes with the changed project. `isNoticeDiagnostic` tells it from a refusal.
 
 Keys and chord roots in `constraints` share one spelling: a letter A-G, then `#`, `##`, `b` or `bb`, and `m` for a minor key; a chord name is a root, one quality from the vocabulary, and optionally `/` and a bass root.
 
