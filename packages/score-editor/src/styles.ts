@@ -1,6 +1,7 @@
 // ABOUTME: The stylesheet of the editor and its view parts as a string, injected by mount() and by each part, and removed again by destroy().
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
+import { boxCss } from "./box-styles";
 import { TICKS_PER_QUARTER } from "./score";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
@@ -625,7 +626,8 @@ ${labelThinning()}
  * A selected note keeps its box and thickens its border to 2px in the text colour, so shape and weight carry the
  * state, not hue, and nothing moves. It comes before the tie rules, which take the border off a joined side.
  */
-.sce-root .sce-note[data-selected] {
+.sce-root .sce-note[data-selected],
+.sce-root .sce-note[data-boxed] {
   border-width: 2px;
   border-color: var(--sce-_text);
 }
@@ -741,7 +743,7 @@ ${labelThinning()}
   clip-path: inset(50%);
   white-space: nowrap;
 }
-`;
+${boxCss}`;
 
 interface Injection {
   remove(): void;
