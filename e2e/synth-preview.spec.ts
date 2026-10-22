@@ -14,6 +14,10 @@ declare global {
     audioLog?: { contexts: AudioContext[]; tones: AudioLog["tones"] };
     /** The timers the page has set that have neither fired nor been cleared, by their id. */
     timers?: Map<number, { repeats: boolean }>;
+    /** The media element a test started in the page, so it can be read afterwards. */
+    hostMedia?: HTMLMediaElement;
+    /** Whether each Escape key the window saw had been prevented by the time it got there. */
+    escapes?: boolean[];
   }
 }
 
@@ -100,6 +104,18 @@ const audio = (page: Page) =>
       tones: [...(window.audioLog?.tones ?? [])],
     }),
   );
+
+/** Waits until the page's one audio context has run `seconds` more on its own clock: a wait on the sound, not on the wall. */
+async function letAudioRun(page: Page, seconds: number) {
+  const now = () => page.evaluate(() => window.audioLog?.contexts[0]?.currentTime ?? 0);
+  const from = await now();
+  await expect
+    .poll(now, { message: `the audio clock runs ${seconds} s`, timeout: seconds * 1000 + 5000 })
+    .toBeGreaterThanOrEqual(from + seconds);
+}
+
+/** What has been sounded, each as its waveform and rounded pitch, once each and sorted. */
+const soundsOf = (log: AudioLog) => [...new Set(log.tones.map((tone) => `${tone.type}:${Math.round(tone.hz)}`))].sort();
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 const previewButton = (page: Page) => page.getByRole("button", { name: /^(Preview|Stop)$/ });
@@ -278,14 +294,14 @@ test.describe("the playhead", () => {
     await press(button);
     await expect(playhead(page)).toHaveCount(0);
     const tones = (await audio(page)).tones.length;
-    await page.waitForTimeout(700);
-    await expect(playhead(page)).toHaveCount(0);
-    expect((await audio(page)).tones.length, "nothing new is sounded after the stop").toBe(tones);
+    // The device is let go once nothing plays, which is later than the next hand-over of notes would have been.
     await expect
       .poll(async () => (await audio(page)).contexts.map((context) => context.state), {
         message: "the audio device is let go once nothing plays",
       })
       .toEqual(["suspended"]);
+    await expect(playhead(page)).toHaveCount(0);
+    expect((await audio(page)).tones.length, "nothing new is sounded after the stop").toBe(tones);
   });
 
   test("is not the insertion point: both are drawn at once, and the playhead has no flag", async ({ page, press }) => {
@@ -356,6 +372,26 @@ test.describe("stopping and following", () => {
     await expect(playhead(page)).toHaveCount(0);
     await expect(slot(page, "synth").getByRole("button")).toHaveText("Preview");
     await expect(slot(page, "synth").getByRole("status")).toHaveText("Preview stopped");
+  });
+
+  test("Escape is left to the host as well: it still reaches the window, and has not been prevented", async ({
+    page,
+    press,
+  }) => {
+    const harness = await visit(page);
+    await openLayout(harness);
+    await page.evaluate(() => {
+      window.escapes = [];
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") window.escapes?.push(event.defaultPrevented);
+      });
+    });
+    await press(slot(page, "synth").getByRole("button"));
+    await expect(playhead(page)).toHaveCount(1);
+
+    await page.keyboard.press("Escape");
+    await expect(playhead(page)).toHaveCount(0);
+    expect(await page.evaluate(() => window.escapes)).toEqual([false]);
   });
 
   test("the page is turned a beat before the line reaches the right edge, so it never touches it", async ({
@@ -455,6 +491,24 @@ test.describe("read-only", () => {
     await expect(playhead(page)).toHaveCount(0);
   });
 
+  test("starts at the start whatever insertion point the session was left with, since a read-only view shows none", async ({
+    page,
+    press,
+  }) => {
+    const harness = await visit(page);
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["toolbar", "synth", "vocal"] });
+    await setInsertionPoint(page, { tick: 512 });
+    await expect(slot(page, "vocal").getByRole("separator")).toHaveCount(1);
+
+    await harness.layout.setEditable(false);
+    await expect(slot(page, "vocal").getByRole("separator"), "a read-only view draws no insertion point").toHaveCount(
+      0,
+    );
+    await press(slot(page, "synth").getByRole("button"));
+    await expect(slot(page, "synth").getByRole("status")).toHaveText("Playing the preview from the start");
+    expect(await firstLead(page)).toBe(C4_HZ);
+  });
+
   test("goes on playing when the session turns read-only", async ({ page, press }) => {
     const harness = await visit(page);
     await openLayout(harness);
@@ -468,9 +522,15 @@ test.describe("read-only", () => {
 });
 
 test.describe("other sound on the page", () => {
-  /** Starts a silent-enough audio element in the page's document and resolves once it plays. */
-  const playPageAudio = (page: Page) =>
-    page.evaluate(async () => {
+  type Kind = "audio" | "video" | "detached" | "shadow";
+
+  /**
+   * Starts three seconds of a tone that belongs to the page, not to the editor, in a media element of the given kind: an
+   * `<audio>` or a `<video>` in the document, an `<audio>` made with `new Audio()` and never put in the document, or an
+   * `<audio>` inside a shadow root. Resolves once it plays.
+   */
+  const playPageMedia = (page: Page, kind: Kind) =>
+    page.evaluate(async (what) => {
       const rate = 8000;
       const samples = rate * 3;
       const bytes = new ArrayBuffer(44 + samples * 2);
@@ -490,44 +550,103 @@ test.describe("other sound on the page", () => {
       view.setUint16(34, 16, true);
       text(36, "data");
       view.setUint32(40, samples * 2, true);
-      const element = document.createElement("audio");
-      element.id = "host-audio";
-      element.src = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
-      document.body.append(element);
-      await element.play();
-    });
-  const hostAudioPaused = (page: Page) =>
-    page.evaluate(() => document.querySelector<HTMLAudioElement>("#host-audio")?.paused);
+      const src = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+      let media: HTMLMediaElement;
+      if (what === "detached") media = new Audio(src);
+      else {
+        media = document.createElement(what === "video" ? "video" : "audio");
+        media.src = src;
+        if (what === "shadow") {
+          const host = document.createElement("div");
+          document.body.append(host);
+          host.attachShadow({ mode: "open" }).append(media);
+        } else document.body.append(media);
+      }
+      window.hostMedia = media;
+      await media.play();
+    }, kind);
+  const hostMedia = (page: Page) =>
+    page.evaluate(() => ({ paused: window.hostMedia?.paused, position: window.hostMedia?.currentTime ?? 0 }));
 
-  test("an audio element that starts while the preview plays stops the preview, and the page's own audio goes on", async ({
+  for (const kind of ["audio", "video"] as const) {
+    test(`a ${kind} element in the document that starts while the preview plays stops the preview, and the page's own sound goes on`, async ({
+      page,
+      press,
+    }) => {
+      const harness = await visit(page);
+      await openLayout(harness);
+      await press(slot(page, "synth").getByRole("button"));
+      await expect(playhead(page)).toHaveCount(1);
+
+      await playPageMedia(page, kind);
+      await expect(slot(page, "synth").getByRole("button")).toHaveText("Preview");
+      await expect(playhead(page)).toHaveCount(0);
+      expect((await hostMedia(page)).paused).toBe(false);
+    });
+  }
+
+  // These two the preview does not hear: a capturing listener on the document gets no `play` event from them.
+  for (const kind of ["detached", "shadow"] as const) {
+    test(`a ${kind} audio element is not heard: the preview and the page's own sound play on together`, async ({
+      page,
+      press,
+    }) => {
+      const harness = await visit(page);
+      await openLayout(harness);
+      await press(slot(page, "synth").getByRole("button"));
+      await expect(playhead(page)).toHaveCount(1);
+
+      await playPageMedia(page, kind);
+      await letAudioRun(page, 0.5);
+      await expect(slot(page, "synth").getByRole("button")).toHaveText("Stop");
+      await expect(playhead(page)).toHaveCount(1);
+      expect((await hostMedia(page)).paused).toBe(false);
+    });
+  }
+
+  test("a preview started while the page's audio plays leaves that audio playing, and both run", async ({
     page,
     press,
   }) => {
     const harness = await visit(page);
     await openLayout(harness);
-    await press(slot(page, "synth").getByRole("button"));
-    await expect(playhead(page)).toHaveCount(1);
-
-    await playPageAudio(page);
-    await expect(slot(page, "synth").getByRole("button")).toHaveText("Preview");
-    await expect(playhead(page)).toHaveCount(0);
-    expect(await hostAudioPaused(page)).toBe(false);
-  });
-
-  test("a preview started while the page's audio plays leaves that audio playing", async ({ page, press }) => {
-    const harness = await visit(page);
-    await openLayout(harness);
-    await playPageAudio(page);
-    expect(await hostAudioPaused(page)).toBe(false);
+    await playPageMedia(page, "audio");
+    expect((await hostMedia(page)).paused).toBe(false);
 
     await press(slot(page, "synth").getByRole("button"));
     await expect(playhead(page)).toHaveCount(1);
-    expect(await hostAudioPaused(page)).toBe(false);
+    const before = (await hostMedia(page)).position;
+    await expect
+      .poll(async () => (await hostMedia(page)).position, {
+        message: "the page's audio goes on, not paused and not stuck",
+      })
+      .toBeGreaterThan(before + 0.3);
+    expect((await hostMedia(page)).paused).toBe(false);
+    await expect(playhead(page)).toHaveCount(1);
+    expect((await audio(page)).contexts.map((context) => context.state)).toEqual(["running"]);
   });
 });
 
 test.describe("requests", () => {
-  test("none leaves the page from the moment the editor is mounted to the stop, and nothing came from another origin", async ({
+  /** Two voices and a chord: a bar of Vocal quarter notes C D E F under the chord C, and Ins half notes c and e. */
+  const TWO_VOICES = [
+    "X:1",
+    "T:",
+    "M:4/4",
+    "L:1/16",
+    "Q:1/4=100",
+    'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"',
+    'V: Ins clef=treble name="Ins Melody" snm="Inst."',
+    "K:C",
+    "% a",
+    "V: Vocal",
+    '"C"C4D4E4F4|',
+    "V: Ins",
+    "c8e8|",
+    "",
+  ].join("\n");
+
+  test("none leaves the page from before the editor is mounted to the stop, and nothing came from another origin", async ({
     page,
     press,
   }) => {
@@ -536,26 +655,44 @@ test.describe("requests", () => {
     page.on("request", (request) => requests.push(request.url()));
     page.on("websocket", (socket) => sockets.push(socket.url()));
     const harness = await visit(page);
-    await harness.mount({ score: { sample: "compact-three-sections" } });
-    await expect(page.getByRole("list", { name: "Vocal" })).toBeVisible();
-    const origin = new URL(page.url()).origin;
     const loaded = requests.length;
-    expect(loaded, "the page and the score were fetched before the preview").toBeGreaterThan(0);
+    expect(loaded, "the page and its own files were fetched before the editor was mounted").toBeGreaterThan(0);
+    const origin = new URL(page.url()).origin;
 
+    await harness.mount({ score: { text: TWO_VOICES } });
+    await expect(lane(page)).toBeVisible();
     await press(previewButton(page));
     await expect(previewButton(page)).toHaveText("Stop");
     await expect
-      .poll(async () => new Set((await audio(page)).tones.map((tone) => tone.type)).size, {
-        message: "melody, second voice and chords all sound",
+      .poll(async () => soundsOf(await audio(page)), {
+        message: "the melody, the second voice and the chord all sound, each at its pitch",
         timeout: 8000,
       })
-      .toBe(3);
+      .toEqual(
+        [
+          // Vocal C D E F as a triangle wave, Ins c and e as a square wave, the chord C (bass C2, then C3 E3 G3) as sine waves.
+          "triangle:262",
+          "triangle:294",
+          "triangle:330",
+          "triangle:349",
+          "square:523",
+          "square:659",
+          "sine:65",
+          "sine:131",
+          "sine:165",
+          "sine:196",
+        ].sort(),
+      );
     await press(previewButton(page));
     await expect(previewButton(page)).toHaveText("Preview");
     expect(await previewNote(page, 64)).toBe(true);
-    await page.waitForTimeout(700);
+    await expect
+      .poll(async () => (await audio(page)).contexts.map((context) => context.state), {
+        message: "the note has died away and the audio device is let go",
+      })
+      .toEqual(["suspended"]);
 
-    expect(requests.slice(loaded), "no request from the mount to the stop").toEqual([]);
+    expect(requests.slice(loaded), "no request from before the mount to the end of the note").toEqual([]);
     expect(
       requests.filter((url) => new URL(url).origin !== origin),
       "no request to another origin",
@@ -610,8 +747,9 @@ test.describe("the single-note preview", () => {
     await press(slot(page, "synth").getByRole("button"));
     await expect(playhead(page)).toHaveCount(1);
 
-    await previewNote(page, 60, { duration: 0.1 });
-    await page.waitForTimeout(700);
+    // C5 is not a pitch of the score; one second of the audio clock is long after its note has died away.
+    await previewNote(page, 72, { duration: 0.1 });
+    await letAudioRun(page, 1);
     const { contexts } = await audio(page);
     expect(
       contexts.map((context) => context.state),
@@ -635,7 +773,7 @@ test.describe("the single-note preview", () => {
     await expect(playhead(page)).toHaveCount(0);
     const placed = (await audio(page)).tones.length;
     // The preview keeps handing out its next notes a few seconds ahead of the clock for as long as it is not stopped.
-    await page.waitForTimeout(1400);
+    await letAudioRun(page, 1.5);
     expect((await audio(page)).tones.length, "no tone is placed after the stop").toBe(placed);
     expect((await audio(page)).contexts.map((context) => context.state)).toEqual(["running"]);
   });
@@ -685,6 +823,13 @@ test.describe("the preview player of a session", () => {
     await harness.layout.destroyPart("synth");
     await expect(playhead(page)).toHaveCount(0);
     expect(await page.evaluate(() => window.harness.previewPlayer().playing)).toBe(false);
+    const placed = (await audio(page)).tones.length;
+    await expect
+      .poll(async () => (await audio(page)).contexts.map((context) => context.state), {
+        message: "no sound is left, so the audio device is let go",
+      })
+      .toEqual(["suspended"]);
+    expect((await audio(page)).tones.length, "and nothing more is sounded").toBe(placed);
   });
 });
 
