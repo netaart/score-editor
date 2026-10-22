@@ -51,8 +51,6 @@ export type {
 } from "./session";
 export { createEditingSession } from "./session";
 export { mountTimeRuler } from "./time-ruler";
-export type { ToolbarOptions } from "./toolbar";
-export { mountToolbar } from "./toolbar";
 export type {
   BooleanToolParameter,
   ChoiceToolParameter,
@@ -69,6 +67,8 @@ export type {
   ToolText,
 } from "./tool";
 export { createToolRegistry, previewTool, validateToolParameters } from "./tool";
+export type { ToolbarOptions } from "./toolbar";
+export { mountToolbar } from "./toolbar";
 export type {
   AxisPartOptions,
   ChordVocabulary,
