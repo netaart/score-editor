@@ -206,6 +206,19 @@ describe("hand-worked write-back", () => {
     check(parse(removed));
   });
 
+  it("drops an unfinished chord tail when the last chord is removed", () => {
+    const original = scoreText('"C"C16|D8"C');
+    const input = parse(original);
+    const result = applyOk(original, "Vocal:0", "");
+
+    expect(result).toBe(scoreText("C16|D8"));
+    const output = parse(result);
+    expect(output.hasChords).toBe(false);
+    expect(output.truncation).toEqual(input.truncation);
+    expect(output.notes.map(noteFacts)).toEqual(input.notes.map(noteFacts));
+    check(output);
+  });
+
   it("changes only the target's chord", () => {
     const text = scoreText('"C"C8"D"D8|');
 
