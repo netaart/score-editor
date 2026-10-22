@@ -58,7 +58,9 @@ describe where it points and the values its text needs.
 ## Write one command back
 
 Every edit ends in the same command layer. `ScoreCommand` is the dialect-agnostic union of edits; today it has
-`{ type: "toRest", noteId }`. A score command runs on the model (`Score`), then the dialect writes it and runs `check`.
+`{ type: "toRest", noteId }` and `{ type: "toRests", noteIds }`, which turns the tie chain of every named note into rests as one
+edit: every id is checked first, the first that names no note or a rest refuses the whole command, and the dialect writes
+and checks once. A score command runs on the model (`Score`), then the dialect writes it and runs `check`.
 
 - `applyScoreCommand(dialect, text, command)` returns `ApplyScoreResult`: `{ ok: true, text }` or
   `{ ok: false, diagnostic }`. A command that cannot be applied, a write/read-back mismatch, or any `check` failure

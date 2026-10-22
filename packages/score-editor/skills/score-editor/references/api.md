@@ -24,7 +24,7 @@ change. The tests in the repository check that the list stays complete.
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
-| `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete) to a session; returns `EditingInputResult`. |
+| `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete, a toggle, a box, select all, invert, clear) to a session; returns `EditingInputResult`. |
 
 ## Constants and values
 
@@ -53,7 +53,7 @@ change. The tests in the repository check that the list stays complete.
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus any diagnostics, or the untouched project and a refusal. |
 | `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape, its causes, and the listener type. |
-| `ScoreCommand` | The dialect-agnostic edit union; today `{ type: "toRest", noteId }`. |
+| `ScoreCommand` | The dialect-agnostic edit union; today `{ type: "toRest", noteId }` and `{ type: "toRests", noteIds }` (several notes as one edit, all or none). |
 
 ## Score model types
 
@@ -99,7 +99,7 @@ change. The tests in the repository check that the list stays complete.
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
 | `ToolbarOptions` | `{ hintId?, onRefused? }` for the toolbar. |
-| `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, or a delete. |
+| `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
 ## Tool types
