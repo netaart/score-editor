@@ -607,6 +607,10 @@ ${labelThinning()}
 .sce-root[data-editable="true"] .sce-note {
   cursor: pointer;
 }
+/* The selection frame answers a tap, so the browser's own flash over the tapped note would only blur it. */
+.sce-root[data-editable="true"] {
+  -webkit-tap-highlight-color: transparent;
+}
 /*
  * A selected note keeps its box and thickens its border to 2px in the text colour, so shape and weight carry the
  * state, not hue, and nothing moves. It comes before the tie rules, which take the border off a joined side.
@@ -630,14 +634,15 @@ ${labelThinning()}
 
 /*
  * The insertion point: a line through the lane, heavier and darker than a bar line, with a flag at its top. The flag
- * sticks just under the pinned track head, so it stays in view when the lane is scrolled past its own top.
+ * sticks just under the pinned track head, so it stays in view when the lane is scrolled past its own top. At either
+ * end of the lane the line is kept whole inside it, where the pitch column and the focus ring would cover half of it.
  */
 .sce-root .sce-insertion {
   position: absolute;
   z-index: 2;
   top: 0;
   bottom: 0;
-  left: calc(var(--t) / var(--sce-ticks) * 100%);
+  left: clamp(1px, calc(var(--t) / var(--sce-ticks) * 100%), calc(100% - 1px));
   width: 2px;
   margin-left: -1px;
   background: var(--sce-_text);

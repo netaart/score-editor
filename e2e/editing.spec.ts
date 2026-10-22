@@ -53,6 +53,7 @@ test.describe("selecting a note in a voice track", () => {
 
     await expect(selected(page, D4)).toBeVisible();
     await expect(selected(page, D4)).toHaveCSS("border-top-width", "2px");
+    await expect(selected(page, D4)).toHaveCSS("-webkit-tap-highlight-color", "rgba(0, 0, 0, 0)");
     await expect(note(page, C4)).toHaveCSS("border-top-width", "1px");
     expect(await harness.layout.selection()).toEqual(["Vocal:256"]);
     expect(await harness.layout.insertionPoint()).toBeNull();
@@ -142,6 +143,8 @@ test.describe("the toolbar part", () => {
     await expect(undoButton(page)).toHaveAttribute("aria-disabled", "true");
     await expect(redoButton(page)).toHaveAttribute("aria-disabled", "true");
     await expect(toolbar(page).getByText("Read only")).toBeHidden();
+    await expect(undoButton(page)).toHaveAttribute("title", "Undo (Ctrl/Cmd+Z)");
+    await expect(redoButton(page)).toHaveAttribute("title", "Redo (Ctrl/Cmd+Shift+Z)");
 
     await harness.layout.dispatch({ type: "toRest", noteId: "Vocal:256" });
     await expect(note(page, D4)).toHaveCount(0);
@@ -390,6 +393,7 @@ test.describe("read-only", () => {
     await expect(slot(page, "vocal").getByRole("listitem", { name: /, selected$/ })).toHaveCount(0);
     await expect(slot(page, "vocal").getByRole("separator")).toHaveCount(0);
     await expect(note(page, D4)).toHaveCSS("cursor", "auto");
+    await expect(note(page, D4)).not.toHaveCSS("-webkit-tap-highlight-color", "rgba(0, 0, 0, 0)");
   });
 
   test("hides the frame and the insertion point when the session stops being editable, and shows them again", async ({
@@ -480,6 +484,24 @@ test.describe("the insertion point", () => {
     await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 1");
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 0 });
     expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("the line stays whole inside the lane at Home and at End, where the pitch column would cover half of it", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, vocalOnly("C4z4E4F4|G16|"));
+    await pressAt(isMobile, lane(page), { x: 70, y: 4 });
+    const marker = slot(page, "vocal").getByRole("separator");
+    for (const key of ["Home", "End"]) {
+      await page.keyboard.press(key);
+      await expect(marker).toBeVisible();
+      const area = await box(lane(page));
+      const line = await box(marker);
+      expect(line.x, `${key}: left edge`).toBeGreaterThanOrEqual(area.x - 0.01);
+      expect(line.x + line.width, `${key}: right edge`).toBeLessThanOrEqual(area.x + area.width + 0.01);
+    }
   });
 
   test("the part scrolls to keep it in view as the keys carry it away", async ({ page, harness, isMobile }) => {

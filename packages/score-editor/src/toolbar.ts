@@ -82,12 +82,12 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     title.textContent = t.title;
     badge.textContent = t.readOnly;
     history.setAttribute("aria-label", t.history);
-    for (const [button, label] of [
-      [undo, t.undo],
-      [redo, t.redo],
+    for (const [button, label, keys] of [
+      [undo, t.undo, "Ctrl/Cmd+Z"],
+      [redo, t.redo, "Ctrl/Cmd+Shift+Z"],
     ] as const) {
       button.setAttribute("aria-label", label);
-      button.title = label;
+      button.title = `${label} (${keys})`;
     }
     drawn = "";
   }
