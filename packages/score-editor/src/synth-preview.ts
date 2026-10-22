@@ -107,8 +107,6 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
       const position =
         from !== null && from > 0 && reading.kind === "score" ? insertionPosition(reading.score, from) : null;
       live.say(t.previewStarted(position));
-      // In a toolbar that scrolls sideways the caption may be out of sight; while the sound plays it should not be.
-      caption.scrollIntoView({ block: "nearest", inline: "nearest" });
     } else if (result === "nothing-to-play") {
       live.say(t.previewNothing);
       tell(t.previewNothing);
