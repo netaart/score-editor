@@ -401,6 +401,19 @@ describe("setChord failures", () => {
     }
   });
 
+  it("locates a refusal of the dialect's check at the chord's note", () => {
+    const refusing = {
+      ...song2Dialect,
+      check: () => [{ code: "write-mismatch", params: {}, at: {} }] as const,
+    };
+    const result = applyScoreCommand(refusing, scoreText("C16|"), { type: "setChord", noteId: "Vocal:0", name: "C" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("write-mismatch");
+    expect(result.diagnostic.at).toEqual({ voice: "Vocal", bar: 1, beat: 1, noteId: "Vocal:0" });
+  });
+
   it("treats removing a chord from a voice that never had one as a successful no-op", () => {
     const result = applyScoreCommand(song2Dialect, TWO_VOICE_TEXT, { type: "setChord", noteId: "Ins:0", name: "" });
 

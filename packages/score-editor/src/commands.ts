@@ -24,9 +24,9 @@ export type ScoreCommandResult =
   | { readonly ok: true; readonly score: Score }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
-/** Where a command acts, in the voice, bar and beat a person counts: the note it names, or nothing for a bar command. */
+/** Where a command acts, in the voice, bar and beat a person counts: the note it names, or nothing for a command without one. */
 export function commandAt(score: Score, command: ScoreCommand): DiagnosticAt {
-  if (command.type !== "toRest") return {};
+  if (!("noteId" in command)) return {};
   const note = score.notes.find((found) => found.id === command.noteId);
   if (note === undefined) return { noteId: command.noteId };
   const { bar, beat } = positionOf(score.bars, note.bar, note.start);
