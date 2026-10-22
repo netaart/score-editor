@@ -67,7 +67,12 @@ export const COMMAND_DIAGNOSTIC_CODES = [
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
 
 /** A diagnostic that reports something the user should know, while the project it describes is still usable. */
-export const NOTICE_DIAGNOSTIC_CODES = ["style-no-bpm", "melody-with-chords"] as const;
+export const NOTICE_DIAGNOSTIC_CODES = [
+  "style-no-bpm",
+  "melody-with-chords",
+  "lyrics-unaligned",
+  "lyrics-too-long",
+] as const;
 
 export type NoticeDiagnosticCode = (typeof NOTICE_DIAGNOSTIC_CODES)[number];
 
@@ -143,6 +148,8 @@ interface Catalog {
   readonly sectionNameTrailingSpace: Text;
   readonly styleNoBpm: Text;
   readonly melodyWithChords: Text;
+  readonly lyricsUnaligned: Text;
+  readonly lyricsTooLong: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -755,6 +762,24 @@ function chineseMelodyWithChords(): string {
   return "melody 模式不能带和弦；可以删掉所有和弦，或改回 full。";
 }
 
+function englishLyricsUnaligned(params: DiagnosticParams): string {
+  const count = value(params, "count");
+  const isOne = count === "1";
+  return `${count} lyric line${isOne ? "" : "s"} ${isOne ? "is" : "are"} unaligned and left out of the joined lyrics.`;
+}
+
+function chineseLyricsUnaligned(params: DiagnosticParams): string {
+  return `有 ${value(params, "count")} 行歌词没有对齐，拼回 lyrics 时不会写进去。`;
+}
+
+function englishLyricsTooLong(params: DiagnosticParams): string {
+  return `The joined lyrics are ${value(params, "count")} characters; song2 generation accepts ${value(params, "max")}.`;
+}
+
+function chineseLyricsTooLong(params: DiagnosticParams): string {
+  return `拼回的 lyrics 有 ${value(params, "count")} 字，超过 song2 生成接受的 ${value(params, "max")} 字上限。`;
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -805,6 +830,8 @@ const en: Catalog = {
   sectionNameTrailingSpace: englishSectionNameTrailingSpace,
   styleNoBpm: englishStyleNoBpm,
   melodyWithChords: englishMelodyWithChords,
+  lyricsUnaligned: englishLyricsUnaligned,
+  lyricsTooLong: englishLyricsTooLong,
 };
 
 const zh: Catalog = {
@@ -857,6 +884,8 @@ const zh: Catalog = {
   sectionNameTrailingSpace: chineseSectionNameTrailingSpace,
   styleNoBpm: chineseStyleNoBpm,
   melodyWithChords: chineseMelodyWithChords,
+  lyricsUnaligned: chineseLyricsUnaligned,
+  lyricsTooLong: chineseLyricsTooLong,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -962,6 +991,10 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.styleNoBpm(diagnostic.params);
     case "melody-with-chords":
       return catalog.melodyWithChords(diagnostic.params);
+    case "lyrics-unaligned":
+      return catalog.lyricsUnaligned(diagnostic.params);
+    case "lyrics-too-long":
+      return catalog.lyricsTooLong(diagnostic.params);
     default:
       return "";
   }

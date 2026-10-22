@@ -65,7 +65,12 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "section-name-trailing-space",
 ];
 
-const NOTICE_CODES: NoticeDiagnosticCode[] = ["style-no-bpm", "melody-with-chords"];
+const NOTICE_CODES: NoticeDiagnosticCode[] = [
+  "style-no-bpm",
+  "melody-with-chords",
+  "lyrics-unaligned",
+  "lyrics-too-long",
+];
 
 describe("diagnostics", () => {
   it("has exactly the reading codes RULES.md lists, the command codes and the notice codes", () => {
