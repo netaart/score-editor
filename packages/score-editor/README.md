@@ -25,11 +25,39 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 - `editable` (default `true`) says whether the user may change the score. While it is true the toolbar has undo, redo and Delete, a click or tap selects a note or drops the insertion point, Tab reaches the notes, and Delete (or Backspace), Ctrl or Cmd plus Z, Ctrl or Cmd plus Shift plus Z, Ctrl plus Y, Left, Right, Home, End, Enter and Space act. While it is false none of that exists: no editing control, no selection frame, no insertion point, and the keys do nothing; the toolbar shows a read-only badge instead. `update({ editable })` switches it without remounting, and a selection made before comes back with it.
 - A command the user's keys caused that the score would not take (the dialect refuses to write the result) changes nothing and reaches `notify` once as `{ code: "command-refused", level: "warning", message }`, in the interface language.
 - Importing the package runs nothing that touches the DOM, so a server render can import it. `mount` and the view parts' mount functions need a browser and throw a clear error elsewhere; call them from client-side code. `createEditingSession` needs none.
-- The headless layer is dialect-agnostic: `applyScoreCommand(dialect, text, command)` and `applyProjectCommand(dialect, project, command)` apply one command to the shared score model, write it with the dialect, and run `dialect.check`. A failure returns a diagnostic and changes nothing.
-- **Score commands:** `toRest` (`noteId`); `setChord` (`noteId`, `name`); `insertBar` (`bar`); `deleteBars` (`from`, `count`); `setSectionMeter` (`section`, `meter`); `fillTruncatedBar`; `deleteTruncatedBar`. `setChord` sets the chord on a note or rest whose voice allows chords, replacing every chord that starts at the note, and an empty `name` removes it; removing the last chord also removes an unfinished chord string at the end of the text, see [RULES.md C8](../score-dialect-song2/RULES.md). Refusals use `note-not-found`, `chord-voice`, `chord-vocabulary`, `bar-out-of-range`, `section-out-of-range`, `meter-not-allowed`, `no-truncation`, `no-incomplete-bar`, `tie-across-bar`, `truncated-tail`, `meter-does-not-fit`, `last-bar` and `cut-in-complete-bar`; a dialect that throws while writing reports `write-mismatch`. The two truncation commands are the repairs that leave a score with no cut: `fillTruncatedBar` pads every short voice to the end, and `deleteTruncatedBar` removes the incomplete measure when no other voice keeps material in it.
+- The headless layer is dialect-agnostic: `applyScoreCommand(dialect, text, command)` and `applyProjectCommand(dialect, project, command)` apply one command to the shared score model, write it with the dialect, and run `dialect.check`. A refusal returns the input unchanged and one diagnostic.
 - Styles: every class is prefixed `sce-`. The host maps its theme onto `--sce-color-bg`, `--sce-color-text`, `--sce-color-accent` and a few more; unmapped colours fall back to neutral defaults derived from the mapped ones. The full list is in [DESIGN.md](../../DESIGN.md).
 - A host whose own CSS uses ID selectors or `!important` on plain elements should mount the editor inside a shadow root. See [docs/spike.md](../../docs/spike.md).
 - The package assumes a browser with native popovers, `:has()` and `light-dark()`. Only Chromium has been run so far.
+
+## Commands
+
+`applyScoreCommand` takes one `ScoreCommand` and changes the score text; it refuses a `ProjectCommand`. `applyProjectCommand` takes a `ScoreCommand` or a `ProjectCommand`, the one-word name of the second union, for edits to the project itself. A refusal is what the headless layer above describes; a notice is the third, non-failure diagnostic class, and it comes with the changed project. `isNoticeDiagnostic` tells it from a refusal.
+
+Keys and chord roots in `constraints` share one spelling: a letter A-G, then `#`, `##`, `b` or `bb`, and `m` for a minor key; a chord name is a root, one quality from the vocabulary, and optionally `/` and a bass root.
+
+Score commands, in the order `ScoreCommand` lists them:
+
+- `toRest` (`noteId`): turns a note and its whole tie chain into rests. Refuses with `note-not-found` or `not-a-note`.
+- `setChord` (`noteId`, `name`): sets the chord on a note or rest whose voice allows chords, replacing every chord that starts at the note; an empty `name` removes it. Removing the last chord also removes an unfinished chord string at the end of the text, see [RULES.md C8](../score-dialect-song2/RULES.md). Refuses with `note-not-found`, `chord-voice` or `chord-vocabulary`.
+- `insertBar` (`bar`, counted from 0): inserts a bar of rests at that index, before the bar now there or after the last one. Refuses with `bar-out-of-range`, `truncated-tail` or `tie-across-bar`.
+- `deleteBars` (`from`, counted from 0, and `count`): deletes whole bars. Refuses with `bar-out-of-range`, `last-bar` or `truncated-tail`.
+- `setSectionMeter` (`section`, `meter`): sets the meter of one section. Refuses with `section-out-of-range`, `meter-not-allowed`, `meter-does-not-fit` or `truncated-tail`.
+- `fillTruncatedBar` and `deleteTruncatedBar`: the two repairs that leave a score with no cut. `fillTruncatedBar` pads every short voice to the end; `deleteTruncatedBar` removes the incomplete measure when no other voice keeps material in it. Both refuse with `no-truncation` or `no-incomplete-bar`; `deleteTruncatedBar` also with `cut-in-complete-bar` or `last-bar`.
+- `transpose`: moves every note, every chord root and bass, the header `K:`, every body `K:` line and every inline `[K:…]` by the same number of semitones. The new keys are the declared spellings with the fewest accidentals. A note that would leave MIDI 0-127 refuses the whole command. Refuses with `semitones-not-integer`, `pitch-out-of-range`, `key-unavailable` or `chord-invalid`.
+- `setKey`: moves the notes and chords to the chosen key, like `transpose` by the shortest interval between the two tonics, and forces the chosen key's spelling. With `from`, only the score from that key-change position on moves; the header and earlier key changes stay. Refuses with `key-not-allowed` or `key-change-not-found`, and like `transpose` otherwise.
+- `setTempo`: writes `Q:1/4=<bpm>` from the dialect's tempo range and changes no pitch. Refuses with `tempo-out-of-range`.
+- `removeChords`: removes every chord from the score. It is the one-step fix for a `melody` project that carries chords.
+
+Any score command also fails with `write-mismatch`, or with a reading code, when the dialect cannot write the result or read it back the same.
+
+Project commands, the `ProjectCommand` union:
+
+- `setStyle`: sets the style text.
+- `setScoreMode`: sets `full` or `melody`.
+- `setSeed`: sets a whole-number seed, or `null` to clear it.
+
+`applyProjectCommand` also runs the song-project rules. A `setTempo` through it rewrites every BPM written in the style text (`120 BPM`, `120bpm`, `BPM: 120`, `bpm=120`, `BPM 120`, `BPM：120`) and reports the notice `style-no-bpm` when the style has none; a number not next to the word BPM stays as it is. A project in `melody` mode whose score has chords reports the notice `melody-with-chords`; delete the chords or switch back to `full`. `checkProject(dialect, project)` reports that notice for a project as it stands, without changing anything.
 
 ## The editing session and view parts
 
@@ -68,7 +96,7 @@ for (const part of parts) part.destroy(); // each removes its own listeners, nod
 stop();
 ```
 
-- The session is headless: it touches no DOM, so it runs in Node and in a worker. `dispatch` applies a command through `applyProjectCommand`; a refused command changes nothing and returns its diagnostics. The history keeps whole song projects. Selection (note ids), insertion point, zoom, scroll and language are not in the history. `replaceProject` starts a new document from outside, the way `update({ project })` does.
+- The session is headless: it touches no DOM, so it runs in Node and in a worker. `dispatch` applies a command through `applyProjectCommand`; a refusal comes back as the headless layer above describes. The history keeps whole song projects. Selection (note ids), insertion point, zoom, scroll and language are not in the history. `replaceProject` starts a new document from outside, the way `update({ project })` does.
 - Parts: `mountToolbar`, `mountZoomControl`, `mountCutNotice`, `mountProblemView`, `mountTimeRuler`, `mountChordTrack` and `mountVoiceTrack(el, session, { voice })`. Each returns `{ destroy() }`, and a second `destroy` does nothing. Each part is styled and isolated as `mount` is, and the zoom menu uses the popover layer; the decisions are in [docs/spike.md](../../docs/spike.md).
 - The ruler, the chord track and a voice track scroll in time on their own element, each by its own width. Each is a named region that Tab reaches, and the plus and minus keys zoom around the middle of the one that has the focus. Pass `{ scroller }` as the last argument to put several of them in one scroller of your own, as `mount` does. A part mounted late starts at the session's zoom and scroll.
 - The toolbar part holds the title, the zoom control, undo, redo and Delete (while `session.view.editable` is true), the read-only badge (while it is not) and, when you pass `{ hintId }`, a screen-reader hint with that id for a view's `aria-describedby`. Its options are `ToolbarOptions`: `hintId`, and `onRefused` for the diagnostics of a Delete the score would not take. Its row scrolls sideways when your element is narrower than its controls. Undo and redo are the session's `undo()` and `redo()`; Delete is muted until a pitched note is selected and then does what the Delete key does, so a touch screen can delete without a keyboard.

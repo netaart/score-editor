@@ -1,8 +1,10 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
 import { positionOf } from "./arrangement";
+import { commandRefusal } from "./command-refusal";
 import { runBarCommand } from "./commands-bars";
 import { setChord } from "./commands-chords";
+import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./commands-key-tempo";
 import { runTruncationCommand } from "./commands-truncation";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
@@ -16,7 +18,11 @@ export type ScoreCommand =
   | { readonly type: "deleteBars"; readonly from: number; readonly count: number }
   | { readonly type: "setSectionMeter"; readonly section: number; readonly meter: Meter }
   | { readonly type: "fillTruncatedBar" }
-  | { readonly type: "deleteTruncatedBar" };
+  | { readonly type: "deleteTruncatedBar" }
+  | { readonly type: "transpose"; readonly semitones: number }
+  | { readonly type: "setKey"; readonly key: string; readonly from?: number }
+  | { readonly type: "setTempo"; readonly bpm: number }
+  | { readonly type: "removeChords" };
 
 export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
@@ -33,12 +39,8 @@ export function commandAt(score: Score, command: ScoreCommand): DiagnosticAt {
   return { voice: note.voice, bar, beat, noteId: note.id };
 }
 
-function commandFailure(
-  code: "note-not-found" | "not-a-note",
-  score: Score,
-  command: ToRestCommand,
-): ScoreCommandResult {
-  return { ok: false, diagnostic: { code, params: { noteId: command.noteId }, at: commandAt(score, command) } };
+function commandFailure(code: "note-not-found" | "not-a-note", score: Score, noteId: string): ScoreCommandResult {
+  return commandRefusal(code, { noteId }, commandAt(score, { type: "toRest", noteId }));
 }
 
 /** The whole tie chain around a note: every note tied into it and every note it ties into. */
@@ -54,8 +56,8 @@ export function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): Sc
 
 function toRest(score: Score, command: ToRestCommand): ScoreCommandResult {
   const target = score.notes.find((note) => note.id === command.noteId);
-  if (target === undefined) return commandFailure("note-not-found", score, command);
-  if (target.midi === null) return commandFailure("not-a-note", score, command);
+  if (target === undefined) return commandFailure("note-not-found", score, command.noteId);
+  if (target.midi === null) return commandFailure("not-a-note", score, command.noteId);
 
   const chain = new Set(tieChain(score.notes, target).map((note) => note.id));
   const notes = score.notes.map((note) => (chain.has(note.id) ? { ...note, midi: null, tie: false } : note));
@@ -80,5 +82,13 @@ export function runScoreCommand(
     case "fillTruncatedBar":
     case "deleteTruncatedBar":
       return runTruncationCommand(score, command, constraints);
+    case "transpose":
+      return runTranspose(score, command.semitones, constraints);
+    case "setKey":
+      return runSetKey(score, command.key, command.from, constraints);
+    case "setTempo":
+      return runSetTempo(score, command.bpm, constraints);
+    case "removeChords":
+      return runRemoveChords(score);
   }
 }

@@ -5,6 +5,8 @@ import {
   COMMAND_DIAGNOSTIC_CODES,
   type CommandDiagnosticCode,
   formatDiagnostic,
+  NOTICE_DIAGNOSTIC_CODES,
+  type NoticeDiagnosticCode,
   READING_DIAGNOSTIC_CODES,
   type ReadingDiagnosticCode,
 } from "@neta-art/score-editor";
@@ -42,19 +44,50 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "meter-does-not-fit",
   "last-bar",
   "cut-in-complete-bar",
+  "pitch-out-of-range",
+  "semitones-not-integer",
+  "key-not-allowed",
+  "key-change-not-found",
+  "key-unavailable",
+  "chord-invalid",
+  "tempo-out-of-range",
+  "seed-not-integer",
+  "style-invalid",
+  "score-mode-invalid",
+  "not-a-score-command",
 ];
 
+const NOTICE_CODES: NoticeDiagnosticCode[] = ["style-no-bpm", "melody-with-chords"];
+
 describe("diagnostics", () => {
-  it("has exactly the reading codes RULES.md lists and the command codes the headless layer and tools report", () => {
+  it("has exactly the reading codes RULES.md lists, the command codes and the notice codes", () => {
     expect([...READING_DIAGNOSTIC_CODES]).toEqual(READING_CODES);
     expect([...COMMAND_DIAGNOSTIC_CODES]).toEqual(COMMAND_CODES);
+    expect([...NOTICE_DIAGNOSTIC_CODES]).toEqual(NOTICE_CODES);
   });
 
-  it("has non-empty zh and en text for every reading and command code", () => {
-    for (const code of [...READING_DIAGNOSTIC_CODES, ...COMMAND_DIAGNOSTIC_CODES]) {
+  it("has non-empty zh and en text for every reading, command and notice code", () => {
+    for (const code of [...READING_DIAGNOSTIC_CODES, ...COMMAND_DIAGNOSTIC_CODES, ...NOTICE_DIAGNOSTIC_CODES]) {
       for (const language of ["zh", "en"] as const) {
         const text = formatDiagnostic({ code, params: {}, at: {} }, language);
         expect(text.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("fills the facts of a refused transpose, key or tempo in both languages", () => {
+    const cases = [
+      { code: "pitch-out-of-range", params: { midi: 130, noteId: "Vocal:0" }, values: ["130"] },
+      { code: "key-not-allowed", params: { key: "D#" }, values: ["D#"] },
+      { code: "tempo-out-of-range", params: { bpm: 401, min: 20, max: 400 }, values: ["401", "20", "400"] },
+      { code: "seed-not-integer", params: { seed: "1.5" }, values: ["1.5"] },
+    ] as const;
+
+    for (const { code, params, values } of cases) {
+      for (const language of ["zh", "en"] as const) {
+        const text = formatDiagnostic({ code, params, at: {} }, language);
+        for (const value of values) expect(text).toContain(value);
+        expect(text).not.toContain("undefined");
       }
     }
   });

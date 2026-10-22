@@ -5,6 +5,8 @@ export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
 export { mountChordTrack } from "./chord-track";
 export type { ScoreCommand } from "./commands";
+export type { ProjectCommand } from "./commands-project";
+export { checkProject } from "./commands-project";
 export { mountCutNotice } from "./cut-notice";
 export type {
   CommandDiagnosticCode,
@@ -12,11 +14,14 @@ export type {
   DiagnosticAt,
   DiagnosticCode,
   DiagnosticParams,
+  NoticeDiagnosticCode,
   ReadingDiagnosticCode,
 } from "./diagnostics";
 export {
   COMMAND_DIAGNOSTIC_CODES,
   formatDiagnostic,
+  isNoticeDiagnostic,
+  NOTICE_DIAGNOSTIC_CODES,
   READING_DIAGNOSTIC_CODES,
 } from "./diagnostics";
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
