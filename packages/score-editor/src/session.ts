@@ -2,7 +2,7 @@
 // ABOUTME: Headless: it touches no DOM, so it imports and runs in Node and in a Worker like the rest of the headless layer.
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
-import type { ProjectCommand } from "./commands-project";
+import { isProjectCommand, type ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
@@ -81,7 +81,7 @@ export type SessionChangeCause =
 
 /**
  * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view or of
- * the rejected text touches none of the five and is told by its cause alone.
+ * the rejected text touches none of the four booleans and is told by its cause alone.
  */
 export interface SessionChange {
   readonly cause: SessionChangeCause;
@@ -91,6 +91,12 @@ export interface SessionChange {
   readonly insertionPoint: boolean;
   /** The view state (zoom, scroll, language, editable) changed. */
   readonly view: boolean;
+  /**
+   * The project command a `"dispatch"` change was made by, so a log can tell a text typed into the score from the other
+   * edits. Absent on every other change, and on a dispatch of a score command or a tool run: those are told by the
+   * changed project alone.
+   */
+  readonly command?: ProjectCommand;
 }
 
 export type SessionListener = (change: SessionChange) => void;
@@ -266,28 +272,31 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     return a.length === b.length && a.every((id, at) => id === b[at]);
   }
 
-  function projectChanged(cause: SessionChangeCause): void {
+  function projectChanged(cause: SessionChangeCause, command?: ProjectCommand): void {
     const kept = idsStillInScore(selection);
     const selectionChanged = !sameIds(kept, selection);
     selection = kept;
     rejectedText = null;
-    announce(cause, { project: true, selection: selectionChanged });
+    announce(cause, { project: true, selection: selectionChanged, ...(command === undefined ? {} : { command }) });
   }
 
-  function commit(next: SongProject, cause: SessionChangeCause): void {
+  function commit(next: SongProject, cause: SessionChangeCause, command?: ProjectCommand): void {
     past.push(project);
     future.length = 0;
     project = next;
-    projectChanged(cause);
+    projectChanged(cause, command);
   }
 
   /** The one path a list of commands takes into the history: all apply, or none does. */
-  function applyCommands(commands: ReadonlyArray<ScoreCommand | ProjectCommand>): DispatchResult {
+  function applyCommands(
+    commands: ReadonlyArray<ScoreCommand | ProjectCommand>,
+    named?: ProjectCommand,
+  ): DispatchResult {
     return withDialect<DispatchResult>(
       (dialect) => {
         const applied = applyCommandList(dialect, project, commands);
         if (applied.diagnostics.length > 0) return { ok: false, project, diagnostics: applied.diagnostics };
-        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch");
+        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch", named);
         return { ok: true, project, diagnostics: [] };
       },
       (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),
@@ -396,7 +405,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       announce("select", { selection: true });
     },
     dispatch(command) {
-      return applyCommands([command]);
+      return applyCommands([command], isProjectCommand(command) ? command : undefined);
     },
     runTool(tool, values = {}) {
       const result = applyToolRequest(tool, { project, selection, values }, dialects);

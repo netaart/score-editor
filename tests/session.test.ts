@@ -653,7 +653,14 @@ C5|`;
     expect(session.project).toEqual({ ...project, score: typed });
     expect(session.reading.kind === "score" && session.reading.score.bars.length).toBe(3);
     expect(changes).toEqual([
-      { cause: "dispatch", project: true, selection: false, insertionPoint: false, view: false },
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        command: { type: "replaceScoreText", text: typed },
+      },
     ]);
 
     expect(session.undo()).toBe(true);
@@ -661,6 +668,30 @@ C5|`;
     expect(session.canUndo).toBe(false);
     expect(session.redo()).toBe(true);
     expect(session.project.score).toBe(typed);
+  });
+
+  it("is told by the change it made, with the command, so a log can call it a direct edit of the score text", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.dispatch({ type: "replaceScoreText", text: typed });
+    session.undo();
+    session.redo();
+
+    expect(changes.map((change) => change.cause)).toEqual(["dispatch", "undo", "redo"]);
+    expect(changes[0]?.command).toEqual({ type: "replaceScoreText", text: typed });
+    expect(changes[1]).not.toHaveProperty("command");
+    expect(changes[2]).not.toHaveProperty("command");
+  });
+
+  it("is the only change that names its command: an edit of the notes is told by the project alone", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).not.toHaveProperty("command");
   });
 
   it("is refused for an unreadable text: nothing changes, no step, nothing is announced", () => {

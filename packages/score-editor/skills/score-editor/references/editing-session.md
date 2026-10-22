@@ -58,8 +58,8 @@ const session = createEditingSession({
 | `replaceDialects(next)` | Reads the project with another registry. The history stays. No-op for the same registry. |
 | `subscribe(listener)` | Calls `listener(change)` after every change and returns the unsubscribe function. |
 
-`SessionChange` is `{ cause, project, selection, insertionPoint, view }`. The four booleans say which state the change
-touched; `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,
+`SessionChange` is `{ cause, project, selection, insertionPoint, view, command? }`. The four booleans say which state the change
+touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,
 `"replace"`, `"active-view"` or `"rejected-text"`; the last two touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
 of the change; its error goes to `reportError`.
 

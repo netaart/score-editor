@@ -82,8 +82,10 @@ if (reading.score) {
 `ProjectCommand` is the union of edits that act on the project and not on a parsed score. Today it has
 `{ type: "replaceScoreText", text }`, which replaces the whole score text: the dialect must read `text` and its
 `check` must pass, and the project then holds the text as the dialect writes it; otherwise the project keeps its
-old text and the result carries the first diagnostic. It is the command the text view sends, so a history step of
-this `type` is a person's direct edit of the score text.
+old text and the result carries the first diagnostic. It is the command the text view sends. A session announces a
+`dispatch` of it with the command in `SessionChange.command`, so a host can tell a person's direct edit of the score
+text from the other edits as it happens. The undo history keeps whole projects, not commands, so nothing in it, and
+nothing in a project that was saved and loaded again, says how the text came to be what it is.
 
 ```ts
 const taken = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: typed });
