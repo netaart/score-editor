@@ -6,7 +6,7 @@ import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
-import { applyToolCommands, buildToolCommands, previewTool as computePreview } from "./tool";
+import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
 import type { Language } from "./types";
 
 /** What reading the project's score came to: a score, or the reason there is none. */
@@ -222,12 +222,12 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   function applyCommands(commands: ReadonlyArray<ScoreCommand>): DispatchResult {
     return withDialect<DispatchResult>(
       (dialect) => {
-        const applied = applyToolCommands(dialect, project, commands);
+        const applied = applyCommandList(dialect, project, commands);
         if (applied.diagnostics.length > 0) return { ok: false, project, diagnostics: applied.diagnostics };
         if (!sameProject(project, applied.project)) commit(applied.project, "dispatch");
         return { ok: true, project, diagnostics: [] };
       },
-      (modelId) => ({ ok: false, project, diagnostics: [{ code: "no-dialect", params: { modelId }, at: {} }] }),
+      (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),
     );
   }
 
@@ -301,11 +301,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       return applyCommands([command]);
     },
     runTool(tool, values = {}) {
-      const built = buildToolCommands(tool, project, selection, values);
-      if (built.diagnostics.length > 0) {
-        return { ok: false, project, diagnostics: built.diagnostics, commands: built.commands };
-      }
-      return { ...applyCommands(built.commands), commands: built.commands };
+      const result = applyToolRequest(tool, { project, selection, values }, dialects);
+      if (result.ok && !sameProject(project, result.project)) commit(result.project, "dispatch");
+      return result;
     },
     previewTool(tool, values = {}) {
       return computePreview(tool, project, selection, values, dialects);
@@ -337,18 +335,3 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
   };
 }
-/** Runs a tool through an editing session, so a caller that holds only the function and the session can do the same. */
-export function runTool(session: EditingSession, tool: ScoreTool, values?: ToolParameterValues): ToolResult;
-export function runTool(tool: ScoreTool, session: EditingSession, values?: ToolParameterValues): ToolResult;
-export function runTool(
-  first: EditingSession | ScoreTool,
-  second: EditingSession | ScoreTool,
-  values: ToolParameterValues = {},
-): ToolResult {
-  const session = ("runTool" in first ? first : second) as EditingSession;
-  const tool = ("runTool" in first ? second : first) as ScoreTool;
-  return session.runTool(tool, values);
-}
-
-/** The same run under the name that pairs with `ScoreTool`. */
-export const runScoreTool = runTool;
