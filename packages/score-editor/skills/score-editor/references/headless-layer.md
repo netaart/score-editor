@@ -118,8 +118,8 @@ if (score) {
 
 - Events are the `Vocal` and `Ins` notes (a tied chain once, from its first note to the end of its last; a rest is
   silent) and each chord span, in time order. `at` and `length` are seconds counted from `fromTick`.
-- Seconds come from the score's tempo. Positions come from the score's own ticks, so a bar in 3/4 or 6/8 and a change
-  of meter are already in them.
+- Seconds come from the score's tempo, of which a score has one (`score.tempo`; the format has no tempo changes).
+  Positions come from the score's own ticks, so a bar in 3/4 or 6/8 and a change of meter are already in them.
 - From a start tick, a note that began before it is not sounded again, and the chord in force at the start is heard to
   its end. A cut score ends where its music ends, not at the end of the bar the cut is in. `length` is 0 when there is
   nothing to play.

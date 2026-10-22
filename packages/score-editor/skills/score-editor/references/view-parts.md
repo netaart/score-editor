@@ -193,7 +193,7 @@ noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once
 ```
 
 - The preview plays `Vocal`, `Ins` and the chord of each span, from the insertion point, or from the start when there
-  is none or the session is not editable. Tempo and meter are the score's own. It stops at the end of the music, when
+  is none or the session is not editable. The one tempo and each bar's meter are the score's own. It stops at the end of the music, when
   the project changes, when Escape is pressed, when the browser interrupts the audio, and when an `<audio>` or `<video>` element in the page's
   document starts playing. It does not pause sound the page already plays.
 - Start sound only inside a user gesture: call `player.start()` and `previewNote()` synchronously from a click, tap or
