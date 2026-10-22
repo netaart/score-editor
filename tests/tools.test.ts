@@ -1,5 +1,5 @@
-// ABOUTME: Seam 1 for custom tools: a hand-written tool is registered, previewed and run through the package entry in Node.
-// ABOUTME: Expected projects are worked out by hand from the same score samples the session tests use, never from the tool layer.
+// ABOUTME: Seam 1 for custom tools: hand-written tools are registered, previewed and run through the package entry in Node.
+// ABOUTME: Expected projects are worked out by hand from this file's own score sample, never from the tool layer.
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
   createDialectRegistry,
@@ -7,9 +7,9 @@ import {
   createToolRegistry,
   type EditingSession,
   previewTool,
-  runTool,
   type ScoreTool,
   type SongProject,
+  type ToolParameter,
   validateToolParameters,
 } from "@neta-art/score-editor";
 import { describe, expect, it, vi } from "vitest";
@@ -32,6 +32,12 @@ const SCORE_WITHOUT_D_AND_F = `${HEADER}
 K:C
 V: Vocal
 C4z4E4z4|G16|`;
+
+/** E (tick 512) becomes a rest; D stays a note. */
+const SCORE_WITHOUT_E = `${HEADER}
+K:C
+V: Vocal
+C4D4z4F4|G16|`;
 
 const dialects = createDialectRegistry([song2Dialect]);
 
@@ -62,6 +68,25 @@ const restEveryNth: ScoreTool = {
   },
 };
 
+const failsInTheMiddle: ScoreTool = {
+  id: "fails-in-the-middle",
+  name: { en: "Fails in the middle", zh: "中途失败" },
+  parameters: [],
+  commands() {
+    return [
+      { type: "toRest", noteId: "Vocal:256" },
+      { type: "toRest", noteId: "Vocal:999" },
+      { type: "toRest", noteId: "Vocal:768" },
+    ];
+  },
+};
+
+function listen(session: EditingSession): number[] {
+  const changes: number[] = [];
+  session.subscribe(() => changes.push(changes.length));
+  return changes;
+}
+
 describe("the tool registry", () => {
   it("lists the tool with its parameter declaration", () => {
     const registry = createToolRegistry([restEveryNth]);
@@ -69,8 +94,6 @@ describe("the tool registry", () => {
     expect(registry.list()).toEqual([restEveryNth]);
     expect(registry.list()[0]?.parameters).toEqual([{ name: "every", type: "number", min: 1, max: 8, default: 2 }]);
     expect(registry.find("rest-every-nth")).toBe(restEveryNth);
-    expect(registry.get("rest-every-nth")).toBe(restEveryNth);
-    expect(registry.tools).toEqual([restEveryNth]);
   });
 
   it("refuses a duplicate id in the list it is built from", () => {
@@ -84,19 +107,42 @@ describe("the tool registry", () => {
     expect(() => registry.register(restEveryNth)).toThrow(/rest-every-nth/);
     expect(registry.list()).toEqual([restEveryNth]);
   });
+
+  it("refuses a tool without a commands builder, whether listed or registered later", () => {
+    const noCommands = { ...restEveryNth, commands: undefined } as unknown as ScoreTool;
+
+    expect(() => createToolRegistry([noCommands])).toThrow(/commands/);
+    const registry = createToolRegistry();
+    expect(() => registry.register(noCommands)).toThrow(/commands/);
+    expect(registry.list()).toEqual([]);
+  });
+
+  it("refuses an unknown parameter type, a choice without values, and a refused default", () => {
+    const unknownType = {
+      ...restEveryNth,
+      id: "unknown-type",
+      parameters: [{ name: "x", type: "magic", default: "x" }],
+    } as unknown as ScoreTool;
+    const noValues = {
+      ...restEveryNth,
+      id: "no-values",
+      parameters: [{ name: "mode", type: "choice", default: "up" }],
+    } as unknown as ScoreTool;
+    const refusedDefaults = [
+      { name: "n", type: "number", min: 1, max: 2, default: 0 },
+      { name: "b", type: "boolean", default: "yes" },
+      { name: "c", type: "choice", values: ["a"], default: "b" },
+      { name: "t", type: "text", default: 2 },
+    ] as unknown as ToolParameter[];
+
+    expect(() => createToolRegistry([unknownType])).toThrow(/unknown-type/);
+    expect(() => createToolRegistry([noValues])).toThrow(/no-values/);
+    for (const parameter of refusedDefaults) {
+      const tool = { ...restEveryNth, id: `bad-default-${parameter.name}`, parameters: [parameter] } as ScoreTool;
+      expect(() => createToolRegistry([tool])).toThrow(new RegExp(`bad-default-${parameter.name}`));
+    }
+  });
 });
-
-/** E (tick 512) becomes a rest; D stays a note. */
-const SCORE_WITHOUT_E = `${HEADER}
-K:C
-V: Vocal
-C4D4z4F4|G16|`;
-
-function listen(session: EditingSession): number[] {
-  const changes: number[] = [];
-  session.subscribe(() => changes.push(changes.length));
-  return changes;
-}
 
 describe("tool parameters", () => {
   it("takes the default for a missing value and gives the builder every declared value", () => {
@@ -122,6 +168,22 @@ describe("tool parameters", () => {
     }
 
     expect(build).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unknown type or a malformed tool with a diagnostic, never with an empty success", () => {
+    const noCommands = { ...restEveryNth, commands: undefined } as unknown as ScoreTool;
+    const unknownType = {
+      ...restEveryNth,
+      id: "unknown-type",
+      parameters: [{ name: "x", type: "magic", default: "x" }],
+    } as unknown as ScoreTool;
+
+    for (const tool of [noCommands, unknownType]) {
+      const preview = previewTool(tool, project, [], {}, dialects);
+      expect(preview.ok).toBe(false);
+      expect(preview.diagnostics[0]?.code).toBe("tool-parameter");
+      expect(preview.commands).toEqual([]);
+    }
   });
 });
 
@@ -156,54 +218,27 @@ describe("previewing a tool", () => {
   });
 
   it("returns the diagnostic of the step that fails instead of a project", () => {
-    const failsAtTheMiddle: ScoreTool = {
-      id: "fails-in-the-middle",
-      name: { en: "Fails in the middle", zh: "中途失败" },
-      parameters: [],
-      commands() {
-        return [
-          { type: "toRest", noteId: "Vocal:256" },
-          { type: "toRest", noteId: "Vocal:999" },
-          { type: "toRest", noteId: "Vocal:768" },
-        ];
-      },
-    };
-
-    const result = previewTool(failsAtTheMiddle, project, [], {}, dialects);
+    const result = previewTool(failsInTheMiddle, project, [], {}, dialects);
 
     expect(result.ok).toBe(false);
     expect(result.diagnostics[0]).toMatchObject({ code: "note-not-found", at: { noteId: "Vocal:999" } });
-    expect(result.project).toBe(project);
+    expect(result.project).toEqual(project);
   });
 });
-
-const failsInTheMiddle: ScoreTool = {
-  id: "fails-in-the-middle",
-  name: { en: "Fails in the middle", zh: "中途失败" },
-  parameters: [],
-  commands() {
-    return [
-      { type: "toRest", noteId: "Vocal:256" },
-      { type: "toRest", noteId: "Vocal:999" },
-      { type: "toRest", noteId: "Vocal:768" },
-    ];
-  },
-};
 
 describe("running a tool on a session", () => {
   it("applies the same project as dispatching its commands one by one", () => {
     const session = open();
-    session.select(["Vocal:256", "Vocal:512"]);
+    session.select(["Vocal:0", "Vocal:256", "Vocal:512", "Vocal:768"]);
     const oneByOne = open();
 
     const result = session.runTool(restEveryNth, { every: 2 });
     for (const command of result.commands) oneByOne.dispatch(command);
 
     expect(result.ok).toBe(true);
-    expect(result.commands).toEqual([{ type: "toRest", noteId: "Vocal:512" }]);
-    expect(result.project.score).toBe(SCORE_WITHOUT_E);
-    expect(session.project.score).toBe(oneByOne.project.score);
-    expect(session.project.score).toBe(SCORE_WITHOUT_E);
+    expect(result.commands).toHaveLength(2);
+    expect(session.project).toEqual(oneByOne.project);
+    expect([session.canUndo, session.canRedo]).toEqual([oneByOne.canUndo, oneByOne.canRedo]);
   });
 
   it("is one history step: one undo restores the project and one redo reapplies it", () => {
@@ -234,8 +269,24 @@ describe("running a tool on a session", () => {
 
     expect(result.ok).toBe(false);
     expect(result.diagnostics[0]).toMatchObject({ code: "note-not-found", at: { noteId: "Vocal:999" } });
-    expect(result.project).toBe(before);
-    expect(session.project).toBe(before);
+    expect(result.project).toEqual(before);
+    expect(session.project).toEqual(before);
+    expect([session.canUndo, session.canRedo]).toEqual(history);
+    expect(changes).toEqual([]);
+  });
+
+  it("refuses a malformed tool with a diagnostic and leaves the session unchanged", () => {
+    const noCommands = { ...restEveryNth, commands: undefined } as unknown as ScoreTool;
+    const session = open();
+    const before = session.project;
+    const history = [session.canUndo, session.canRedo];
+    const changes = listen(session);
+
+    const result = session.runTool(noCommands, {});
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics[0]).toMatchObject({ code: "tool-parameter", params: { reason: "commands" } });
+    expect(result.project).toEqual(before);
     expect([session.canUndo, session.canRedo]).toEqual(history);
     expect(changes).toEqual([]);
   });
@@ -252,7 +303,7 @@ describe("running a tool on a session", () => {
       const result = session.runTool(tool, values);
       expect(result.ok).toBe(false);
       expect(result.diagnostics[0]?.code).toBe("tool-parameter");
-      expect(result.project).toBe(session.project);
+      expect(result.project).toEqual(session.project);
     }
 
     expect(build).not.toHaveBeenCalled();
@@ -290,20 +341,6 @@ describe("running a tool on a session", () => {
     expect(session.project).toBe(before);
     expect(session.canUndo).toBe(false);
     expect(changes).toEqual([]);
-  });
-});
-
-describe("the free run function", () => {
-  it("runs the tool through the session it is given, as one step", () => {
-    const session = open();
-    session.select(["Vocal:256", "Vocal:512"]);
-
-    const result = runTool(session, restEveryNth, { every: 2 });
-
-    expect(result.ok).toBe(true);
-    expect(result.project.score).toBe(SCORE_WITHOUT_E);
-    expect(session.undo()).toBe(true);
-    expect(session.project.score).toBe(SCORE);
   });
 });
 

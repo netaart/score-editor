@@ -33,7 +33,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
 ];
 
 describe("diagnostics", () => {
-  it("has exactly the reading codes RULES.md lists and the command codes of the edit layer", () => {
+  it("has exactly the reading codes RULES.md lists and the command codes the edit layer and tools report", () => {
     expect([...READING_DIAGNOSTIC_CODES]).toEqual(READING_CODES);
     expect([...COMMAND_DIAGNOSTIC_CODES]).toEqual(COMMAND_CODES);
   });
@@ -94,30 +94,73 @@ describe("diagnostics", () => {
 });
 
 describe("tool parameter diagnostics", () => {
-  const diagnostic = {
-    code: "tool-parameter",
-    params: { toolId: "rest-every", parameter: "every", reason: "range", min: 1, max: 8, value: 9 },
-    at: {},
-  } as const;
+  const base = { code: "tool-parameter", at: {} } as const;
 
   it("names the tool and the parameter in both languages", () => {
     for (const language of ["zh", "en"] as const) {
-      const text = formatDiagnostic(diagnostic, language);
+      const text = formatDiagnostic(
+        { ...base, params: { toolId: "rest-every", parameter: "every", reason: "range", min: 1, max: 8, value: 9 } },
+        language,
+      );
       expect(text).toContain("rest-every");
       expect(text).toContain("every");
       expect(text).not.toContain("undefined");
     }
   });
 
-  it("says which allowed values a choice takes", () => {
-    const en = formatDiagnostic(
-      {
-        code: "tool-parameter",
-        params: { toolId: "t", parameter: "mode", reason: "value", values: "up, down" },
-        at: {},
-      },
+  it("builds the type sentence from structured facts, with no English in the Chinese text", () => {
+    const cases = [
+      { type: "number", en: "number", zh: "数字" },
+      { type: "boolean", en: "true or false", zh: "真或假" },
+      { type: "text", en: "text", zh: "文本" },
+    ];
+
+    for (const { type, en, zh } of cases) {
+      const params = { toolId: "t", parameter: "p", reason: "type", type };
+      const english = formatDiagnostic({ ...base, params }, "en");
+      const chinese = formatDiagnostic({ ...base, params }, "zh");
+      expect(english).toContain(en);
+      expect(chinese).toContain(zh);
+      expect(chinese).not.toMatch(/number|true or false|text/);
+    }
+  });
+
+  it("writes a both-sided, a min-only and a max-only range in each language", () => {
+    const cases = [
+      { params: { min: 1, max: 8 }, en: "between 1 and 8", zh: "1 到 8 之间" },
+      { params: { min: 1 }, en: "at least 1", zh: "不小于 1" },
+      { params: { max: 8 }, en: "at most 8", zh: "不大于 8" },
+    ];
+
+    for (const { params, en, zh } of cases) {
+      const diagnostic = {
+        ...base,
+        params: { toolId: "t", parameter: "p", reason: "range", ...params },
+      };
+      expect(formatDiagnostic(diagnostic, "en")).toContain(en);
+      expect(formatDiagnostic(diagnostic, "zh")).toContain(zh);
+    }
+  });
+
+  it("says which allowed values a choice takes and uses the type sentence for an unknown reason", () => {
+    const choice = formatDiagnostic(
+      { ...base, params: { toolId: "t", parameter: "mode", reason: "value", values: "up, down" } },
       "en",
     );
-    expect(en).toContain("up, down");
+    expect(choice).toContain("up, down");
+
+    const unknownReason = formatDiagnostic(
+      { ...base, params: { toolId: "t", parameter: "p", reason: "something-else", type: "text" } },
+      "en",
+    );
+    expect(unknownReason).toContain("text");
+  });
+
+  it("says a malformed tool has no commands builder", () => {
+    for (const language of ["zh", "en"] as const) {
+      const text = formatDiagnostic({ ...base, params: { toolId: "t", reason: "commands" } }, language);
+      expect(text).toContain("t");
+      expect(text).not.toContain("undefined");
+    }
   });
 });
