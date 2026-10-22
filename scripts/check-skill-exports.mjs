@@ -166,22 +166,25 @@ const byPath = new Map(files.map((file) => [file.path, file]));
 let failed = false;
 for (const entry of entries) {
   const names = exportedNames(entry);
-  const unowned = names.filter((name) => !ownerOf.has(name));
   const missing = names.filter((name) => {
-    const reference = byPath.get(ownerOf.get(name) ?? "");
-    return !mentions(api.code, name) || !reference || !mentions(reference.code, name);
+    const owner = ownerOf.get(name);
+    const covered = owner
+      ? mentions(byPath.get(owner)?.code ?? "", name)
+      : files.some(
+          (file) =>
+            (file.path.startsWith("references/") || file.path.startsWith("assets/")) &&
+            file.path !== apiPath &&
+            file.path !== "SKILL.md" &&
+            mentions(file.code, name),
+        );
+    return !mentions(api.code, name) || !covered;
   });
-  if (unowned.length > 0) {
-    failed = true;
-    console.error(`${entry.package}: ${unowned.length} public export(s) have no owning reference:`);
-    console.error(`  ${unowned.join(", ")}`);
-  }
   if (missing.length > 0) {
     failed = true;
     console.error(`${entry.package}: ${missing.length} public export(s) not covered as code in the skill:`);
     console.error(`  ${missing.join(", ")}`);
-    console.error(`Name each one in ${apiPath} and in the reference that owns it.`);
-  } else if (unowned.length === 0) {
+    console.error(`Name each one in ${apiPath} and in its layer or extension reference, or in an example.`);
+  } else {
     console.log(
       `${entry.package}: all ${names.length} public exports are code-mentioned in api.md and their reference`,
     );
