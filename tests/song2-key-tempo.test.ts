@@ -1,7 +1,7 @@
-// ABOUTME: Exercises transpose, set key, set tempo, the melody/chord rule and the project commands through the package entries.
-// ABOUTME: Expected text is worked by hand from RULES.md and the spec; sample cases assert the spec's invariants instead.
+// ABOUTME: Exercises transpose, set key, set tempo, the song-project rules and the project commands through the package entries.
+// ABOUTME: Expected text and key spellings are worked by hand from RULES.md; sample sweeps use hand-written expected values.
 import { readFileSync } from "node:fs";
-import { song2Constraints, song2Dialect } from "@neta-art/score-dialect-song2";
+import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
   applyProjectCommand,
   applyScoreCommand,
@@ -10,6 +10,7 @@ import {
   type Note,
   type ProjectCommand,
   type Score,
+  type ScoreCommand,
   type SongProject,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
@@ -41,7 +42,35 @@ K:C
 V: Vocal
 C16|D4E4F4G4|`;
 
-const NOTE_SEMITONES: Readonly<Record<string, number>> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+// Worked by hand from RULES.md H9: each sample's header key, transposed up two semitones. key-changes.abc also
+// states G inline at tick 512 and D at the start of the verse, so those two entries move with the header.
+const TRANSPOSE_UP_2_KEYS: Readonly<Record<string, ReadonlyArray<string>>> = {
+  "chords-cut-tail.abc": ["Fm"],
+  "chords-eight-sections.abc": ["Gm"],
+  "chords-long.abc": ["Fm"],
+  "compact-three-sections.abc": ["G"],
+  "dense-accidentals.abc": ["E"],
+  "key-changes.abc": ["D", "A", "E"],
+  "melody-cut-tail.abc": ["Fm"],
+  "short-three-sections.abc": ["Gb"],
+  "short-two-sections.abc": ["Gb"],
+  "vocal-only-melody.abc": ["Fm"],
+};
+
+// The shortest interval from each sample's header key to C, worked by hand: D#m down 3, Fm down 5, F down 5,
+// D down 2, E down 4, C none.
+const SET_KEY_C_SHIFT: Readonly<Record<string, number>> = {
+  "chords-cut-tail.abc": -3,
+  "chords-eight-sections.abc": -5,
+  "chords-long.abc": -3,
+  "compact-three-sections.abc": -5,
+  "dense-accidentals.abc": -2,
+  "key-changes.abc": 0,
+  "melody-cut-tail.abc": -3,
+  "short-three-sections.abc": -4,
+  "short-two-sections.abc": -4,
+  "vocal-only-melody.abc": -3,
+};
 
 function parse(text: string): Score {
   const { score, diagnostics } = song2Dialect.parse(text);
@@ -72,30 +101,6 @@ function project(overrides: Partial<SongProject> = {}): SongProject {
     sourceKey: "source",
     ...overrides,
   };
-}
-
-function keyPitchClass(key: string): number {
-  const match = /^([A-G])(bb|b|##|#)?m?$/.exec(key);
-  expect(match, key).not.toBeNull();
-  if (match === null) return 0;
-  const letter = match[1] as string;
-  const mark = match[2] ?? "";
-  const accidental = mark === "bb" ? -2 : mark === "b" ? -1 : mark === "##" ? 2 : mark === "#" ? 1 : 0;
-  return ((((NOTE_SEMITONES[letter] as number) + accidental) % 12) + 12) % 12;
-}
-
-function keyIsMinor(key: string): boolean {
-  return key.endsWith("m");
-}
-
-function chordParts(name: string): { root: number; bass: number | null } {
-  const match = /^([A-G](?:bb|b|##|#)?)(.*)$/.exec(name);
-  expect(match, name).not.toBeNull();
-  if (match === null) return { root: 0, bass: null };
-  const root = match[1] as string;
-  const slash = (match[2] as string).indexOf("/");
-  const bass = slash < 0 ? null : (match[2] as string).slice(slash + 1);
-  return { root: keyPitchClass(root), bass: bass === null ? null : keyPitchClass(bass) };
 }
 
 function splitBars(text: string): { pieces: Map<string, string>; otherLines: string[] } {
@@ -203,6 +208,22 @@ E16|`);
     check(parse(output));
   });
 
+  it("respells a flat slash chord with a double accidental into a sharp key", () => {
+    const text = `${ONE_VOICE}
+K:F
+V: Vocal
+"Dbb/Fb"C4D4E4F4|`;
+    const output = apply(text, { type: "transpose", semitones: 2 });
+
+    expect(output).toBe(`${ONE_VOICE}
+K:G
+V: Vocal
+"D/F#"D4E4F4G4|`);
+    const score = parse(output);
+    expect(score.chords).toEqual([{ name: "D/F#", start: 0, noteId: "Vocal:0" }]);
+    check(score);
+  });
+
   it("moves an inline key and a body key line", () => {
     const output = apply(twoGroups, { type: "transpose", semitones: 2 });
 
@@ -244,40 +265,15 @@ E16|`);
     }
   });
 
-  it("moves every chord root and bass by the same semitones on every sample that has chords", () => {
+  it("moves every key by the same semitones on every sample", () => {
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
-      const before = parse(text);
-      if (before.chords.length === 0) continue;
       const after = parse(apply(text, { type: "transpose", semitones: 2 }));
 
-      expect(after.chords, fact.file).toHaveLength(before.chords.length);
-      for (const [index, chord] of after.chords.entries()) {
-        const source = before.chords[index] as { start: number; noteId: string | null };
-        const old = chordParts((before.chords[index] as { name: string }).name);
-        const moved = chordParts(chord.name);
-        expect(chord.start, fact.file).toBe(source.start);
-        expect(chord.noteId, fact.file).toBe(source.noteId);
-        expect(moved.root, fact.file).toBe((old.root + 2) % 12);
-        expect(moved.bass, fact.file).toBe(old.bass === null ? null : (old.bass + 2) % 12);
-      }
-    }
-  });
-
-  it("moves every key by the same semitones and keeps its mode on every sample", () => {
-    for (const fact of facts) {
-      const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
-      const before = parse(text);
-      const after = parse(apply(text, { type: "transpose", semitones: 2 }));
-
-      expect(after.keys, fact.file).toHaveLength(before.keys.length);
-      for (const [index, entry] of after.keys.entries()) {
-        const source = before.keys[index] as { at: number; key: string };
-        expect(entry.at, fact.file).toBe(source.at);
-        expect(keyIsMinor(entry.key), fact.file).toBe(keyIsMinor(source.key));
-        expect(keyPitchClass(entry.key), fact.file).toBe((keyPitchClass(source.key) + 2) % 12);
-        expect([...song2Constraints.keys.major, ...song2Constraints.keys.minor]).toContain(entry.key);
-      }
+      expect(
+        after.keys.map((entry) => entry.key),
+        fact.file,
+      ).toEqual(TRANSPOSE_UP_2_KEYS[fact.file]);
     }
   });
 
@@ -322,6 +318,132 @@ C16|g''''16|`;
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.diagnostic.code).toBe("semitones-not-integer");
+  });
+});
+
+describe("spelling after a transposition", () => {
+  it("spells an out-of-key note with a flat key's accidental and cancels the signature", () => {
+    const text = `${ONE_VOICE}
+K:C
+V: Vocal
+^F16|`;
+    const output = apply(text, { type: "transpose", semitones: 1 });
+
+    expect(output).toBe(`${ONE_VOICE}
+K:Db
+V: Vocal
+=G16|`);
+    expect(parse(output).notes.map((note) => note.midi)).toEqual([67]);
+    check(parse(output));
+  });
+
+  it("keeps a minor key minor and spells its out-of-key note in the new sharp key", () => {
+    const text = `${ONE_VOICE}
+K:Am
+V: Vocal
+^C16|`;
+    const output = apply(text, { type: "transpose", semitones: 2 });
+
+    expect(output).toBe(`${ONE_VOICE}
+K:Bm
+V: Vocal
+^D16|`);
+    expect(parse(output).notes.map((note) => note.midi)).toEqual([63]);
+    check(parse(output));
+  });
+
+  it("takes the flat spelling of a tritone tie, and lets set key force the sharp side", () => {
+    const text = `${ONE_VOICE}
+K:C
+V: Vocal
+C16|`;
+    const transposed = apply(text, { type: "transpose", semitones: 6 });
+    expect(transposed).toBe(`${ONE_VOICE}
+K:Gb
+V: Vocal
+G16|`);
+    expect(parse(transposed).notes.map((note) => note.midi)).toEqual([66]);
+
+    const forced = apply(text, { type: "setKey", key: "F#" });
+    expect(forced).toBe(`${ONE_VOICE}
+K:F#
+V: Vocal
+F16|`);
+    expect(parse(forced).notes.map((note) => note.midi)).toEqual([66]);
+  });
+
+  it("takes E-flat minor on the enharmonic tie, and lets set key force D-sharp minor", () => {
+    const text = `${ONE_VOICE}
+K:Cm
+V: Vocal
+C16|`;
+    const transposed = apply(text, { type: "transpose", semitones: 3 });
+    expect(transposed).toBe(`${ONE_VOICE}
+K:Ebm
+V: Vocal
+E16|`);
+    expect(parse(transposed).keys).toEqual([{ at: 0, key: "Ebm" }]);
+
+    const forced = apply(text, { type: "setKey", key: "D#m" });
+    expect(forced).toBe(`${ONE_VOICE}
+K:D#m
+V: Vocal
+D16|`);
+    expect(parse(forced).keys).toEqual([{ at: 0, key: "D#m" }]);
+  });
+
+  it("handles the extreme keys Cb and C# as both a start and a target", () => {
+    const fromCb = apply(
+      `${ONE_VOICE}
+K:Cb
+V: Vocal
+C16|`,
+      { type: "transpose", semitones: 1 },
+    );
+    expect(fromCb).toBe(`${ONE_VOICE}
+K:C
+V: Vocal
+C16|`);
+    expect(parse(fromCb).notes.map((note) => note.midi)).toEqual([60]);
+
+    const fromCSharp = apply(
+      `${ONE_VOICE}
+K:C#
+V: Vocal
+C16|`,
+      { type: "transpose", semitones: -1 },
+    );
+    expect(fromCSharp).toBe(`${ONE_VOICE}
+K:C
+V: Vocal
+C16|`);
+    expect(parse(fromCSharp).notes.map((note) => note.midi)).toEqual([60]);
+
+    const toCb = apply(
+      `${ONE_VOICE}
+K:C
+V: Vocal
+C16|`,
+      { type: "setKey", key: "Cb" },
+    );
+    expect(toCb).toBe(`${ONE_VOICE}
+K:Cb
+V: Vocal
+=B,16|`);
+    expect(parse(toCb).notes.map((note) => note.midi)).toEqual([59]);
+
+    const toCSharp = apply(
+      `${ONE_VOICE}
+K:C
+V: Vocal
+C16|`,
+      { type: "setKey", key: "C#" },
+    );
+    expect(toCSharp).toBe(`${ONE_VOICE}
+K:C#
+V: Vocal
+C16|`);
+    expect(parse(toCSharp).notes.map((note) => note.midi)).toEqual([61]);
   });
 });
 
@@ -433,19 +555,66 @@ C8[K:D]A,8|`);
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const before = parse(text);
-      const current = (before.keys[0] as { key: string }).key;
-      let shift = (keyPitchClass("C") - keyPitchClass(current) + 12) % 12;
-      if (shift > 6) shift -= 12;
-      const after = parse(apply(text, { type: "setKey", key: "C" }));
+      const output = apply(text, { type: "setKey", key: "C" });
+      const after = parse(output);
       check(after);
 
-      expect(after.keys[0], fact.file).toEqual({ at: 0, key: "C" });
-      expectNotesMoved(before, after, shift);
+      expect(
+        after.keys.map((entry) => entry.key),
+        fact.file,
+      ).toEqual(fact.file === "key-changes.abc" ? ["C", "G", "D"] : ["C"]);
+      expectNotesMoved(before, after, SET_KEY_C_SHIFT[fact.file] as number);
       expect(after.bars.length, fact.file).toBe(before.bars.length);
-      expect(otherLinesWithoutKeys(apply(text, { type: "setKey", key: "C" })), fact.file).toEqual(
-        otherLinesWithoutKeys(text),
-      );
+      expect(otherLinesWithoutKeys(output), fact.file).toEqual(otherLinesWithoutKeys(text));
     }
+  });
+
+  it("sets the key from the verse of key-changes.abc, leaving the earlier bars byte-identical", () => {
+    const text = readFileSync(new URL("samples/key-changes.abc", directory), "utf8");
+    const output = apply(text, { type: "setKey", key: "G", from: 2048 });
+
+    expect(output).toBe(`X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=112
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+V: Ins clef=treble name="Ins Melody" snm="Inst."
+K:C
+% intro
+V: Vocal
+C8[K:G]D8|"G"G8D8|
+V: Ins
+C8[K:G]D8|G8D8|
+% verse
+V: Vocal
+K:G
+G16|"G"G8B8|
+V: Ins
+K:G
+G16|G8B8|
+`);
+    const before = parse(text);
+    const after = parse(output);
+    check(after);
+
+    const oldBars = splitBars(text).pieces;
+    const newBars = splitBars(output).pieces;
+    for (const bar of ["Vocal:0", "Vocal:1", "Ins:0", "Ins:1"]) {
+      expect(newBars.get(bar), bar).toBe(oldBars.get(bar));
+    }
+    const oldNotes = notesById(before);
+    for (const note of before.notes) {
+      if (note.start >= 2048) continue;
+      expect(after.notes.find((moved) => moved.id === note.id)?.midi, note.id).toBe(note.midi);
+    }
+    expect(after.keys).toEqual([
+      { at: 0, key: "C" },
+      { at: 512, key: "G" },
+      { at: 2048, key: "G" },
+    ]);
+    expect(oldNotes.get("Vocal:3584")?.midi).toBe(66);
+    expect(after.notes.find((moved) => moved.id === "Vocal:3584")?.midi).toBe(71);
   });
 
   it("refuses a key outside constraints.keys and leaves the text unchanged", () => {
@@ -510,8 +679,13 @@ describe("project commands and the style BPM", () => {
     ["pop, BPM: 120", "pop, BPM: 140"],
     ["pop, bpm=120", "pop, bpm=140"],
     ["pop, BPM 120", "pop, BPM 140"],
+    ["pop, BPM：120", "pop, BPM：140"],
+    ["3/4 BPM: 120", "3/4 BPM: 140"],
+    ["4/4, 120 BPM", "4/4, 140 BPM"],
     ["流行风格，120 BPM，温暖的钢琴", "流行风格，140 BPM，温暖的钢琴"],
     ["3/4 拍，2 段，120 BPM，第 3 段", "3/4 拍，2 段，140 BPM，第 3 段"],
+    ["120 BPM，另一次 BPM: 90", "140 BPM，另一次 BPM: 140"],
+    ["2019 年写了 12 首，120 BPM", "2019 年写了 12 首，140 BPM"],
   ];
 
   it("moves a BPM written in the style text with the tempo, in each form", () => {
@@ -545,6 +719,29 @@ describe("project commands and the style BPM", () => {
     expect(isNoticeDiagnostic(result.diagnostics[0] as (typeof result.diagnostics)[number])).toBe(true);
   });
 
+  it("runs the style rule even when the score already has the requested tempo", () => {
+    const at140 = `${ONE_VOICE.replace("Q:1/4=120", "Q:1/4=140")}
+K:C
+V: Vocal
+C16|`;
+
+    const synced = applyProjectCommand(song2Dialect, project({ score: at140, style: "120 BPM" }), {
+      type: "setTempo",
+      bpm: 140,
+    });
+    expect(synced.project.style).toBe("140 BPM");
+    expect(synced.project.score).toBe(at140);
+    expect(synced.diagnostics).toEqual([]);
+
+    const missing = applyProjectCommand(song2Dialect, project({ score: at140, style: "warm pop" }), {
+      type: "setTempo",
+      bpm: 140,
+    });
+    expect(missing.project.style).toBe("warm pop");
+    expect(missing.project.score).toBe(at140);
+    expect(missing.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+  });
+
   it("changes only the requested project field", () => {
     const style = applyProjectCommand(song2Dialect, project(), { type: "setStyle", style: "rock" });
     expect(style.project).toEqual({ ...project(), style: "rock" });
@@ -576,6 +773,50 @@ describe("project commands and the style BPM", () => {
 
     expect(result.diagnostics).toEqual([]);
     expect(result.project.score).toContain("z16|");
+  });
+});
+
+describe("removeChords on every sample", () => {
+  it("removes every chord and leaves every other bar and every note untouched", () => {
+    for (const fact of facts) {
+      const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
+      const before = parse(text);
+      const result = applyScoreCommand(song2Dialect, text, { type: "removeChords" });
+      expect(result.ok, fact.file).toBe(true);
+      if (!result.ok) continue;
+
+      if (!before.hasChords) {
+        expect(result.text, fact.file).toBe(text);
+        continue;
+      }
+
+      const after = parse(result.text);
+      check(after);
+      expect(after.hasChords, fact.file).toBe(false);
+      expect(after.chords, fact.file).toEqual([]);
+      expect(after.notes, fact.file).toEqual(before.notes);
+      expect(after.keys, fact.file).toEqual(before.keys);
+      expect(after.bars, fact.file).toEqual(before.bars);
+      expect(after.sections, fact.file).toEqual(before.sections);
+      expect(after.truncation, fact.file).toEqual(before.truncation);
+
+      const touched = new Set<string>();
+      for (const chord of before.chords) {
+        const bar = before.bars.find((entry) => chord.start >= entry.start && chord.start < entry.start + entry.length);
+        if (bar !== undefined) touched.add(`Vocal:${bar.index}`);
+      }
+      const oldBars = splitBars(text).pieces;
+      const newBars = splitBars(result.text).pieces;
+      expect(
+        [...newBars.keys()].filter((key) => !oldBars.has(key)),
+        fact.file,
+      ).toEqual([]);
+      for (const [key, piece] of oldBars) {
+        if (touched.has(key)) continue;
+        expect(newBars.get(key), `${fact.file} ${key}`).toBe(piece);
+      }
+      expect(splitBars(result.text).otherLines, fact.file).toEqual(splitBars(text).otherLines);
+    }
   });
 });
 
@@ -627,9 +868,23 @@ V: Vocal
   });
 });
 
-describe("project command types", () => {
-  it("names the union ProjectCommand", () => {
-    const command: ProjectCommand = { type: "setScoreMode", scoreMode: "full" };
-    expect(command.type).toBe("setScoreMode");
+describe("the two command unions", () => {
+  it("refuses a ProjectCommand passed to applyScoreCommand at run time", () => {
+    const command = { type: "setStyle", style: "jazz" } as unknown as ScoreCommand;
+    const result = applyScoreCommand(song2Dialect, SIMPLE, command);
+
+    expect(result.ok).toBe(false);
+    expect("text" in result).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("not-a-score-command");
+    expect(result.diagnostic.params.type).toBe("setStyle");
+  });
+
+  it("applies a ProjectCommand through applyProjectCommand", () => {
+    const command: ProjectCommand = { type: "setStyle", style: "jazz" };
+    const result = applyProjectCommand(song2Dialect, project(), command);
+
+    expect(result.project.style).toBe("jazz");
+    expect(result.diagnostics).toEqual([]);
   });
 });

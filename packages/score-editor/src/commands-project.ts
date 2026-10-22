@@ -1,10 +1,12 @@
-// ABOUTME: The song-project commands and the project-level rules: style, score mode, seed, the style BPM and melody chords.
+// ABOUTME: The song-project commands and the song-project rules: style, score mode, seed, the style BPM and melody chords.
 // ABOUTME: A project command never touches the score text; applyProjectCommand is the one entry that runs these rules.
 
 import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import type { SongProject } from "./score";
+
+const PROJECT_COMMAND_TYPES = ["setStyle", "setScoreMode", "setSeed"] as const;
 
 /** A song-project edit that is not a score edit. The name is one word so the two command kinds stay apart. */
 export type ProjectCommand =
@@ -17,8 +19,8 @@ export type ProjectCommandResult =
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
 /** The project half of the command union applyProjectCommand accepts besides ScoreCommand. */
-export function isProjectCommand(command: ScoreCommand | ProjectCommand): command is ProjectCommand {
-  return command.type === "setStyle" || command.type === "setScoreMode" || command.type === "setSeed";
+export function isProjectCommand(command: { readonly type: string }): command is ProjectCommand {
+  return (PROJECT_COMMAND_TYPES as ReadonlyArray<string>).includes(command.type);
 }
 
 /** Applies one project field edit. It never reads or writes the score text. */
@@ -45,12 +47,12 @@ export function runProjectCommand(project: SongProject, command: ProjectCommand)
   }
 }
 
-// Several ways a style text writes a BPM: "120 BPM", "120bpm", "BPM: 120", "bpm=120", "BPM 120".
-const BPM_PATTERN = /(\d+)([ \t]*)(bpm)|(bpm)([ \t]*[:=：]?[ \t]*)(\d+)/gi;
+// The forms a style text may use for a BPM are listed in the package README.
+const BPM_PATTERN = /(?<![A-Za-z0-9_/.])(\d+)([ \t]*)(bpm)\b|(?<![A-Za-z0-9_])(bpm)([ \t]*[:=：]?[ \t]*)(\d+)/gi;
 
 /**
- * Replaces every BPM written in a style text. A number with no BPM word next to it is left alone,
- * so a meter, a count or a year in the same sentence survives the tempo change.
+ * Replaces every BPM written in a style text. A BPM number stands next to the BPM word and is not part of a
+ * larger token, so a meter such as 3/4, a count or a year in the same sentence survives the tempo change.
  */
 export function styleWithTempo(style: string, bpm: number): { readonly style: string; readonly found: boolean } {
   let found = false;
@@ -75,4 +77,24 @@ export function checkProject(dialect: ScoreDialect, project: SongProject): Reado
   const parsed = dialect.parse(project.score);
   if (parsed.score === null || !parsed.score.hasChords) return [];
   return [{ code: "melody-with-chords", params: {}, at: {} }];
+}
+
+/**
+ * The song-project rules after a command: a set tempo carries into the style text whether or not it changed the
+ * score, and a melody project with chords carries its notice. A notice comes with a usable project; a refusal does not.
+ */
+export function applyProjectRules(
+  dialect: ScoreDialect,
+  project: SongProject,
+  command: ScoreCommand | ProjectCommand,
+): { readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> } {
+  const diagnostics: Diagnostic[] = [];
+  let next = project;
+  if (command.type === "setTempo") {
+    const synced = styleWithTempo(next.style, command.bpm);
+    if (synced.found) next = { ...next, style: synced.style };
+    else diagnostics.push({ code: "style-no-bpm", params: {}, at: {} });
+  }
+  diagnostics.push(...checkProject(dialect, next));
+  return { project: next, diagnostics };
 }
