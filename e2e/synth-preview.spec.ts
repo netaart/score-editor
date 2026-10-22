@@ -12,6 +12,8 @@ interface AudioLog {
 declare global {
   interface Window {
     audioLog?: { contexts: AudioContext[]; tones: AudioLog["tones"] };
+    /** The timers the page has set that have neither fired nor been cleared, by their id. */
+    timers?: Map<number, { repeats: boolean }>;
   }
 }
 
@@ -49,6 +51,39 @@ function withoutAudio() {
   const scope = window as unknown as Record<string, unknown>;
   scope.AudioContext = undefined;
   scope.webkitAudioContext = undefined;
+}
+
+/** Runs on the page before its own scripts: records every timer set and not yet fired or cleared, so a test can see what is left. */
+function trackTimers() {
+  const live = new Map<number, { repeats: boolean }>();
+  window.timers = live;
+  const real = {
+    setTimeout: window.setTimeout.bind(window),
+    setInterval: window.setInterval.bind(window),
+    clearTimeout: window.clearTimeout.bind(window),
+    clearInterval: window.clearInterval.bind(window),
+  };
+  window.setTimeout = ((handler: () => void, delay?: number) => {
+    const id = real.setTimeout(() => {
+      live.delete(id);
+      handler();
+    }, delay);
+    live.set(id, { repeats: false });
+    return id;
+  }) as typeof window.setTimeout;
+  window.setInterval = ((handler: () => void, delay?: number) => {
+    const id = real.setInterval(handler, delay);
+    live.set(id, { repeats: true });
+    return id;
+  }) as typeof window.setInterval;
+  window.clearTimeout = (id?: number) => {
+    if (id !== undefined) live.delete(id);
+    real.clearTimeout(id);
+  };
+  window.clearInterval = (id?: number) => {
+    if (id !== undefined) live.delete(id);
+    real.clearInterval(id);
+  };
 }
 
 /** Opens the test page with the audio spy installed, before any of the page's own scripts run. */
@@ -631,5 +666,46 @@ test.describe("the preview player of a session", () => {
     await harness.layout.destroyPart("synth");
     await expect(playhead(page)).toHaveCount(0);
     expect(await page.evaluate(() => window.harness.previewPlayer().playing)).toBe(false);
+  });
+});
+
+test.describe("what the preview leaves running", () => {
+  // Read in the same task as the stop, so that no timer has had the time to fire before it is counted.
+  const leftBy = (page: Page, action: string) =>
+    page.evaluate(async (what) => {
+      const known = new Set(window.timers?.keys());
+      const player = window.harness.previewPlayer();
+      await player.start();
+      if (what === "stop") player.stop();
+      else window.harness.layout.destroyPart("synth");
+      return [...(window.timers ?? [])].filter(([id]) => !known.has(id)).map(([, timer]) => timer);
+    }, action);
+
+  test("a stopped preview leaves one timer, the one that lets go of the audio device, and no interval", async ({
+    page,
+  }) => {
+    await page.addInitScript(trackTimers);
+    const harness = await visit(page);
+    await openLayout(harness);
+    expect(await leftBy(page, "stop")).toEqual([{ repeats: false }]);
+  });
+
+  test("a control destroyed while it plays leaves the same one timer", async ({ page }) => {
+    await page.addInitScript(trackTimers);
+    const harness = await visit(page);
+    await openLayout(harness);
+    expect(await leftBy(page, "destroy")).toEqual([{ repeats: false }]);
+    await expect(playhead(page)).toHaveCount(0);
+  });
+
+  test("a note preview that is sounding has no timer of its own running", async ({ page }) => {
+    await page.addInitScript(trackTimers);
+    await visit(page);
+    const left = await page.evaluate(async () => {
+      const known = new Set(window.timers?.keys());
+      await window.harness.previewNote(60, { duration: 2 });
+      return [...(window.timers ?? [])].filter(([id]) => !known.has(id)).map(([, timer]) => timer);
+    });
+    expect(left).toEqual([]);
   });
 });
