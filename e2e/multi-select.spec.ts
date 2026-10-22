@@ -24,6 +24,8 @@ const toolbar = (page: Page) => slot(page, "toolbar");
 const trackRegion = (page: Page) => slot(page, "vocal").getByRole("region", { name: "Vocal" });
 const undoButton = (page: Page) => toolbar(page).getByRole("button", { name: "Undo", exact: true });
 const deleteButton = (page: Page) => toolbar(page).getByRole("button", { name: "Delete", exact: true });
+const selectButton = (page: Page, name = "Select") => toolbar(page).getByRole("button", { name, exact: true });
+const menuItem = (page: Page, name: string) => toolbar(page).getByRole("menuitem", { name, exact: true });
 
 async function openTrack(harness: Harness, score: string = QUARTERS, options: Record<string, unknown> = {}) {
   await harness.layout.open({ score: { text: score }, parts: ["toolbar", "vocal"], ...options });
@@ -938,6 +940,118 @@ test.describe("a subset from the keyboard", () => {
     await page.keyboard.press("Shift+Space");
     await page.keyboard.press("Shift+Enter");
     expect(await harness.layout.selection()).toEqual([IDS.D4]);
+  });
+});
+
+test.describe("the Select menu, for a finger", () => {
+  test("selects all, inverts and clears with taps alone", async ({ page, harness, press }) => {
+    await openTrack(harness);
+
+    await press(selectButton(page));
+    await expect(menuItem(page, "Select all")).toBeFocused();
+    await press(menuItem(page, "Select all"));
+    expect(await harness.layout.selection()).toEqual(Object.values(IDS));
+    await expect(said(page)).toHaveText("Selected 5 notes");
+    await expect(menuItem(page, "Select all")).toBeHidden();
+
+    await press(selectButton(page));
+    await press(menuItem(page, "Invert selection"));
+    expect(await harness.layout.selection()).toEqual([]);
+
+    await press(note(page, D4));
+    await press(selectButton(page));
+    await press(menuItem(page, "Invert selection"));
+    expect(await harness.layout.selection()).toEqual([IDS.C4, IDS.E4, IDS.F4, IDS.G4]);
+    await framed(page, `${C4}, selected`);
+    await unframed(page, D4);
+
+    await press(selectButton(page));
+    await press(menuItem(page, "Clear selection"));
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(slot(page, "vocal").getByRole("listitem", { name: /, selected$/ })).toHaveCount(0);
+  });
+
+  test("mutes an item that has nothing to do, and presses on it change nothing", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    const forced = (target: Locator) => (isMobile ? target.tap({ force: true }) : target.click({ force: true }));
+    await openTrack(harness);
+    await press(selectButton(page));
+    await expect(menuItem(page, "Select all")).toHaveAttribute("aria-disabled", "false");
+    await expect(menuItem(page, "Invert selection")).toHaveAttribute("aria-disabled", "false");
+    await expect(menuItem(page, "Clear selection")).toHaveAttribute("aria-disabled", "true");
+    await forced(menuItem(page, "Clear selection"));
+    expect(await harness.layout.selection()).toEqual([]);
+
+    await press(selectButton(page));
+    await press(menuItem(page, "Select all"));
+    await press(selectButton(page));
+    await expect(menuItem(page, "Clear selection")).toHaveAttribute("aria-disabled", "false");
+    await page.keyboard.press("Escape");
+
+    // A score without a pitched note offers nothing to select.
+    await harness.layout.close();
+    await openTrack(harness, vocalOnly("z16|"));
+    await press(selectButton(page));
+    await expect(menuItem(page, "Select all")).toHaveAttribute("aria-disabled", "true");
+    await expect(menuItem(page, "Invert selection")).toHaveAttribute("aria-disabled", "true");
+    await forced(menuItem(page, "Select all"));
+    expect(await harness.layout.selection()).toEqual([]);
+  });
+
+  test("keeps the keys typed in the open menu: Escape closes it and leaves the selection", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(note(page, D4));
+    await press(selectButton(page));
+    await expect(menuItem(page, "Select all")).toBeFocused();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(menuItem(page, "Invert selection")).toBeFocused();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Escape");
+
+    await expect(menuItem(page, "Invert selection")).toBeHidden();
+    expect(await harness.layout.selection()).toEqual([IDS.D4]);
+    await expect(selectButton(page)).toBeFocused();
+  });
+
+  test("is there while the editor may edit and gone while it is read-only", async ({ page, harness }) => {
+    await openTrack(harness);
+    await expect(selectButton(page)).toBeVisible();
+
+    await harness.layout.setEditable(false);
+    await expect(selectButton(page)).toBeHidden();
+
+    await harness.layout.setEditable(true);
+    await expect(selectButton(page)).toBeVisible();
+  });
+
+  test("is named in the interface language", async ({ page, harness, press }) => {
+    await openTrack(harness, QUARTERS, { language: "zh" });
+    await press(selectButton(page, "选择"));
+    await press(menuItem(page, "全选"));
+    expect(await harness.layout.selection()).toEqual(Object.values(IDS));
+    await press(selectButton(page, "选择"));
+    await expect(menuItem(page, "反选")).toBeVisible();
+    await expect(menuItem(page, "取消选中")).toBeVisible();
+  });
+
+  test("works in the assembled editor", async ({ page, harness, press }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" } });
+    const bar = page.getByRole("button", { name: "Select", exact: true });
+    await press(bar);
+    await press(page.getByRole("menuitem", { name: "Select all", exact: true }));
+    await expect(page.getByRole("listitem", { name: /, selected$/ }).first()).toBeVisible();
+    await press(bar);
+    await press(page.getByRole("menuitem", { name: "Clear selection", exact: true }));
+    await expect(page.getByRole("listitem", { name: /, selected$/ })).toHaveCount(0);
   });
 });
 

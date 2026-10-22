@@ -5,6 +5,7 @@ import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
@@ -72,6 +73,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.type = "button";
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
+  const select = mountSelectionMenu(row, session);
   create(doc, "span", "sce-spacer", row);
   const badge = create(doc, "span", "sce-badge", row);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
@@ -142,6 +144,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       abort.abort();
       unsubscribe();
       zoom.destroy();
+      select.destroy();
       root.remove();
       releaseStyles();
     },

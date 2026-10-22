@@ -17,6 +17,10 @@ export interface Messages {
   undo: string;
   redo: string;
   delete: string;
+  select: string;
+  selectAll: string;
+  selectInvert: string;
+  selectClear: string;
   bars: string;
   timeRuler: string;
   sections: string;
@@ -61,6 +65,10 @@ const en: Messages = {
   undo: "Undo",
   redo: "Redo",
   delete: "Delete",
+  select: "Select",
+  selectAll: "Select all",
+  selectInvert: "Invert selection",
+  selectClear: "Clear selection",
   bars: "Bars",
   timeRuler: "Time ruler",
   sections: "Sections",
@@ -112,6 +120,10 @@ const zh: Messages = {
   undo: "撤销",
   redo: "重做",
   delete: "删除",
+  select: "选择",
+  selectAll: "全选",
+  selectInvert: "反选",
+  selectClear: "取消选中",
   bars: "小节",
   timeRuler: "时间尺",
   sections: "段落",
