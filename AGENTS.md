@@ -12,8 +12,9 @@ Run from the repository root. `pnpm check` runs all of them in order and must pa
 | `pnpm lint` | Biome check (lint and format). `pnpm lint:fix` applies fixes. |
 | `pnpm typecheck` | `tsc --noEmit` per package, then over tests, scripts and configs. |
 | `pnpm test` | Vitest, node environment: imports both package entries where there is no DOM (an import that touches one throws), and checks that `mount` without a DOM fails with a clear error. |
-| `pnpm test:e2e` | Playwright on real Chromium (desktop and Pixel 7 phone profiles) against the test page in `e2e/page`. |
-| `pnpm check` | `build`, `lint`, `typecheck`, `test`, `test:e2e`. |
+| `pnpm test:e2e` | Playwright on real Chromium (desktop and Pixel 7 phone profiles) against the test page in `e2e/page`, including both runnable examples from the editor skill. |
+| `pnpm check:skill` | Fails when a public export is not named in the editor skill, when the skill name or SKILL.md length is wrong, or when an example pin drifts from the package version. |
+| `pnpm check` | `build`, `lint`, `typecheck`, `test`, `check:skill`, `test:e2e`. |
 
 Playwright needs its Chromium once: `pnpm exec playwright install chromium`. `PLAYWRIGHT_BROWSERS_PATH` chooses where browsers live; `PLAYWRIGHT_DOWNLOAD_HOST` points the download at a mirror. The test server listens on `E2E_PORT` (default 4310).
 
@@ -23,7 +24,7 @@ Three seams, and no others:
 
 - Importing each package entry in a node environment (`tests/entries.test.ts`), the editing session driven through the entry with real commands (`tests/session.test.ts`), and custom tools driven through the entry (`tests/tools.test.ts`).
 - The dialect's `parse` and `serialize`, the registry and `formatDiagnostic`, through the package entries (`tests/song2-*.test.ts`).
-- The mounted editor, and view parts mounted on one editing session in a layout of the page's own, in real Chromium, driven only through `window.harness` on the test page (`e2e/page/harness.js`) and through what a user can see and do (`e2e/mount.spec.ts`, `e2e/parts.spec.ts`). The page is the bare host: it builds the dialect registry and fetches the test scores itself. Prefer locators by role, name and text over class names.
+- The mounted editor, and view parts mounted on one editing session in a layout of the page's own, in real Chromium, driven only through `window.harness` on the test page (`e2e/page/harness.js`) and through what a user can see and do (`e2e/mount.spec.ts`, `e2e/parts.spec.ts`, `e2e/skill.spec.ts`). The page is the bare host: it builds the dialect registry and fetches the test scores itself. Prefer locators by role, name and text over class names.
 
 New behaviour gets a failing test at one of these seams first. After a change that makes a test pass, break the change on purpose once and see the test fail.
 
@@ -38,6 +39,8 @@ To look at the page by hand: `node e2e/serve.mjs`, then open `/?demo` (add `&lan
 - Every class is prefixed `sce-`; every public variable is `--sce-*`. A new colour comes from the variable contract in `DESIGN.md` or a derivation of it. Keep per-node CSS cheap (see the spike note).
 - Everything the editor adds (listeners, nodes, stylesheets) is registered so `destroy()` removes it, and so does every view part's own `destroy()`.
 - Later UI is built as view parts bound to the editing session: a part mounts on an element of the host's layout, takes the session, draws from what the session holds, re-renders from its notifications, and keeps the isolation `mount()` gives. It does not read another part or reach into the default editor. The default editor is one arrangement of such parts. See [the package README](packages/score-editor/README.md#the-editing-session-and-view-parts) and [DESIGN.md](DESIGN.md#view-parts).
+- A change that adds a public export or a view part updates the editor skill in the same change ([packages/score-editor/skills/score-editor](packages/score-editor/skills/score-editor)).
+- The skill and both examples pin the package version; 0.1.0 predates the new API, and the release bump changes the version and those pins in one commit, enforced by `pnpm check:skill`.
 - Dependency versions are pinned exactly. Commits are small and named by type: `feat`, `test`, `chore`, `docs`.
 - UI work goes through the design tooling's review steps (critique, audit, polish) and is checked in the rendered result at desktop and phone widths.
 

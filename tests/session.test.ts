@@ -79,7 +79,7 @@ describe("dispatching a command", () => {
   });
 
   it("adds no step and announces nothing when the command leaves the project as it was", () => {
-    // The edit layer hands back a new project object holding the same text, so the session has to compare fields.
+    // The headless layer hands back a new project object holding the same text, so the session has to compare fields.
     const writesTheTextBack = { ...song2Dialect, serialize: () => SCORE };
     const session = createEditingSession({ project, dialects: createDialectRegistry([writesTheTextBack]) });
     const changes = listen(session);
