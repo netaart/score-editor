@@ -1345,3 +1345,28 @@ test.describe("an editable toolbar in a narrow host", () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 });
+
+test.describe("keyboard focus in a short editor", () => {
+  test("a note the keys step onto is scrolled clear of the pinned header, not left half under it", async ({
+    page,
+    harness,
+  }) => {
+    await page.setViewportSize({ width: 600, height: 360 });
+    await harness.mount({ score: { text: vocalOnly("c'4b4C,4z4|") } });
+    await page.getByRole("region", { name: "Arrangement" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("listitem", { name: /^C6, bar 1 beat 1/ })).toBeFocused();
+
+    // The user scrolls the arrangement until the next note, B5, sits half under the pinned header.
+    const head = await box(page.locator(".sce-track-head"));
+    const next = page.getByRole("listitem", { name: /^B5, bar 1 beat 2/ });
+    const half = head.y + head.height - 6;
+    await page.mouse.move(300, 250);
+    await page.mouse.wheel(0, (await box(next)).y - half);
+    await expect.poll(async () => Math.round((await box(next)).y)).toBe(Math.round(half));
+
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("listitem", { name: /^B5, bar 1 beat 2.*selected$/ })).toBeFocused();
+    await expect.poll(async () => (await box(next)).y).toBeGreaterThanOrEqual(head.y + head.height);
+  });
+});

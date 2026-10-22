@@ -314,6 +314,15 @@ const css = `
   min-height: 0;
 }
 
+/*
+ * What the sticky header, track head and pitch column cover is not room to look at: a note the keys move the focus to
+ * is scrolled out from under them, with 4px for its focus ring, instead of being left half hidden. The editor scrolls
+ * in its scroller and a part mounted alone in its own root.
+ */
+.sce-root .sce-scroller,
+.sce-root.sce-axis {
+  scroll-padding: calc(var(--sce-_head-top, 0px) + var(--sce-_band) + 4px) 4px 4px calc(var(--sce-_keys) + 4px);
+}
 .sce-root .sce-scroller {
   position: relative;
   flex: 1 1 auto;
