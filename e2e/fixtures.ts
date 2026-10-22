@@ -7,6 +7,19 @@ export interface Point {
   y: number;
 }
 
+/** The box a locator occupies on the page; throws when nothing is drawn for it. */
+export async function box(target: Locator) {
+  const found = await target.boundingBox();
+  if (!found) throw new Error("nothing is drawn for the locator");
+  return found;
+}
+
+/** A Vocal-only song2 score in C major, 4/4, with the given music lines under one section. */
+export function vocalOnly(...music: string[]): string {
+  const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
+  return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
+}
+
 /** The editing session as the test page exposes it to the helpers below. */
 interface PageSession {
   project: { score: string };
@@ -276,7 +289,7 @@ export class Harness {
 
 export const test = base.extend<{
   harness: Harness;
-  press: (target: Locator) => Promise<void>;
+  press: (target: Locator, position?: Point) => Promise<void>;
   partNames: { all: string[]; axis: string[] };
 }>({
   harness: async ({ page }, use) => {
@@ -287,9 +300,12 @@ export const test = base.extend<{
   partNames: async ({ harness }, use) => {
     await use(await harness.layout.partNames());
   },
-  /** Taps where the project has a touch screen and clicks where it has a mouse. */
+  /** Taps where the project has a touch screen and clicks where it has a mouse, at `position` in the target when given. */
   press: async ({ isMobile }, use) => {
-    await use((target) => (isMobile ? target.tap() : target.click()));
+    await use((target, position) => {
+      const options = position ? { position } : {};
+      return isMobile ? target.tap(options) : target.click(options);
+    });
   },
 });
 

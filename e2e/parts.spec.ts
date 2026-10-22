@@ -1,7 +1,7 @@
 // ABOUTME: Seam 5 for the view parts: several parts mounted on one editing session, each on its own element of a layout the page builds.
 // ABOUTME: Covers drawing, dispatch, replacement, zoom and scroll shared through the session, style isolation, and what destroy leaves.
 import type { CDPSession, Locator, Page } from "@playwright/test";
-import { expect, type Harness, test } from "./fixtures";
+import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 /** The one element a part drew into its slot. */
@@ -21,18 +21,6 @@ const zoomButton = (page: Page, name: "Zoom in" | "Zoom out") =>
   slot(page, "zoom").getByRole("button", { name, exact: true });
 const bars = (page: Page) => slot(page, "ruler").getByRole("list", { name: "Bars" });
 const chordItems = (page: Page) => slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem");
-
-async function box(target: Locator) {
-  const found = await target.boundingBox();
-  if (!found) throw new Error("nothing is drawn for the locator");
-  return found;
-}
-
-/** A Vocal-only song2 score in C major, 4/4, with the given music lines under one section. */
-function vocalOnly(...music: string[]): string {
-  const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
-  return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
-}
 
 // Notes of compact-three-sections, read off its score text: 2/4 bars at 40 pixels a beat are 80 pixels wide at 100%.
 const INS_BAR_1 = "F4, bar 1 beat 1, length 0.5 beats";

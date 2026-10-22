@@ -1,19 +1,7 @@
 // ABOUTME: Seam 5: the mounted editor driven in real Chromium through a bare test page.
 // ABOUTME: Covers the read-only arrangement of real song2 scores, zoom and scroll, and what update and destroy leave behind.
 import type { Locator, Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
-
-async function box(target: Locator) {
-  const found = await target.boundingBox();
-  if (!found) throw new Error("nothing is drawn for the locator");
-  return found;
-}
-
-/** A Vocal-only song2 score in C major, 4/4, with the given music lines under one section. */
-function vocalOnly(...music: string[]): string {
-  const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
-  return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
-}
+import { box, expect, test, vocalOnly } from "./fixtures";
 
 /** Per item: its text drawn whole inside its cell, left out (pushed out of sight), or cut off, which is a misreading. */
 function textFit(items: Locator) {
@@ -1158,12 +1146,6 @@ test.describe("a narrow host", () => {
   });
 });
 
-/** Presses where a user would: a click with a mouse, a tap on a touch screen. */
-function pressAt(isMobile: boolean, target: Locator, position?: { x: number; y: number }) {
-  const options = position ? { position } : {};
-  return isMobile ? target.tap(options) : target.click(options);
-}
-
 test.describe("editing in the default editor", () => {
   const QUARTERS = vocalOnly("C4D4E4F4|G16|");
   const noteNamed = (page: Page, name: RegExp | string) => page.getByRole("listitem", { name });
@@ -1212,9 +1194,9 @@ test.describe("editing in the default editor", () => {
     expect(await harness.notices()).toEqual([]);
   });
 
-  test("a click on empty space drops the insertion point and the keys move it", async ({ page, harness, isMobile }) => {
+  test("a click on empty space drops the insertion point and the keys move it", async ({ page, harness, press }) => {
     await harness.mount({ score: { text: QUARTERS } });
-    await pressAt(isMobile, page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
+    await press(page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
     const point = page.getByRole("separator", { name: /^Insertion point/ });
     await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 3");
 
@@ -1226,18 +1208,14 @@ test.describe("editing in the default editor", () => {
     await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 1");
   });
 
-  test("a read-only editor offers no editing control and ignores clicks and keys", async ({
-    page,
-    harness,
-    isMobile,
-  }) => {
+  test("a read-only editor offers no editing control and ignores clicks and keys", async ({ page, harness, press }) => {
     await harness.mount({ score: { text: QUARTERS }, editable: false });
     await expect(undoButton(page)).toBeHidden();
     await expect(redoButton(page)).toBeHidden();
     await expect(page.getByText("Read only", { exact: true })).toBeVisible();
 
-    await pressAt(isMobile, noteNamed(page, D4));
-    await pressAt(isMobile, page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
+    await press(noteNamed(page, D4));
+    await press(page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
     for (const keys of ["Delete", "Backspace", "Control+z", "Control+y", "End"]) await page.keyboard.press(keys);
 
     await expect(noteNamed(page, D4)).toBeVisible();
@@ -1271,7 +1249,7 @@ test.describe("editing in the default editor", () => {
   test("the insertion point's flag stays in view under the pinned track head when the lane is scrolled past its top", async ({
     page,
     harness,
-    isMobile,
+    press,
   }) => {
     // Three octaves of range make a lane taller than the editor, so the lane can be scrolled past its own top.
     await harness.mount({ score: { text: vocalOnly("C,4C4c4c'4|") } });
@@ -1281,7 +1259,7 @@ test.describe("editing in the default editor", () => {
       el.scrollTop = el.scrollHeight;
     });
     const row = await box(noteNamed(page, /^C4,/));
-    await pressAt(isMobile, lane, { x: 100, y: row.y + row.height / 2 - (await box(lane)).y });
+    await press(lane, { x: 100, y: row.y + row.height / 2 - (await box(lane)).y });
     const point = page.getByRole("separator", { name: /^Insertion point/ });
     await expect(point).toHaveCount(1);
     const head = await box(page.locator(".sce-track-head"));
