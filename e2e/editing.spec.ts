@@ -1,6 +1,6 @@
 // ABOUTME: Seam 5 for editing in view parts: select, delete, undo, redo and the insertion point, by mouse, touch and keyboard.
 // ABOUTME: Parts are mounted on one session in the page's own layout; tests act as a user does and read what the session holds.
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
@@ -16,6 +16,8 @@ const G4 = "G4, bar 2 beat 1, length 4 beats";
 const note = (page: Page, name: string) => slot(page, "vocal").getByRole("listitem", { name, exact: true });
 const selected = (page: Page, name: string) => note(page, `${name}, selected`);
 const lane = (page: Page) => slot(page, "vocal").getByRole("list", { name: "Vocal" });
+/** The Vocal track as a keyboard user reaches it: a focusable, named region that scrolls itself. */
+const trackRegion = (page: Page) => slot(page, "vocal").getByRole("region", { name: "Vocal" });
 
 /** Opens the toolbar and the Vocal track on one session, in the page's layout. */
 async function openTrack(harness: Harness, score: string = QUARTERS, options: Record<string, unknown> = {}) {
@@ -23,7 +25,7 @@ async function openTrack(harness: Harness, score: string = QUARTERS, options: Re
 }
 
 test.describe("selecting a note in a voice track", () => {
-  test("a click or a tap selects the note: it is framed, named as selected, and the session holds its id", async ({
+  test("a click or a tap selects the note: it is named as selected, framed with a 2px border (visual), and the session holds its id", async ({
     page,
     harness,
     press,
@@ -35,10 +37,22 @@ test.describe("selecting a note in a voice track", () => {
 
     await expect(selected(page, D4)).toBeVisible();
     await expect(selected(page, D4)).toHaveCSS("border-top-width", "2px");
-    await expect(selected(page, D4)).toHaveCSS("-webkit-tap-highlight-color", "rgba(0, 0, 0, 0)");
     await expect(note(page, C4)).toHaveCSS("border-top-width", "1px");
     expect(await harness.layout.selection()).toEqual(["Vocal:256"]);
     expect(await harness.layout.insertionPoint()).toBeNull();
+  });
+
+  test("the pointer cursor and the quiet tap flash belong to editing (visual): a note has them while editable, not read-only", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await expect(note(page, D4)).toHaveCSS("cursor", "pointer");
+    await expect(note(page, D4)).toHaveCSS("-webkit-tap-highlight-color", "rgba(0, 0, 0, 0)");
+
+    await harness.layout.setEditable(false);
+    await expect(note(page, D4)).toHaveCSS("cursor", "auto");
+    await expect(note(page, D4)).not.toHaveCSS("-webkit-tap-highlight-color", "rgba(0, 0, 0, 0)");
   });
 
   test("selecting another note moves the selection, and empty space clears it", async ({ page, harness, press }) => {
@@ -212,6 +226,7 @@ test.describe("the toolbar part", () => {
     page,
     harness,
     isMobile,
+    press,
   }) => {
     await harness.layout.open({
       score: { text: QUARTERS },
@@ -220,33 +235,40 @@ test.describe("the toolbar part", () => {
     });
     await harness.layout.dispatch({ type: "toRest", noteId: "Vocal:256" });
     await harness.layout.undo();
-    const row = toolbar(page).locator(".sce-toolbar");
-    const sizes = await row.evaluate((el) => ({ shown: el.clientWidth, content: el.scrollWidth, left: el.scrollLeft }));
-    expect(sizes.shown).toBe(190);
-    expect(sizes.content).toBeGreaterThan(sizes.shown);
-    expect(sizes.left).toBe(0);
+    const shown = await box(toolbar(page));
+    expect(shown.width).toBe(190);
+    const rightEdge = async (control: Locator) => {
+      const area = await box(control);
+      return area.x + area.width;
+    };
+    // The last control is out of sight to begin with, and the first is not.
+    expect(await rightEdge(deleteButton(page))).toBeGreaterThan(shown.x + shown.width);
+    expect(await rightEdge(toolbar(page).getByText("Arrangement", { exact: true }))).toBeLessThan(
+      shown.x + shown.width,
+    );
 
     if (isMobile) {
-      const area = await box(row);
-      const at = { x: area.x + area.width / 2, y: area.y + area.height / 2 };
+      const at = { x: shown.x + shown.width / 2, y: shown.y + shown.height / 2 };
       await harness.swipe({ x: at.x + 60, y: at.y }, { x: at.x - 60, y: at.y });
-      await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBeGreaterThan(10);
+      await expect.poll(async () => (await box(deleteButton(page))).x).toBeLessThan(shown.x + shown.width);
     } else {
-      await redoButton(page).focus();
-      await expect.poll(() => row.evaluate((el) => el.scrollLeft)).toBeGreaterThan(10);
+      await deleteButton(page).focus();
     }
-    const rowBox = await box(row);
+    await expect.poll(() => rightEdge(deleteButton(page))).toBeLessThanOrEqual(shown.x + shown.width + 1);
     const redo = await box(redoButton(page));
-    expect(redo.x + redo.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
-    await (isMobile ? redoButton(page).tap() : redoButton(page).click());
+    expect(redo.x).toBeGreaterThanOrEqual(shown.x - 1);
+    await press(redoButton(page));
     await expect(note(page, D4)).toHaveCount(0);
   });
 
-  test("does not scroll when it has room", async ({ page, harness }) => {
+  test("shows every control inside its box when it has room", async ({ page, harness }) => {
     await openTrack(harness);
-    const row = toolbar(page).locator(".sce-toolbar");
-    const sizes = await row.evaluate((el) => ({ shown: el.clientWidth, content: el.scrollWidth }));
-    expect(sizes.content).toBe(sizes.shown);
+    const shown = await box(toolbar(page));
+    for (const control of [undoButton(page), redoButton(page), deleteButton(page)]) {
+      const area = await box(control);
+      expect(area.x).toBeGreaterThanOrEqual(shown.x);
+      expect(area.x + area.width).toBeLessThanOrEqual(shown.x + shown.width);
+    }
   });
 });
 
@@ -319,7 +341,7 @@ test.describe("deleting the selected note", () => {
   test("does nothing when no note is selected", async ({ page, harness }) => {
     await openTrack(harness);
     const score = await harness.layout.scoreText();
-    await page.locator('[data-slot="vocal"] [role="region"]').focus();
+    await trackRegion(page).focus();
     await page.keyboard.press("Delete");
     await page.keyboard.press("Backspace");
     expect(await harness.layout.scoreText()).toBe(score);
@@ -425,7 +447,7 @@ test.describe("read-only", () => {
 
     await press(note(page, D4));
     await press(lane(page), { x: 100, y: 4 });
-    await page.locator('[data-slot="vocal"] [role="region"]').focus();
+    await trackRegion(page).focus();
     for (const keys of ["Delete", "Backspace", "Control+z", "Control+y", "ArrowRight", "End", "Home"]) {
       await page.keyboard.press(keys);
     }
@@ -435,8 +457,6 @@ test.describe("read-only", () => {
     expect(await harness.layout.scoreText()).toBe(score);
     await expect(slot(page, "vocal").getByRole("listitem", { name: /, selected$/ })).toHaveCount(0);
     await expect(slot(page, "vocal").getByRole("separator")).toHaveCount(0);
-    await expect(note(page, D4)).toHaveCSS("cursor", "auto");
-    await expect(note(page, D4)).not.toHaveCSS("-webkit-tap-highlight-color", "rgba(0, 0, 0, 0)");
   });
 
   test("hides the frame and the insertion point when the session stops being editable, and shows them again", async ({
@@ -455,7 +475,7 @@ test.describe("read-only", () => {
     await harness.layout.setEditable(false);
     await expect(selected(page, E4)).toHaveCount(0);
     await expect(point).toHaveCount(0);
-    await page.locator('[data-slot="vocal"] [role="region"]').focus();
+    await trackRegion(page).focus();
     await page.keyboard.press("Delete");
     await expect(note(page, E4)).toBeVisible();
 
@@ -549,7 +569,7 @@ test.describe("the insertion point", () => {
 
   test("the part scrolls to keep it in view as the keys carry it away", async ({ page, harness, press }) => {
     await openTrack(harness, vocalOnly(...Array(3).fill("C16|C16|C16|C16|")));
-    const region = page.locator('[data-slot="vocal"] [role="region"]');
+    const region = trackRegion(page);
     const point = slot(page, "vocal").getByRole("separator");
     await press(lane(page), { x: 30, y: 4 });
     await expect(point).toBeVisible();
@@ -601,7 +621,7 @@ test.describe("the insertion point", () => {
 
   test("Left and Right keep scrolling the part while there is no insertion point", async ({ page, harness }) => {
     await openTrack(harness, vocalOnly(...Array(3).fill("C16|C16|C16|C16|")));
-    const region = page.locator('[data-slot="vocal"] [role="region"]');
+    const region = trackRegion(page);
     await region.focus();
     await page.keyboard.press("ArrowRight");
     await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(10);
@@ -718,12 +738,11 @@ test.describe("announcements for screen readers", () => {
 });
 
 test.describe("selecting a note by keyboard", () => {
-  const region = (page: Page) => slot(page, "vocal").getByRole("region", { name: "Vocal" });
   const said = (page: Page) => slot(page, "vocal").getByRole("status");
 
   /** Moves the focus onto the notes of the Vocal track the way a keyboard user does: to the track, then Tab. */
   async function tabToNotes(page: Page) {
-    await region(page).focus();
+    await trackRegion(page).focus();
     await page.keyboard.press("Tab");
   }
 
@@ -809,7 +828,7 @@ test.describe("selecting a note by keyboard", () => {
   }) => {
     await openTrack(harness);
     await harness.layout.select(["Vocal:256"]);
-    await region(page).focus();
+    await trackRegion(page).focus();
 
     await page.keyboard.press("Home");
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 0 });

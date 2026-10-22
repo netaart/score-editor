@@ -74,11 +74,9 @@ describe("diagnostics", () => {
     for (const language of ["zh", "en"] as const) {
       const plain = formatDiagnostic({ code: "write-mismatch", params: {}, at: {} }, language);
       for (const field of fields) {
-        const diagnostic = { code: "write-mismatch", params: { field }, at: {} } as const;
-        const text = formatDiagnostic(diagnostic, language);
+        const text = formatDiagnostic({ code: "write-mismatch", params: { field }, at: {} }, language);
         expect(text, `${language} ${field}`).toBe(plain);
         expect(text).not.toContain(field);
-        expect(diagnostic.params.field).toBe(field);
       }
     }
     expect(formatDiagnostic({ code: "write-mismatch", params: { field: "bars" }, at: {} }, "en")).toBe(

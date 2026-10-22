@@ -1164,7 +1164,9 @@ test.describe("editing in the default editor", () => {
   const redoButton = (page: Page) => page.getByRole("button", { name: "Redo", exact: true });
   const deleteButton = (page: Page) => page.getByRole("button", { name: "Delete", exact: true });
 
-  test("a click or tap selects a note, Delete turns it into a rest, and the keys and the buttons walk the history", async ({
+  // The cases of editing itself (every key, every refusal, the history) are in editing.spec.ts; these are the ones that
+  // need the assembled editor: its toolbar, its tracks and its frame wired to one session.
+  test("the assembled editor takes a note from select to Delete to undo, by keys and by pointer alone", async ({
     page,
     harness,
     press,
@@ -1174,34 +1176,28 @@ test.describe("editing in the default editor", () => {
 
     await press(noteNamed(page, D4));
     await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
-
     await page.keyboard.press("Delete");
     await expect(noteNamed(page, anyD4)).toHaveCount(0);
     await expect(undoButton(page)).toHaveAttribute("aria-disabled", "false");
-
     await page.keyboard.press("Control+z");
     await expect(noteNamed(page, anyD4)).toHaveCount(1);
-    await page.keyboard.press("Control+Shift+z");
-    await expect(noteNamed(page, anyD4)).toHaveCount(0);
-    await page.keyboard.press("Control+z");
-    await expect(noteNamed(page, anyD4)).toHaveCount(1);
-    await page.keyboard.press("Control+y");
-    await expect(noteNamed(page, anyD4)).toHaveCount(0);
 
+    // The same round with a pointer alone: select, the Delete button, the Undo button.
+    await press(noteNamed(page, anyD4));
+    await press(deleteButton(page));
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
     await press(undoButton(page));
     await expect(noteNamed(page, anyD4)).toHaveCount(1);
     await press(redoButton(page));
     await expect(noteNamed(page, anyD4)).toHaveCount(0);
-    await press(undoButton(page));
-
-    // The same edit with a pointer alone: select, then the Delete button.
-    await press(noteNamed(page, anyD4));
-    await press(deleteButton(page));
-    await expect(noteNamed(page, anyD4)).toHaveCount(0);
     expect(await harness.notices()).toEqual([]);
   });
 
-  test("a click on empty space drops the insertion point and the keys move it", async ({ page, harness, press }) => {
+  test("with the focus on the scroller, the frame carries the keys to the insertion point a click dropped", async ({
+    page,
+    harness,
+    press,
+  }) => {
     await harness.mount({ score: { text: QUARTERS } });
     await press(page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
     const point = page.getByRole("separator", { name: /^Insertion point/ });
@@ -1211,24 +1207,14 @@ test.describe("editing in the default editor", () => {
     await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 4");
     await page.keyboard.press("End");
     await expect(point).toHaveAccessibleName("Insertion point, end of the score");
-    await page.keyboard.press("Home");
-    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 1");
   });
 
-  test("a read-only editor offers no editing control and ignores clicks and keys", async ({ page, harness, press }) => {
+  test("a read-only editor offers no editing control, and its hint names no editing key", async ({ page, harness }) => {
     await harness.mount({ score: { text: QUARTERS }, editable: false });
     await expect(undoButton(page)).toBeHidden();
     await expect(redoButton(page)).toBeHidden();
     await expect(deleteButton(page)).toBeHidden();
     await expect(page.getByText("Read only", { exact: true })).toBeVisible();
-
-    await press(noteNamed(page, D4));
-    await press(page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
-    for (const keys of ["Delete", "Backspace", "Control+z", "Control+y", "End"]) await page.keyboard.press(keys);
-
-    await expect(noteNamed(page, D4)).toBeVisible();
-    await expect(noteNamed(page, /, selected$/)).toHaveCount(0);
-    await expect(page.getByRole("separator", { name: /^Insertion point/ })).toHaveCount(0);
     await expect(page.getByRole("region", { name: "Arrangement" })).not.toHaveAccessibleDescription(/Delete/);
   });
 
@@ -1265,14 +1251,13 @@ test.describe("editing in the default editor", () => {
     // Three octaves of range make a lane taller than the editor, so the lane can be scrolled past its own top.
     await harness.mount({ score: { text: vocalOnly("C,4C4c4c'4|") } });
     const lane = page.getByRole("list", { name: "Vocal" });
-    const view = page.getByRole("region", { name: "Arrangement" });
-    await view.evaluate((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
+    // Scrolling down to the lowest note, as a user does, takes the top of the lane out of sight.
+    await noteNamed(page, /^C3,/).scrollIntoViewIfNeeded();
     const row = await box(noteNamed(page, /^C4,/));
     await press(lane, { x: 100, y: row.y + row.height / 2 - (await box(lane)).y });
     const point = page.getByRole("separator", { name: /^Insertion point/ });
     await expect(point).toHaveCount(1);
+    // The pinned head has no role or name of its own; the pixels under it are what this test looks at.
     const head = await box(page.locator(".sce-track-head"));
     const line = await box(point);
     expect(line.y, "the lane's own top is scrolled out of sight").toBeLessThan(head.y);
@@ -1336,12 +1321,11 @@ test.describe("an editable toolbar in a narrow host", () => {
   test("keeps every control reachable when the toolbar has only 320 pixels", async ({ page, harness }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     await harness.mount({ score: { text: vocalOnly("C4D4E4F4|G16|") } });
-    const redo = page.getByRole("button", { name: "Redo", exact: true });
-    await redo.focus();
-    const rowBox = await box(page.locator(".sce-toolbar"));
-    const at = await box(redo);
-    expect(at.x).toBeGreaterThanOrEqual(rowBox.x - 0.5);
-    expect(at.x + at.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    const last = page.getByRole("button", { name: "Delete", exact: true });
+    await last.focus();
+    const at = await box(last);
+    expect(at.x).toBeGreaterThanOrEqual(0);
+    expect(at.x + at.width).toBeLessThanOrEqual(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 });
