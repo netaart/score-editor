@@ -29,6 +29,20 @@ export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
 export { createDialectRegistry } from "./dialect";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
+export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
+export {
+  alignedLyricLines,
+  alignLyricLine,
+  joinLyrics,
+  LYRICS_MAX_CHARACTERS,
+  layoutLyrics,
+  lyricCharacterCount,
+  lyricLinesOf,
+  lyricSyllables,
+  noteOnsets,
+  syllableCount,
+  unalignedLyricLines,
+} from "./lyrics";
 export { mount } from "./mount";
 // The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
@@ -42,6 +56,8 @@ export type {
   Bar,
   Chord,
   KeyChange,
+  LyricLine,
+  LyricPhrase,
   Meter,
   Note,
   Score,

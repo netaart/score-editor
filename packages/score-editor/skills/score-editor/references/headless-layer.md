@@ -17,8 +17,12 @@ interface SongProject {
   seed: number | null;
   modelId: string; // must match the dialect id, such as "song2"
   sourceKey: string;
+  lyricLines?: LyricLine[]; // absent: the layout comes from lyrics and the score
 }
 ```
+
+`LyricLine` is `{ text, phrase }`, where `LyricPhrase` is `{ firstBar, barCount }`; `phrase: null` puts the line in
+the unaligned area. Only that binding is stored; syllables, note onsets and whether their counts are equal are computed.
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, `voices`, `bars`, `keys`, `sections`, `notes`, `chords`, `truncation`,
@@ -94,6 +98,17 @@ if (reading.score) {
 A host that stores scores can use this path without mounting anything. To write a whole model instead of one command,
 call `song2Dialect.serialize(score)` and keep the project otherwise unchanged; call `song2Dialect.check(score)` to see
 whether the written text reads back as the same model.
+
+## Lyrics
+
+The call surface is `lyricLinesOf(project, score)` (the stored lines, or the legacy layout from `layoutLyrics`),
+`joinLyrics(score, lines)`, `alignedLyricLines` and `unalignedLyricLines`, `lyricSyllables` and `syllableCount`,
+`noteOnsets`, `alignLyricLine` (`LyricAlignment`, `LyricSyllableNote`), `lyricCharacterCount` and
+`LYRICS_MAX_CHARACTERS`. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`.
+
+The rules — what a label matches, where unaligned lines go, what counts as a syllable, how a command carries the
+lines and when `lyrics` is rewritten — are the contract in the package README's
+[lyrics section](../../../README.md#lyrics-on-the-song-project). Do not restate them here.
 
 ## The dialect and its constraints
 
