@@ -236,6 +236,24 @@ describe("moveNotes on a hand-worked score", () => {
     });
   });
 
+  it("changes the score text of a project and leaves its lyric lines where they are", () => {
+    const lyricLines = [{ text: "la", phrase: { firstBar: 0, barCount: 1 } }];
+    const project: SongProject = {
+      style: "",
+      lyrics: "la",
+      score: SCORE,
+      scoreMode: "full",
+      seed: null,
+      modelId: "song2",
+      sourceKey: "notes-test",
+      lyricLines,
+    };
+    const done = applyProjectCommand(song2Dialect, project, move(["Vocal:0"], 256, 0, 4));
+    expect(done.diagnostics).toEqual([]);
+    expect(done.project.score).toBe(scoreOf("z4C4E4F4|G16|"));
+    expect(done.project.lyricLines).toEqual(lyricLines);
+  });
+
   it("returns the score as it was for an empty set of notes", () => {
     expect(applyScoreCommand(song2Dialect, SCORE, move([], 256, 0, 4))).toEqual({ ok: true, text: SCORE });
   });
