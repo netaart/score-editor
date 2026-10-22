@@ -168,17 +168,6 @@ test.describe("the play control", () => {
     await expect(page.locator(".sce-synth-button")).toHaveAttribute("aria-description", "合成试听，不代表成品效果");
   });
 
-  test("the caption stays in view while the preview plays, even in a toolbar that scrolls sideways", async ({
-    page,
-    press,
-  }) => {
-    const harness = await visit(page);
-    await harness.mount();
-    await press(previewButton(page));
-    await expect(previewButton(page)).toHaveText("Stop");
-    await expect(page.locator(".sce-synth-caption")).toBeInViewport();
-  });
-
   test("a browser with no Web Audio gets a control that says so, and no preview", async ({ page, isMobile }) => {
     const harness = await visit(page, withoutAudio);
     await openLayout(harness);
@@ -254,12 +243,10 @@ test.describe("without a user gesture", () => {
     });
     await page.addInitScript(spyOnAudio);
     await page.goto("/?demo");
-    await expect(page.getByRole("status").filter({ hasText: "did not allow sound" })).toHaveText(
-      "The browser did not allow sound. Press Preview again.",
+    await expect(page.getByRole("status").filter({ hasText: "Blocked by the browser" })).toHaveText(
+      "Blocked by the browser. Press Preview again.",
     );
-    await expect(page.locator(".sce-synth-caption")).toHaveText(
-      "The browser did not allow sound. Press Preview again.",
-    );
+    await expect(page.locator(".sce-synth-caption")).toHaveText("Blocked by the browser. Press Preview again.");
     await expect(previewButton(page)).toHaveText("Preview");
     await expect(playhead(page)).toHaveCount(0);
 

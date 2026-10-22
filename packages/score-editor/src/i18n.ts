@@ -116,7 +116,7 @@ const en: Messages = {
   previewStopped: "Preview stopped",
   previewNothing: "There is nothing to play from here",
   previewUnsupported: "This browser can’t play the preview",
-  previewBlocked: "The browser did not allow sound. Press Preview again.",
+  previewBlocked: "Blocked by the browser. Press Preview again.",
 };
 
 const zh: Messages = {
