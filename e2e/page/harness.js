@@ -10,6 +10,7 @@ import {
   mountChordTrack,
   mountCutNotice,
   mountProblemView,
+  mountTextView,
   mountTimeRuler,
   mountToolbar,
   mountVoiceTrack,
@@ -66,6 +67,16 @@ const LAYOUT_PARTS = {
   problem: (el, session) => mountProblemView(el, session),
 };
 
+/**
+ * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for
+ * them, and the lists of the parts the older specs walk through do not include them.
+ */
+const VIEW_PARTS = {
+  text: (el, session) => mountTextView(el, session),
+};
+
+const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };
+
 /** The parts that draw on the time axis. */
 const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
 
@@ -73,7 +84,7 @@ const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
  * A layout of the host's own, nothing like the editor's: parts in cards of different widths, one slot for each. It is
  * styled by classes of host.css, since a strict style policy refuses inline style attributes.
  */
-function buildLayout(container) {
+function buildLayout(container, names = []) {
   container.innerHTML = `
     <div class="layout-grid">
       <div class="layout-slot" data-slot="zoom"></div>
@@ -85,6 +96,13 @@ function buildLayout(container) {
       <div class="layout-card layout-card-medium"><div class="layout-slot" data-slot="vocal"></div></div>
       <div class="layout-card layout-card-wide" data-card="ins"><div class="layout-slot" data-slot="ins"></div></div>
       <div class="layout-slot" data-slot="problem"></div>
+      ${names
+        .filter((name) => name in VIEW_PARTS)
+        .map(
+          (name) =>
+            `<div class="layout-card layout-card-wide"><div class="layout-slot" data-slot="${name}"></div></div>`,
+        )
+        .join("")}
     </div>`;
   return Object.fromEntries([...container.querySelectorAll("[data-slot]")].map((el) => [el.dataset.slot, el]));
 }
@@ -117,7 +135,7 @@ const SCENES = {
 };
 
 function mountLayoutParts(slots, session, names) {
-  return Object.fromEntries(names.map((name) => [name, LAYOUT_PARTS[name](slots[name], session)]));
+  return Object.fromEntries(names.map((name) => [name, PART_FACTORIES[name](slots[name], session)]));
 }
 
 const layout = {
@@ -163,7 +181,8 @@ const layout = {
       await new Promise((resolve) => styles.addEventListener("load", resolve, { once: true }));
     }
     layout.host = host;
-    layout.slots = buildLayout(container);
+    const names = parts ?? Object.keys(LAYOUT_PARTS);
+    layout.slots = buildLayout(container, names);
     if (scene) SCENES[scene](container, layout.slots);
     layout.session = createEditingSession({
       project: base,
@@ -171,7 +190,7 @@ const layout = {
       language,
       ...(editable === undefined ? {} : { editable }),
     });
-    layout.parts = mountLayoutParts(layout.slots, layout.session, parts ?? Object.keys(LAYOUT_PARTS));
+    layout.parts = mountLayoutParts(layout.slots, layout.session, names);
   },
   /** Replaces the project from outside, the way update does for the editor. */
   async replace({ score, project: fields }) {
@@ -179,7 +198,7 @@ const layout = {
   },
   /** Mounts one more part on the open session, as a host does that adds a view later. */
   mountPart(name) {
-    layout.parts[name] = LAYOUT_PARTS[name](layout.slots[name], layout.session);
+    layout.parts[name] = PART_FACTORIES[name](layout.slots[name], layout.session);
   },
   /** Destroys one part, `times` times over: a second destroy must be harmless. */
   destroyPart(name, times = 1) {
@@ -196,7 +215,7 @@ const layout = {
     const host = document.createElement("div");
     host.className = "layout-offscreen";
     document.body.append(host);
-    const slots = buildLayout(host);
+    const slots = buildLayout(host, Object.keys(layout.parts));
     const { project, view } = layout.session;
     const session = createEditingSession({ project, dialects, language: view.language, editable: view.editable });
     session.setView({ zoom: view.zoom });

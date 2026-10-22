@@ -733,6 +733,142 @@ ${labelThinning()}
   }
 }
 
+/*
+ * The text view: the score text in a box with a number for each line beside it, then a sentence, then the problems. The
+ * gutter and the box share one font, size and line height, so a number stays level with its line. A host sets the
+ * monospace face with --sce-font-family-mono.
+ */
+.sce-root.sce-part-text {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.sce-root .sce-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.sce-root .sce-text-frame {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 14em;
+  background: var(--sce-_bg);
+  border-bottom: 1px solid var(--sce-_line);
+}
+.sce-root .sce-gutter,
+.sce-root .sce-text-box {
+  font-family: var(--sce-font-family-mono, ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace);
+  font-size: 1em;
+  line-height: 1.6;
+  tab-size: 4;
+}
+.sce-root .sce-gutter {
+  flex: none;
+  min-width: 3.4em;
+  /* The bottom padding is room for the box's horizontal scrollbar, so the numbers scroll as far as the lines do. */
+  padding: 8px 8px 32px 12px;
+  overflow: hidden;
+  background: var(--sce-_surface);
+  border-right: 1px solid var(--sce-_line);
+  color: var(--sce-_muted);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sce-root .sce-gutter-line {
+  display: block;
+  white-space: nowrap;
+}
+/* A line with a problem is marked by weight and a dot as well as by colour. */
+.sce-root .sce-gutter-line[data-problem="true"] {
+  color: var(--sce-_text);
+  font-weight: 700;
+}
+.sce-root .sce-gutter-line[data-problem="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.5em;
+  height: 0.5em;
+  margin-right: 0.5em;
+  border-radius: 50%;
+  background: currentColor;
+}
+.sce-root .sce-text-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  outline: none;
+  resize: none;
+  white-space: pre;
+}
+.sce-root .sce-text-box:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: -2px;
+}
+.sce-root .sce-text-status {
+  flex: none;
+  margin: 0;
+  padding: 6px 12px;
+  background: var(--sce-_surface);
+  color: var(--sce-_muted);
+}
+.sce-root .sce-text[data-problems] .sce-text-status {
+  color: var(--sce-_text);
+  font-weight: 600;
+}
+.sce-root .sce-text-problems {
+  flex: none;
+  max-height: 9em;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  background: var(--sce-_surface);
+  border-top: 1px solid var(--sce-_line);
+  list-style: none;
+}
+.sce-root .sce-text-problem {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--sce-_text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.sce-root .sce-text-problem:hover {
+  background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
+}
+.sce-root .sce-text-problem:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: -2px;
+}
+.sce-root .sce-text-more {
+  padding: 4px 12px;
+  color: var(--sce-_muted);
+}
+@media (pointer: coarse) {
+  /* Below 16px a phone zooms the page when the box is focused, so the box and its numbers are 16px there. */
+  .sce-root .sce-gutter,
+  .sce-root .sce-text-box {
+    font-size: 16px;
+  }
+  .sce-root .sce-text-problem {
+    min-height: 40px;
+  }
+}
+
 .sce-root .sce-sr-only {
   position: absolute;
   width: 1px;

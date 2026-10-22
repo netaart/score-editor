@@ -27,12 +27,15 @@ interface PageSession {
   insertionPoint: { tick: number } | null;
   view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
   reading: { kind: string; score?: { notes: Array<{ id: string; voice: string; midi: number | null }> } };
+  activeView: string;
+  rejectedText: { text: string; diagnostics: Array<{ code: string }> } | null;
   canUndo: boolean;
   dispatch(command: unknown): { ok: boolean; diagnostics: Array<{ code: string }> };
   undo(): boolean;
   redo(): boolean;
   select(noteIds: string[]): void;
   setView(patch: Record<string, unknown>): void;
+  setActiveView(name: string): void;
 }
 
 interface PageLayout {
@@ -183,6 +186,26 @@ export class Layout {
   /** The score text of the session's project. */
   scoreText() {
     return this.page.evaluate(() => window.harness.layout.live().project.score);
+  }
+
+  /** Which view the session says is shown. */
+  activeView() {
+    return this.page.evaluate(() => window.harness.layout.live().activeView);
+  }
+
+  /** Says, as a host's own switcher does, which view is shown. */
+  setActiveView(name: string) {
+    return this.page.evaluate((value) => window.harness.layout.live().setActiveView(value), name);
+  }
+
+  /** The text the text view holds that the session did not take, with the codes of what is wrong with it; null when none. */
+  rejectedText() {
+    return this.page.evaluate(() => {
+      const { rejectedText } = window.harness.layout.live();
+      return rejectedText === null
+        ? null
+        : { text: rejectedText.text, codes: rejectedText.diagnostics.map((diagnostic) => diagnostic.code) };
+    });
   }
 
   /** Says, as a host does with its permissions, whether the user may edit. */

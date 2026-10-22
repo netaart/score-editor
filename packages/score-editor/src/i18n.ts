@@ -45,6 +45,12 @@ export interface Messages {
   /** What a live region says when an undo brought back one deleted note, and when it brought back several. */
   restoredNote(pitch: string, position: BarPosition): string;
   restoredNotes(count: number): string;
+  /** The text view: the name of its box and of its list of problems, and the sentence under the box. */
+  scoreText: string;
+  problems: string;
+  noProblems: string;
+  /** `kept`: the text is not in the project, which still has the last score that read. */
+  problemCount(count: number, kept: boolean): string;
 }
 
 const en: Messages = {
@@ -96,6 +102,11 @@ const en: Messages = {
   deletedNotes: (count) => `Deleted ${count} notes`,
   restoredNote: (pitch, { bar, beat }) => `Restored ${pitch}, bar ${bar} beat ${beat}`,
   restoredNotes: (count) => `Restored ${count} notes`,
+  scoreText: "Score text",
+  problems: "Problems",
+  noProblems: "No problems",
+  problemCount: (count, kept) =>
+    `${count} ${count === 1 ? "problem" : "problems"}${kept ? ". The other views still show the last readable score." : ""}`,
 };
 
 const zh: Messages = {
@@ -145,6 +156,10 @@ const zh: Messages = {
   deletedNotes: (count) => `已删除 ${count} 个音符`,
   restoredNote: (pitch, { bar, beat }) => `已恢复 ${pitch}，第 ${bar} 小节第 ${beat} 拍`,
   restoredNotes: (count) => `已恢复 ${count} 个音符`,
+  scoreText: "乐谱文本",
+  problems: "问题",
+  noProblems: "没有问题",
+  problemCount: (count, kept) => `${count} 个问题${kept ? "。其他视图显示的仍是上一份能读的乐谱。" : ""}`,
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
