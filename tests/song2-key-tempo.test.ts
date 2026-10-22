@@ -818,6 +818,18 @@ describe("removeChords on every sample", () => {
       expect(splitBars(result.text).otherLines, fact.file).toEqual(splitBars(text).otherLines);
     }
   });
+
+  it("removes an unfinished chord string at the cut when it is the only chord material", () => {
+    const result = applyScoreCommand(song2Dialect, `${ONE_VOICE}\nK:C\nV: Vocal\nC16|D8"C`, { type: "removeChords" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${ONE_VOICE}\nK:C\nV: Vocal\nC16|D8`);
+    const after = parse(result.text);
+    check(after);
+    expect(after.hasChords).toBe(false);
+    expect(after.chords).toEqual([]);
+  });
 });
 
 describe("melody mode with chords", () => {
