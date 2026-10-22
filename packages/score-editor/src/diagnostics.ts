@@ -54,6 +54,14 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "style-invalid",
   "score-mode-invalid",
   "not-a-score-command",
+  "section-unnamed",
+  "section-move-start",
+  "section-move-end",
+  "section-before-unnamed",
+  "section-name-empty",
+  "section-name-blank",
+  "section-name-line-break",
+  "section-name-trailing-space",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -125,6 +133,14 @@ interface Catalog {
   readonly styleInvalid: Text;
   readonly scoreModeInvalid: Text;
   readonly notAScoreCommand: Text;
+  readonly sectionUnnamed: Text;
+  readonly sectionMoveStart: Text;
+  readonly sectionMoveEnd: Text;
+  readonly sectionBeforeUnnamed: Text;
+  readonly sectionNameEmpty: Text;
+  readonly sectionNameBlank: Text;
+  readonly sectionNameLineBreak: Text;
+  readonly sectionNameTrailingSpace: Text;
   readonly styleNoBpm: Text;
   readonly melodyWithChords: Text;
 }
@@ -659,6 +675,70 @@ function chineseNotAScoreCommand(): string {
   return "这是歌曲工程级命令，不是乐谱命令；请把它应用到歌曲工程上。";
 }
 
+function englishSectionUnnamed(): string {
+  return "The unnamed section has no marker, so it can be deleted but not copied or moved.";
+}
+
+function chineseSectionUnnamed(): string {
+  return "无名段落没有段落标记，只能删除，不能复制或移动。";
+}
+
+function englishSectionMoveStart(params: DiagnosticParams): string {
+  return `The section${quoted(value(params, "section"))} is already first and cannot move earlier.`;
+}
+
+function chineseSectionMoveStart(params: DiagnosticParams): string {
+  return `段落${quoted(value(params, "section"))}已经是第一段，不能再往前移。`;
+}
+
+function englishSectionMoveEnd(params: DiagnosticParams): string {
+  return `The section${quoted(value(params, "section"))} is already last and cannot move later.`;
+}
+
+function chineseSectionMoveEnd(params: DiagnosticParams): string {
+  return `段落${quoted(value(params, "section"))}已经是最后一段，不能再往后移。`;
+}
+
+function englishSectionBeforeUnnamed(): string {
+  return "A named section cannot move before the unnamed section, which has no marker and can only come first.";
+}
+
+function chineseSectionBeforeUnnamed(): string {
+  return "有名字的段落不能移到无名段落前面；无名段落没有标记，只能放在最前面。";
+}
+
+function englishSectionNameEmpty(): string {
+  return "A section needs a name; the name cannot be empty.";
+}
+
+function chineseSectionNameEmpty(): string {
+  return "段落需要一个名字，名字不能为空。";
+}
+
+function englishSectionNameBlank(): string {
+  return "A section name cannot be only spaces or tabs.";
+}
+
+function chineseSectionNameBlank(): string {
+  return "段落名不能只有空格或制表符。";
+}
+
+function englishSectionNameLineBreak(): string {
+  return "A section name cannot contain a line break.";
+}
+
+function chineseSectionNameLineBreak(): string {
+  return "段落名不能包含换行。";
+}
+
+function englishSectionNameTrailingSpace(): string {
+  return "A section name cannot end with a space or tab, because the score format drops it.";
+}
+
+function chineseSectionNameTrailingSpace(): string {
+  return "段落名不能以空格或制表符结尾，因为乐谱格式会去掉它。";
+}
+
 function englishStyleNoBpm(): string {
   return "The style text has no BPM, so it was left as it is.";
 }
@@ -715,6 +795,14 @@ const en: Catalog = {
   styleInvalid: englishStyleInvalid,
   scoreModeInvalid: englishScoreModeInvalid,
   notAScoreCommand: englishNotAScoreCommand,
+  sectionUnnamed: englishSectionUnnamed,
+  sectionMoveStart: englishSectionMoveStart,
+  sectionMoveEnd: englishSectionMoveEnd,
+  sectionBeforeUnnamed: englishSectionBeforeUnnamed,
+  sectionNameEmpty: englishSectionNameEmpty,
+  sectionNameBlank: englishSectionNameBlank,
+  sectionNameLineBreak: englishSectionNameLineBreak,
+  sectionNameTrailingSpace: englishSectionNameTrailingSpace,
   styleNoBpm: englishStyleNoBpm,
   melodyWithChords: englishMelodyWithChords,
 };
@@ -759,6 +847,14 @@ const zh: Catalog = {
   styleInvalid: chineseStyleInvalid,
   scoreModeInvalid: chineseScoreModeInvalid,
   notAScoreCommand: chineseNotAScoreCommand,
+  sectionUnnamed: chineseSectionUnnamed,
+  sectionMoveStart: chineseSectionMoveStart,
+  sectionMoveEnd: chineseSectionMoveEnd,
+  sectionBeforeUnnamed: chineseSectionBeforeUnnamed,
+  sectionNameEmpty: chineseSectionNameEmpty,
+  sectionNameBlank: chineseSectionNameBlank,
+  sectionNameLineBreak: chineseSectionNameLineBreak,
+  sectionNameTrailingSpace: chineseSectionNameTrailingSpace,
   styleNoBpm: chineseStyleNoBpm,
   melodyWithChords: chineseMelodyWithChords,
 };
@@ -846,6 +942,22 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.scoreModeInvalid(diagnostic.params);
     case "not-a-score-command":
       return catalog.notAScoreCommand(diagnostic.params);
+    case "section-unnamed":
+      return catalog.sectionUnnamed(diagnostic.params);
+    case "section-move-start":
+      return catalog.sectionMoveStart(diagnostic.params);
+    case "section-move-end":
+      return catalog.sectionMoveEnd(diagnostic.params);
+    case "section-before-unnamed":
+      return catalog.sectionBeforeUnnamed(diagnostic.params);
+    case "section-name-empty":
+      return catalog.sectionNameEmpty(diagnostic.params);
+    case "section-name-blank":
+      return catalog.sectionNameBlank(diagnostic.params);
+    case "section-name-line-break":
+      return catalog.sectionNameLineBreak(diagnostic.params);
+    case "section-name-trailing-space":
+      return catalog.sectionNameTrailingSpace(diagnostic.params);
     case "style-no-bpm":
       return catalog.styleNoBpm(diagnostic.params);
     case "melody-with-chords":

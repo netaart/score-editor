@@ -5,6 +5,7 @@ import { commandRefusal } from "./command-refusal";
 import { runBarCommand } from "./commands-bars";
 import { setChord } from "./commands-chords";
 import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./commands-key-tempo";
+import { runSectionCommand } from "./commands-sections";
 import { runTruncationCommand } from "./commands-truncation";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
@@ -28,7 +29,12 @@ export type ScoreCommand =
   | { readonly type: "transpose"; readonly semitones: number }
   | { readonly type: "setKey"; readonly key: string; readonly from?: number }
   | { readonly type: "setTempo"; readonly bpm: number }
-  | { readonly type: "removeChords" };
+  | { readonly type: "removeChords" }
+  | { readonly type: "deleteSection"; readonly section: number }
+  | { readonly type: "duplicateSection"; readonly section: number }
+  | { readonly type: "moveSection"; readonly section: number; readonly direction: "earlier" | "later" }
+  | { readonly type: "renameSection"; readonly section: number; readonly name: string }
+  | { readonly type: "nameSection"; readonly bar: number; readonly name: string };
 
 export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
@@ -118,5 +124,11 @@ export function runScoreCommand(
       return runSetTempo(score, command.bpm, constraints);
     case "removeChords":
       return runRemoveChords(score);
+    case "deleteSection":
+    case "duplicateSection":
+    case "moveSection":
+    case "renameSection":
+    case "nameSection":
+      return runSectionCommand(score, command);
   }
 }

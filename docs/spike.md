@@ -60,6 +60,17 @@ All browser results are from Chromium 156 (Playwright 1.64), on an x86 server in
 
 Against the numbers in the table above (83 ms at 1x, 463 ms at 4x) the first frame is 1.3 times and 1.2 to 1.4 times as long, inside the limit of twice. The view has about 170 more nodes than the spike's roll (chords, bar numbers, bands, flags, grid runs) and reads the score text first; the parse is 1 ms at 1x and 4 to 5 ms at 4x.
 
+After the synth preview (the toolbar's control, and a playhead line in each voice lane while it plays). Direct, headless Chromium 156, the defaults of the script (128 bars, 1,500 notes), two runs per row, against a build of integration/v1 as it was just before the preview, measured the same day on the same machine:
+
+| Build | CPU | Cold first frame after mount | Cold mount() alone | Warm first frame (median) | Parse alone (median) | DOM nodes | Long tasks, zoom and scroll |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Before the preview | 1x | 118 ms and 121 ms | 113 ms and 115 ms | 33 ms and 33 ms | 4.6 ms and 4.7 ms | 1880 | none; worst frame 16.8 ms |
+| With the preview | 1x | 119 ms and 137 ms | 112 ms and 125 ms | 34 ms and 37 ms | 4.7 ms and 5.2 ms | 1888 | none; worst frame 16.8 ms |
+| Before the preview | 4x slowdown | 677 ms and 679 ms | 644 ms and 646 ms | 176 ms and 180 ms | 32 ms and 33 ms | 1880 | zoom steps 19 and 21, wheel zoom 39 and 38, up to 131 ms; scrolling none |
+| With the preview | 4x slowdown | 646 ms and 669 ms | 617 ms and 640 ms | 169 ms and 186 ms | 33 ms and 34 ms | 1888 | zoom steps 13 and 16, wheel zoom 34 and 35, up to 114 ms; scrolling none |
+
+The preview adds 8 nodes (its button, icon, two words and caption) and nothing measurable. The rows above this note (1848 nodes, parse 1 ms) are older than the commands for bars, meter, key, tempo and chords, and the parse now reads 4.7 ms at 1x and 33 ms at 4x without the preview, so that part of the difference from the first table is not the preview's.
+
 Zooming and scrolling at that size, 1x: no long task and a worst frame of 16.8 ms (one 33 ms frame in one run's wheel scroll) in eight button zoom steps (three runs), 60 control-plus-wheel zoom events, wheel scrolling in time (90 events) and in pitch (60 events), and a script moving `scrollLeft` every frame. At 4x: scrolling the same way has no long task; a button zoom step takes 50 to 66 ms (long tasks of 50 to 69 ms in none to seven of eight steps, by run); 60 control-plus-wheel zoom events each cost about 55 ms, so 25 to 40 of them are long tasks of up to 115 ms. A zoom step before the change to axis widths (see Now, above) was 70 to 85 ms at 1x. Not measured: 256 bars and 6000 notes, the 6x slowdown, a real phone.
 
 **What the measurement says.** The approach meets the targets at the size of a real song (128 bars, 1500 notes): first render well under a second even at 6x slowdown, no long task above 50 ms in drag or scroll. It does not at 6000 notes on a slow CPU: first render near two seconds and long tasks of 70 ms or more. Cost grows linearly with node count (first frame 83 ms at 1677 nodes, 253 ms at 6305 nodes, both at 1x).

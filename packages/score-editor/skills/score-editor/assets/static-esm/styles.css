@@ -41,9 +41,8 @@ body {
   background: #ffffff;
 }
 
-/* The editor's toolbar scrolls sideways inside the width it is given; a flex item may shrink to that width, so it must not widen the page. */
-.skill-toolbar [data-slot="toolbar"] {
-  flex: 1 1 20rem;
+/* The toolbar wraps in a box narrower than its controls, but only when the box is allowed to be narrow. */
+.skill-toolbar > [data-slot="toolbar"] {
   min-width: 0;
 }
 

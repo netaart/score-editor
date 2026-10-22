@@ -2,7 +2,7 @@
 // ABOUTME: Both end with no cut; delete refuses when the incomplete measure is one another voice still uses.
 import { commandRefusal } from "./command-refusal";
 import type { ScoreCommandResult } from "./commands";
-import { orderNotes, scoreUnit, sectionsFrom, splitLength } from "./commands-shared";
+import { hasChordsAfter, orderNotes, scoreUnit, sectionsFrom, splitLength } from "./commands-shared";
 import { type Chord, type Note, noteId, type Score } from "./score";
 import type { DialectConstraints } from "./types";
 
@@ -69,7 +69,7 @@ function fillTruncatedBar(score: Score, constraints: DialectConstraints): ScoreC
     ...score,
     bars,
     notes: orderNotes(score, clearTiesIntoRests(notes)),
-    hasChords: score.chords.length > 0,
+    hasChords: hasChordsAfter(score.chords, null),
     truncation: null,
   };
   return { ok: true, score: nextScore };
@@ -125,7 +125,7 @@ function deleteTruncatedBar(score: Score, constraints: DialectConstraints): Scor
     notes: orderNotes(score, finalNotes),
     chords,
     keys,
-    hasChords: chords.length > 0,
+    hasChords: hasChordsAfter(chords, null),
     sections: sectionsFrom({ ...score, bars }, markers),
     truncation: null,
   };

@@ -260,7 +260,11 @@ E16|`);
       expect(after.bars.length, fact.file).toBe(before.bars.length);
       expect(after.voices, fact.file).toEqual(before.voices);
       expect(after.sections, fact.file).toEqual(before.sections);
-      expect(after.truncation, fact.file).toEqual(before.truncation);
+      expect(after.truncation, fact.file).toEqual(
+        before.truncation?.unfinishedChord === true
+          ? { voice: before.truncation.voice, bar: before.truncation.bar, short: before.truncation.short }
+          : before.truncation,
+      );
       expectNotesMoved(before, after, 2);
     }
   });
@@ -829,6 +833,7 @@ describe("removeChords on every sample", () => {
     check(after);
     expect(after.hasChords).toBe(false);
     expect(after.chords).toEqual([]);
+    expect(after.truncation).toEqual({ voice: "Vocal", bar: 1, short: true });
   });
 });
 

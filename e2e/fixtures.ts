@@ -32,6 +32,7 @@ interface PageSession {
   undo(): boolean;
   redo(): boolean;
   select(noteIds: string[]): void;
+  setInsertionPoint(point: { tick: number } | null): void;
   setView(patch: Record<string, unknown>): void;
 }
 
@@ -79,6 +80,14 @@ interface PageHarness {
   layout: PageLayout;
   host: { addRules(kind: "important" | "hostile"): void; addProbe(): void; setColorScheme(scheme: string): void };
   shadowRoot: ShadowRoot | null;
+  previewNote(midi: number, options?: { duration?: number }): Promise<boolean>;
+  previewPlayer(): {
+    readonly playing: boolean;
+    readonly tick: number | null;
+    readonly from: number | null;
+    start(): Promise<string>;
+    stop(): void;
+  };
   mount(options?: Record<string, unknown>): Promise<void>;
   update(options: Record<string, unknown>): Promise<void>;
   destroy(): void;

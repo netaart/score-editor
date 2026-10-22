@@ -1,8 +1,19 @@
 // ABOUTME: Small model helpers shared by the command files: ticks, ordering, sections, keys and writable lengths.
 // ABOUTME: Keeping them here means insert, meter and truncation split and order notes the same way.
-import type { KeyChange, Meter, Note, Score } from "./score";
+import type { Chord, KeyChange, Meter, Note, Score, Truncation } from "./score";
 import { TICKS_PER_QUARTER } from "./score";
 import type { DurationSet } from "./types";
+
+/** True when chord material remains: a finished chord, or an unfinished chord string at the cut (RULES.md C8). */
+export function hasChordsAfter(chords: ReadonlyArray<Chord>, truncation: Truncation | null): boolean {
+  return chords.length > 0 || truncation?.unfinishedChord === true;
+}
+
+/** Drops the unfinished chord string's flag when a command removes chord material on purpose. */
+export function withoutUnfinishedChord(truncation: Truncation | null): Truncation | null {
+  if (truncation?.unfinishedChord !== true) return truncation;
+  return { voice: truncation.voice, bar: truncation.bar, short: truncation.short };
+}
 
 export function barTicks(meter: Meter): number {
   return (4 * meter.numerator * TICKS_PER_QUARTER) / meter.denominator;

@@ -15,6 +15,7 @@ import {
 } from "./parser";
 import { serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
 import { keepsCutTail } from "./write-chords";
+import { sectionsMatchSource } from "./write-sections";
 
 const TICKS_PER_QUARTER = 256;
 const DURATIONS: ReadonlyArray<number> = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48];
@@ -86,7 +87,15 @@ export function sameContent(left: BarContent, right: BarContent): boolean {
   for (let index = 0; index < left.notes.length; index += 1) {
     const a = left.notes[index] as BarContent["notes"][number];
     const b = right.notes[index] as BarContent["notes"][number];
-    if (a.start !== b.start || a.duration !== b.duration || a.midi !== b.midi || a.tie !== b.tie) return false;
+    if (
+      a.start !== b.start ||
+      a.duration !== b.duration ||
+      a.midi !== b.midi ||
+      a.tie !== b.tie ||
+      a.tiedFromPrevious !== b.tiedFromPrevious
+    ) {
+      return false;
+    }
   }
   for (let index = 0; index < left.chords.length; index += 1) {
     const a = left.chords[index] as BarContent["chords"][number];
@@ -276,6 +285,7 @@ function barsFill(score: Score): boolean {
 }
 
 function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
+  if (!sectionsMatchSource(score, source)) return true;
   const content = sourceContentByBar(source);
   let oldCount = 0;
   for (const index of content.keys()) oldCount = Math.max(oldCount, index + 1);

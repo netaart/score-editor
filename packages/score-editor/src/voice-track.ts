@@ -19,6 +19,8 @@ import type { Messages } from "./i18n";
 import { createInsertionPointLine, type InsertionPointLine } from "./insertion-point";
 import { installLanePointer } from "./lane-pointer";
 import { mountNoteFocus, type NoteFocus } from "./note-focus";
+import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from "./playhead";
+import { previewPlayer } from "./preview-player";
 import type { Note, Score } from "./score";
 import type { EditingSession, InsertionPoint } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
@@ -43,6 +45,7 @@ interface Drawn {
   readonly blocks: Map<string, HTMLElement>;
   readonly owners: Map<Element, string>;
   readonly insertionPoint: InsertionPointLine;
+  readonly playhead: PlayheadLine;
   /** The notes drawn as selected now. */
   framed: ReadonlySet<string>;
 }
@@ -119,6 +122,13 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         });
         noteFocus = focus;
         announceVoice(session, voice, live, signal, () => focus.stepping);
+        const player = previewPlayer(session);
+        const follower = createPlayheadFollower(session);
+        const unsubscribePlayer = player.subscribe(() => {
+          drawn?.playhead.show(player.tick);
+          follower.follow(player.tick);
+        });
+        signal.addEventListener("abort", unsubscribePlayer, { once: true });
         own.setAttribute("data-editable", String(session.view.editable));
         installLanePointer(own, session, signal, { lane: () => drawn, focus: (noteId) => focus.focus(noteId) });
       },
@@ -171,6 +181,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           blocks: new Map(),
           owners: new Map(),
           insertionPoint: createInsertionPointLine(lane, score, t),
+          playhead: createPlayheadLine(lane, score),
           framed: new Set(),
         };
         const blocks = doc.createDocumentFragment();
@@ -188,6 +199,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         }
         list.appendChild(blocks);
         drawn = fresh;
+        fresh.playhead.show(previewPlayer(session).tick);
         noteFocus?.draw({
           order: notes.filter((note) => note.midi !== null).map((note) => note.id),
           blocks: fresh.blocks,

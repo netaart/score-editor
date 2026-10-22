@@ -236,7 +236,7 @@ The empty string is a major triad. `Cmaj`, `Cmaj9`, `C13`, `A7alt`, `C:maj`, `CM
 
 **C7 — chords only in Vocal.** A chord token in `Ins` MUST be rejected with `chord` (parameter `voice` = `Ins`). This includes a chord string whose closing quote was removed by a cut; the token is still a chord start in `Ins`, and the score is rejected at the end of reading even though the unfinished string is not a finished chord event. A score without `Ins` has no such problem. Reading result: no chord events in `Ins`.
 
-**C8 — hasChords.** The reading result reports `hasChords: true` exactly when the text contains at least one chord token, finished or not. An unfinished chord string in a cut tail (X4) is not a chord event and has no name or position in `chords`, but it still counts here: a score that carries chord material is treated as carrying chords wherever that matters (for example a mode that forbids chords), and removing all chords removes those bytes too. Reading result: the boolean.
+**C8 — hasChords.** The reading result reports `hasChords: true` exactly when the text contains at least one chord token, finished or not. An unfinished chord string in a cut tail (X4) is not a chord event and has no name or position in `chords`, but it still counts here: a score that carries chord material is treated as carrying chords wherever that matters (for example a mode that forbids chords), and removing all chords removes those bytes too. When the cut ends inside such a string, the reading result also sets `truncation.unfinishedChord: true`; the field is absent otherwise, and the writer drops the tail with the last chord. Reading result: the boolean and the optional truncation field.
 
 ## V. Voice agreement
 
@@ -264,7 +264,8 @@ The empty string is a major triad. `Cmaj`, `Cmaj9`, `C13`, `A7alt`, `C:maj`, `CM
 
 - `voice`: the voice whose reading stopped, one of `Vocal` or `Ins`;
 - `measure`: the 1-based measure number within that voice where the cut is;
-- `short`: `true` when the cut is inside a measure whose finished tokens last less than the bar length, `false` otherwise.
+- `short`: `true` when the cut is inside a measure whose finished tokens last less than the bar length, `false` otherwise;
+- `unfinishedChord`: `true` only when the cut ends inside an unfinished chord string (X4, C8); the field is absent otherwise.
 
 `measure` is `1 + (number of complete measures already read in that voice)` for a cut before a new measure or between blocks, and is the partial measure’s own number when the cut is inside a measure. A complete text has `truncated: false` and no `truncation` value. The reader MUST report the cut even when all measures that can be read are complete (for example a missing final block).
 
@@ -281,7 +282,7 @@ The empty string is a major triad. `Cmaj`, `Cmaj9`, `C13`, `A7alt`, `C:maj`, `CM
 - (i) after a final note that continues a tie with a different pitch (P14);
 - (j) after a complete final block, when the `Ins` block of that group would be required but is absent.
 
-**X4 — unfinished tokens.** In the final measure of a cut, the remaining bytes MAY be one of these unfinished token forms: `"` followed by any characters up to the end of the line with no closing `"`; `[`, `[K`, or `[K:` followed by any characters up to the end of the line with no `]`; or a lone `^`, `^^`, `_`, `__`, or `=`. Such a remainder is accepted only as the end of the text. It is not a note, a rest, a chord, or a key change in the reading result; it has no start, duration, or pitch; it does not set an accidental or a key. Its bytes are kept. The cut is reported in the current measure (X2). Any other unrecognized remainder is rejected with `token`.
+**X4 — unfinished tokens.** In the final measure of a cut, the remaining bytes MAY be one of these unfinished token forms: `"` followed by any characters up to the end of the line with no closing `"`; `[`, `[K`, or `[K:` followed by any characters up to the end of the line with no `]`; or a lone `^`, `^^`, `_`, `__`, or `=`. Such a remainder is accepted only as the end of the text. It is not a note, a rest, a chord, or a key change in the reading result; it has no start, duration, or pitch; it does not set an accidental or a key. Its bytes are kept. The cut is reported in the current measure (X2), with `unfinishedChord: true` when the remainder is an unfinished chord string (C8). Any other unrecognized remainder is rejected with `token`.
 
 **X5 — a cut tie continuation before its octave marks.** If the last token of a cut measure is a note that continues a pending tie and its computed pitch differs from the tied pitch, the reader MUST accept the text as a cut and MUST treat that token as unfinished: it is absent from `notes`, contributes no duration, and does not set the letter state. The preceding tied note keeps `tie: true`. This is the only note token that may be unfinished; a note token that is complete apart from a possible later octave mark but whose pitch already matches is a finished note.
 

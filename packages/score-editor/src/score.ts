@@ -36,7 +36,7 @@ export interface Bar {
   readonly incomplete: boolean;
 }
 
-/** A section and the bars it covers. The unnamed part before the first marker has `name: null`. */
+/** A section and the bars it covers. The unnamed section before the first marker has `name: null`. */
 export interface Section {
   readonly name: string | null;
   /** 0-based index of its first bar. */
@@ -73,6 +73,8 @@ export interface Truncation {
   /** 0-based. It may equal the bar count when the cut is before a new bar rather than inside one. */
   readonly bar: number;
   readonly short: boolean;
+  /** True only when the cut ends inside an unfinished chord string (RULES.md C8 and X4). */
+  readonly unfinishedChord?: true;
 }
 
 /** A parsed score. `source` is dialect-private data the core never reads; the dialect uses it to write unchanged text. */

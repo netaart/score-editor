@@ -1,13 +1,15 @@
-// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge and the screen-reader hint.
+// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor } from "./i18n";
+import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
+import { mountSynthControl } from "./synth-preview";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { mountZoomControl } from "./zoom-control";
 
@@ -17,26 +19,11 @@ export interface ToolbarOptions extends EditingPartOptions {
    * this option the toolbar draws no hint, since a hint nothing refers to would only be noise.
    */
   hintId?: string;
-}
-
-const SVG = "http://www.w3.org/2000/svg";
-
-/**
- * A 16 by 16 line drawing. It is built of polylines, since the reset that isolates the parts reverts every CSS
- * property, and a path's `d` is one, where `points` is not; the stylesheet gives the lines their stroke.
- */
-function lineIcon(doc: Document, polylines: ReadonlyArray<string>): SVGSVGElement {
-  const icon = doc.createElementNS(SVG, "svg");
-  icon.setAttribute("class", "sce-icon");
-  icon.setAttribute("viewBox", "0 0 16 16");
-  icon.setAttribute("aria-hidden", "true");
-  icon.setAttribute("focusable", "false");
-  for (const points of polylines) {
-    const line = doc.createElementNS(SVG, "polyline");
-    line.setAttribute("points", points);
-    icon.appendChild(line);
-  }
-  return icon;
+  /**
+   * Whether the toolbar holds the synth preview control. On by default, so a toolbar alone lets a person listen; a host
+   * that mounts `mountSynthPreview` in a place of its own turns it off, so the control is not there twice.
+   */
+  synthPreview?: boolean;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -47,7 +34,8 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
 
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
- * read-only badge (while it is not) and, when asked, the screen-reader hint. It follows the session's language.
+ * read-only badge (while it is not), the synth preview control, which is there either way unless `synthPreview` is off,
+ * and, when asked, the screen-reader hint. It follows the session's language.
  */
 export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
   requireDom("mountToolbar");
@@ -80,6 +68,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
+  const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
+  if (synth) row.dataset.synth = "";
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -145,6 +135,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       unsubscribe();
       zoom.destroy();
       select.destroy();
+      synth?.destroy();
       root.remove();
       releaseStyles();
     },
