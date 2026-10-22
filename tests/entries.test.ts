@@ -34,7 +34,7 @@ describe("package entries in a node environment", () => {
     ];
     for (const name of functions) expect(typeof editor[name as keyof typeof editor], name).toBe("function");
     expect(typeof editor.TICKS_PER_QUARTER).toBe("number");
-    expect(Array.isArray(editor.NOTICE_CODES)).toBe(true);
+    expect([...editor.NOTICE_CODES]).toEqual(["command-refused"]);
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });
 

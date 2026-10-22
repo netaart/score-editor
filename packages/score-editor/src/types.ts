@@ -6,8 +6,11 @@ import type { SongProject } from "./score";
 /** Interface languages the package ships text for. The host picks one. */
 export type Language = "zh" | "en";
 
-/** The reasons of the one-time messages the editor sends to the host. The set is closed and starts empty: a later ticket adds its codes here. */
-export const NOTICE_CODES = [] as const;
+/**
+ * The reasons of the one-time messages the editor sends to the host. The set is closed; a later ticket adds its codes
+ * here. `command-refused`: the user asked for an edit and the score would not take it, so nothing changed.
+ */
+export const NOTICE_CODES = ["command-refused"] as const;
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */
 export type NoticeCode = (typeof NOTICE_CODES)[number];
