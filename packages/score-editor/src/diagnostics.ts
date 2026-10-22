@@ -20,7 +20,7 @@ export const READING_DIAGNOSTIC_CODES = [
 export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
 
 /**
- * The codes a command is refused with: the dialect-agnostic edit layer reports the first three when a command cannot be
+ * The codes a command is refused with: the dialect-agnostic headless layer reports the first three when a command cannot be
  * applied or checked, `session.dispatch` reports `no-dialect` for a model the registry has no dialect for, and a tool
  * run reports `tool-parameter` for a parameter of the wrong type or outside its declaration, or a tool with no builder.
  */

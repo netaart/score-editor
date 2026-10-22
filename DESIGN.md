@@ -145,7 +145,7 @@ Sizes are keyword-relative so the user's browser font size applies and a host's 
 
 ### Hierarchy
 
-- **Base** (400, `small`, line-height 1.3): toolbar buttons, menu items, the cut sentence, the problem panel.
+- **Base** (400, `small`, line-height 1.3): toolbar buttons, menu items, the cut sentence, the problem view.
 - **Title** (600, `small`): toolbar title, the zoom value, chord names.
 - **Label** (`0.92em`): bar numbers, section names (600), marks, track names (600, 0.02em tracking), badge.
 - **Numeral label** (`0.85em`): octave labels in the pitch column and the Chords label.
@@ -249,7 +249,7 @@ A block exactly one row high, filled with the note colour, with a border mixed 3
 
 When the text of a voice stops before the song does, three things say so: a strip of one sentence above the view, led by a small swatch of the hatch so the sentence and the texture read as one ("This score is cut off: bar 232 of Ins is incomplete." or "...after bar 5 of Vocal."), a flag in the marks row at the bar where it stops ("Incomplete bar" when the bar is unfinished, "Cut off" when the text stops at a bar line, which puts the flag at the end of the score), and in that voice's lane a hatched tail with a dashed left edge from where its last note ends to the end of the score. The hatch is 1px diagonal lines in the strong line colour at 7px (the swatch is 1.1em square with a dashed border); the strip is a note landmark. None of it uses a new colour.
 
-### Problem panel
+### Problem view
 
 When the score cannot be read, the view is replaced by an alert panel: one sentence in 600 weight ("This score can't be shown because it can't be read."), then the dialect's diagnostics as a list in the interface language ("The duration "5" is not allowed. (bar 1, line 10)"), at most 20 and then "and N more". A model with no dialect gets one sentence naming it. The toolbar keeps its title and loses the zoom group.
 

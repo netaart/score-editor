@@ -1,4 +1,4 @@
-// ABOUTME: The two entry points into the generic edit layer: one works on score text, one on a song project.
+// ABOUTME: The two entry points into the generic headless layer: one works on score text, one on a song project.
 // ABOUTME: Both run the dialect's check after the command; any failure returns a diagnostic and leaves the input unchanged.
 import { runScoreCommand, type ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";

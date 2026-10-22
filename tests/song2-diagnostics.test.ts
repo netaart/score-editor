@@ -33,7 +33,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
 ];
 
 describe("diagnostics", () => {
-  it("has exactly the reading codes RULES.md lists and the command codes the edit layer and tools report", () => {
+  it("has exactly the reading codes RULES.md lists and the command codes the headless layer and tools report", () => {
     expect([...READING_DIAGNOSTIC_CODES]).toEqual(READING_CODES);
     expect([...COMMAND_DIAGNOSTIC_CODES]).toEqual(COMMAND_CODES);
   });
