@@ -7,6 +7,7 @@ import { applyProjectRules, isProjectCommand, type ProjectCommand, runProjectCom
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import type { SongProject } from "./score";
+import { fallbackDiagnostic } from "./score-text";
 
 export type ApplyScoreResult =
   | { readonly ok: true; readonly text: string }
@@ -16,10 +17,6 @@ export type ApplyProjectResult = {
   readonly project: SongProject;
   readonly diagnostics: ReadonlyArray<Diagnostic>;
 };
-
-function fallbackDiagnostic(): Diagnostic {
-  return { code: "token", params: { reason: "unrecognized" }, at: {} };
-}
 
 /** A diagnostic the dialect left without a bar points where the command acted; one that has its own place keeps it. */
 function located(diagnostic: Diagnostic, acted: DiagnosticAt): Diagnostic {
@@ -55,8 +52,9 @@ export function applyScoreCommand(dialect: ScoreDialect, text: string, command: 
 }
 
 /**
- * Applies one command to a project. A ScoreCommand edits the score text through the score entry; a ProjectCommand
- * edits only the project fields. The project is returned unchanged on a failure.
+ * Applies one command to a project. A ScoreCommand edits the score text through the score entry; a ProjectCommand edits
+ * the project's fields, or, for `replaceScoreText`, takes a whole new score text. Either way the song-project rules run
+ * after it. The project is returned unchanged on a failure.
  */
 export function applyProjectCommand(
   dialect: ScoreDialect,
@@ -64,7 +62,7 @@ export function applyProjectCommand(
   command: ScoreCommand | ProjectCommand,
 ): ApplyProjectResult {
   if (isProjectCommand(command)) {
-    const applied = runProjectCommand(project, command);
+    const applied = runProjectCommand(dialect, project, command);
     if (!applied.ok) return { project, diagnostics: [applied.diagnostic] };
     return applyProjectRules(dialect, applied.project, command);
   }

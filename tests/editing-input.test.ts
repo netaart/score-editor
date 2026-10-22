@@ -79,6 +79,30 @@ C4z4E4F4|G16|`);
   });
 });
 
+describe("Delete in a melody project whose score holds chords", () => {
+  const WITH_CHORDS = `${HEADER}
+K:C
+V: Vocal
+"C"C4D4E4F4|G16|`;
+
+  it("is not refused for the notice the project carries, and is one step to undo", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+    session.select(["Vocal:256"]);
+    const changes = listen(session);
+
+    const result = handleEditingInput(session, key("Delete"));
+
+    expect(result).toEqual({ handled: true, refused: [] });
+    expect(session.project.score).toBe(`${HEADER}
+K:C
+V: Vocal
+"C"C4z4E4F4|G16|`);
+    expect(changes.map((change) => change.cause)).toEqual(["dispatch"]);
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(WITH_CHORDS);
+  });
+});
+
 describe("Delete and Backspace in detail", () => {
   it("treat Backspace as Delete", () => {
     const session = open();
@@ -464,5 +488,60 @@ describe("the arrow keys, Home and End", () => {
     const unreadable = open({ score: `${HEADER}\nK:C\nV: Vocal\nC5|` });
     expect(handleEditingInput(unreadable, key("Home")).handled).toBe(false);
     expect(unreadable.insertionPoint).toBeNull();
+  });
+});
+
+describe("while a view other than the arrangement is shown", () => {
+  it("leaves Delete, Backspace and the delete input alone, so no note is deleted that the user cannot see", () => {
+    for (const view of ["staff", "text"] as const) {
+      const session = open();
+      session.select(["Vocal:256"]);
+      session.setActiveView(view);
+
+      for (const input of [key("Delete"), key("Backspace"), { type: "delete" } as const]) {
+        expect(handleEditingInput(session, input).handled, `${view} ${input.type}`).toBe(false);
+      }
+
+      expect(session.project.score).toBe(SCORE);
+      expect(session.canUndo).toBe(false);
+      expect(session.selection).toEqual(["Vocal:256"]);
+    }
+  });
+
+  it("leaves clicks and the insertion point keys alone", () => {
+    const session = open();
+    session.select(["Vocal:256"]);
+    session.setInsertionPoint({ tick: 512 });
+    session.setActiveView("staff");
+
+    expect(handleEditingInput(session, { type: "click-note", noteId: "Vocal:768" }).handled).toBe(false);
+    expect(handleEditingInput(session, { type: "click-empty", tick: 0 }).handled).toBe(false);
+    for (const name of ["ArrowLeft", "ArrowRight", "Home", "End"]) {
+      expect(handleEditingInput(session, key(name)).handled, name).toBe(false);
+    }
+
+    expect(session.selection).toEqual(["Vocal:256"]);
+    expect(session.insertionPoint).toEqual({ tick: 512 });
+  });
+
+  it("still undoes and redoes, since the text view changes the score and the history is the session's", () => {
+    const session = open();
+    session.dispatch({ type: "replaceScoreText", text: SCORE.replace("G16", "G8G8") });
+    session.setActiveView("text");
+
+    expect(handleEditingInput(session, key("z", { ctrl: true })).handled).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(handleEditingInput(session, key("y", { ctrl: true })).handled).toBe(true);
+    expect(session.project.score).toBe(SCORE.replace("G16", "G8G8"));
+  });
+
+  it("acts again on the arrangement once it is shown again", () => {
+    const session = open();
+    session.select(["Vocal:256"]);
+    session.setActiveView("staff");
+    session.setActiveView("arrangement");
+
+    expect(handleEditingInput(session, key("Delete")).handled).toBe(true);
+    expect(session.project.score).toBe(SCORE.replace("C4D4", "C4z4"));
   });
 });

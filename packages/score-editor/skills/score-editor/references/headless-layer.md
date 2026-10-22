@@ -73,19 +73,36 @@ command runs on the model (`Score`), then the dialect writes it and runs `check`
 
 `applyProjectCommand` also runs the song-project rules and can return a notice with the changed project. `checkProject`
 reports those notices for a project as it stands, `isNoticeDiagnostic` tells a notice from a refusal, and
-`NOTICE_DIAGNOSTIC_CODES` lists the notice codes.
+`NOTICE_DIAGNOSTIC_CODES` lists the notice codes. A result whose diagnostics are all notices is a command that was taken;
+the session does that for you (`dispatch` returns `ok: true` with the notices), and a host that calls this function itself
+should do the same.
 
 ```ts
-import { applyProjectCommand } from "@neta-art/score-editor";
+import { applyProjectCommand, isNoticeDiagnostic } from "@neta-art/score-editor";
 
 const reading = song2Dialect.parse(project.score);
 if (reading.score) {
   const first = reading.score.notes.find((note) => note.voice === "Vocal" && note.midi !== null);
   if (first) {
     const result = applyProjectCommand(song2Dialect, project, { type: "toRest", noteId: first.id });
-    if (result.diagnostics.length === 0) project = result.project; // the new score text
+    if (result.diagnostics.every(isNoticeDiagnostic)) project = result.project; // the new score text; a notice is not a refusal
   }
 }
+```
+
+`ProjectCommand` is the union of edits that act on the project and not on a parsed score. `setStyle`, `setScoreMode`
+and `setSeed` change a field of the project. `{ type: "replaceScoreText", text }` replaces the whole score text: the
+dialect must read `text` and its `check` must pass, and the project then holds the text as the dialect writes it;
+otherwise the project keeps its old text and the result carries the first diagnostic. It is the command the text view
+sends. The song-project rules run after it as after any command, so a `melody` project whose new text has chords comes
+back with the notice `melody-with-chords`. A session announces a `dispatch` of any project command with the command in
+`SessionChange.command`, so a host can tell a person's direct edit of the score text from the other edits as it
+happens. The undo history keeps whole projects, not commands, so nothing in it, and nothing in a project that was
+saved and loaded again, says how the text came to be what it is.
+
+```ts
+const taken = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: typed });
+if (taken.diagnostics.every(isNoticeDiagnostic)) project = taken.project;
 ```
 
 A host that stores scores can use this path without mounting anything. To write a whole model instead of one command,

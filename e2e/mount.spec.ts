@@ -212,6 +212,15 @@ test.describe("the arrangement of a song2 score", () => {
     await expect(page.getByRole("list", { name: "Marks" }).getByText("Incomplete bar")).toBeVisible();
   });
 
+  test("the cut notice leads with a swatch of the hatch", async ({ page, harness }) => {
+    await harness.mount({ score: { vector: "truncate-partial-measure" } });
+    const swatch = await page.getByRole("note").evaluate((el) => ({
+      content: getComputedStyle(el, "::before").content,
+      display: getComputedStyle(el, "::before").display,
+    }));
+    expect(swatch).toEqual({ content: '""', display: "inline-block" });
+  });
+
   test("a cut in the Ins voice of a long score is marked at the bar where Ins stops", async ({ page, harness }) => {
     // Vocal has 235 bars; its last line starts at bar 232, and the Ins line there stops after e6f6g (bar 232 of Ins).
     await harness.mount({ score: { sample: "melody-cut-tail" } });
@@ -1369,4 +1378,25 @@ test.describe("keyboard focus in a short editor", () => {
     await expect(page.getByRole("listitem", { name: /^B5, bar 1 beat 2.*selected$/ })).toBeFocused();
     await expect.poll(async () => (await box(next)).y).toBeGreaterThanOrEqual(head.y + head.height);
   });
+});
+
+test("destroying the editor after all three views were shown leaves the page as it found it", async ({
+  page,
+  harness,
+}) => {
+  const views = page.getByRole("group", { name: "View" });
+  const html = await page.evaluate(() => document.documentElement.outerHTML);
+  const sheets = await page.evaluate(() => document.adoptedStyleSheets.length);
+  await harness.mount({ score: { text: vocalOnly("C4D4E4F4|G16|") } });
+
+  await views.getByRole("button", { name: "Staff", exact: true }).click();
+  await expect(page.locator("svg .abcjs-note")).toHaveCount(5);
+  await views.getByRole("button", { name: "Score text", exact: true }).click();
+  await page.getByRole("textbox", { name: "Score text" }).fill("not a score");
+  await views.getByRole("button", { name: "Arrangement", exact: true }).click();
+
+  await harness.destroy();
+
+  expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(html);
+  expect(await page.evaluate(() => document.adoptedStyleSheets.length)).toBe(sheets);
 });

@@ -80,7 +80,8 @@ session's state and `session.runTool(tool, values?)` applies it.
 `ToolResult` is `{ ok, project, diagnostics, commands }` in both cases. A preview changes nothing, adds no history
 step and notifies nobody. A run applies all commands as one history step: one undo goes back to the project before the
 run; if any step fails, the run is refused, the result carries that step's diagnostic, and project and history stay
-as they were.
+as they were. A step that comes back with a notice (`isNoticeDiagnostic`) does not fail the run: the result is `ok`, its
+`diagnostics` hold each notice once, and the project is the one the commands made.
 
 ```ts
 const preview = session.previewTool(restEveryNth, { every: 2 });
