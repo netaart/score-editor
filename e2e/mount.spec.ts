@@ -1241,6 +1241,9 @@ test.describe("editing in the default editor", () => {
     await press(noteNamed(page, D4));
     await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
     await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(/Delete/);
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(
+      /press Tab to reach the notes/,
+    );
 
     await harness.update({ editable: false });
     await expect(undoButton(page)).toBeHidden();

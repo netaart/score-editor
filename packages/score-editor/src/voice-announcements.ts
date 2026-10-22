@@ -19,9 +19,16 @@ function sameIds(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean {
 /**
  * Makes `live` speak for `voice` for as long as `signal` lives: a selection of the voice's own notes, a delete that
  * took some of them, and, for the first voice of the score, which speaks for the time axis they share, a move of the
- * insertion point. While the session is read-only nothing is said.
+ * insertion point. While the session is read-only nothing is said, and nothing is said about a selection that `quiet`
+ * covers, as when the keys step from note to note and the focus already speaks the note it lands on.
  */
-export function announceVoice(session: EditingSession, voice: string, live: LiveRegion, signal: AbortSignal): void {
+export function announceVoice(
+  session: EditingSession,
+  voice: string,
+  live: LiveRegion,
+  signal: AbortSignal,
+  quiet: () => boolean,
+): void {
   function look(): Seen {
     const { reading, selection } = session;
     if (reading.kind !== "score") return { score: null, selected: [] };
@@ -54,7 +61,7 @@ export function announceVoice(session: EditingSession, voice: string, live: Live
         return;
       }
     }
-    if (change.selection && selected.length > 0 && !sameIds(selected, before.selected)) {
+    if (change.selection && selected.length > 0 && !sameIds(selected, before.selected) && !quiet()) {
       const only = selected.length === 1 ? describe(score, selected[0] ?? "") : undefined;
       live.say(only ? t.selectedNote(only.pitch, only.position) : t.selectedNotes(selected.length));
     }

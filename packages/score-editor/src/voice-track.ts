@@ -17,6 +17,7 @@ import { tieChain } from "./commands";
 import { create } from "./dom";
 import { handleEditingInput } from "./editing-input";
 import type { Messages } from "./i18n";
+import { mountNoteFocus, type NoteFocus } from "./note-focus";
 import type { Note, Score } from "./score";
 import type { EditingSession, InsertionPoint } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
@@ -61,6 +62,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
   const { voice } = options;
   let drawn: Drawn | null = null;
   let root: HTMLElement | null = null;
+  let noteFocus: NoteFocus | null = null;
   let shown: { selection: ReadonlyArray<string>; point: InsertionPoint | null; editable: boolean } | null = null;
 
   /** The ids drawn as selected for a selection: every selected note of this voice, with the whole chain it is tied into. */
@@ -116,6 +118,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     for (const id of wanted) if (!drawn.framed.has(id)) frame(id, true);
     drawn.framed = wanted;
     drawMarker(editable ? point : null);
+    noteFocus?.sync(editable, selection);
   }
 
   /** A click or tap that landed inside the track: on a note, or else on the lane at some position in time. */
@@ -124,7 +127,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     const block = event.target.closest(".sce-note");
     const noteId = block ? drawn.owners.get(block) : undefined;
     if (noteId !== undefined) {
-      handleEditingInput(session, { type: "click-note", noteId });
+      if (handleEditingInput(session, { type: "click-note", noteId }).handled) noteFocus?.focus(noteId);
       return;
     }
     if (!event.target.closest(".sce-lane")) return;
@@ -145,7 +148,11 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       region: () => voice,
       attach(own, signal, live) {
         root = own;
-        announceVoice(session, voice, live, signal);
+        const focus = mountNoteFocus(own, session, signal, (noteId) =>
+          handleEditingInput(session, { type: "click-note", noteId }),
+        );
+        noteFocus = focus;
+        announceVoice(session, voice, live, signal, () => focus.stepping);
         own.setAttribute("data-editable", String(session.view.editable));
         let down: { id: number; x: number; y: number } | null = null;
         own.addEventListener(
@@ -179,6 +186,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       build(canvas, score, t): BuiltAxis | null {
         drawn = null;
         shown = null;
+        noteFocus?.draw(null);
         if (!score.voices.includes(voice)) return null;
         const doc = canvas.ownerDocument;
         const notes = notesByVoice(score).get(voice) ?? [];
@@ -238,6 +246,11 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         }
         list.appendChild(blocks);
         drawn = fresh;
+        noteFocus?.draw({
+          order: notes.filter((note) => note.midi !== null).map((note) => note.id),
+          blocks: fresh.blocks,
+          owners: fresh.owners,
+        });
         return { axes: [lane], grids, corner: keys, timeline: lane, barCount: 0 };
       },
     },
@@ -248,6 +261,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       part.destroy();
       drawn = null;
       root = null;
+      noteFocus = null;
     },
   };
 }

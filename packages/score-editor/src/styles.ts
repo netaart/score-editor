@@ -619,6 +619,11 @@ ${labelThinning()}
   border-width: 2px;
   border-color: var(--sce-_text);
 }
+/* A note reached by the keyboard gets the focus ring of the other controls, outside the selection frame. */
+.sce-root .sce-note:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: 2px;
+}
 /* A tie joins two notes into one bar: no gap, no border and no rounding where they meet. */
 .sce-root .sce-note[data-tie-next] {
   width: calc(var(--d) / var(--sce-ticks) * 100%);

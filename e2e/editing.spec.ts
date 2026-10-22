@@ -716,3 +716,166 @@ test.describe("announcements for screen readers", () => {
     await expect(said(page, "vocal")).toHaveText("");
   });
 });
+
+test.describe("selecting a note by keyboard", () => {
+  const region = (page: Page) => slot(page, "vocal").getByRole("region", { name: "Vocal" });
+  const said = (page: Page) => slot(page, "vocal").getByRole("status");
+
+  /** Moves the focus onto the notes of the Vocal track the way a keyboard user does: to the track, then Tab. */
+  async function tabToNotes(page: Page) {
+    await region(page).focus();
+    await page.keyboard.press("Tab");
+  }
+
+  test("Tab reaches the notes, Enter selects the one in focus, Delete turns it into a rest, undo brings it back", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await tabToNotes(page);
+    await expect(note(page, C4)).toBeFocused();
+    expect(await harness.layout.selection()).toEqual([]);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(selected(page, D4)).toBeFocused();
+    expect(await harness.layout.selection()).toEqual(["Vocal:256"]);
+
+    await page.keyboard.press("Delete");
+    await expect(note(page, D4)).toHaveCount(0);
+    expect(await harness.layout.scoreText()).toContain("C4z4E4F4|G16|");
+    // The focus stays in the track, on the note that followed the deleted one.
+    await expect(note(page, E4)).toBeFocused();
+
+    await page.keyboard.press("Control+z");
+    await expect(selected(page, D4)).toBeVisible();
+    expect(await harness.layout.scoreText()).toBe(QUARTERS);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("Enter and Space select the note in focus without moving", async ({ page, harness }) => {
+    await openTrack(harness);
+    await tabToNotes(page);
+
+    await page.keyboard.press("Enter");
+    await expect(selected(page, C4)).toBeFocused();
+    expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
+
+    await page.keyboard.press("ArrowRight");
+    await harness.layout.select([]);
+    await page.keyboard.press("Space");
+    await expect(selected(page, D4)).toBeFocused();
+    expect(await harness.layout.selection()).toEqual(["Vocal:256"]);
+  });
+
+  test("Left and Right step from note to note and stop at the ends; Home and End jump to the first and last", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await tabToNotes(page);
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(selected(page, C4)).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(selected(page, G4)).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(selected(page, G4)).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(selected(page, F4)).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(selected(page, C4)).toBeFocused();
+    expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
+    // Walking the notes is not walking the insertion point.
+    expect(await harness.layout.insertionPoint()).toBeNull();
+  });
+
+  test("Tab leaves the notes in one step, and comes back to the selected one", async ({ page, harness }) => {
+    await openTrack(harness);
+    await tabToNotes(page);
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect(selected(page, E4)).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(selected(page, E4)).not.toBeFocused();
+    await expect(note(page, F4)).not.toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(selected(page, E4)).toBeFocused();
+  });
+
+  test("keeps the keys of the insertion point for everything that is not a note in focus", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await harness.layout.select(["Vocal:256"]);
+    await region(page).focus();
+
+    await page.keyboard.press("Home");
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 0 });
+    await page.keyboard.press("ArrowRight");
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 256 });
+    expect(await harness.layout.selection()).toEqual(["Vocal:256"]);
+  });
+
+  test("leaves a key with a modifier to the editing keys, so Shift and Ctrl keep their room", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await tabToNotes(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(selected(page, C4)).toBeFocused();
+    expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
+
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("Control+z");
+    await expect(selected(page, C4)).toBeVisible();
+  });
+
+  test("stepping speaks through the focus alone, and Enter says what it selected", async ({ page, harness }) => {
+    await openTrack(harness);
+    await tabToNotes(page);
+    await page.keyboard.press("ArrowRight");
+    await expect(selected(page, D4)).toBeFocused();
+    await expect(said(page)).toHaveText("");
+
+    await page.keyboard.press("ArrowRight");
+    await harness.layout.select([]);
+    await page.keyboard.press("Enter");
+    await expect(said(page)).toHaveText("Selected E4, bar 1 beat 3");
+  });
+
+  test("a click or a tap puts the focus on the note, so the keys go on from there", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(note(page, D4));
+    await expect(selected(page, D4)).toBeFocused();
+
+    await page.keyboard.press("ArrowRight");
+    await expect(selected(page, E4)).toBeFocused();
+  });
+
+  test("read-only offers no note to reach by Tab", async ({ page, harness }) => {
+    await openTrack(harness, QUARTERS, { editable: false });
+    await tabToNotes(page);
+    await expect(note(page, C4)).not.toBeFocused();
+    await expect(slot(page, "vocal").getByRole("listitem").and(page.locator("[tabindex]"))).toHaveCount(0);
+  });
+
+  test("a tie chain is one thing to select: stepping onto a segment frames the whole chain", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness, vocalOnly("C16-|C16|"));
+    await tabToNotes(page);
+    await page.keyboard.press("ArrowRight");
+    await expect(note(page, "C4, bar 2 beat 1, length 4 beats, selected")).toBeFocused();
+    await expect(note(page, "C4, bar 1 beat 1, length 4 beats, tied to the next note, selected")).toBeVisible();
+  });
+});
