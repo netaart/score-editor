@@ -30,11 +30,26 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "write-mismatch",
   "no-dialect",
   "tool-parameter",
+  "pitch-out-of-range",
+  "semitones-not-integer",
+  "key-not-allowed",
+  "key-change-not-found",
+  "key-unavailable",
+  "chord-invalid",
+  "tempo-out-of-range",
+  "seed-not-integer",
+  "style-invalid",
+  "score-mode-invalid",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
 
-export type DiagnosticCode = ReadingDiagnosticCode | CommandDiagnosticCode;
+/** A diagnostic that reports something the user should know, while the project it describes is still usable. */
+export const NOTICE_DIAGNOSTIC_CODES = ["style-no-bpm", "melody-with-chords"] as const;
+
+export type NoticeDiagnosticCode = (typeof NOTICE_DIAGNOSTIC_CODES)[number];
+
+export type DiagnosticCode = ReadingDiagnosticCode | CommandDiagnosticCode | NoticeDiagnosticCode;
 
 export type DiagnosticParams = Readonly<Record<string, string | number | boolean>>;
 
@@ -71,6 +86,18 @@ interface Catalog {
   readonly writeMismatch: Text;
   readonly noDialect: Text;
   readonly toolParameter: Text;
+  readonly pitchOutOfRange: Text;
+  readonly semitonesNotInteger: Text;
+  readonly keyNotAllowed: Text;
+  readonly keyChangeNotFound: Text;
+  readonly keyUnavailable: Text;
+  readonly chordInvalid: Text;
+  readonly tempoOutOfRange: Text;
+  readonly seedNotInteger: Text;
+  readonly styleInvalid: Text;
+  readonly scoreModeInvalid: Text;
+  readonly styleNoBpm: Text;
+  readonly melodyWithChords: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -396,6 +423,116 @@ function chineseToolParameter(params: DiagnosticParams): string {
   return `工具${tool}的参数${parameter}需要${chineseToolParameterType(params)}。`;
 }
 
+function englishPitchOutOfRange(params: DiagnosticParams): string {
+  const midi = value(params, "midi");
+  return midi === ""
+    ? "A note would be moved outside MIDI 0-127."
+    : `The note would be moved to pitch ${midi}, outside MIDI 0-127.`;
+}
+
+function chinesePitchOutOfRange(params: DiagnosticParams): string {
+  const midi = value(params, "midi");
+  return midi === "" ? "移调后的音高超出了 MIDI 0-127 的范围。" : `移调后的音高 ${midi} 超出了 MIDI 0-127 的范围。`;
+}
+
+function englishSemitonesNotInteger(): string {
+  return "Transpose by a whole number of semitones.";
+}
+
+function chineseSemitonesNotInteger(): string {
+  return "移调必须用整数个半音。";
+}
+
+function englishKeyNotAllowed(params: DiagnosticParams): string {
+  return `The key${quoted(value(params, "key"))} is not one this format allows.`;
+}
+
+function chineseKeyNotAllowed(params: DiagnosticParams): string {
+  return `这个格式不支持${quoted(value(params, "key"))}这个调。`;
+}
+
+function englishKeyChangeNotFound(): string {
+  return "The score has no key change at the chosen position.";
+}
+
+function chineseKeyChangeNotFound(): string {
+  return "乐谱在选定的位置没有换调。";
+}
+
+function englishKeyUnavailable(): string {
+  return "No spelling this format allows fits that key after the shift.";
+}
+
+function chineseKeyUnavailable(): string {
+  return "这个格式里没有适合移调后这个调的调号写法。";
+}
+
+function englishChordInvalid(params: DiagnosticParams): string {
+  return `The chord${quoted(value(params, "name"))} cannot be transposed.`;
+}
+
+function chineseChordInvalid(params: DiagnosticParams): string {
+  return `和弦${quoted(value(params, "name"))}无法移调。`;
+}
+
+function englishTempoOutOfRange(params: DiagnosticParams): string {
+  const bpm = value(params, "bpm");
+  const min = value(params, "min");
+  const max = value(params, "max");
+  return `The tempo ${bpm} BPM is outside ${min}-${max} BPM.`;
+}
+
+function chineseTempoOutOfRange(params: DiagnosticParams): string {
+  const bpm = value(params, "bpm");
+  const min = value(params, "min");
+  const max = value(params, "max");
+  return `速度 ${bpm} BPM 不在 ${min}-${max} BPM 的范围内。`;
+}
+
+function englishSeedNotInteger(params: DiagnosticParams): string {
+  const seed = value(params, "seed");
+  return seed === ""
+    ? "The seed must be a whole number, or empty."
+    : `The seed ${seed} is not a whole number. Use a whole number, or clear it.`;
+}
+
+function chineseSeedNotInteger(params: DiagnosticParams): string {
+  const seed = value(params, "seed");
+  return seed === "" ? "seed 必须是整数，或者留空。" : `seed ${seed} 不是整数。请填整数，或者清空。`;
+}
+
+function englishStyleInvalid(): string {
+  return "The style must be text.";
+}
+
+function chineseStyleInvalid(): string {
+  return "风格描述必须是文本。";
+}
+
+function englishScoreModeInvalid(): string {
+  return "The score mode must be full or melody.";
+}
+
+function chineseScoreModeInvalid(): string {
+  return "乐谱模式必须是 full 或 melody。";
+}
+
+function englishStyleNoBpm(): string {
+  return "The style text has no BPM, so it was left as it is.";
+}
+
+function chineseStyleNoBpm(): string {
+  return "风格描述里没有写 BPM，所以没有改动它。";
+}
+
+function englishMelodyWithChords(): string {
+  return "Melody mode cannot carry chords; delete all chords or switch to full.";
+}
+
+function chineseMelodyWithChords(): string {
+  return "melody 模式不能带和弦；可以删掉所有和弦，或改回 full。";
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -413,6 +550,18 @@ const en: Catalog = {
   writeMismatch: englishWriteMismatch,
   noDialect: englishNoDialect,
   toolParameter: englishToolParameter,
+  pitchOutOfRange: englishPitchOutOfRange,
+  semitonesNotInteger: englishSemitonesNotInteger,
+  keyNotAllowed: englishKeyNotAllowed,
+  keyChangeNotFound: englishKeyChangeNotFound,
+  keyUnavailable: englishKeyUnavailable,
+  chordInvalid: englishChordInvalid,
+  tempoOutOfRange: englishTempoOutOfRange,
+  seedNotInteger: englishSeedNotInteger,
+  styleInvalid: englishStyleInvalid,
+  scoreModeInvalid: englishScoreModeInvalid,
+  styleNoBpm: englishStyleNoBpm,
+  melodyWithChords: englishMelodyWithChords,
 };
 
 const zh: Catalog = {
@@ -432,6 +581,18 @@ const zh: Catalog = {
   writeMismatch: chineseWriteMismatch,
   noDialect: chineseNoDialect,
   toolParameter: chineseToolParameter,
+  pitchOutOfRange: chinesePitchOutOfRange,
+  semitonesNotInteger: chineseSemitonesNotInteger,
+  keyNotAllowed: chineseKeyNotAllowed,
+  keyChangeNotFound: chineseKeyChangeNotFound,
+  keyUnavailable: chineseKeyUnavailable,
+  chordInvalid: chineseChordInvalid,
+  tempoOutOfRange: chineseTempoOutOfRange,
+  seedNotInteger: chineseSeedNotInteger,
+  styleInvalid: chineseStyleInvalid,
+  scoreModeInvalid: chineseScoreModeInvalid,
+  styleNoBpm: chineseStyleNoBpm,
+  melodyWithChords: chineseMelodyWithChords,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -471,9 +632,40 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.noDialect(diagnostic.params);
     case "tool-parameter":
       return catalog.toolParameter(diagnostic.params);
+    case "pitch-out-of-range":
+      return catalog.pitchOutOfRange(diagnostic.params);
+    case "semitones-not-integer":
+      return catalog.semitonesNotInteger(diagnostic.params);
+    case "key-not-allowed":
+      return catalog.keyNotAllowed(diagnostic.params);
+    case "key-change-not-found":
+      return catalog.keyChangeNotFound(diagnostic.params);
+    case "key-unavailable":
+      return catalog.keyUnavailable(diagnostic.params);
+    case "chord-invalid":
+      return catalog.chordInvalid(diagnostic.params);
+    case "tempo-out-of-range":
+      return catalog.tempoOutOfRange(diagnostic.params);
+    case "seed-not-integer":
+      return catalog.seedNotInteger(diagnostic.params);
+    case "style-invalid":
+      return catalog.styleInvalid(diagnostic.params);
+    case "score-mode-invalid":
+      return catalog.scoreModeInvalid(diagnostic.params);
+    case "style-no-bpm":
+      return catalog.styleNoBpm(diagnostic.params);
+    case "melody-with-chords":
+      return catalog.melodyWithChords(diagnostic.params);
     default:
       return "";
   }
+}
+
+/** True for a notice: the project it describes is usable, and the message is something to tell the user. */
+export function isNoticeDiagnostic(diagnostic: Diagnostic): diagnostic is Diagnostic & {
+  readonly code: NoticeDiagnosticCode;
+} {
+  return (NOTICE_DIAGNOSTIC_CODES as ReadonlyArray<string>).includes(diagnostic.code);
 }
 
 function position(diagnostic: Diagnostic, language: Language): string {

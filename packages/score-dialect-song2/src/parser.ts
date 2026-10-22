@@ -112,7 +112,7 @@ interface VoiceState {
   key: string;
   signature: Partial<Record<Letter, number>>;
   timeline: KeyChange[];
-  inlineKeys: KeyChange[];
+  inlineKeys: Song2SourceKey[];
   measures: MeasureRecord[];
   partial: PartialMeasure | null;
   notes: Note[];
@@ -173,12 +173,17 @@ export interface BarContent {
   readonly incomplete: boolean;
 }
 
+/** A `[K:...]` token and its place in the score's shared key timeline, so a later write finds its new key. */
+export interface Song2SourceKey extends KeyChange {
+  readonly timelineIndex: number;
+}
+
 export interface Song2SourceBar {
   readonly voice: string;
   readonly bar: number;
   readonly content: BarContent;
   /** The `[K:...]` tokens read in this bar, including one at its first instant. */
-  readonly inlineKeys: ReadonlyArray<KeyChange>;
+  readonly inlineKeys: ReadonlyArray<Song2SourceKey>;
 }
 
 /** One piece between barlines. A `Z2`-`Z4` piece expands to more than one bar. */
@@ -205,12 +210,21 @@ export interface Song2SourceLine {
   readonly cutTail: Song2CutTail | null;
 }
 
+/** A `K:` field line at the start of a block, and the timeline entry it states, so a later write finds its new key. */
+export interface Song2SourceKeyField {
+  /** 0-based line index in the normalized text. */
+  readonly line: number;
+  readonly timelineIndex: number;
+}
+
 export interface Song2Source {
   /** The text with CRLF and lone CR already turned into LF. */
   readonly text: string;
   /** The denominator of the `L:1/d` line, so a duration can be written in the format's units. */
   readonly unitDenominator: number;
   readonly musicLines: ReadonlyArray<Song2SourceLine>;
+  /** The block `K:` field lines the reader applied, in text order. A trailing cut field is not here. */
+  readonly keyFields: ReadonlyArray<Song2SourceKeyField>;
 }
 
 interface PendingBar {
@@ -361,6 +375,7 @@ class Song2Parser {
   private ins: VoiceState | null = null;
   private readonly groups: GroupCounts[] = [];
   private readonly plannedSections: PlannedSection[] = [];
+  private readonly keyFields: Song2SourceKeyField[] = [];
   private musicLines = 0;
   private readonly sourceLines: PendingLine[] = [];
   private lastCutReason: "tie" | "unfinished" = "unfinished";
@@ -671,6 +686,7 @@ class Song2Parser {
     const key = line.slice(2);
     if (!isKey(key)) this.failHeader("K", lineNumber, line, key);
     this.setKey(voice, key, voice.measureStart);
+    this.keyFields.push({ line: lineNumber - 1, timelineIndex: voice.timeline.length - 1 });
   }
 
   private setKey(voice: VoiceState, key: string, at: number): void {
@@ -874,7 +890,11 @@ class Song2Parser {
         this.requireRoom(voice, offset, length, bar, lineNumber);
         if (!isKey(key)) this.failHeader("K", lineNumber, key, key);
         this.setKey(voice, key, measureStart + offset);
-        voice.inlineKeys.push({ at: measureStart + offset, key });
+        voice.inlineKeys.push({
+          at: measureStart + offset,
+          key,
+          timelineIndex: voice.timeline.length - 1,
+        });
         pos = end + 1;
         continue;
       }
@@ -1262,6 +1282,7 @@ class Song2Parser {
     const source: Song2Source = {
       text: this.normalized,
       unitDenominator: this.unitDenominator,
+      keyFields: this.keyFields,
       musicLines: this.sourceLines.map((line) => ({
         line: line.line,
         voice: line.voice,

@@ -178,7 +178,11 @@ function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominator: numb
       : [];
   const changes = [...bar.keyChanges];
   for (const inline of sourceBar.inlineKeys) {
-    if (!changes.some((change) => change.at === inline.at && change.key === inline.key)) changes.push(inline);
+    // The timeline is the authority, so a transposed inline key is written at its new spelling.
+    const key = score.keys[inline.timelineIndex]?.key ?? inline.key;
+    if (!changes.some((change) => change.at === inline.at && change.key === key)) {
+      changes.push({ at: inline.at, key });
+    }
   }
   changes.sort((a, b) => a.at - b.at);
 
@@ -231,10 +235,37 @@ function lastNoteOf(score: Score, voice: string): Note | undefined {
   return notes[notes.length - 1];
 }
 
+function headerValue(line: string | undefined): string {
+  return line === undefined ? "" : line.replace(/[ \t]+$/, "").slice(2);
+}
+
+/**
+ * Changes only the header lines the model changed, so an untouched header keeps its exact bytes.
+ * The header is fixed (RULES.md H1-H10): `Q:` is line 5 and the header `K:` follows the voice lines.
+ */
+function writeHeader(score: Score, source: Song2Source, lines: string[]): void {
+  const tempoLine = lines[4];
+  const tempo = tempoLine === undefined ? null : /^Q:1\/4=([0-9]+)$/.exec(tempoLine.replace(/[ \t]+$/, ""));
+  if (tempo === null || Number(tempo[1]) !== score.tempo.bpm) lines[4] = `Q:1/4=${score.tempo.bpm}`;
+
+  const headerKeyLine = score.voices.length > 1 ? 7 : 6;
+  const headerKey = score.keys[0]?.key;
+  if (headerKey !== undefined && headerValue(lines[headerKeyLine]) !== headerKey) {
+    lines[headerKeyLine] = `K:${headerKey}`;
+  }
+
+  for (const field of source.keyFields) {
+    const entry = score.keys[field.timelineIndex];
+    if (entry === undefined) continue;
+    if (headerValue(lines[field.line]) !== entry.key) lines[field.line] = `K:${entry.key}`;
+  }
+}
+
 /** Writes a score: untouched bars keep their read bytes, changed bars are rewritten whole. */
 export function serializeSong2(score: Score): string {
   const source = sourceOf(score);
   const lines = source.text.split("\n");
+  writeHeader(score, source, lines);
   const dropped = new Set<number>();
   for (const musicLine of source.musicLines) {
     const tail = musicLine.cutTail;

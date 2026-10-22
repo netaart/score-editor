@@ -1,10 +1,17 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
+import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./commands-key-tempo";
 import type { Diagnostic } from "./diagnostics";
 import type { Score, Note as ScoreNote } from "./score";
+import type { DialectConstraints } from "./types";
 
 /** A dialect-agnostic edit of a Score. More commands join this union in later tickets. */
-export type ScoreCommand = { readonly type: "toRest"; readonly noteId: string };
+export type ScoreCommand =
+  | { readonly type: "toRest"; readonly noteId: string }
+  | { readonly type: "transpose"; readonly semitones: number }
+  | { readonly type: "setKey"; readonly key: string; readonly from?: number }
+  | { readonly type: "setTempo"; readonly bpm: number }
+  | { readonly type: "removeChords" };
 
 export type ScoreCommandResult =
   | { readonly ok: true; readonly score: Score }
@@ -36,9 +43,21 @@ function toRest(score: Score, id: string): ScoreCommandResult {
 }
 
 /** Applies one score command to a model. It never writes text and never touches a DOM. */
-export function runScoreCommand(score: Score, command: ScoreCommand): ScoreCommandResult {
+export function runScoreCommand(
+  score: Score,
+  command: ScoreCommand,
+  constraints: DialectConstraints,
+): ScoreCommandResult {
   switch (command.type) {
     case "toRest":
       return toRest(score, command.noteId);
+    case "transpose":
+      return runTranspose(score, command.semitones, constraints);
+    case "setKey":
+      return runSetKey(score, command.key, command.from, constraints);
+    case "setTempo":
+      return runSetTempo(score, command.bpm, constraints);
+    case "removeChords":
+      return runRemoveChords(score);
   }
 }
