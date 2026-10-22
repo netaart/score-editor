@@ -849,10 +849,12 @@ ${labelThinning()}
 }
 .sce-root .sce-text-problem:hover {
   background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
+  text-decoration: underline;
 }
 .sce-root .sce-text-problem:focus-visible {
   outline: 2px solid var(--sce-_accent);
   outline-offset: -2px;
+  text-decoration: underline;
 }
 .sce-root .sce-text-more {
   padding: 4px 12px;

@@ -125,6 +125,8 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): ViewPa
       target.replaceChildren();
       abcjs.renderAbc(target, text, {
         staffwidth: Math.max(MIN_STAFF_WIDTH, width),
+        paddingtop: 6,
+        paddingbottom: 12,
         paddingleft: 0,
         paddingright: 0,
         wrap: { minSpacing: 1.8, maxSpacing: 2.7, preferredMeasuresPerLine: 4 },
