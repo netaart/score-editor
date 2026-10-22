@@ -11,8 +11,17 @@ import { installEditKeys } from "./edit-keys";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import { mountProblemView } from "./problem-view";
-import { createEditingSession, type EditingSession, type ScoreReading, type SessionChange } from "./session";
+import {
+  createEditingSession,
+  type EditingSession,
+  type ScoreReading,
+  type SessionChange,
+  type ViewName,
+} from "./session";
+import { mountStaffView } from "./staff-view";
+import { mountStaleNotice } from "./stale-notice";
 import { acquireStyles } from "./styles";
+import { mountTextView } from "./text-view";
 import { mountTimeRuler } from "./time-ruler";
 import { mountToolbar } from "./toolbar";
 import type { Language, MountedEditor, MountOptions, ViewPart } from "./types";
@@ -30,7 +39,16 @@ export class Editor implements MountedEditor {
   private readonly scroller: HTMLElement;
   private readonly content: HTMLElement;
   private readonly top: HTMLElement;
+  /** The wrappers that show and hide a view's parts as one: they take no box of their own. */
+  private readonly stalePane: HTMLElement;
+  private readonly problemPane: HTMLElement;
+  private readonly staffPane: HTMLElement;
+  private readonly textPane: HTMLElement;
   private readonly parts: ViewPart[] = [];
+  private staffMounted = false;
+  private shownView: ViewName = "arrangement";
+  /** A project was opened while another view was shown: the arrangement opens at its start when it is shown again. */
+  private centreDue = false;
   private tracks: ViewPart[] = [];
   private voices: string[] = [];
   private reading: ScoreReading;
@@ -66,8 +84,10 @@ export class Editor implements MountedEditor {
 
     const hintId = `sce-hint-${n}`;
     const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
-    this.parts.push(mountToolbar(this.root, this.session, { hintId, onRefused }));
+    this.parts.push(mountToolbar(this.root, this.session, { hintId, onRefused, viewSwitch: true }));
     this.parts.push(mountCutNotice(this.root, this.session));
+    this.stalePane = create(doc, "div", "sce-pane", this.root);
+    this.parts.push(mountStaleNotice(this.stalePane, this.session));
     const body = create(doc, "div", "sce-body", this.root);
     this.scroller = create(doc, "div", "sce-scroller", body);
     this.scroller.tabIndex = 0;
@@ -79,7 +99,12 @@ export class Editor implements MountedEditor {
     this.parts.push(mountTimeRuler(this.top, this.session, { scroller: this.scroller, onRefused }));
     this.parts.push(mountChordTrack(this.top, this.session, { scroller: this.scroller, onRefused }));
     this.syncTracks();
-    this.parts.push(mountProblemView(body, this.session));
+    this.problemPane = create(doc, "div", "sce-pane", body);
+    this.parts.push(mountProblemView(this.problemPane, this.session));
+    // The staff view is mounted when it is first shown, since mounting it asks for abcjs.
+    this.staffPane = create(doc, "div", "sce-pane", body);
+    this.textPane = create(doc, "div", "sce-pane", body);
+    this.parts.push(mountTextView(this.textPane, this.session));
 
     installZoomGestures(this.root, this.session, this.abort.signal, { wheel: false });
     installZoomGestures(this.scroller, this.session, this.abort.signal, { wheel: true });
@@ -91,7 +116,7 @@ export class Editor implements MountedEditor {
 
     this.applyLanguage();
     this.applyEditable();
-    this.scroller.hidden = this.reading.kind !== "score";
+    this.showView();
     // The frame hears a change after the parts have drawn it, so it can scroll to what they drew.
     this.unsubscribe.push(this.session.subscribe(() => this.afterParts()));
     this.centreFirstTrack();
@@ -160,11 +185,36 @@ export class Editor implements MountedEditor {
     );
   }
 
+  /**
+   * Shows the view the session says is shown, and no other: the arrangement when the score reads, the problem view for the
+   * arrangement and the staff, the stale notice above the two that draw the project, the text view on its own.
+   */
+  private showView(): void {
+    const view = this.session.activeView;
+    const arrangement = view === "arrangement" && this.reading.kind === "score";
+    const returning = this.shownView !== "arrangement" && view === "arrangement";
+    this.shownView = view;
+    this.scroller.hidden = !arrangement;
+    this.stalePane.hidden = view === "text";
+    this.problemPane.hidden = view === "text";
+    this.staffPane.hidden = view !== "staff";
+    this.textPane.hidden = view !== "text";
+    if (view === "staff" && !this.staffMounted) {
+      this.staffMounted = true;
+      this.parts.push(mountStaffView(this.staffPane, this.session));
+    }
+    if (returning && arrangement && this.centreDue) {
+      this.centreDue = false;
+      this.openArrangement();
+    }
+  }
+
   private beforeParts(change: SessionChange): void {
     if (this.session.view.language !== this.language) this.applyLanguage();
-    if (this.session.reading === this.reading) return;
-    this.reading = this.session.reading;
-    this.scroller.hidden = this.reading.kind !== "score";
+    const readingChanged = this.session.reading !== this.reading;
+    if (readingChanged) this.reading = this.session.reading;
+    if (readingChanged || this.session.activeView !== this.shownView) this.showView();
+    if (!readingChanged) return;
     this.syncTracks();
     if (change.cause === "replace") this.openingViewDue = true;
   }
@@ -172,6 +222,13 @@ export class Editor implements MountedEditor {
   private afterParts(): void {
     if (!this.openingViewDue) return;
     this.openingViewDue = false;
+    // A project opened while another view is shown opens the arrangement at its start when it is shown again.
+    if (this.shownView !== "arrangement") this.centreDue = true;
+    else this.openArrangement();
+  }
+
+  /** Scrolls the arrangement to the start of the score and the middle of its first track. */
+  private openArrangement(): void {
     this.session.setView({ scrollLeft: 0 });
     this.scroller.scrollTop = 0;
     this.centreFirstTrack();

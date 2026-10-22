@@ -960,6 +960,11 @@ ${labelThinning()}
   color: var(--sce-_muted);
 }
 
+/* A pane shows and hides the parts of one view together, and takes no box of its own. */
+.sce-root .sce-pane {
+  display: contents;
+}
+
 .sce-root .sce-sr-only {
   position: absolute;
   width: 1px;

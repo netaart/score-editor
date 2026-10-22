@@ -234,6 +234,8 @@ export function stepZoomBy(session: EditingSession, direction: "in" | "out", fra
 function onZoomKey(event: KeyboardEvent, session: EditingSession, frame: () => AxisFrame | null): void {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.target instanceof Element && event.target.closest(".sce-menu-item")) return;
+  // A plus or a minus typed into a text box is text; the text view has one inside the editor.
+  if (event.target instanceof Element && event.target.closest("input, textarea, select")) return;
   if (event.key === "+" || event.key === "=") {
     event.preventDefault();
     stepZoomBy(session, "in", frame());

@@ -423,6 +423,12 @@ test.describe("destroying the view parts", () => {
     harness,
     partNames,
   }) => {
+    // abcjs puts two resize listeners on the window when its module is loaded, and has no way to take them off. They are
+    // its, not the staff view's: the module is loaded once before the baseline is taken, so that what is measured is what
+    // the parts leave behind.
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+    await harness.layout.close();
     const cdp = await page.context().newCDPSession(page);
     const listeners = listenerCounter(cdp);
     const globals = await listeners.onGlobals();
@@ -433,8 +439,9 @@ test.describe("destroying the view parts", () => {
       await harness.layout.open({ score: { text: QUARTERS }, parts: [name] });
       expect((await harness.layout.sheets()).document, `${name} adds the one style sheet`).toBe(sheets + 1);
       await harness.layout.retain(name);
-      // The notice only draws; the others have something to press, type in or scroll with.
-      if (name !== "stale") expect(await listeners.onRetained(), `${name} has listeners`).toBeGreaterThan(0);
+      // The notice and the staff only draw (the staff watches its size with an observer, which is no event listener).
+      if (!["stale", "staff"].includes(name))
+        expect(await listeners.onRetained(), `${name} has listeners`).toBeGreaterThan(0);
 
       await harness.layout.destroyPart(name, 2);
       expect(await listeners.onRetained(), `${name} leaves listeners`).toBe(0);
@@ -850,4 +857,376 @@ test.describe("style isolation of the staff view", () => {
     await harness.layout.close();
     expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(html);
   });
+});
+
+test.describe("the three views of the default editor", () => {
+  const views = (page: Page) => page.getByRole("group", { name: "View" });
+  const viewTab = (page: Page, name: string) => views(page).getByRole("button", { name, exact: true });
+  const arrangement = (page: Page) => page.getByRole("region", { name: "Arrangement" });
+  const staffView = (page: Page) => page.getByRole("region", { name: "Staff" });
+  const editorText = (page: Page) => page.getByRole("textbox", { name: "Score text" });
+  const editorProblems = (page: Page) => page.getByRole("list", { name: "Problems" });
+  const editorStatus = (page: Page) => page.locator(".sce-text-status");
+  const staleNote = (page: Page) => page.getByRole("note").filter({ hasText: "The score text has a problem" });
+  const title = (page: Page) => page.locator(".sce-title");
+  const staffNotes = (page: Page) => page.locator("svg .abcjs-note");
+  const staffRests = (page: Page) => page.locator("svg .abcjs-rest");
+  const note = (page: Page, name: string) => page.getByRole("listitem", { name, exact: true });
+  const undoButton = (page: Page) => page.getByRole("button", { name: "Undo", exact: true });
+
+  test("starts on the arrangement and switches to the staff, the text and back, one view shown at a time", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await expect(arrangement(page)).toBeVisible();
+    await expect(title(page)).toHaveText("Arrangement");
+    await expect(viewTab(page, "Arrangement")).toHaveAttribute("aria-pressed", "true");
+    await expect(staffView(page)).toHaveCount(0);
+    await expect(editorText(page)).toHaveCount(0);
+
+    await press(viewTab(page, "Staff"));
+    await expect(staffView(page)).toBeVisible();
+    await expect(staffNotes(page)).toHaveCount(5);
+    await expect(title(page)).toHaveText("Staff");
+    await expect(arrangement(page)).toHaveCount(0);
+    await expect(editorText(page)).toHaveCount(0);
+    await expect(viewTab(page, "Staff")).toHaveAttribute("aria-pressed", "true");
+    await expect(viewTab(page, "Arrangement")).toHaveAttribute("aria-pressed", "false");
+
+    await press(viewTab(page, "Score text"));
+    await expect(editorText(page)).toHaveValue(QUARTERS);
+    await expect(title(page)).toHaveText("Score text");
+    await expect(staffView(page)).toHaveCount(0);
+    await expect(arrangement(page)).toHaveCount(0);
+
+    await press(viewTab(page, "Arrangement"));
+    await expect(arrangement(page)).toBeVisible();
+    await expect(note(page, D4)).toBeVisible();
+    await expect(title(page)).toHaveText("Arrangement");
+    await expect(editorText(page)).toHaveCount(0);
+    await expect(staffView(page)).toHaveCount(0);
+  });
+
+  test("shows the zoom control and the delete button only on the arrangement, and keeps undo and redo everywhere", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    const zoom = page.getByRole("group", { name: "Zoom" });
+    const remove = page.getByRole("button", { name: "Delete", exact: true });
+    await expect(zoom).toBeVisible();
+    await expect(remove).toBeVisible();
+
+    for (const name of ["Staff", "Score text"]) {
+      await press(viewTab(page, name));
+      await expect(zoom, name).toBeHidden();
+      await expect(remove, name).toBeHidden();
+      await expect(undoButton(page), name).toBeVisible();
+    }
+    await press(viewTab(page, "Arrangement"));
+    await expect(zoom).toBeVisible();
+    await expect(remove).toBeVisible();
+  });
+
+  test("asks for abcjs when the staff is first shown, and not before", async ({ page, harness, press }) => {
+    const requests: string[] = [];
+    page.on("request", (request) => {
+      if (request.url().endsWith("/vendor/abcjs.js")) requests.push(request.url());
+    });
+
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+    await press(viewTab(page, "Arrangement"));
+    await page.waitForTimeout(300);
+    expect(requests, "no staff view was asked for").toHaveLength(0);
+
+    await press(viewTab(page, "Staff"));
+    await expect(staffNotes(page)).toHaveCount(5);
+    await press(viewTab(page, "Arrangement"));
+    await press(viewTab(page, "Staff"));
+    await expect(staffNotes(page)).toHaveCount(5);
+    expect(requests).toHaveLength(1);
+  });
+
+  test("follows an edit made in the text: the arrangement and the staff show the new score, as one step to undo", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+
+    await editorText(page).fill(QUARTERS_WITHOUT_D);
+    await press(viewTab(page, "Arrangement"));
+
+    await expect(note(page, D4)).toHaveCount(0);
+    await expect(note(page, "C4, bar 1 beat 1, length 1 beat")).toBeVisible();
+    await press(viewTab(page, "Staff"));
+    await expect(staffNotes(page)).toHaveCount(4);
+    await expect(staffRests(page)).toHaveCount(1);
+
+    await press(undoButton(page));
+    await expect(staffNotes(page)).toHaveCount(5);
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "true");
+    await press(viewTab(page, "Score text"));
+    await expect(editorText(page)).toHaveValue(QUARTERS);
+  });
+
+  test("tells a text that does not read: the problem in the text view, the stale notice above the others, which keep the last score", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+
+    await editorText(page).fill(BROKEN);
+
+    await expect(editorProblems(page).getByRole("listitem")).toHaveText([
+      `The duration “5” is not allowed. (bar 1, line ${MUSIC_LINE})`,
+    ]);
+    await expect(editorStatus(page)).toHaveText("1 problem. The other views still show the last readable score.");
+    await expect(staleNote(page), "the text view says it itself").toHaveCount(0);
+
+    await press(viewTab(page, "Arrangement"));
+    await expect(staleNote(page)).toHaveText(STALE);
+    await expect(note(page, D4)).toBeVisible();
+    await press(viewTab(page, "Staff"));
+    await expect(staleNote(page)).toHaveText(STALE);
+    await expect(staffNotes(page)).toHaveCount(5);
+
+    await press(viewTab(page, "Score text"));
+    await expect(editorText(page)).toHaveValue(BROKEN);
+    await expect(staleNote(page)).toHaveCount(0);
+
+    await editorText(page).fill(QUARTERS_WITHOUT_D);
+    await press(viewTab(page, "Staff"));
+    await expect(staleNote(page)).toHaveCount(0);
+    await expect(staffRests(page)).toHaveCount(1);
+  });
+
+  test("undoes a text edit from the toolbar right after typing it, and redoes it", async ({ page, harness, press }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+
+    await editorText(page).fill(QUARTERS_WITHOUT_D);
+    await press(undoButton(page));
+
+    await expect(editorText(page)).toHaveValue(QUARTERS);
+    await press(page.getByRole("button", { name: "Redo", exact: true }));
+    await expect(editorText(page)).toHaveValue(QUARTERS_WITHOUT_D);
+  });
+
+  test("drops the text it could not take when an undo changes the score under it", async ({ page, harness, press }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+    await editorText(page).fill(QUARTERS_WITHOUT_D);
+    await press(viewTab(page, "Staff"));
+    await press(viewTab(page, "Score text"));
+    await editorText(page).fill(BROKEN);
+    await expect(editorProblems(page).getByRole("listitem")).toHaveCount(1);
+
+    await press(undoButton(page));
+
+    await expect(editorText(page)).toHaveValue(QUARTERS);
+    await expect(editorProblems(page)).toHaveCount(0);
+    await expect(editorStatus(page)).toHaveText("No problems");
+  });
+
+  test("lets a plus or a minus typed into the text be text, and not a zoom of the arrangement", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+
+    await editorText(page).focus();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type("-+=_");
+
+    await expect(editorText(page)).toHaveValue(`${QUARTERS}-+=_`);
+    await press(viewTab(page, "Arrangement"));
+    await expect(page.getByRole("button", { name: /^Zoom \d+%$/ })).toHaveAccessibleName("Zoom 100%");
+  });
+
+  test("is read-only for the text and not for the switching: the text can be read, the staff drawn, the views changed", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS }, editable: false });
+    await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+
+    await press(viewTab(page, "Score text"));
+    await expect(editorText(page)).toHaveAttribute("readonly", "");
+    await expect(editorText(page)).toHaveValue(QUARTERS);
+    await editorText(page).focus();
+    await page.keyboard.press("Control+End");
+    await page.keyboard.type("V: Vocal");
+    await page.waitForTimeout(PAUSE_MS + 200);
+    await expect(editorText(page)).toHaveValue(QUARTERS);
+
+    await press(viewTab(page, "Staff"));
+    await expect(staffNotes(page)).toHaveCount(5);
+    await press(viewTab(page, "Arrangement"));
+    await expect(note(page, D4)).toBeVisible();
+    await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+  });
+
+  test("turns the text read-only and writable again as the host changes the permission", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+    await expect(editorText(page)).not.toHaveAttribute("readonly", "");
+
+    await harness.update({ editable: false });
+    await expect(editorText(page)).toHaveAttribute("readonly", "");
+    await expect(viewTab(page, "Staff")).toBeVisible();
+
+    await harness.update({ editable: true });
+    await expect(editorText(page)).not.toHaveAttribute("readonly", "");
+  });
+
+  test("shows the new text when the host replaces the project while the text is shown, and drops what it could not take", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Score text"));
+    await editorText(page).fill(BROKEN);
+    await expect(staleNote(page)).toHaveCount(0);
+
+    await harness.update({ score: { text: QUARTERS_WITHOUT_D } });
+
+    await expect(editorText(page)).toHaveValue(QUARTERS_WITHOUT_D);
+    await expect(editorProblems(page)).toHaveCount(0);
+    await press(viewTab(page, "Arrangement"));
+    await expect(staleNote(page)).toHaveCount(0);
+  });
+
+  test("for a project that came with a score that cannot be read: the problem view on the arrangement and the staff, the text view's own problems on the text", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: BROKEN } });
+    await expect(page.getByRole("alert")).toBeVisible();
+
+    await press(viewTab(page, "Score text"));
+    await expect(editorText(page)).toHaveValue(BROKEN);
+    await expect(editorProblems(page).getByRole("listitem")).toHaveCount(1);
+    await expect(page.getByRole("alert"), "one place says it").toHaveCount(0);
+
+    await press(viewTab(page, "Staff"));
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(page.locator("svg .abcjs-note")).toHaveCount(0);
+
+    await press(viewTab(page, "Score text"));
+    await editorText(page).fill(QUARTERS);
+    await press(viewTab(page, "Staff"));
+    await expect(staffNotes(page)).toHaveCount(5);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("keeps where the arrangement was scrolled to while another view is shown", async ({ page, harness, press }) => {
+    await harness.mount({ score: { synthetic: { bars: 128, notes: 1500 } } });
+    const scroller = arrangement(page);
+    await scroller.evaluate((el) => el.scrollTo(400, 60));
+    const before = await scroller.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+    expect(before.left).toBeGreaterThan(300);
+
+    await press(viewTab(page, "Score text"));
+    await press(viewTab(page, "Arrangement"));
+
+    const after = await arrangement(page).evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+    expect(after).toEqual(before);
+  });
+
+  test("opens a project that the host replaces while another view is shown at its start when the arrangement is shown again", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { synthetic: { bars: 128, notes: 1500 } } });
+    await arrangement(page).evaluate((el) => el.scrollTo(400, 60));
+    await press(viewTab(page, "Staff"));
+
+    await harness.update({ score: { synthetic: { bars: 96, notes: 900 } } });
+    await press(viewTab(page, "Arrangement"));
+
+    await expect.poll(() => arrangement(page).evaluate((el) => el.scrollLeft)).toBe(0);
+  });
+
+  test("names the views in the language the host sets, and changes it with the host", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS }, language: "zh" });
+    const zh = page.getByRole("group", { name: "视图" });
+    await expect(zh.getByRole("button", { name: "编曲视图", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+    await press(zh.getByRole("button", { name: "乐谱文本", exact: true }));
+    await expect(page.getByRole("textbox", { name: "乐谱文本" })).toBeVisible();
+    await expect(page.locator(".sce-title")).toHaveText("乐谱文本");
+
+    await harness.update({ language: "en" });
+    await expect(viewTab(page, "Score text")).toHaveAttribute("aria-pressed", "true");
+    await expect(title(page)).toHaveText("Score text");
+  });
+
+  test("leaves the page as it found it when it is destroyed after all three views were shown", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const html = await page.evaluate(() => document.documentElement.outerHTML);
+    const sheets = await page.evaluate(() => document.adoptedStyleSheets.length);
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(viewTab(page, "Staff"));
+    await expect(staffNotes(page)).toHaveCount(5);
+    await press(viewTab(page, "Score text"));
+    await editorText(page).fill(BROKEN);
+    await press(viewTab(page, "Arrangement"));
+
+    await harness.destroy();
+
+    expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(html);
+    expect(await page.evaluate(() => document.adoptedStyleSheets.length)).toBe(sheets);
+  });
+});
+
+test.describe("the view switch in a narrow host", () => {
+  test.skip(({ isMobile }) => isMobile, "the width is set once, on the desktop project");
+
+  for (const editable of [true, false]) {
+    test(`keeps the switch inside the box, in reach, and the page from scrolling sideways when the editor has 320 pixels and ${editable ? "can edit" : "is read-only"}`, async ({
+      page,
+      harness,
+      press,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 700 });
+      await harness.mount({ score: { text: QUARTERS }, editable });
+
+      const tabs = page.getByRole("group", { name: "View" });
+      const at = await box(tabs);
+      expect(at.x).toBeGreaterThanOrEqual(0);
+      expect(at.x + at.width).toBeLessThanOrEqual(320);
+      if (!editable) {
+        const badge = await box(page.getByText("Read only", { exact: true }));
+        expect(badge.x + badge.width).toBeLessThanOrEqual(320);
+      }
+      await press(tabs.getByRole("button", { name: "Staff", exact: true }));
+      await expect(page.getByRole("region", { name: "Staff" })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+  }
 });
