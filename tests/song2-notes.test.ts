@@ -493,6 +493,7 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
   const result = applyScoreCommand(song2Dialect, text, command);
   if (!result.ok) {
     expect(REFUSALS.has(result.diagnostic.code), `${label}: refusal ${result.diagnostic.code}`).toBe(true);
+    expectUnchanged(text, command);
     return;
   }
 
