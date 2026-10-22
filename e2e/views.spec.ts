@@ -20,6 +20,9 @@ const vocalNote = (page: Page, name: string) => slot(page, "vocal").getByRole("l
 const textBox = (page: Page) => slot(page, "text").getByRole("textbox", { name: "Score text" });
 const problems = (page: Page) => slot(page, "text").getByRole("list", { name: "Problems" });
 const status = (page: Page) => slot(page, "text").getByRole("status");
+const textNotice = (page: Page) => slot(page, "text").getByRole("note");
+/** QUARTERS with the chord C on its first note: a melody project cannot carry it, and the editor says so without refusing it. */
+const QUARTERS_WITH_CHORD = QUARTERS.replace("C4D4E4F4|", '"C"C4D4E4F4|');
 
 /** The pause after the last keystroke before text that reads is handed to the project, as the part keeps it. */
 const PAUSE_MS = 600;
@@ -138,6 +141,43 @@ test.describe("the text view", () => {
     await expect(problems(page)).toHaveCount(0);
     await expect(status(page)).toHaveText("No problems");
     expect(await harness.layout.rejectedText()).toBeNull();
+  });
+
+  test("takes text that comes back with a notice, keeps it in the box, and says the notice apart from the problems", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness, { project: { scoreMode: "melody" } });
+    await expect(textNotice(page)).toHaveCount(0);
+
+    await textBox(page).fill(QUARTERS_WITH_CHORD);
+    await textBox(page).blur();
+
+    await expect(textNotice(page)).toHaveText("Melody mode cannot carry chords; delete all chords or switch to full.");
+    await expect(textBox(page)).toHaveAttribute("aria-describedby", /sce-text-notice-\d+/);
+    await expect(textBox(page)).not.toHaveAttribute("aria-invalid", "true");
+    await expect(problems(page)).toHaveCount(0);
+    await expect(status(page)).toHaveText("No problems");
+    await expect(textBox(page)).toHaveValue(QUARTERS_WITH_CHORD);
+    expect(await harness.layout.scoreText()).toBe(QUARTERS_WITH_CHORD);
+    expect(await harness.layout.rejectedText()).toBeNull();
+    expect(await harness.layout.canUndo()).toBe(true);
+
+    // A text that cannot be read has problems to say, and the notice of the text before it steps aside.
+    await textBox(page).fill(BROKEN);
+    await expect(problems(page).getByRole("listitem")).toHaveCount(1);
+    await expect(textNotice(page)).toHaveCount(0);
+
+    // Back to the text the project holds: the notice is true of it again.
+    await textBox(page).fill(QUARTERS_WITH_CHORD);
+    await textBox(page).blur();
+    await expect(problems(page)).toHaveCount(0);
+    await expect(textNotice(page)).toHaveCount(1);
+
+    // The project moved from elsewhere: the notice was about the replacement, which is undone.
+    expect(await harness.layout.undo()).toBe(true);
+    await expect(textBox(page)).toHaveValue(QUARTERS);
+    await expect(textNotice(page)).toHaveCount(0);
   });
 
   test("puts the caret on the line of a problem when the problem is chosen", async ({ page, harness, press }) => {

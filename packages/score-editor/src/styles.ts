@@ -852,6 +852,18 @@ ${labelThinning()}
   color: var(--sce-_text);
   font-weight: 600;
 }
+/* A notice is a plain sentence under the status, set apart from the problems by a bar at its start, not by hue alone. */
+.sce-root .sce-text-notice {
+  flex: none;
+  margin: 0;
+  padding: 0 12px 6px;
+  background: var(--sce-_surface);
+  color: var(--sce-_text);
+}
+.sce-root .sce-text-notice:not([hidden]) {
+  border-inline-start: 3px solid var(--sce-_accent);
+  padding-inline-start: 9px;
+}
 .sce-root .sce-text-problems {
   flex: none;
   max-height: 9em;

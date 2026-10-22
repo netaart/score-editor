@@ -1,7 +1,7 @@
 // ABOUTME: The text view part: the score text in a box the user edits, checked as it is typed, handed to the project when it reads.
 // ABOUTME: Text that cannot be read stays in the box with its problems listed, and the project keeps the last score that could.
 
-import { type Diagnostic, formatDiagnostic } from "./diagnostics";
+import { type Diagnostic, formatDiagnostic, isNoticeDiagnostic } from "./diagnostics";
 import { create, requireDom } from "./dom";
 import { messagesFor } from "./i18n";
 import type { EditingSession } from "./session";
@@ -36,7 +36,9 @@ function lineSpan(text: string, line: number): { start: number; end: number } {
  * Mounts the text view on `el`: the score text in a box with a number for each line, and under it a sentence that says
  * whether the text has problems, and the problems themselves. A pause in typing, or leaving the box, checks the text; text
  * that reads replaces the project's score as one step, and text that does not is kept in the box and told to the session
- * (`setRejectedText`) while the project keeps the last score that read. The box is read-only while the session is.
+ * (`setRejectedText`) while the project keeps the last score that read. Text that reads but comes back with a notice is
+ * taken as well, and the notice is shown under the sentence, apart from the problems. The box is read-only while the
+ * session is.
  */
 export function mountTextView(el: HTMLElement, session: EditingSession): ViewPart {
   requireDom("mountTextView");
@@ -61,6 +63,11 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
   const status = create(doc, "p", "sce-text-status", panel);
   status.id = `sce-text-status-${n}`;
   status.setAttribute("role", "status");
+  const notice = create(doc, "p", "sce-text-notice", panel);
+  notice.id = `sce-text-notice-${n}`;
+  notice.setAttribute("role", "note");
+  notice.setAttribute("aria-live", "polite");
+  notice.hidden = true;
   const list = create(doc, "ul", "sce-text-problems", panel);
   list.setAttribute("role", "list");
   list.id = `sce-text-problems-${n}`;
@@ -74,6 +81,8 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
   let drawnLines = 0;
   let drawnMarks = "";
   let drawnProblems = "";
+  /** The notices the last replacement this part made came back with; they go when the project changes by another cause. */
+  let notices: ReadonlyArray<Diagnostic> = [];
 
   function stopTimer(): void {
     if (timer === null) return;
@@ -162,7 +171,13 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
     panel.toggleAttribute("data-problems", found.length > 0);
     if (found.length > 0) box.setAttribute("aria-invalid", "true");
     else box.removeAttribute("aria-invalid");
-    box.setAttribute("aria-describedby", found.length > 0 ? `${status.id} ${list.id}` : status.id);
+    // A notice describes a text that was taken; while the box holds text that was not, the problems are what to say.
+    const told = found.length === 0 && reading.kind !== "no-dialect" ? notices : [];
+    const noticeSentence = told.map((diagnostic) => formatDiagnostic(diagnostic, language)).join(" ");
+    if (notice.textContent !== noticeSentence) notice.textContent = noticeSentence;
+    notice.hidden = told.length === 0;
+    const described = [status.id, ...(found.length > 0 ? [list.id] : []), ...(told.length > 0 ? [notice.id] : [])];
+    box.setAttribute("aria-describedby", described.join(" "));
     drawGutter(found);
     drawProblems(found, language);
   }
@@ -181,9 +196,10 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
       session.setRejectedText(null);
       return;
     }
-    const diagnostics = session.checkScoreText(text);
-    if (diagnostics.length > 0) {
-      session.setRejectedText({ text, diagnostics });
+    // A notice is not a refusal: text that comes back with one is taken, and the notice is told apart from the problems.
+    const refusals = session.checkScoreText(text).filter((diagnostic) => !isNoticeDiagnostic(diagnostic));
+    if (refusals.length > 0) {
+      session.setRejectedText({ text, diagnostics: refusals });
       return;
     }
     committing = true;
@@ -193,7 +209,10 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
     } finally {
       committing = false;
     }
+    notices = result.ok ? result.diagnostics : [];
     session.setRejectedText(result.ok ? null : { text, diagnostics: result.diagnostics });
+    // The dispatch announced before the notices were known, and clearing nothing announces nothing: draw them now.
+    render();
   }
 
   box.addEventListener(
@@ -246,6 +265,7 @@ export function mountTextView(el: HTMLElement, session: EditingSession): ViewPar
       if (change.project) {
         // The project moved under the box: an undo, a redo, new data or new dialects. What the box held, typed or refused, goes.
         stopTimer();
+        notices = [];
         setText(held());
       } else if (change.cause === "rejected-text" && box.value !== held()) {
         // Another part of the host set or cleared the rejected text: the box follows what the session holds.
