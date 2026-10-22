@@ -65,9 +65,17 @@ export interface PageNotice {
   message: string;
 }
 
+/** What the helpers below have the page keep for a test to read: stand-ins and listeners they install themselves. */
+interface PageProbes {
+  vibrations: unknown[];
+  pointerId: number | null;
+  keysSeen: boolean[];
+}
+
 interface PageHarness {
   stage: HTMLElement;
   notices: PageNotice[];
+  probes?: Partial<PageProbes>;
   layout: PageLayout;
   host: { addRules(kind: "important" | "hostile"): void; addProbe(): void; setColorScheme(scheme: string): void };
   shadowRoot: ShadowRoot | null;
@@ -279,7 +287,8 @@ export class Harness {
   async recordVibrations(): Promise<() => Promise<unknown[]>> {
     await this.page.evaluate(() => {
       const asked: unknown[] = [];
-      Object.assign(window, { vibrationsAsked: asked });
+      window.harness.probes ??= {};
+      window.harness.probes.vibrations = asked;
       Object.assign(navigator, {
         vibrate: (pattern: unknown) => {
           asked.push(pattern);
@@ -287,8 +296,85 @@ export class Harness {
         },
       });
     });
-    return () =>
-      this.page.evaluate(() => (window as unknown as { vibrationsAsked: unknown[] }).vibrationsAsked.slice());
+    return () => this.page.evaluate(() => window.harness.probes?.vibrations?.slice() ?? []);
+  }
+
+  /**
+   * Keeps the id of the last pointer that went down, so a test can cancel it the way a browser does when it takes a
+   * touch for a gesture of its own. `cancel` sends the `pointercancel` to `target`, which the pointer is over.
+   */
+  async watchPointer(): Promise<{ cancel(target: Locator): Promise<void> }> {
+    await this.page.evaluate(() => {
+      window.harness.probes ??= {};
+      const probes = window.harness.probes;
+      addEventListener("pointerdown", (event) => (probes.pointerId = event.pointerId), true);
+    });
+    return {
+      cancel: (target) =>
+        target.evaluate((el) => {
+          const pointerId = window.harness.probes?.pointerId ?? -1;
+          el.dispatchEvent(new PointerEvent("pointercancel", { pointerId, bubbles: true }));
+        }),
+    };
+  }
+
+  /** Sends `blur` to the window, as a switch to another window does. */
+  loseWindowFocus() {
+    return this.page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  }
+
+  /** Whether the browser would open its own menu on `target`: false when the page called `preventDefault` on it. */
+  contextMenuOpensOn(target: Locator): Promise<boolean> {
+    return target.evaluate((el) =>
+      el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })),
+    );
+  }
+
+  /**
+   * Listens on the document, as a host does, for presses of `key`. Gives back a way to read, for each press so far,
+   * whether the press had been handled (`defaultPrevented`) by the time it reached the document.
+   */
+  async watchKey(key: string): Promise<() => Promise<boolean[]>> {
+    await this.page.evaluate((watched) => {
+      const seen: boolean[] = [];
+      window.harness.probes ??= {};
+      window.harness.probes.keysSeen = seen;
+      document.addEventListener("keydown", (event) => {
+        if (event.key === watched) seen.push(event.defaultPrevented);
+      });
+    }, key);
+    return () => this.page.evaluate(() => window.harness.probes?.keysSeen?.slice() ?? []);
+  }
+
+  /** The text the page has selected, as the browser's own select all leaves it. */
+  hostSelection() {
+    return this.page.evaluate(() => window.getSelection()?.toString() ?? "");
+  }
+
+  clearHostSelection() {
+    return this.page.evaluate(() => window.getSelection()?.removeAllRanges());
+  }
+
+  /** How far `target` has scrolled. */
+  scrollOf(target: Locator) {
+    return target.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+  }
+
+  /**
+   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` or
+   * inside it; null when none is. A part may pin a header over `target`, so the first free spot is found by looking.
+   */
+  firstYOn(target: Locator, x: number, from: number, until: number) {
+    return target.evaluate(
+      (el, { at, start, end }) => {
+        for (let y = start; y < end; y += 4) {
+          const top = document.elementFromPoint(at, y);
+          if (top && el.contains(top)) return y;
+        }
+        return null;
+      },
+      { at: x, start: from, end: until },
+    );
   }
 
   /** A finger to put down, slide and lift by hand; close it when the test is done with it. */

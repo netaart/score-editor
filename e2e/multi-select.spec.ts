@@ -17,7 +17,13 @@ const IDS = { C4: "Vocal:0", D4: "Vocal:256", E4: "Vocal:512", F4: "Vocal:768", 
 const note = (page: Page, name: string) => slot(page, "vocal").getByRole("listitem", { name, exact: true });
 const lane = (page: Page) => slot(page, "vocal").getByRole("list", { name: "Vocal" });
 const said = (page: Page) => slot(page, "vocal").getByRole("status");
-const theBox = (page: Page) => slot(page, "vocal").locator(".sce-box");
+// The box is a decoration (aria-hidden), so it has no role or name to be found by; its class is the one hook the spec uses.
+const boxIn = (within: Locator) => within.locator(".sce-box");
+const theBox = (page: Page) => boxIn(slot(page, "vocal"));
+// The lane marks itself while a box is armed or drawn. It wraps the list of notes and has no role, so it is the list's parent.
+const boxingLane = (page: Page) => lane(page).locator("..");
+const isBoxing = (page: Page) => expect(boxingLane(page)).toHaveAttribute("data-boxing", "");
+const notBoxing = (page: Page) => expect(boxingLane(page)).not.toHaveAttribute("data-boxing");
 const framed = (page: Page, name: string) => expect(note(page, name)).toHaveCSS("border-top-width", "2px");
 const unframed = (page: Page, name: string) => expect(note(page, name)).toHaveCSS("border-top-width", "1px");
 const toolbar = (page: Page) => slot(page, "toolbar");
@@ -318,9 +324,7 @@ test.describe("the box", () => {
   }) => {
     await openTrack(harness);
     await press(note(page, F4));
-    await page.evaluate(() => {
-      addEventListener("pointerdown", (event) => ((window as unknown as { pid: number }).pid = event.pointerId), true);
-    });
+    const pointers = await harness.watchPointer();
     const { from, to } = await aroundCAndD(page);
     const pointer = await pointerOf(page, harness, isMobile);
     try {
@@ -328,10 +332,7 @@ test.describe("the box", () => {
       await pointer.move(to);
       await expect(theBox(page)).toBeVisible();
 
-      await lane(page).evaluate((el) => {
-        const pointerId = (window as unknown as { pid: number }).pid;
-        el.dispatchEvent(new PointerEvent("pointercancel", { pointerId, bubbles: true }));
-      });
+      await pointers.cancel(lane(page));
       await expect(theBox(page)).toHaveCount(0);
       await unframed(page, C4);
       await pointer.up();
@@ -357,9 +358,9 @@ test.describe("the box", () => {
       await pointer.move(to);
       await expect(theBox(page)).toBeVisible();
 
-      await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+      await harness.loseWindowFocus();
       await expect(theBox(page)).toHaveCount(0);
-      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await notBoxing(page);
       await pointer.up();
     } finally {
       await pointer.close();
@@ -612,8 +613,7 @@ test.describe("a finger", () => {
     harness,
   }) => {
     await openTrack(harness);
-    const menuOpens = (target: Locator) =>
-      target.evaluate((el) => el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    const menuOpens = (target: Locator) => harness.contextMenuOpensOn(target);
     const finger = await harness.finger();
     try {
       await finger.down(await spot(page, 2, 2), 550);
@@ -635,7 +635,7 @@ test.describe("a finger", () => {
       await finger.down(await spot(page, 2, 2));
       await harness.layout.setEditable(false);
       await page.waitForTimeout(600);
-      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await notBoxing(page);
       await finger.up();
     } finally {
       await finger.close();
@@ -659,7 +659,7 @@ test.describe("a finger", () => {
       await harness.layout.replace({ score: { text: vocalOnly("C4D4E4F4|G16|C16|") } });
       await page.waitForTimeout(550);
       expect(await buzzes()).toEqual([]);
-      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await notBoxing(page);
       await finger.up();
     } finally {
       await finger.close();
@@ -678,12 +678,12 @@ test.describe("a finger", () => {
       await finger.down(from, 550);
       await finger.move(to);
       await expect(theBox(page)).toBeVisible();
-      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(1);
+      await isBoxing(page);
 
       await finger.addSecond(await spot(page, 300, 4));
 
       await expect(theBox(page)).toHaveCount(0);
-      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await notBoxing(page);
       await finger.up();
     } finally {
       await finger.close();
@@ -710,7 +710,7 @@ test.describe("a finger", () => {
       expect(Math.abs(marker.y + marker.height / 2 - at.y)).toBeLessThan(2);
 
       await finger.move({ x: at.x + 90, y: at.y + 70 });
-      await expect(page.locator(".sce-box[data-anchor]")).toHaveCount(0);
+      await expect(theBox(page)).not.toHaveAttribute("data-anchor");
       const drawn = await box(theBox(page));
       expect(Math.abs(drawn.width - 90)).toBeLessThan(3);
       await finger.up();
@@ -747,7 +747,8 @@ test.describe("a finger", () => {
       await finger.down(at);
       await finger.move({ x: at.x + 8, y: at.y }, 2);
       await page.waitForTimeout(500);
-      await expect(page.locator(".sce-box[data-anchor]")).toBeVisible();
+      await expect(theBox(page)).toHaveAttribute("data-anchor", "");
+      await expect(theBox(page)).toBeVisible();
       await finger.up();
     } finally {
       await finger.close();
@@ -816,14 +817,14 @@ test.describe("Ctrl+A, Ctrl+Shift+A and Escape", () => {
   }) => {
     await openTrack(harness);
     await harness.addHostProbe();
-    const selectedText = () => page.evaluate(() => window.getSelection()?.toString() ?? "");
+    const selectedText = () => harness.hostSelection();
 
     // Outside the editor Ctrl+A is the browser's: the probe text is selected, which keeps the check below honest.
     await page.getByRole("button", { name: /host/i }).focus();
     await page.keyboard.press("Control+a");
     expect((await selectedText()).length).toBeGreaterThan(0);
     expect(await harness.layout.selection()).toEqual([]);
-    await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    await harness.clearHostSelection();
 
     // In the editor it is the editor's, on a note and on the track.
     await press(note(page, D4));
@@ -843,14 +844,7 @@ test.describe("Ctrl+A, Ctrl+Shift+A and Escape", () => {
     press,
   }) => {
     await openTrack(harness);
-    await page.evaluate(() => {
-      const seen: boolean[] = [];
-      (window as unknown as { escapes: boolean[] }).escapes = seen;
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") seen.push(event.defaultPrevented);
-      });
-    });
-    const escapes = () => page.evaluate(() => (window as unknown as { escapes: boolean[] }).escapes);
+    const escapes = await harness.watchKey("Escape");
 
     await trackRegion(page).focus();
     await page.keyboard.press("Escape");
@@ -1248,22 +1242,14 @@ test.describe("the assembled editor", () => {
     const scroller = page.getByRole("region", { name: "Arrangement" });
     const vocal = page.getByRole("list", { name: "Vocal" });
     await expect(vocal).toBeVisible();
-    const position = () => scroller.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+    const position = () => harness.scrollOf(scroller);
     const before = await position();
     const frame = await box(scroller);
     const laneArea = await box(vocal);
     // The four bars of the intro are rests: the lane is empty where the finger goes down, and the box reaches the verse.
     // The editor pins a header over the lane, so the first free spot is found by looking at what is on the screen.
     const x = Math.max(laneArea.x, frame.x + 60) + 10;
-    const free = await page.evaluate(
-      ({ at, from, until }) => {
-        for (let y = from; y < until; y += 4) {
-          if (document.elementFromPoint(at, y)?.closest(".sce-lane")) return y;
-        }
-        return null;
-      },
-      { at: x, from: Math.max(laneArea.y, frame.y), until: frame.y + frame.height },
-    );
+    const free = await harness.firstYOn(vocal, x, Math.max(laneArea.y, frame.y), frame.y + frame.height);
     expect(free).not.toBeNull();
     const from = { x, y: (free ?? 0) + 8 };
     const to = { x: frame.x + frame.width - 6, y: Math.min(laneArea.y + laneArea.height, frame.y + frame.height) - 6 };
@@ -1272,7 +1258,7 @@ test.describe("the assembled editor", () => {
     try {
       await finger.down(from, 550);
       await finger.move(to);
-      await expect(page.locator(".sce-box")).toBeVisible();
+      await expect(boxIn(scroller)).toBeVisible();
       await finger.up();
     } finally {
       await finger.close();
@@ -1280,7 +1266,7 @@ test.describe("the assembled editor", () => {
 
     expect(await position()).toEqual(before);
     expect(await harness.notices()).toEqual([]);
-    await expect(page.locator(".sce-box")).toHaveCount(0);
+    await expect(boxIn(scroller)).toHaveCount(0);
     await expect(voices(page, SELECTED).first()).toBeVisible();
   });
   test("tells a screen reader how to select several notes, in both languages", async ({ page, harness }) => {
