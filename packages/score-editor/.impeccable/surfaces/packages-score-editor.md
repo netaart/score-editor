@@ -20,7 +20,7 @@ Assumptions (no human to confirm; mark and proceed):
 - A5. Zoom is a menu of presets plus "fit the whole song", with minus and plus buttons stepping through the presets. The menu is the native popover the spike settled.
 - A6. A selected note is framed by a 2px border in the text colour (shape and weight, not hue); a tied chain is selected and framed as one bar, because Delete turns the whole chain into rests. The insertion point is a 2px line in the text colour through the lane with a small flag that stays in view under the pinned track head; it is heavier and darker than a bar line, ignores the pointer, and has no motion.
 - A7. A click or tap on empty space puts the insertion point on the nearest beat line of the bar's own meter (a quarter note in 4/4, an eighth in 6/8) until the grid ticket replaces that step. Left and Right move it a beat, Home and End send it to the ends; while there is no insertion point Left and Right keep scrolling.
-- A8. No keyboard path to choose a note yet, and no way to delete by pointer alone on a phone; both belong to later tickets.
+- A8. Delete has a toolbar button, so a phone can select, delete and undo with taps alone; a note can be reached by Tab, stepped with Left and Right, Home and End and selected with Enter or Space. Shift, Ctrl and Cmd combinations, a box and Escape are left for multiple selection.
 
 Chosen direction: the world is pinned by PRODUCT.md (no identity of its own), so the choices are structure and density only. Reference: the arrangement window of a DAW (Ableton Live's Arrangement view, Logic's global tracks) in the editor's neutral defaults. Nothing decorative is added; the one authored move is the cut, and every mark says in words what it is.
 
@@ -39,4 +39,4 @@ Real songs run 100 to 235 bars and up to about 1,500 notes; one to three meters 
 
 ## Unresolved
 
-Lyrics track, selecting by keyboard, box and multiple selection, the section menu, chord picking, tempo and key editing, and the staff and text views belong to later tickets. Pinch-to-zoom on the time axis is not built (it would take page pinch-zoom away); revisit when an editing ticket needs two fingers.
+Lyrics track, box and multiple selection, the section menu, chord picking, tempo and key editing, and the staff and text views belong to later tickets. Pinch-to-zoom on the time axis is not built (it would take page pinch-zoom away); revisit when an editing ticket needs two fingers.
