@@ -10,6 +10,15 @@ const partRoot = (page: Page, name: string) => slot(page, name).locator(":scope 
 /** Whatever a part draws for the score: its root without the empty live region every axis part keeps for what it says. */
 const drawnContent = (page: Page, name: string) => partRoot(page, name).locator('*:not([role="status"])');
 
+/** The roots as drawn, with what the parts say in their live regions taken out. */
+const unsaid = (roots: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(roots).map(([name, html]) => [
+      name,
+      html.replace(/(role="status" aria-live="polite">)[^<]*/g, "$1"),
+    ]),
+  );
+
 /** What a part on the time axis calls itself when it is a scroll surface of its own. */
 const REGION_NAMES: Record<string, string> = { ruler: "Time ruler", chords: "Chords", vocal: "Vocal", ins: "Ins" };
 function scrollSurface(page: Page, name: string): Locator {
@@ -176,7 +185,8 @@ test.describe("a layout of view parts on one session", () => {
     await expect(vocalNotes).toHaveCount(before.vocal);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toBeVisible();
     const undone = await harness.layout.roots();
-    expect({ ...undone, toolbar: "" }).toEqual({ ...drawnBefore, toolbar: "" });
+    // The undo is said in the live region ("Restored ..."); what a part says is not what it draws.
+    expect(unsaid({ ...undone, toolbar: "" })).toEqual(unsaid({ ...drawnBefore, toolbar: "" }));
     expect(undone.toolbar, "redo is there to press now").not.toBe(drawnBefore.toolbar);
     expect(await harness.layout.redo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
