@@ -53,7 +53,7 @@ change. The tests in the repository check that the list stays complete.
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus any diagnostics, or the untouched project and a refusal. |
 | `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape, its causes, and the listener type. |
-| `ScoreCommand` | The dialect-agnostic edit union; today `{ type: "toRest", noteId }`. |
+| `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
 
 ## Score model types
 
