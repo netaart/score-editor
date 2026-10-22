@@ -5,6 +5,7 @@ export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
 export { mountChordTrack } from "./chord-track";
 export type { ScoreCommand } from "./commands";
+export type { Grid, GridValue, MoveNotesCommand, NoteCommand, ResizeNotesCommand } from "./commands-notes";
 export type { ProjectCommand } from "./commands-project";
 export { checkProject } from "./commands-project";
 export { mountCutNotice } from "./cut-notice";
