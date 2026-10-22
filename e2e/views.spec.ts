@@ -1039,7 +1039,7 @@ test.describe("the three views of the default editor", () => {
     await expect(staffView(page)).toHaveCount(0);
   });
 
-  test("shows the zoom control and the delete button only on the arrangement, and keeps undo and redo everywhere", async ({
+  test("shows the zoom control, the delete button and the Select menu only on the arrangement, and keeps undo and redo everywhere", async ({
     page,
     harness,
     press,
@@ -1047,18 +1047,22 @@ test.describe("the three views of the default editor", () => {
     await harness.mount({ score: { text: QUARTERS } });
     const zoom = page.getByRole("group", { name: "Zoom" });
     const remove = page.getByRole("button", { name: "Delete", exact: true });
+    const select = page.getByRole("button", { name: "Select", exact: true });
     await expect(zoom).toBeVisible();
     await expect(remove).toBeVisible();
+    await expect(select).toBeVisible();
 
     for (const name of ["Staff", "Score text"]) {
       await press(viewTab(page, name));
       await expect(zoom, name).toBeHidden();
       await expect(remove, name).toBeHidden();
+      await expect(select, name).toBeHidden();
       await expect(undoButton(page), name).toBeVisible();
     }
     await press(viewTab(page, "Arrangement"));
     await expect(zoom).toBeVisible();
     await expect(remove).toBeVisible();
+    await expect(select).toBeVisible();
   });
 
   test("asks for abcjs when the staff is first shown, and not before", async ({ page, harness, press }) => {

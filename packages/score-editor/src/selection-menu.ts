@@ -7,10 +7,12 @@ import { mountPopoverMenu } from "./popover-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
+import { arrangementShown } from "./view-rules";
 
 /**
- * Mounts the Select menu on `el`. It is drawn while the session is editable and has a score to show, and its items act
- * on the session the way the keys do: Ctrl or Cmd with A, with Shift and A, and Escape.
+ * Mounts the Select menu on `el`. It is drawn while the session is editable, has a score to show and shows the arrangement,
+ * the one view with notes to select, and its items act on the session the way the keys do: Ctrl or Cmd with A, with Shift
+ * and A, and Escape.
  */
 export function mountSelectionMenu(el: HTMLElement, session: EditingSession): ViewPart {
   const doc = el.ownerDocument;
@@ -55,7 +57,7 @@ export function mountSelectionMenu(el: HTMLElement, session: EditingSession): Vi
       drawn = "";
     }
     const { reading } = session;
-    const shown = reading.kind === "score" && session.view.editable;
+    const shown = reading.kind === "score" && session.view.editable && arrangementShown(session);
     const anyNote = reading.kind === "score" && reading.score.notes.some((note) => note.midi !== null);
     const state = [shown, anyNote, session.selection.length > 0].join();
     if (state === drawn) return;
