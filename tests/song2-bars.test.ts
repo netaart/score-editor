@@ -2,7 +2,14 @@
 // ABOUTME: Untouched bars are compared as raw music-line pieces, and the cut-tail bytes of an untouched tail stay verbatim.
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
-import { applyScoreCommand, formatDiagnostic, type Note, type Score } from "@neta-art/score-editor";
+import {
+  applyProjectCommand,
+  applyScoreCommand,
+  formatDiagnostic,
+  type Note,
+  type Score,
+  type SongProject,
+} from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
 const HEADER = `X:1
@@ -526,6 +533,18 @@ z16|C8`;
     if (result.ok) return;
     expect(result.diagnostic.code).toBe("cut-in-complete-bar");
     expect(result.diagnostic.at.bar).toBe(2);
+    const project: SongProject = {
+      style: "",
+      lyrics: "",
+      score: text,
+      scoreMode: "full",
+      seed: null,
+      modelId: "song2",
+      sourceKey: "review",
+    };
+    const refused = applyProjectCommand(song2Dialect, project, { type: "deleteTruncatedBar" });
+    expect(refused.project).toBe(project);
+    expect(refused.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["cut-in-complete-bar"]);
   });
 
   it("cuts a tie into the deleted incomplete measure", () => {
