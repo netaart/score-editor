@@ -2,6 +2,7 @@
 // ABOUTME: Both run the dialect's check after the command; any failure returns a diagnostic and leaves the input unchanged.
 import { commandRefusal } from "./command-refusal";
 import { commandAt, runScoreCommand, type ScoreCommand } from "./commands";
+import { withRemappedLyrics } from "./commands-lyrics";
 import { applyProjectRules, isProjectCommand, type ProjectCommand, runProjectCommand } from "./commands-project";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
@@ -68,5 +69,6 @@ export function applyProjectCommand(
 
   const applied = applyScoreCommand(dialect, project.score, command);
   if (!applied.ok) return { project, diagnostics: [applied.diagnostic] };
-  return applyProjectRules(dialect, { ...project, score: applied.text }, command);
+  const next = withRemappedLyrics(dialect, project, command, applied.text);
+  return applyProjectRules(dialect, next, command);
 }

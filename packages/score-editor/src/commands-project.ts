@@ -4,6 +4,7 @@
 import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
+import { joinLyrics, LYRICS_MAX_CHARACTERS, lyricCharacterCount, lyricLinesOf, unalignedLyricLines } from "./lyrics";
 import type { SongProject } from "./score";
 import { fallbackDiagnostic, readScoreText } from "./score-text";
 
@@ -88,10 +89,25 @@ export function styleWithTempo(style: string, bpm: number): { readonly style: st
 
 /** The notices a project carries as it stands, without changing anything. */
 export function checkProject(dialect: ScoreDialect, project: SongProject): ReadonlyArray<Diagnostic> {
-  if (project.scoreMode !== "melody") return [];
-  const parsed = dialect.parse(project.score);
-  if (parsed.score === null || !parsed.score.hasChords) return [];
-  return [{ code: "melody-with-chords", params: {}, at: {} }];
+  const diagnostics: Diagnostic[] = [];
+  const parsed = dialect.parse(project.score).score;
+  if (project.scoreMode === "melody" && parsed !== null && parsed.hasChords) {
+    diagnostics.push({ code: "melody-with-chords", params: {}, at: {} });
+  }
+  if (parsed !== null) {
+    const lines = lyricLinesOf(project, parsed);
+    const unaligned = unalignedLyricLines(lines).length;
+    if (unaligned > 0) diagnostics.push({ code: "lyrics-unaligned", params: { count: unaligned }, at: {} });
+    const characters = lyricCharacterCount(joinLyrics(parsed, lines));
+    if (characters > LYRICS_MAX_CHARACTERS) {
+      diagnostics.push({
+        code: "lyrics-too-long",
+        params: { count: characters, max: LYRICS_MAX_CHARACTERS },
+        at: {},
+      });
+    }
+  }
+  return diagnostics;
 }
 
 /**

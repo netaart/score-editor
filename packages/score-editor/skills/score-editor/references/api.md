@@ -24,6 +24,16 @@ change. The tests in the repository check that the list stays complete.
 | `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
 | `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
 | `checkProject` | core | Reports the song-project notices of a project as it stands, without changing it. |
+| `lyricLinesOf` | core | The stored lyric lines, or the layout computed from a legacy `lyrics` text. |
+| `layoutLyrics` | core | Lays a legacy `lyrics` text onto a score, one line per bar, with the unaligned area. |
+| `joinLyrics` | core | Writes the joined `lyrics` text from a score and its lyric lines; unaligned lines are left out. |
+| `alignedLyricLines` | core | The lines bound to a phrase. |
+| `unalignedLyricLines` | core | The lines in the unaligned area. |
+| `lyricSyllables` | core | Splits a lyrics text into the syllable units the count uses. |
+| `syllableCount` | core | Counts syllables: Han and kana one each, Latin by vowel groups, `-` by hand. |
+| `noteOnsets` | core | The `Vocal` notes in a phrase that are not rests or tie continuations. |
+| `alignLyricLine` | core | Compares a line's syllables with its onsets; returns one note per syllable when equal. |
+| `lyricCharacterCount` | core | Counts the characters of a lyrics text as Unicode code points. |
 | `formatDiagnostic` | core | Turns a `Diagnostic` into a sentence in `en` or `zh`. |
 | `isNoticeDiagnostic` | core | Says whether a diagnostic is a notice, so a changed project is not mistaken for a refusal. |
 | `noteId` | core | Builds a note id from voice and start tick. |
@@ -43,7 +53,8 @@ change. The tests in the repository check that the list stays complete.
 | `TICKS_PER_QUARTER` | core | 256; the tick unit of the shared model. |
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
-| `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`). |
+| `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
+| `LYRICS_MAX_CHARACTERS` | core | 2000; the limit song2 generation accepts for the joined `lyrics` text. |
 | `NOTICE_CODES` | core | The closed host message codes; today `"command-refused"`. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `song2Id` | song2 | `"song2"`. |
@@ -74,10 +85,12 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key. |
+| `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`. |
 | `Score` | A parsed score: tempo, voices, bars, keys, sections, notes, chords, truncation, hasChords, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
+| `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |
+| `LyricAlignment`, `LyricSyllableNote` | A line's syllables, onsets and whether their counts are equal, and one syllable placed on its note. |
 
 ## Diagnostics types
 
