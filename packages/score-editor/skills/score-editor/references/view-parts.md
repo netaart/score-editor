@@ -30,8 +30,8 @@ the session, so the other parts follow. Pass the same `scroller` to several part
 surface of the host's, as the default editor does.
 
 A part mounted after the user already zoomed or scrolled starts at the session's current zoom and scroll. A part
-whose score has no notes for its voice draws nothing, and a model with no dialect leaves the axis parts empty while
-the problem view explains it.
+whose score does not have its voice draws nothing; a voice with only rests still draws its empty track. A model with no
+dialect leaves the axis parts empty while the problem view explains it.
 
 ## Usage
 

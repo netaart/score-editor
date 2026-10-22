@@ -26,13 +26,13 @@ Every layer is public and usable on its own. Pick the smallest one that serves t
 | Read or write another score format, or a second model ID | Dialect registry | [references/dialect-registry.md](references/dialect-registry.md) |
 | Match a host's colours, scheme, font, radius or density | CSS-variable theme | [references/theme.md](references/theme.md) |
 
-The public names are listed in [references/api.md](references/api.md). A change that adds a public export or a view part updates this skill in the same change; keep that list complete.
+The public names are listed in [references/api.md](references/api.md).
 
 ## Rules the package relies on
 
 - Importing either package entry touches no DOM, so a server render may import it. `mount` and every view part's mount function need a browser and throw a clear error elsewhere.
 - The host owns the page layout. A view part mounts on an element the host placed, binds to exactly one editing session, draws from that session, and removes all of its nodes, listeners and style sheet when destroyed.
-- The song project is the only document. Selection, insertion point, zoom, scroll and language are UI state and are not in the undo history.
+- The song project is the only document. [The package README](../../README.md#the-editing-session-and-view-parts) is the contract for the session and what its history holds.
 - The editor is styled by `--sce-*` variables and isolated by its own style sheet; classes are internal. Theme only through the variables in [references/theme.md](references/theme.md).
 - Dialects are passed in explicitly through `createDialectRegistry`; there is no global registry and no runtime dependency between the packages.
 

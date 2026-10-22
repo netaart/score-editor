@@ -28,9 +28,9 @@ const session = createEditingSession({
 | --- | --- |
 | `project` | The current `SongProject`. The only document state. |
 | `reading` | A `ScoreReading`, cached until the score text, model or dialects change. |
-| `selection` | `ReadonlyArray<string>` of note ids. UI state, not in the history. Ids of notes that no longer exist are dropped. |
-| `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state, not in the history. |
-| `view` | `ViewState`: `{ zoom, scrollLeft, language }`, shared by all parts. Not in the history. |
+| `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
+| `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |
+| `view` | `ViewState`: `{ zoom, scrollLeft, language }`, shared by all parts. |
 | `canUndo`, `canRedo` | Whether the history has a step in that direction. |
 
 `ScoreReading` is one of `{ kind: "score", score }`, `{ kind: "unreadable", diagnostics }`, or
@@ -75,9 +75,10 @@ session.undo(); // the whole project before that command
 stop();
 ```
 
-Selection and view state are deliberately outside the history so undo never moves the user's scroll or focus. A host
-that replaces the document (a new score from outside) uses `replaceProject`, not a dispatch. Keep one session per
-document; parts created for the previous session should be destroyed with it.
+The package README's [session contract](../../../README.md#the-editing-session-and-view-parts) states what the
+history holds and what stays UI state. A host that replaces the document (a new score from outside) uses
+`replaceProject`, not a dispatch. Keep one session per document; parts created for the previous session should be
+destroyed with it.
 
 A tool is a pure function, not a session method. The session's `runTool` and `previewTool` are the same code path a
 tool panel uses, and `dispatch` is the same path a direct edit uses. See [custom-tools.md](custom-tools.md).

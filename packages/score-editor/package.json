@@ -30,7 +30,7 @@
     "dist",
     "LICENSE",
     "README.md",
-    "skill"
+    "skills"
   ],
   "scripts": {
     "build": "tsdown",

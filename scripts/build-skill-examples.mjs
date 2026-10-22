@@ -1,12 +1,12 @@
 // ABOUTME: Builds the skill's bundler example for the repository's browser tests, with both package imports aliased to the local build.
-// ABOUTME: Playwright's web server serves the result at /e2e/page/skill/pnpm-bundler.js; it is generated, never committed.
+// ABOUTME: The browser test fulfills the shipped bundler page's script request from the result; it is generated, never committed.
 import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const example = join(root, "packages/score-editor/skill/assets/pnpm-bundler");
+const example = join(root, "packages/score-editor/skills/score-editor/assets/pnpm-bundler");
 const outfile = join(root, "e2e/page/skill/pnpm-bundler.js");
 mkdirSync(dirname(outfile), { recursive: true });
 

@@ -22,7 +22,7 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 | `dialects: DialectRegistry` | The dialects the editor can read, from `createDialectRegistry`. |
 | `language: Language` | Interface language, `"zh"` or `"en"`. |
 | `editable?: boolean` | Defaults to true. This version shows the score read-only either way; `false` adds a read-only badge. |
-| `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language. |
+| `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language; no message exists in this version. |
 
 `MountedEditor`:
 
@@ -50,9 +50,8 @@ editor.update({ project: nextProject }); // redraws from the new document, keeps
 editor.destroy();
 ```
 
-A score that cannot be read shows the dialect's diagnostics in the interface language instead of the view. A project
-whose model has no dialect in the registry shows one short sentence. Both are the problem view; see
-[view-parts.md](view-parts.md).
+The package README's [mount contract](../../../README.md#mount) states what a score that cannot be read and a model
+with no dialect show. Both are the problem view; see [view-parts.md](view-parts.md).
 
 If the host needs its own layout, a subset of parts or its own views, do not wrap `mount`: create an
 `EditingSession` and mount the parts yourself, as in [view-parts.md](view-parts.md). The session, not `mount`, is the

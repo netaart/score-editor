@@ -12,8 +12,9 @@ const common = ["LICENSE", "README.md", "package.json", "dist/index.js", "dist/i
 
 let failed = false;
 for (const { dir, skill } of packages) {
-  const required = skill ? [...common, "skill/SKILL.md"] : common;
-  const allowed = (path) => required.includes(path) || path.startsWith("dist/") || (skill && path.startsWith("skill/"));
+  const required = skill ? [...common, "skills/score-editor/SKILL.md"] : common;
+  const allowed = (path) =>
+    required.includes(path) || path.startsWith("dist/") || (skill && path.startsWith("skills/score-editor/"));
   const out = execFileSync("npm", ["pack", "--dry-run", "--json"], {
     cwd: `${root}${dir}`,
     encoding: "utf8",
@@ -24,8 +25,10 @@ for (const { dir, skill } of packages) {
   const extra = paths.filter((path) => !allowed(path));
   const missing = required.filter((path) => !paths.includes(path));
   if (skill) {
-    if (!paths.some((path) => path.startsWith("skill/references/"))) missing.push("skill/references/*");
-    if (!paths.some((path) => path.startsWith("skill/assets/"))) missing.push("skill/assets/*");
+    if (!paths.some((path) => path.startsWith("skills/score-editor/references/")))
+      missing.push("skills/score-editor/references/*");
+    if (!paths.some((path) => path.startsWith("skills/score-editor/assets/")))
+      missing.push("skills/score-editor/assets/*");
   }
   if (extra.length > 0 || missing.length > 0) {
     failed = true;

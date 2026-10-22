@@ -1,7 +1,7 @@
 // ABOUTME: The static-page skill example: imports both packages from esm.sh, mounts parts on one session, and runs a custom tool.
 // ABOUTME: It also reads the score with the dialect and writes one command back through applyScoreCommand, with no mount().
 
-import { song2Dialect } from "https://esm.sh/@neta-art/score-dialect-song2?bundle&target=es2022";
+import { song2Dialect } from "https://esm.sh/@neta-art/score-dialect-song2@0.1.0?bundle&target=es2022";
 import {
   applyScoreCommand,
   createDialectRegistry,
@@ -14,7 +14,7 @@ import {
   mountTimeRuler,
   mountVoiceTrack,
   mountZoomControl,
-} from "https://esm.sh/@neta-art/score-editor?bundle&target=es2022";
+} from "https://esm.sh/@neta-art/score-editor@0.1.0?bundle&target=es2022";
 
 // Hand-written: two voices, four bars, a verse and a chorus.
 const SCORE = `X:1
@@ -124,16 +124,19 @@ function firstProblem(diagnostics) {
   return first ? formatDiagnostic(first, "en") : "The command was refused without a diagnostic.";
 }
 
+function pitchedVocalNotes() {
+  if (session.reading.kind !== "score") return null;
+  return session.reading.score.notes.filter((note) => note.voice === "Vocal" && note.midi !== null);
+}
+
 function selectVocalNotes() {
-  if (session.reading.kind !== "score") {
+  const notes = pitchedVocalNotes();
+  if (!notes) {
     say("There is no readable score to select notes from.");
     return;
   }
-  const ids = session.reading.score.notes
-    .filter((note) => note.voice === "Vocal" && note.midi !== null)
-    .map((note) => note.id);
-  session.select(ids);
-  say(`Selected ${ids.length} Vocal notes.`);
+  session.select(notes.map((note) => note.id));
+  say(`Selected ${notes.length} Vocal notes.`);
 }
 
 function runTool() {
@@ -165,9 +168,9 @@ function writeBack() {
     say("There is no readable score to write.");
     return;
   }
-  const first = session.reading.score.notes.find((note) => note.voice === "Vocal" && note.midi !== null);
+  const first = pitchedVocalNotes()?.[0];
   if (!first) {
-    say("Vocal has no pitched note to rest.");
+    say("There is no pitched Vocal note to rest.");
     return;
   }
   const result = applyScoreCommand(song2Dialect, session.project.score, { type: "toRest", noteId: first.id });
@@ -200,11 +203,6 @@ app.addEventListener("click", (event) => {
 });
 
 say(`Ready: ${tools.list().length} custom tool registered.`);
-window.skillExample = {
-  session,
-  tools,
-  parts,
-  destroy: () => {
-    for (const part of parts) part.destroy();
-  },
-};
+window.addEventListener("pagehide", () => {
+  for (const part of parts) part.destroy();
+});

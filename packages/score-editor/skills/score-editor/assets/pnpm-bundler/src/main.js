@@ -124,16 +124,19 @@ function firstProblem(diagnostics) {
   return first ? formatDiagnostic(first, "en") : "The command was refused without a diagnostic.";
 }
 
+function pitchedVocalNotes() {
+  if (session.reading.kind !== "score") return null;
+  return session.reading.score.notes.filter((note) => note.voice === "Vocal" && note.midi !== null);
+}
+
 function selectVocalNotes() {
-  if (session.reading.kind !== "score") {
+  const notes = pitchedVocalNotes();
+  if (!notes) {
     say("There is no readable score to select notes from.");
     return;
   }
-  const ids = session.reading.score.notes
-    .filter((note) => note.voice === "Vocal" && note.midi !== null)
-    .map((note) => note.id);
-  session.select(ids);
-  say(`Selected ${ids.length} Vocal notes.`);
+  session.select(notes.map((note) => note.id));
+  say(`Selected ${notes.length} Vocal notes.`);
 }
 
 function runTool() {
@@ -165,9 +168,9 @@ function writeBack() {
     say("There is no readable score to write.");
     return;
   }
-  const first = session.reading.score.notes.find((note) => note.voice === "Vocal" && note.midi !== null);
+  const first = pitchedVocalNotes()?.[0];
   if (!first) {
-    say("Vocal has no pitched note to rest.");
+    say("There is no pitched Vocal note to rest.");
     return;
   }
   const result = applyScoreCommand(song2Dialect, session.project.score, { type: "toRest", noteId: first.id });
@@ -200,11 +203,6 @@ app.addEventListener("click", (event) => {
 });
 
 say(`Ready: ${tools.list().length} custom tool registered.`);
-window.skillExample = {
-  session,
-  tools,
-  parts,
-  destroy: () => {
-    for (const part of parts) part.destroy();
-  },
-};
+window.addEventListener("pagehide", () => {
+  for (const part of parts) part.destroy();
+});

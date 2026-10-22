@@ -54,8 +54,10 @@ for a wrong type, an out-of-range number or a value outside a choice.
 ## The registry
 
 `createToolRegistry(tools = [])` returns a `ToolRegistry` with `register(tool)`, `list()` (registration order) and
-`find(id)`. A second id or a malformed declaration throws, so a broken tool never runs: no `commands` builder, an
-unknown parameter type, a choice without values, or a default its own declaration refuses.
+`find(id)`. `register` throws on a second id or a malformed declaration: a tool without a `commands` builder, an
+unknown parameter type, a `choice` without values, or a default its own declaration refuses. A tool passed straight to
+`previewTool` or `runTool` without a registry does not run: the call returns a `ToolResult` with a `tool-parameter`
+diagnostic and never `ok: true`.
 
 ```ts
 import { createToolRegistry } from "@neta-art/score-editor";
@@ -89,6 +91,5 @@ if (!result.ok) showProblems(result.diagnostics);
 else save(session.project); // one undo step, already applied
 ```
 
-Parameter errors and a missing commands builder use the `tool-parameter` command diagnostic. A refused command uses
-its own command diagnostic code. In both cases `formatDiagnostic` gives text in the current language; see
-[headless-layer.md](headless-layer.md).
+Parameter errors use the `tool-parameter` command diagnostic. A refused command uses its own command diagnostic code.
+In both cases `formatDiagnostic` gives text in the current language; see [headless-layer.md](headless-layer.md).

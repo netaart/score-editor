@@ -83,7 +83,7 @@ A host that stores scores can use this path without mounting anything. To write 
 call `song2Dialect.serialize(score)` and keep the project otherwise unchanged; call `song2Dialect.check(score)` to see
 whether the written text reads back as the same model.
 
-## The dialect and the theme it declares
+## The dialect and its constraints
 
 `ScoreDialect` is `{ id, constraints, parse, serialize, check }`. `DialectConstraints` declares the voices, keys,
 tempo range, section marker, lyric rule, durations, meter rule and chord vocabulary (`ChordVocabulary`, `DurationSet`,

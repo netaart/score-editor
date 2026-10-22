@@ -11,6 +11,6 @@ npx serve .
 
 Open the printed URL. A module script cannot run from `file://`, so open the page over HTTP.
 
-The import URLs are `https://esm.sh/@neta-art/score-editor?bundle&target=es2022` and the same for
-`@neta-art/score-dialect-song2`. The example does not pin a version; esm.sh serves the latest. For a pinned install,
-use the pnpm-and-esbuild example beside this one.
+Both imports pin the version this skill ships in:
+`https://esm.sh/@neta-art/score-editor@<version>?bundle&target=es2022` and the same for
+`@neta-art/score-dialect-song2`.

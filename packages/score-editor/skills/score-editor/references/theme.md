@@ -48,9 +48,8 @@ Names beginning `--sce-_` are private aliases. Per-instance values such as `--sc
 ```
 
 The editor follows the page's `color-scheme` for its light and dark defaults. Every class is prefixed `sce-` and every
-public variable `--sce-`; the package's style sheet does not style the host's plain elements. If a host's own CSS uses
-ID selectors or `!important` rules on plain elements, mount the editor inside a shadow root: each view part brings its
-style sheet into the shadow root it is mounted in.
+public variable `--sce-`; the package's style sheet does not style the host's plain elements. For when to mount inside
+a shadow root, see [the spike's style-isolation decision](https://github.com/netaart/score-editor/blob/main/docs/spike.md).
 
 Changing a variable restyles existing parts without remounting them. For a colour the variable contract cannot serve,
 derive it from the mapped bg and text on the host side rather than reaching for a private name.

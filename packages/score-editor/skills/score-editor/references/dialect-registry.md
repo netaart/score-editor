@@ -98,8 +98,8 @@ const myDialect: ScoreDialect = {
 ```
 
 The model's positions are integer ticks of 1/1024 note (`TICKS_PER_QUARTER` is 256), so a format's own units need
-converting on the way in and out. Diagnostics are `{ code, params, at }`: use one of the reading codes for text that
-cannot be read, or a dialect-specific code only if the host adds it; `formatDiagnostic` handles the documented codes.
+converting on the way in and out. Diagnostics are `{ code, params, at }`. `DiagnosticCode` is the closed union of the
+reading and command codes, and `formatDiagnostic` knows every one; use a reading code for text that cannot be read.
 
 The song2 dialect is the reference implementation: `song2Dialect`, `song2Constraints` and `song2Id` are exported from
 `@neta-art/score-dialect-song2`. A second dialect usually depends on the core for types only, as song2 does.
