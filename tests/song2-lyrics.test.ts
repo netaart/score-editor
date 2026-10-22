@@ -638,6 +638,7 @@ c2`);
   it("applies every score command type to a 0.1.0-shaped project with no lyric field or lyrics rewrite", () => {
     const cases: ReadonlyArray<readonly [ScoreCommand, string?]> = [
       [{ type: "toRest", noteId: "Vocal:0" }],
+      [{ type: "toRests", noteIds: ["Vocal:0"] }],
       [{ type: "setChord", noteId: "Vocal:0", name: "C" }],
       [{ type: "insertBar", bar: 3 }],
       [{ type: "deleteBars", from: 3, count: 1 }],

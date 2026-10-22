@@ -166,6 +166,7 @@ function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPl
     case "deleteTruncatedBar":
       return truncatedBarPlacements(score, after);
     case "toRest":
+    case "toRests":
     case "setChord":
     case "fillTruncatedBar":
     case "transpose":
