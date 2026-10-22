@@ -4,7 +4,7 @@ import { insertionPosition } from "./arrangement";
 import { create, requireDom } from "./dom";
 import { messagesFor } from "./i18n";
 import { lineIcon } from "./icons";
-import { createLiveRegion } from "./live-region";
+import { createLiveRegion, type LiveRegion } from "./live-region";
 import { holdPreviewPlayer, type PreviewStart } from "./preview-player";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -18,25 +18,19 @@ const PLAY = ["4.5,2.5 12.5,8 4.5,13.5 4.5,2.5"];
 const STOP = ["3.5,3.5 12.5,3.5 12.5,12.5 3.5,12.5 3.5,3.5"];
 
 /**
- * Mounts the synth preview control on `el`: one button that plays the session's score as a synthetic preview of melody
- * and chords, from the insertion point or the start, and stops it; and a caption saying the sound is not the finished
- * song. It is hidden while the session has no readable score, and it is there whether or not the session is editable.
+ * The control itself, drawn into `parent`, which must sit in a `.sce-root`: the button, the caption, and what they say
+ * through `live`. The toolbar builds it into its own row and lends it its own live region, so a toolbar speaks with one
+ * voice; `mountSynthPreview` is the same control as a part of its own.
  */
-export function mountSynthPreview(el: HTMLElement, session: EditingSession): ViewPart {
-  requireDom("mountSynthPreview");
-  const doc = el.ownerDocument;
-  const releaseStyles = acquireStyles(el);
-  const root = create(doc, "div", "sce-root sce-part sce-part-synth");
-  el.appendChild(root);
-
-  const group = create(doc, "div", "sce-synth", root);
+export function mountSynthControl(parent: HTMLElement, session: EditingSession, live: LiveRegion): ViewPart {
+  const doc = parent.ownerDocument;
+  const group = create(doc, "div", "sce-synth", parent);
   const button = create(doc, "button", "sce-button sce-synth-button", group);
   button.type = "button";
   const playIcon = button.appendChild(lineIcon(doc, PLAY));
   const stopIcon = button.appendChild(lineIcon(doc, STOP));
   const label = create(doc, "span", "sce-synth-label", button);
   const caption = create(doc, "span", "sce-synth-caption", group);
-  const live = createLiveRegion(root);
   const hold = holdPreviewPlayer(session);
   const { player } = hold;
 
@@ -48,7 +42,7 @@ export function mountSynthPreview(el: HTMLElement, session: EditingSession): Vie
   function applyLanguage(): void {
     language = session.view.language;
     t = messagesFor(language);
-    root.lang = language;
+    group.lang = language;
     caption.textContent = t.previewCaption;
     drawn = "";
   }
@@ -111,6 +105,33 @@ export function mountSynthPreview(el: HTMLElement, session: EditingSession): Vie
       unsubscribeSession();
       unsubscribePlayer();
       hold.release();
+      group.remove();
+    },
+  };
+}
+
+/**
+ * Mounts the synth preview control on `el`: one button that plays the session's score as a synthetic preview of melody
+ * and chords, from the insertion point or the start, and stops it; and a caption saying the sound is not the finished
+ * song. It is hidden while the session has no readable score, and it is there whether or not the session is editable.
+ */
+export function mountSynthPreview(el: HTMLElement, session: EditingSession): ViewPart {
+  requireDom("mountSynthPreview");
+  const releaseStyles = acquireStyles(el);
+  const root = create(el.ownerDocument, "div", "sce-root sce-part sce-part-synth");
+  el.appendChild(root);
+  const control = mountSynthControl(root, session, createLiveRegion(root));
+  root.lang = session.view.language;
+  const unsubscribe = session.subscribe(() => {
+    if (root.lang !== session.view.language) root.lang = session.view.language;
+  });
+  let destroyed = false;
+  return {
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      unsubscribe();
+      control.destroy();
       root.remove();
       releaseStyles();
     },
