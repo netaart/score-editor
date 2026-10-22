@@ -47,8 +47,33 @@ export type {
   SessionOptions,
   ViewState,
 } from "./session";
-export { createEditingSession } from "./session";
+export { createEditingSession, runScoreTool, runTool } from "./session";
 export { mountTimeRuler } from "./time-ruler";
+export type {
+  BooleanToolParameter,
+  ChoiceToolParameter,
+  NumberToolParameter,
+  ScoreTool,
+  TextToolParameter,
+  ToolCommandBuilder,
+  ToolParameter,
+  ToolParameterCheck,
+  ToolParameterValue,
+  ToolParameterValues,
+  ToolRegistry,
+  ToolResult,
+  ToolText,
+  ToolValues,
+} from "./tool";
+export {
+  applyToolCommands,
+  checkToolParameters,
+  createScoreToolRegistry,
+  createToolRegistry,
+  previewScoreTool,
+  previewTool,
+  validateToolParameters,
+} from "./tool";
 export type {
   AxisPartOptions,
   ChordVocabulary,

@@ -23,7 +23,13 @@ export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
  * The codes a command is refused with: the dialect-agnostic edit layer reports the first three when a command cannot be
  * applied or checked, and `session.dispatch` reports `no-dialect` for a model the registry has no dialect for.
  */
-export const COMMAND_DIAGNOSTIC_CODES = ["note-not-found", "not-a-note", "write-mismatch", "no-dialect"] as const;
+export const COMMAND_DIAGNOSTIC_CODES = [
+  "note-not-found",
+  "not-a-note",
+  "write-mismatch",
+  "no-dialect",
+  "tool-parameter",
+] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
 
@@ -63,6 +69,7 @@ interface Catalog {
   readonly notANote: Text;
   readonly writeMismatch: Text;
   readonly noDialect: Text;
+  readonly toolParameter: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -318,6 +325,32 @@ function chineseNoDialect(params: DiagnosticParams): string {
   return `这个编辑器不支持${quoted(value(params, "modelId"))}的乐谱格式，所以无法修改这份乐谱。`;
 }
 
+function englishToolParameter(params: DiagnosticParams): string {
+  const tool = quoted(value(params, "toolId"));
+  const parameter = quoted(value(params, "parameter"));
+  switch (value(params, "reason")) {
+    case "range":
+      return `The tool${tool} needs${parameter} between ${value(params, "min")} and ${value(params, "max")}.`;
+    case "value":
+      return `The tool${tool} needs${parameter} to be one of ${value(params, "values")}.`;
+    default:
+      return `The tool${tool} expects ${value(params, "expected")} for${parameter}.`;
+  }
+}
+
+function chineseToolParameter(params: DiagnosticParams): string {
+  const tool = quoted(value(params, "toolId"));
+  const parameter = quoted(value(params, "parameter"));
+  switch (value(params, "reason")) {
+    case "range":
+      return `工具${tool}的参数${parameter}的值必须在 ${value(params, "min")} 到 ${value(params, "max")} 之间。`;
+    case "value":
+      return `工具${tool}的参数${parameter}的值必须是 ${value(params, "values")} 之一。`;
+    default:
+      return `工具${tool}的参数${parameter}需要${value(params, "expected")}。`;
+  }
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -334,6 +367,7 @@ const en: Catalog = {
   notANote: englishNotANote,
   writeMismatch: englishWriteMismatch,
   noDialect: englishNoDialect,
+  toolParameter: englishToolParameter,
 };
 
 const zh: Catalog = {
@@ -352,6 +386,7 @@ const zh: Catalog = {
   notANote: chineseNotANote,
   writeMismatch: chineseWriteMismatch,
   noDialect: chineseNoDialect,
+  toolParameter: chineseToolParameter,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -389,6 +424,8 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.writeMismatch(diagnostic.params);
     case "no-dialect":
       return catalog.noDialect(diagnostic.params);
+    case "tool-parameter":
+      return catalog.toolParameter(diagnostic.params);
     default:
       return "";
   }

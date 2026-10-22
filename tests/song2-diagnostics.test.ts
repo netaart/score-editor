@@ -24,7 +24,13 @@ const READING_CODES: ReadingDiagnosticCode[] = [
   "empty-line",
 ];
 
-const COMMAND_CODES: CommandDiagnosticCode[] = ["note-not-found", "not-a-note", "write-mismatch", "no-dialect"];
+const COMMAND_CODES: CommandDiagnosticCode[] = [
+  "note-not-found",
+  "not-a-note",
+  "write-mismatch",
+  "no-dialect",
+  "tool-parameter",
+];
 
 describe("diagnostics", () => {
   it("has exactly the reading codes RULES.md lists and the command codes of the edit layer", () => {
@@ -84,5 +90,34 @@ describe("diagnostics", () => {
     expect(formatDiagnostic({ code: "voice-order", params: { expected: "V: Ins" }, at: { line: 9 } }, "zh")).toContain(
       "V: Ins",
     );
+  });
+});
+
+describe("tool parameter diagnostics", () => {
+  const diagnostic = {
+    code: "tool-parameter",
+    params: { toolId: "rest-every", parameter: "every", reason: "range", min: 1, max: 8, value: 9 },
+    at: {},
+  } as const;
+
+  it("names the tool and the parameter in both languages", () => {
+    for (const language of ["zh", "en"] as const) {
+      const text = formatDiagnostic(diagnostic, language);
+      expect(text).toContain("rest-every");
+      expect(text).toContain("every");
+      expect(text).not.toContain("undefined");
+    }
+  });
+
+  it("says which allowed values a choice takes", () => {
+    const en = formatDiagnostic(
+      {
+        code: "tool-parameter",
+        params: { toolId: "t", parameter: "mode", reason: "value", values: "up, down" },
+        at: {},
+      },
+      "en",
+    );
+    expect(en).toContain("up, down");
   });
 });
