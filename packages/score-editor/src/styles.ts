@@ -143,6 +143,15 @@ const css = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* With the preview control the row wraps instead of scrolling, and the title is what gives way: DESIGN.md, "Toolbar". */
+.sce-root .sce-toolbar[data-synth] {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.sce-root .sce-toolbar[data-synth] .sce-title {
+  flex: 1000 1 0;
+  max-width: max-content;
+}
 .sce-root .sce-spacer {
   flex: 1 1 auto;
 }
@@ -745,7 +754,8 @@ ${labelThinning()}
 /* The synth preview: DESIGN.md, "Synth preview". */
 .sce-root .sce-synth {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 8px;
 }
@@ -757,6 +767,7 @@ ${labelThinning()}
   min-width: 2.2em;
 }
 .sce-root .sce-synth-caption {
+  min-width: 0;
   max-width: 12em;
   color: var(--sce-_muted);
   font-size: 0.92em;

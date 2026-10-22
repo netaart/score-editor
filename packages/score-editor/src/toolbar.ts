@@ -67,6 +67,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
+  if (synth) row.dataset.synth = "";
 
   const abort = new AbortController();
   const { signal } = abort;
