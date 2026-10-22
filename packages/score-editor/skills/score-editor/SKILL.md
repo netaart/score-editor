@@ -34,6 +34,7 @@ The public names are listed in [references/api.md](references/api.md).
 - The host owns the page layout. A view part mounts on an element the host placed, binds to exactly one editing session, draws from that session, and removes all of its nodes, listeners and style sheet when destroyed.
 - The song project is the only document. [The package README](../../README.md#the-editing-session-and-view-parts) is the contract for the session and what its history holds.
 - The editor is styled by `--sce-*` variables and isolated by its own style sheet; classes are internal. Theme only through the variables in [references/theme.md](references/theme.md).
+- `abcjs` is the package's one runtime dependency, for the staff view. It is loaded with `import()` when `mountStaffView` runs (the default editor does that the first time the staff is shown), never on import, so a host that does not mount the staff view loads none of it. See [references/view-parts.md](references/view-parts.md#the-text-view-the-staff-view-and-the-view-switch).
 - Dialects are passed in explicitly through `createDialectRegistry`; there is no global registry and no runtime dependency between the packages.
 
 ## Runnable examples

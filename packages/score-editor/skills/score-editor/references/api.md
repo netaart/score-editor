@@ -16,9 +16,13 @@ change. The tests in the repository check that the list stays complete.
 | `mountTimeRuler` | core | Mounts the time-ruler view part; takes `AxisPartOptions`. |
 | `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
+| `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
+| `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. |
+| `mountStaleNotice` | core | Mounts the stale notice part: one sentence while the text view holds text the project did not take. |
+| `mountViewSwitch` | core | Mounts the view switch part: three buttons that set the session's `activeView`. |
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
 | `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult`. |
-| `applyProjectCommand` | core | Applies one command to a `SongProject`; returns `ApplyProjectResult`. |
+| `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
 | `formatDiagnostic` | core | Turns a `Diagnostic` into a sentence in `en` or `zh`. |
 | `noteId` | core | Builds a note id from voice and start tick. |
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
@@ -34,6 +38,7 @@ change. The tests in the repository check that the list stays complete.
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_CODES` | core | The closed notice codes; today `"command-refused"`. |
+| `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |
 | `song2Dialect` | song2 | The `ScoreDialect` for `song2`: parse, serialize and check. |
@@ -46,14 +51,17 @@ change. The tests in the repository check that the list stays complete.
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
-| `SessionOptions` | `{ project, dialects, language?, editable? }` for `createEditingSession`. |
-| `EditingSession` | The headless editing session: project, reading, selection, insertion point, view, dispatch, tools, history, subscribe. |
+| `SessionOptions` | `{ project, dialects, language?, editable?, activeView? }` for `createEditingSession`. |
+| `EditingSession` | The headless editing session: project, reading, selection, insertion point, view, shown view, rejected text, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus any diagnostics, or the untouched project and a refusal. |
 | `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape, its causes, and the listener type. |
+| `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
+| `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; today `{ type: "toRest", noteId }`. |
+| `ProjectCommand` | The edits of the project that are not edits of a parsed score; today `{ type: "replaceScoreText", text }`. |
 
 ## Score model types
 
@@ -98,7 +106,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch? }` for the toolbar. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, or a delete. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 

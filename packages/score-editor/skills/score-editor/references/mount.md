@@ -1,7 +1,9 @@
 # mount: the default editor
 
-Use `mount` when the host wants a working editor without choosing parts: a toolbar, one shared time scroller with the
-ruler, chord track and one track per voice, the cut notice and the problem view, all on one editing session. Its
+Use `mount` when the host wants a working editor without choosing parts: a toolbar that ends with a switch among three
+views, one shared time scroller with the ruler, chord track and one track per voice (the arrangement), the staff view,
+the text view, the stale notice, the cut notice and the problem view, all on one editing session. The arrangement is
+shown first; the staff view is mounted, and abcjs loaded, the first time the staff is shown. Its
 layout is the arrangement described in [view-parts.md](view-parts.md); the parts it uses are the same public parts a
 host can mount itself.
 

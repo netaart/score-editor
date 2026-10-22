@@ -112,6 +112,7 @@ const ownerGroups = {
     "Notice",
     "NoticeCode",
     "NOTICE_CODES",
+    "ProjectCommand",
   ],
   "references/editing-session.md": [
     "createEditingSession",
@@ -124,6 +125,9 @@ const ownerGroups = {
     "SessionListener",
     "SessionOptions",
     "ViewState",
+    "RejectedText",
+    "ViewName",
+    "VIEW_NAMES",
   ],
   "references/view-parts.md": [
     "AxisPartOptions",
@@ -140,6 +144,10 @@ const ownerGroups = {
     "mountToolbar",
     "mountVoiceTrack",
     "mountZoomControl",
+    "mountTextView",
+    "mountStaffView",
+    "mountStaleNotice",
+    "mountViewSwitch",
   ],
   "references/mount.md": ["mount", "MountedEditor", "MountOptions"],
   "references/custom-tools.md": [

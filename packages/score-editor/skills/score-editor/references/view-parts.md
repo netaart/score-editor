@@ -19,12 +19,59 @@ added; calling it twice is harmless.
 | `mountTimeRuler(el, session, options?)` | Bar numbers, section bands, and key/meter/cut marks. | `AxisPartOptions` |
 | `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line. | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
+| `mountTextView(el, session)` | The score text in a box with line numbers, a status sentence, and the problems of text that cannot be read. | — |
+| `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only. | — |
+| `mountStaleNotice(el, session)` | One sentence while the text view holds text the project did not take, or nothing. | — |
+| `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused? }`:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
-it the toolbar draws no hint); `onRefused` is described under editing below. The toolbar's row scrolls sideways when its
+it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` ends the row with the view
+switch, names the shown view in the title, and leaves out the controls that only mean something on the arrangement
+(zoom and Delete) while another view is shown. Where the row is too narrow, a toolbar with the switch wraps onto a
+second line, with the read-only badge and the switch together at its end. The toolbar's row scrolls sideways when its
 element is narrower than its controls, so every control can still be reached.
+
+## The text view, the staff view and the view switch
+
+The default editor shows one of three views of the same project: the arrangement of tracks, the staff, or the score
+text. `session.activeView` says which; the view switch sets it, also while the session is read-only, since it changes
+what is shown and not the score. A host with its own layout shows and hides its own containers from `activeView`, and
+mounts the parts it wants on them.
+
+The text view is the one place where a person writes the score as text. A pause of 600 ms in typing, or leaving the
+box, checks the text with `session.checkScoreText`. Text that reads is dispatched as one `replaceScoreText` step, so
+one burst of typing is one undo step, and the toolbar's undo and redo move over those steps; inside the box the
+browser's own Ctrl or Cmd plus Z undoes typing. Text that does not read stays in the box, its problems are listed
+with the line each is on (a press on one selects that line in the box), the session is told with `setRejectedText`, and the
+project keeps the last score that read. The views that draw the project then show that score, and the stale notice
+above them says so. A read-only session gives a read-only box.
+
+The staff view draws `session.project.score` with abcjs, which the part loads with a dynamic `import()` when it is
+mounted: importing the package loads none of it, and `abcjs` is the package's one runtime dependency. Until it
+arrives the part says it is loading; if it cannot be loaded the part says so and the other parts go on working. The
+drawing sits in a shadow root of its own inside the part, so the host's CSS for `svg`, `text` and `path` does not
+reach it and it adds no rule to the page. It takes the colour of the part's text. A dense bar can be wider than the
+box; the part scrolls inside its own region and not the page. A score that cannot be read is not drawn.
+
+```ts
+const views = {
+  arrangement: document.querySelector<HTMLElement>(".roll")!,
+  staff: document.querySelector<HTMLElement>(".staff")!,
+  text: document.querySelector<HTMLElement>(".text")!,
+};
+const parts = [
+  mountViewSwitch(document.querySelector(".views")!, session),
+  mountStaleNotice(document.querySelector(".stale")!, session),
+  mountTextView(views.text, session),
+  mountStaffView(views.staff, session), // asks for abcjs now
+];
+const show = () => {
+  for (const name of VIEW_NAMES) views[name].hidden = name !== session.activeView;
+};
+session.subscribe((change) => change.cause === "active-view" && show());
+```
 
 ## How the parts share the time axis
 
@@ -87,6 +134,11 @@ import {
   mountTimeRuler,
   mountToolbar,
   mountVoiceTrack,
+  VIEW_NAMES,
+  mountStaffView,
+  mountStaleNotice,
+  mountTextView,
+  mountViewSwitch,
 } from "@neta-art/score-editor";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 

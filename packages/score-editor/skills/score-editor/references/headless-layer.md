@@ -63,8 +63,8 @@ Every edit ends in the same command layer. `ScoreCommand` is the dialect-agnosti
 - `applyScoreCommand(dialect, text, command)` returns `ApplyScoreResult`: `{ ok: true, text }` or
   `{ ok: false, diagnostic }`. A command that cannot be applied, a write/read-back mismatch, or any `check` failure
   returns the diagnostic and no new text.
-- `applyProjectCommand(dialect, project, command)` returns `ApplyProjectResult`: `{ project, diagnostics }`. Only
-  `project.score` can change, and it does not change on a failure.
+- `applyProjectCommand(dialect, project, command)` takes a `ScoreCommand` or a `ProjectCommand` and returns
+  `ApplyProjectResult`: `{ project, diagnostics }`. Only `project.score` can change, and it does not change on a failure.
 
 ```ts
 import { applyProjectCommand } from "@neta-art/score-editor";
@@ -77,6 +77,17 @@ if (reading.score) {
     if (result.diagnostics.length === 0) project = result.project; // the new score text
   }
 }
+```
+
+`ProjectCommand` is the union of edits that act on the project and not on a parsed score. Today it has
+`{ type: "replaceScoreText", text }`, which replaces the whole score text: the dialect must read `text` and its
+`check` must pass, and the project then holds the text as the dialect writes it; otherwise the project keeps its
+old text and the result carries the first diagnostic. It is the command the text view sends, so a history step of
+this `type` is a person's direct edit of the score text.
+
+```ts
+const taken = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: typed });
+if (taken.diagnostics.length === 0) project = taken.project;
 ```
 
 A host that stores scores can use this path without mounting anything. To write a whole model instead of one command,
