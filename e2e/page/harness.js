@@ -15,6 +15,8 @@ import {
   mountToolbar,
   mountVoiceTrack,
   mountZoomControl,
+  previewNote,
+  previewPlayer,
 } from "/packages/score-editor/dist/index.js";
 
 const stage = document.getElementById("stage");
@@ -272,6 +274,10 @@ window.harness = {
   notices,
   host: hostPage,
   shadowRoot: null,
+  /** The single-note preview export, called as a host calls it. */
+  previewNote,
+  /** The preview player of the open layout's session, as a host reads and drives it. */
+  previewPlayer: () => previewPlayer(layout.live()),
   /**
    * Mounts on the stage. `score` says which score text (default: a small two-voice sample), `project` overrides
    * other project fields, and `shadow` mounts inside an open shadow root of a host element instead.
