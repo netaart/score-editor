@@ -73,4 +73,46 @@ stop();
 - Not tied to the DOM: `handleEditingInput(session, input)` takes a key, a click on a note or a click on empty space as plain data and does what the parts do, so a host with its own input handling can reuse it. It returns `{ handled, refused }`.
 - `mount` builds one session and assembles these parts in a toolbar, a scroller and a problem view; its options are unchanged, and `editable` and `notify` do what the first list says.
 
+## Custom tools
+
+A **tool** is a pure function from a song project, the selected note ids and its parameter values to a list of commands. It declares an id, a name in both languages and its parameters; it never touches a session or the DOM, so the same tool runs in a test, a worker or a panel.
+
+```ts
+import { song2Dialect } from "@neta-art/score-dialect-song2";
+import {
+  createDialectRegistry,
+  createToolRegistry,
+  previewTool,
+  type ScoreTool,
+  type ToolParameter,
+} from "@neta-art/score-editor";
+
+const every: ToolParameter = { name: "every", type: "number", min: 1, max: 8, default: 2 };
+
+const restEveryNth: ScoreTool = {
+  id: "rest-every-nth",
+  name: { en: "Rest every Nth note", zh: "每隔 N 个音变休止" },
+  parameters: [every],
+  commands(_project, selection, values) {
+    const step = values.every as number;
+    return selection
+      .filter((_id, index) => (index + 1) % step === 0)
+      .map((noteId) => ({ type: "toRest", noteId }));
+  },
+};
+
+const tools = createToolRegistry([restEveryNth]); // a second id or a malformed tool throws
+const found = tools.find("rest-every-nth"); // tools.list() returns every registered tool
+
+const dialects = createDialectRegistry([song2Dialect]); // the session was created with the same registry
+const preview = previewTool(restEveryNth, session.project, session.selection, { every: 2 }, dialects);
+const viaSession = session.previewTool(restEveryNth, { every: 2 });
+const result = session.runTool(restEveryNth, { every: 2 });
+```
+
+- Parameters are declared as `number` (with optional `min`, `max` and `step`), `boolean`, `choice` (with `values`), or `text`. A missing value takes its default. A wrong type, an out-of-range number or a value outside a choice is refused with the command diagnostic code `tool-parameter` before the tool's function runs; `formatDiagnostic` gives it zh and en text. The registry also refuses a tool with no `commands` builder, an unknown parameter type, a choice without values, or a default its own declaration would refuse, so a broken tool never runs.
+- `previewTool` and `session.previewTool` return `{ ok, project, diagnostics, commands }` without changing the session: no dispatch, no history step, no notification. The project is the tool's result, or the project it started from when a step fails.
+- `session.runTool` checks the parameters, builds the commands once, and applies them through the same command path as `dispatch`. All commands are one history step: one undo goes back to the project before the run, one redo reapplies it. If any step fails its `check`, the run is refused, the result carries that step's diagnostic, and project and history stay as they were.
+- Every export here is additive to the 0.1.0 entry and the editing-session entry; `commands`, `parameters` and `name` are the shape the registry and session read. The tool panel in a later ticket reads the registry's declarations to draw its controls and preview.
+
 MIT licensed.

@@ -1,11 +1,12 @@
 // ABOUTME: The editing session: the song project, its undo history, the selection and the insertion point, and the UI state view parts share.
 // ABOUTME: Headless: it touches no DOM, so it imports and runs in Node and in a Worker like the rest of the headless layer.
-import { applyProjectCommand } from "./apply";
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
+import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
+import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
 import type { Language } from "./types";
 
 /** What reading the project's score came to: a score, or the reason there is none. */
@@ -92,6 +93,14 @@ export interface EditingSession {
    * diagnostics; a command that leaves the project as it was adds no step and announces nothing.
    */
   dispatch(command: ScoreCommand): DispatchResult;
+  /**
+   * Runs a tool on the session: validates its parameters, builds its commands, and applies all of them as one history
+   * step through the same command path as `dispatch`. One failing step refuses the whole run and leaves project and
+   * history unchanged.
+   */
+  runTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
+  /** The project a tool would make from the current project and selection, without changing or announcing anything. */
+  previewTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
   /** Selects exactly these notes. Ids that name no note are left out. */
   select(noteIds: ReadonlyArray<string>): void;
   /** Puts the insertion point at `point`, or removes it with null. A tick must be a whole number, zero or more. */
@@ -221,6 +230,19 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     projectChanged(cause);
   }
 
+  /** The one path a list of commands takes into the history: all apply, or none does. */
+  function applyCommands(commands: ReadonlyArray<ScoreCommand>): DispatchResult {
+    return withDialect<DispatchResult>(
+      (dialect) => {
+        const applied = applyCommandList(dialect, project, commands);
+        if (applied.diagnostics.length > 0) return { ok: false, project, diagnostics: applied.diagnostics };
+        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch");
+        return { ok: true, project, diagnostics: [] };
+      },
+      (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),
+    );
+  }
+
   return {
     get project() {
       return project;
@@ -296,15 +318,15 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       announce("select", { selection: true });
     },
     dispatch(command) {
-      return withDialect<DispatchResult>(
-        (dialect) => {
-          const applied = applyProjectCommand(dialect, project, command);
-          if (applied.diagnostics.length > 0) return { ok: false, project, diagnostics: applied.diagnostics };
-          if (!sameProject(project, applied.project)) commit(applied.project, "dispatch");
-          return { ok: true, project, diagnostics: [] };
-        },
-        (modelId) => ({ ok: false, project, diagnostics: [{ code: "no-dialect", params: { modelId }, at: {} }] }),
-      );
+      return applyCommands([command]);
+    },
+    runTool(tool, values = {}) {
+      const result = applyToolRequest(tool, { project, selection, values }, dialects);
+      if (result.ok && !sameProject(project, result.project)) commit(result.project, "dispatch");
+      return result;
+    },
+    previewTool(tool, values = {}) {
+      return computePreview(tool, project, selection, values, dialects);
     },
     undo() {
       const previous = past.pop();
