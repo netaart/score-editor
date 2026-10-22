@@ -1157,3 +1157,159 @@ test.describe("a narrow host", () => {
     expect(badge.x + badge.width).toBeLessThanOrEqual(view.x + view.width + 0.5);
   });
 });
+
+/** Presses where a user would: a click with a mouse, a tap on a touch screen. */
+function pressAt(isMobile: boolean, target: Locator, position?: { x: number; y: number }) {
+  const options = position ? { position } : {};
+  return isMobile ? target.tap(options) : target.click(options);
+}
+
+test.describe("editing in the default editor", () => {
+  const QUARTERS = vocalOnly("C4D4E4F4|G16|");
+  const noteNamed = (page: Page, name: RegExp | string) => page.getByRole("listitem", { name });
+  const D4 = "D4, bar 1 beat 2, length 1 beat";
+  const anyD4 = /^D4,/;
+  const undoButton = (page: Page) => page.getByRole("button", { name: "Undo", exact: true });
+  /**
+   * A place in the Vocal lane, 70 pixels in, that no note covers and that is on screen: the row of the G, which starts in
+   * bar 2. The editor pins its header over the top of the lane, so a place at the top edge is not one a finger can reach.
+   */
+  async function emptySpot(page: Page) {
+    const lane = await box(page.getByRole("list", { name: "Vocal" }));
+    const row = await box(noteNamed(page, /^G4,/));
+    return { x: 70, y: row.y + row.height / 2 - lane.y };
+  }
+  const redoButton = (page: Page) => page.getByRole("button", { name: "Redo", exact: true });
+
+  test("a click or tap selects a note, Delete turns it into a rest, and the keys and the buttons walk the history", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "true");
+
+    await press(noteNamed(page, D4));
+    await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
+
+    await page.keyboard.press("Delete");
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "false");
+
+    await page.keyboard.press("Control+z");
+    await expect(noteNamed(page, anyD4)).toHaveCount(1);
+    await page.keyboard.press("Control+Shift+z");
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
+    await page.keyboard.press("Control+z");
+    await expect(noteNamed(page, anyD4)).toHaveCount(1);
+    await page.keyboard.press("Control+y");
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
+
+    await press(undoButton(page));
+    await expect(noteNamed(page, anyD4)).toHaveCount(1);
+    await press(redoButton(page));
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
+    expect(await harness.notices()).toEqual([]);
+  });
+
+  test("a click on empty space drops the insertion point and the keys move it", async ({ page, harness, isMobile }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await pressAt(isMobile, page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
+    const point = page.getByRole("separator", { name: /^Insertion point/ });
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 3");
+
+    await page.keyboard.press("ArrowRight");
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 4");
+    await page.keyboard.press("End");
+    await expect(point).toHaveAccessibleName("Insertion point, end of the score");
+    await page.keyboard.press("Home");
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 1");
+  });
+
+  test("a read-only editor offers no editing control and ignores clicks and keys", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS }, editable: false });
+    await expect(undoButton(page)).toBeHidden();
+    await expect(redoButton(page)).toBeHidden();
+    await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+
+    await pressAt(isMobile, noteNamed(page, D4));
+    await pressAt(isMobile, page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
+    for (const keys of ["Delete", "Backspace", "Control+z", "Control+y", "End"]) await page.keyboard.press(keys);
+
+    await expect(noteNamed(page, D4)).toBeVisible();
+    await expect(noteNamed(page, /, selected$/)).toHaveCount(0);
+    await expect(page.getByRole("separator", { name: /^Insertion point/ })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Arrangement" })).not.toHaveAccessibleDescription(/Delete/);
+  });
+
+  test("update switches editing on and off without remounting, and the selection comes back with it", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(noteNamed(page, D4));
+    await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(/Delete/);
+
+    await harness.update({ editable: false });
+    await expect(undoButton(page)).toBeHidden();
+    await expect(noteNamed(page, `${D4}, selected`)).toHaveCount(0);
+    await page.keyboard.press("Delete");
+    await expect(noteNamed(page, D4)).toBeVisible();
+
+    await harness.update({ editable: true });
+    await expect(undoButton(page)).toBeVisible();
+    await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
+    await expect(page.getByText("Read only", { exact: true })).toBeHidden();
+  });
+
+  test("tells the host once, in the current language, when the score would not take a delete", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    // The note is tied into a cut tail: writing it as a rest would turn the cut into a finished score.
+    await harness.mount({ score: { text: vocalOnly("C16-|B") } });
+    const tied = page.getByRole("list", { name: "Vocal" }).getByRole("listitem");
+    await press(tied);
+    await expect(noteNamed(page, /, selected$/)).toHaveCount(1);
+    await page.keyboard.press("Delete");
+
+    await expect.poll(async () => (await harness.notices()).length).toBe(1);
+    await expect(tied).toHaveCount(1);
+    expect(await harness.notices()).toEqual([
+      {
+        code: "command-refused",
+        level: "warning",
+        message: "This change can't be written into the score safely, so the score was left as it was.",
+      },
+    ]);
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "true");
+
+    await harness.update({ language: "zh" });
+    await page.keyboard.press("Delete");
+    await expect.poll(async () => (await harness.notices()).length).toBe(2);
+    expect((await harness.notices())[1]?.message).toBe("这个改动没法安全地写进乐谱，乐谱保持原样。");
+  });
+});
+
+test.describe("an editable toolbar in a narrow host", () => {
+  test.skip(({ isMobile }) => isMobile, "the width is set once, on the desktop project");
+
+  test("keeps every control reachable when the toolbar has only 320 pixels", async ({ page, harness }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await harness.mount({ score: { text: vocalOnly("C4D4E4F4|G16|") } });
+    const redo = page.getByRole("button", { name: "Redo", exact: true });
+    await redo.focus();
+    const rowBox = await box(page.locator(".sce-toolbar"));
+    const at = await box(redo);
+    expect(at.x).toBeGreaterThanOrEqual(rowBox.x - 0.5);
+    expect(at.x + at.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 0.5);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+});

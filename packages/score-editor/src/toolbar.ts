@@ -71,10 +71,13 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   redo.addEventListener("click", () => session.redo(), { signal });
   installEditKeys(root, session, signal, options);
 
+  /** What the last draw showed, so a change of zoom or scroll, which this part does not draw, costs nothing here. */
+  let drawn = "";
   let language: Language | null = null;
+  let t = messagesFor(session.view.language);
   function applyLanguage(): void {
     language = session.view.language;
-    const t = messagesFor(language);
+    t = messagesFor(language);
     root.lang = language;
     title.textContent = t.title;
     badge.textContent = t.readOnly;
@@ -86,17 +89,16 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       button.setAttribute("aria-label", label);
       button.title = label;
     }
-    if (hint) hint.textContent = t.hint;
+    drawn = "";
   }
 
-  /** What the last draw showed, so a change of zoom or scroll, which this part does not draw, costs nothing here. */
-  let drawn = "";
   function draw(): void {
     if (session.view.language !== language) applyLanguage();
     const { editable } = session.view;
     const shown = [editable, session.reading.kind === "score", session.canUndo, session.canRedo].join();
     if (shown === drawn) return;
     drawn = shown;
+    if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
     history.hidden = !editable || session.reading.kind !== "score";
     badge.hidden = editable;
     undo.setAttribute("aria-disabled", String(!session.canUndo));

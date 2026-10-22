@@ -48,11 +48,12 @@ export interface MountOptions {
   /** Interface language. */
   language: Language;
   /**
-   * Whether the user may change the score. Defaults to true. This version shows the score read-only whatever
-   * the value; `false` additionally shows the read-only badge. Editing arrives in a later version.
+   * Whether the user may change the score. Defaults to true. While true the toolbar offers undo and redo, a click or tap
+   * selects a note or sets the insertion point, and Delete, the history keys and the insertion point keys act. While
+   * false none of that exists, the score is only shown, and the toolbar shows the read-only badge.
    */
   editable?: boolean;
-  /** Receives every one-time message the editor wants shown. No message exists yet, so it is never called. */
+  /** Receives every one-time message the editor wants shown, as listed in `NOTICE_CODES`. */
   notify?: (notice: Notice) => void;
   /** The song project to show. Only its score text and model ID are read in this version. */
   project: SongProject;

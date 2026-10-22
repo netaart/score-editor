@@ -7,6 +7,7 @@ import type { Language } from "./types";
 export interface Messages {
   title: string;
   hint: string;
+  hintEditing: string;
   zoom: string;
   zoomIn: string;
   zoomOut: string;
@@ -39,6 +40,8 @@ export interface Messages {
 const en: Messages = {
   title: "Arrangement",
   hint: "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel.",
+  hintEditing:
+    "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel. Click or tap a note to select it, and press Delete to turn it into a rest. Click or tap empty space to set the insertion point, then move it with Left, Right, Home and End. Ctrl and Z undoes, Ctrl and Y redoes.",
   zoom: "Zoom",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
@@ -81,6 +84,8 @@ const en: Messages = {
 const zh: Messages = {
   title: "编曲视图",
   hint: "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。",
+  hintEditing:
+    "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。点击或轻点音符来选中它，按 Delete 把它变成休止符。点击或轻点空白处来放置插入点，再用左、右、Home、End 键移动。Ctrl 加 Z 撤销，Ctrl 加 Y 重做。",
   zoom: "缩放",
   zoomIn: "放大",
   zoomOut: "缩小",

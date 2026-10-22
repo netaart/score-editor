@@ -5,15 +5,17 @@ import { notesByVoice, pitchRangeOf } from "./arrangement";
 import { installZoomGestures } from "./axis";
 import { mountChordTrack } from "./chord-track";
 import { mountCutNotice } from "./cut-notice";
+import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
+import { installEditKeys } from "./edit-keys";
 import { messagesFor } from "./i18n";
 import { mountProblemView } from "./problem-view";
 import { createEditingSession, type EditingSession, type ScoreReading, type SessionChange } from "./session";
 import { acquireStyles } from "./styles";
 import { mountTimeRuler } from "./time-ruler";
+import { mountToolbar } from "./toolbar";
 import type { Language, MountedEditor, MountOptions, ViewPart } from "./types";
 import { mountVoiceTrack } from "./voice-track";
-import { mountZoomControl } from "./zoom-control";
 
 let instanceCount = 0;
 
@@ -24,9 +26,6 @@ export class Editor implements MountedEditor {
   private readonly releaseStyles: () => void;
   private readonly abort = new AbortController();
   private readonly session: EditingSession;
-  private readonly title: HTMLElement;
-  private readonly hint: HTMLElement;
-  private readonly badge: HTMLElement;
   private readonly scroller: HTMLElement;
   private readonly content: HTMLElement;
   private readonly top: HTMLElement;
@@ -54,6 +53,7 @@ export class Editor implements MountedEditor {
       project: options.project,
       dialects: options.dialects,
       language: options.language,
+      editable: options.editable !== false,
     });
     this.reading = this.session.reading;
     this.language = this.session.view.language;
@@ -63,30 +63,26 @@ export class Editor implements MountedEditor {
     this.root = create(doc, "div", "sce-root sce-editor");
     host.appendChild(this.root);
 
-    const toolbar = create(doc, "div", "sce-toolbar", this.root);
-    this.title = create(doc, "span", "sce-title", toolbar);
-    this.parts.push(mountZoomControl(toolbar, this.session));
-    create(doc, "span", "sce-spacer", toolbar);
-    this.badge = create(doc, "span", "sce-badge", toolbar);
-
+    const hintId = `sce-hint-${n}`;
+    const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
+    this.parts.push(mountToolbar(this.root, this.session, { hintId, onRefused }));
     this.parts.push(mountCutNotice(this.root, this.session));
-    this.hint = create(doc, "div", "sce-sr-only", this.root);
-    this.hint.id = `sce-hint-${n}`;
     const body = create(doc, "div", "sce-body", this.root);
     this.scroller = create(doc, "div", "sce-scroller", body);
     this.scroller.tabIndex = 0;
     this.scroller.setAttribute("role", "region");
-    this.scroller.setAttribute("aria-describedby", this.hint.id);
+    this.scroller.setAttribute("aria-describedby", hintId);
     this.content = create(doc, "div", "sce-content", this.scroller);
     this.top = create(doc, "div", "sce-top", this.content);
 
-    this.parts.push(mountTimeRuler(this.top, this.session, { scroller: this.scroller }));
-    this.parts.push(mountChordTrack(this.top, this.session, { scroller: this.scroller }));
+    this.parts.push(mountTimeRuler(this.top, this.session, { scroller: this.scroller, onRefused }));
+    this.parts.push(mountChordTrack(this.top, this.session, { scroller: this.scroller, onRefused }));
     this.syncTracks();
     this.parts.push(mountProblemView(body, this.session));
 
     installZoomGestures(this.root, this.session, this.abort.signal, { wheel: false });
     installZoomGestures(this.scroller, this.session, this.abort.signal, { wheel: true });
+    installEditKeys(this.root, this.session, this.abort.signal, { onRefused });
 
     this.applyLanguage();
     this.applyEditable();
@@ -126,15 +122,23 @@ export class Editor implements MountedEditor {
     this.language = language;
     const t = messagesFor(language);
     this.root.lang = language;
-    this.title.textContent = t.title;
-    this.hint.textContent = t.hint;
-    this.badge.textContent = t.readOnly;
     this.scroller.setAttribute("aria-label", t.title);
   }
 
   private applyEditable(): void {
     this.root.toggleAttribute("data-readonly", !this.editable);
-    this.badge.hidden = this.editable;
+    this.session.setView({ editable: this.editable });
+  }
+
+  /** A command the user's keys caused was refused and nothing changed: tell the host once, in the current language. */
+  private refused(diagnostics: ReadonlyArray<Diagnostic>): void {
+    const first = diagnostics[0];
+    if (first === undefined) return;
+    this.options.notify?.({
+      code: "command-refused",
+      level: "warning",
+      message: formatDiagnostic(first, this.session.view.language),
+    });
   }
 
   /** One track part for each voice of the score; the parts of a score with other voices are replaced. */
@@ -144,7 +148,11 @@ export class Editor implements MountedEditor {
     for (const track of this.tracks) track.destroy();
     this.voices = voices;
     this.tracks = voices.map((voice) =>
-      mountVoiceTrack(this.content, this.session, { voice, scroller: this.scroller }),
+      mountVoiceTrack(this.content, this.session, {
+        voice,
+        scroller: this.scroller,
+        onRefused: (diagnostics) => this.refused(diagnostics),
+      }),
     );
   }
 
