@@ -48,13 +48,19 @@ const scrollLeftOf = (page: Page, name: string) => scrollSurface(page, name).eva
 const maxScrollOf = (page: Page, name: string) =>
   scrollSurface(page, name).evaluate((el) => el.scrollWidth - el.clientWidth);
 
-/** The toolbar draws the history, which a part mounted fresh on the same project does not have, so it is left out. */
-const withoutToolbar = ({ toolbar: _history, ...others }: Record<string, string>) => others;
-
-/** Every part draws what a part mounted fresh on the same state would draw. Returns what they drew. */
-async function expectDrawnLikeFresh(harness: Harness) {
+/**
+ * Every part draws what a part mounted fresh on the same state would draw. Returns what they drew. A fresh session has
+ * no history, so while the live one has some its toolbar enables undo and the fresh one does not: `withHistory` leaves
+ * the toolbar out of the comparison, and only then.
+ */
+async function expectDrawnLikeFresh(harness: Harness, { withHistory = false } = {}) {
   const drawn = await harness.layout.roots();
-  expect(withoutToolbar(drawn)).toEqual(withoutToolbar(await harness.layout.freshRoots()));
+  const fresh = await harness.layout.freshRoots();
+  if (withHistory) {
+    delete drawn.toolbar;
+    delete fresh.toolbar;
+  }
+  expect(drawn).toEqual(fresh);
   return drawn;
 }
 
@@ -160,7 +166,7 @@ test.describe("a layout of view parts on one session", () => {
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toHaveCount(0);
     expect(await insNotes.count()).toBe(before.ins);
-    const drawnAfter = await expectDrawnLikeFresh(harness);
+    const drawnAfter = await expectDrawnLikeFresh(harness, { withHistory: true });
     expect(drawnAfter.vocal, "Vocal changed").not.toBe(drawnBefore.vocal);
     for (const name of ["zoom", "notice", "ruler", "chords", "ins", "problem"]) {
       expect(drawnAfter[name], `${name} is not touched by a change to Vocal`).toBe(drawnBefore[name]);
@@ -169,7 +175,9 @@ test.describe("a layout of view parts on one session", () => {
     expect(await harness.layout.undo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toBeVisible();
-    expect(withoutToolbar(await harness.layout.roots())).toEqual(withoutToolbar(drawnBefore));
+    const undone = await harness.layout.roots();
+    expect({ ...undone, toolbar: "" }).toEqual({ ...drawnBefore, toolbar: "" });
+    expect(undone.toolbar, "redo is there to press now").not.toBe(drawnBefore.toolbar);
     expect(await harness.layout.redo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
   });

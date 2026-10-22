@@ -70,6 +70,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const redo = historyButton("redo");
   const remove = create(doc, "button", "sce-button sce-icon-button sce-delete", row);
   remove.type = "button";
+  remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   create(doc, "span", "sce-spacer", row);
   const badge = create(doc, "span", "sce-badge", row);
