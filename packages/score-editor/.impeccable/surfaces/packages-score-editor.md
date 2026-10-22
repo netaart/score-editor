@@ -13,7 +13,7 @@ Audience, job and constraints: people who generated a song and want to understan
 
 Assumptions (no human to confirm; mark and proceed):
 
-- A1. The unnamed part before the first section marker is labelled "Unnamed" (zh 未命名); a section marker with no bars after it draws nothing.
+- A1. The unnamed section before the first section marker is labelled "Unnamed" (zh 未命名); a section marker with no bars after it draws nothing.
 - A2. `editable` is the session's `view.editable`, true by default. While it is true the toolbar offers undo and redo, a click or tap selects a note or drops the insertion point, and the editing keys act. While it is false none of that exists (no control, no selection frame, no insertion point, keys do nothing) and the toolbar shows the read-only badge, so the read-only view is the view with the editing left out.
 - A3. Key and meter marks show the state in force at the start too (bar 1), as a DAW's global tracks do, so every score has a first mark and a change is a second one.
 - A4. A cut that stops inside a bar is marked at that bar and hatched from the last finished note to the end of the score in the cut voice; a cut at a bar edge is marked at the end of that voice. A one-line strip under the toolbar says what it means, in the interface language.

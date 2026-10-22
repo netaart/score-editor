@@ -143,6 +143,15 @@ const css = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* With the preview control or the view switch the row wraps instead of scrolling, and the title is what gives way: DESIGN.md, "Toolbar". */
+.sce-root .sce-toolbar:is([data-synth], [data-views]) {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.sce-root .sce-toolbar:is([data-synth], [data-views]) .sce-title {
+  flex: 1000 1 0;
+  max-width: max-content;
+}
 .sce-root .sce-spacer {
   flex: 1 1 auto;
 }
@@ -874,12 +883,8 @@ ${labelThinning()}
 /*
  * The view switch ends the toolbar row: three icon buttons side by side that share their borders, the shown one filled
  * and drawn heavier, so the state is carried by shape and weight and not by hue alone. Where the row is too narrow for
- * all its controls, a toolbar that has the switch wraps, and the switch and the badge move to the next line together.
+ * all its controls, the switch and the badge move to the next line together.
  */
-.sce-root .sce-toolbar[data-views] {
-  flex-wrap: wrap;
-  row-gap: 4px;
-}
 .sce-root .sce-toolbar-end {
   display: flex;
   flex: none;
@@ -968,6 +973,47 @@ ${labelThinning()}
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* The synth preview: DESIGN.md, "Synth preview". */
+.sce-root .sce-synth {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.sce-root .sce-synth-label {
+  min-width: 3.8em;
+  text-align: start;
+}
+.sce-root .sce-synth:lang(zh) .sce-synth-label {
+  min-width: 2.2em;
+}
+.sce-root .sce-synth-caption {
+  min-width: 0;
+  max-width: 12em;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+  line-height: 1.2;
+  /* Chinese breaks after its comma, and not between any two characters. */
+  word-break: keep-all;
+  text-wrap: balance;
+}
+.sce-root .sce-synth-told {
+  color: var(--sce-_text);
+}
+/* The playhead: DESIGN.md, "Playhead". */
+.sce-root .sce-playhead {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
+  width: 3px;
+  margin-left: -1px;
+  background: linear-gradient(to right, var(--sce-_bg) 0 1px, var(--sce-_text) 1px 2px, var(--sce-_bg) 2px 3px);
+  pointer-events: none;
 }
 `;
 

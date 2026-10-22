@@ -17,6 +17,7 @@ Every layer is public and usable on its own. Pick the smallest one that serves t
 | Hold the song project with undo, selection, insertion point and shared zoom/scroll; dispatch commands and notify a UI or a tool runner | Editing session | [references/editing-session.md](references/editing-session.md) |
 | Put only some parts in a layout of your own, or write a view that draws from the session's state and notifications | View parts | [references/view-parts.md](references/view-parts.md) |
 | Get a working editor in one call and choose only its language and project | `mount(el, options)` | [references/mount.md](references/mount.md) |
+| Let a person hear the score as a synthetic preview with a playhead, or sound one note | View parts, and the headless schedule | [references/view-parts.md](references/view-parts.md#the-synth-preview) |
 
 ## Choose an extension point
 

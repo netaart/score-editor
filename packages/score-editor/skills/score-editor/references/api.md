@@ -21,14 +21,20 @@ change. The tests in the repository check that the list stays complete.
 | `mountStaleNotice` | core | Mounts the stale notice part: one sentence while the text view holds text the project did not take. |
 | `mountViewSwitch` | core | Mounts the view switch part: three buttons that set the session's `activeView`. |
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
-| `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult`. |
+| `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
 | `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
+| `checkProject` | core | Reports the song-project notices of a project as it stands, without changing it. |
 | `formatDiagnostic` | core | Turns a `Diagnostic` into a sentence in `en` or `zh`. |
+| `isNoticeDiagnostic` | core | Says whether a diagnostic is a notice, so a changed project is not mistaken for a refusal. |
 | `noteId` | core | Builds a note id from voice and start tick. |
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
 | `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete) to a session; returns `EditingInputResult`. |
+| `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
+| `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
+| `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
+| `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
 
 ## Constants and values
 
@@ -37,7 +43,8 @@ change. The tests in the repository check that the list stays complete.
 | `TICKS_PER_QUARTER` | core | 256; the tick unit of the shared model. |
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
-| `NOTICE_CODES` | core | The closed notice codes; today `"command-refused"`. |
+| `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`). |
+| `NOTICE_CODES` | core | The closed host message codes; today `"command-refused"`. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |
@@ -60,8 +67,8 @@ change. The tests in the repository check that the list stays complete.
 | `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, and the `ProjectCommand` a dispatch made, if any), its causes, and the listener type. |
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
-| `ScoreCommand` | The dialect-agnostic edit union; today `{ type: "toRest", noteId }`. |
-| `ProjectCommand` | The edits of the project that are not edits of a parsed score; today `{ type: "replaceScoreText", text }`. |
+| `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
+| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`); each command is listed in the package README. |
 
 ## Score model types
 
@@ -78,9 +85,10 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- |
 | `Diagnostic` | `{ code, params, at }`; carries no prose. |
 | `DiagnosticAt`, `DiagnosticParams` | Where a diagnostic points and the values its text needs. |
-| `DiagnosticCode` | The union of every reading and command code. |
+| `DiagnosticCode` | The union of every reading, command and notice code. |
 | `ReadingDiagnosticCode` | An element of `READING_DIAGNOSTIC_CODES`. |
 | `CommandDiagnosticCode` | An element of `COMMAND_DIAGNOSTIC_CODES`. |
+| `NoticeDiagnosticCode` | An element of `NOTICE_DIAGNOSTIC_CODES`. |
 
 ## Dialect types
 
@@ -106,7 +114,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview? }` for the toolbar. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, or a delete. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
@@ -126,3 +134,15 @@ change. The tests in the repository check that the list stays complete.
 | `ToolParameterCheck` | The validated values, or the `tool-parameter` diagnostics. |
 | `ToolResult` | `{ ok, project, diagnostics, commands }` from a preview or a run. |
 | `ToolRegistry` | `register`, `list` and `find` for the host's tools. |
+
+## Preview types
+
+| Export | What it is |
+| --- | --- |
+| `PreviewPlayer` | `{ playing, tick, from, start(), stop(), subscribe(listener) }`. |
+| `PreviewStart` | What `start()` resolves: `"started"`, `"nothing-to-play"`, `"unsupported"`, `"blocked"` or `"cancelled"`. |
+| `PreviewNoteOptions` | `{ duration? }` in seconds for `previewNote`. |
+| `PreviewSchedule` | `{ events, fromTick, secondsPerTick, length }`. |
+| `PreviewEvent` | A `PreviewNoteEvent` or a `PreviewChordEvent`. |
+| `PreviewNoteEvent` | `{ kind: "note", voice, midi, at, length }`. |
+| `PreviewChordEvent` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |

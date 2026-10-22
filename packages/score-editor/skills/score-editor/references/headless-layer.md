@@ -51,20 +51,25 @@ if (!score) {
 ```
 
 `Diagnostic` is `{ code, params, at }`; codes carry no prose. `formatDiagnostic(diagnostic, "en" | "zh")` turns one
-into a sentence. `READING_DIAGNOSTIC_CODES` and `COMMAND_DIAGNOSTIC_CODES` are the closed sets; their element types are
-`ReadingDiagnosticCode`, `CommandDiagnosticCode` and the union `DiagnosticCode`. `DiagnosticAt` and `DiagnosticParams`
-describe where it points and the values its text needs.
+into a sentence. `READING_DIAGNOSTIC_CODES`, `COMMAND_DIAGNOSTIC_CODES` and `NOTICE_DIAGNOSTIC_CODES` are the closed
+sets; their element types are `ReadingDiagnosticCode`, `CommandDiagnosticCode`, `NoticeDiagnosticCode` and the union
+`DiagnosticCode`. `DiagnosticAt` and `DiagnosticParams` describe where it points and the values its text needs.
 
 ## Write one command back
 
-Every edit ends in the same command layer. `ScoreCommand` is the dialect-agnostic union of edits; today it has
-`{ type: "toRest", noteId }`. A score command runs on the model (`Score`), then the dialect writes it and runs `check`.
+Every edit ends in the same command layer. `ScoreCommand` is the dialect-agnostic union of score edits and
+`ProjectCommand` the union of song-project edits; the package README lists each command and its refusal codes. A score
+command runs on the model (`Score`), then the dialect writes it and runs `check`.
 
 - `applyScoreCommand(dialect, text, command)` returns `ApplyScoreResult`: `{ ok: true, text }` or
   `{ ok: false, diagnostic }`. A command that cannot be applied, a write/read-back mismatch, or any `check` failure
-  returns the diagnostic and no new text.
-- `applyProjectCommand(dialect, project, command)` takes a `ScoreCommand` or a `ProjectCommand` and returns
-  `ApplyProjectResult`: `{ project, diagnostics }`. Only `project.score` can change, and it does not change on a failure.
+  returns the diagnostic and no new text. It refuses a `ProjectCommand`.
+- `applyProjectCommand(dialect, project, command)` returns `ApplyProjectResult`: `{ project, diagnostics }`. It takes
+  either union; only the score text or the project's own fields can change, and nothing changes on a refusal.
+
+`applyProjectCommand` also runs the song-project rules and can return a notice with the changed project. `checkProject`
+reports those notices for a project as it stands, `isNoticeDiagnostic` tells a notice from a refusal, and
+`NOTICE_DIAGNOSTIC_CODES` lists the notice codes.
 
 ```ts
 import { applyProjectCommand } from "@neta-art/score-editor";
@@ -79,13 +84,15 @@ if (reading.score) {
 }
 ```
 
-`ProjectCommand` is the union of edits that act on the project and not on a parsed score. Today it has
-`{ type: "replaceScoreText", text }`, which replaces the whole score text: the dialect must read `text` and its
-`check` must pass, and the project then holds the text as the dialect writes it; otherwise the project keeps its
-old text and the result carries the first diagnostic. It is the command the text view sends. A session announces a
-`dispatch` of it with the command in `SessionChange.command`, so a host can tell a person's direct edit of the score
-text from the other edits as it happens. The undo history keeps whole projects, not commands, so nothing in it, and
-nothing in a project that was saved and loaded again, says how the text came to be what it is.
+`ProjectCommand` is the union of edits that act on the project and not on a parsed score. `setStyle`, `setScoreMode`
+and `setSeed` change a field of the project. `{ type: "replaceScoreText", text }` replaces the whole score text: the
+dialect must read `text` and its `check` must pass, and the project then holds the text as the dialect writes it;
+otherwise the project keeps its old text and the result carries the first diagnostic. It is the command the text view
+sends. The song-project rules run after it as after any command, so a `melody` project whose new text has chords comes
+back with the notice `melody-with-chords`. A session announces a `dispatch` of any project command with the command in
+`SessionChange.command`, so a host can tell a person's direct edit of the score text from the other edits as it
+happens. The undo history keeps whole projects, not commands, so nothing in it, and nothing in a project that was
+saved and loaded again, says how the text came to be what it is.
 
 ```ts
 const taken = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: typed });
@@ -104,3 +111,36 @@ tempo range, section marker, lyric rule, durations, meter rule and chord vocabul
 
 `Language` is `"zh" | "en"`. `Notice` is a one-time message for the host's own toast system, `NoticeCode` its
 machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-refused"`, sent when the score would not take an edit the user asked for).
+
+## The preview schedule
+
+`schedulePreview(score, fromTick = 0)` turns a `Score` into what a synthetic preview plays: a `PreviewSchedule`, which is
+`{ events, fromTick, secondsPerTick, length }`. It is pure, needs no browser, and runs in Node and in a worker. The
+browser player and the playhead are in [view-parts.md](view-parts.md#the-synth-preview).
+
+```ts
+import { schedulePreview } from "@neta-art/score-editor";
+import type { PreviewChordEvent, PreviewEvent, PreviewNoteEvent, PreviewSchedule } from "@neta-art/score-editor";
+
+const { score } = song2Dialect.parse(project.score);
+if (score) {
+  const schedule: PreviewSchedule = schedulePreview(score, 512); // from tick 512, the third beat of a 4/4 bar
+  for (const event of schedule.events satisfies ReadonlyArray<PreviewEvent>) {
+    if (event.kind === "note") {
+      const note: PreviewNoteEvent = event; // { voice, midi, at, length }, seconds from the start
+    } else {
+      const chord: PreviewChordEvent = event; // { name, midis (bass first), at, length }
+    }
+  }
+  console.log(schedule.length, "seconds; a tick lasts", schedule.secondsPerTick);
+}
+```
+
+- Events are the `Vocal` and `Ins` notes (a tied chain once, from its first note to the end of its last; a rest is
+  silent) and each chord span, in time order. `at` and `length` are seconds counted from `fromTick`.
+- Seconds come from the score's tempo, of which a score has one (`score.tempo`; the format has no tempo changes).
+  Positions come from the score's own ticks, so a bar in 3/4 or 6/8 and a change of meter are already in them.
+- From a start tick, a note that began before it is not sounded again, and the chord in force at the start is heard to
+  its end. A cut score ends where its music ends, not at the end of the bar the cut is in. `length` is 0 when there is
+  nothing to play.
+- A position in the score is `fromTick + seconds / secondsPerTick`, which is how the player places its playhead.

@@ -6,6 +6,7 @@ export { applyProjectCommand, applyScoreCommand } from "./apply";
 export { mountChordTrack } from "./chord-track";
 export type { ScoreCommand } from "./commands";
 export type { ProjectCommand } from "./commands-project";
+export { checkProject } from "./commands-project";
 export { mountCutNotice } from "./cut-notice";
 export type {
   CommandDiagnosticCode,
@@ -13,11 +14,14 @@ export type {
   DiagnosticAt,
   DiagnosticCode,
   DiagnosticParams,
+  NoticeDiagnosticCode,
   ReadingDiagnosticCode,
 } from "./diagnostics";
 export {
   COMMAND_DIAGNOSTIC_CODES,
   formatDiagnostic,
+  isNoticeDiagnostic,
+  NOTICE_DIAGNOSTIC_CODES,
   READING_DIAGNOSTIC_CODES,
 } from "./diagnostics";
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
@@ -25,6 +29,13 @@ export { createDialectRegistry } from "./dialect";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
 export { mount } from "./mount";
+// The synth preview.
+export type { PreviewNoteOptions } from "./preview-note";
+export { previewNote } from "./preview-note";
+export type { PreviewPlayer, PreviewStart } from "./preview-player";
+export { previewPlayer } from "./preview-player";
+export type { PreviewChordEvent, PreviewEvent, PreviewNoteEvent, PreviewSchedule } from "./preview-schedule";
+export { schedulePreview } from "./preview-schedule";
 export { mountProblemView } from "./problem-view";
 export type {
   Bar,
@@ -55,6 +66,7 @@ export type {
 export { createEditingSession, VIEW_NAMES } from "./session";
 export { mountStaffView } from "./staff-view";
 export { mountStaleNotice } from "./stale-notice";
+export { mountSynthPreview } from "./synth-preview";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
 export type {

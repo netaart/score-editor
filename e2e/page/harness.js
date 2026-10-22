@@ -12,12 +12,15 @@ import {
   mountProblemView,
   mountStaffView,
   mountStaleNotice,
+  mountSynthPreview,
   mountTextView,
   mountTimeRuler,
   mountToolbar,
   mountViewSwitch,
   mountVoiceTrack,
   mountZoomControl,
+  previewNote,
+  previewPlayer,
 } from "/packages/score-editor/dist/index.js";
 
 const stage = document.getElementById("stage");
@@ -60,7 +63,8 @@ const blank = {
 
 /** The view parts of the layout page, by name, each with the function that mounts it on its slot. */
 const LAYOUT_PARTS = {
-  toolbar: (el, session) => mountToolbar(el, session),
+  // The layout has a slot of its own for the preview control, so the toolbar leaves its own out.
+  toolbar: (el, session) => mountToolbar(el, session, { synthPreview: false }),
   zoom: (el, session) => mountZoomControl(el, session),
   notice: (el, session) => mountCutNotice(el, session),
   ruler: (el, session) => mountTimeRuler(el, session),
@@ -68,6 +72,7 @@ const LAYOUT_PARTS = {
   vocal: (el, session) => mountVoiceTrack(el, session, { voice: "Vocal" }),
   ins: (el, session) => mountVoiceTrack(el, session, { voice: "Ins" }),
   problem: (el, session) => mountProblemView(el, session),
+  synth: (el, session) => mountSynthPreview(el, session),
 };
 
 /**
@@ -119,6 +124,7 @@ function buildLayout(container, names = []) {
       <div class="layout-card layout-card-wide" data-card="ins"><div class="layout-slot" data-slot="ins"></div></div>
       <div class="layout-slot" data-slot="problem"></div>
       ${viewCards(names)}
+      <div class="layout-slot" data-slot="synth"></div>
     </div>`;
   return Object.fromEntries([...container.querySelectorAll("[data-slot]")].map((el) => [el.dataset.slot, el]));
 }
@@ -320,6 +326,10 @@ window.harness = {
   notices,
   host: hostPage,
   shadowRoot: null,
+  /** The single-note preview export, called as a host calls it. */
+  previewNote,
+  /** The preview player of the open layout's session, as a host reads and drives it. */
+  previewPlayer: () => previewPlayer(layout.live()),
   /**
    * Mounts on the stage. `score` says which score text (default: a small two-voice sample), `project` overrides
    * other project fields, and `shadow` mounts inside an open shadow root of a host element instead.

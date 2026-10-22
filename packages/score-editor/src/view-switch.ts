@@ -1,7 +1,8 @@
 // ABOUTME: The view switch part: three buttons that choose which view the session shows, the arrangement, the staff or the score text.
 // ABOUTME: It works while the session is read-only, and it follows a view that something else sets.
-import { create, lineIcon, requireDom } from "./dom";
+import { create, requireDom } from "./dom";
 import { messagesFor, viewName } from "./i18n";
+import { lineIcon } from "./icons";
 import { type EditingSession, VIEW_NAMES, type ViewName } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";

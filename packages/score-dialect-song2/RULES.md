@@ -64,7 +64,7 @@ The header is fixed. It has exactly seven lines when `Ins` is absent and exactly
 
 **H4 — unit line.** Line 4 MUST match `L:1/[1-9][0-9]{0,5}` exactly. The denominator MUST be a power of two no greater than 1024. `L:1/1`, `L:1/1024`, and every power of two between them are accepted; `L:1/0`, `L:1/3`, `L:1/2048`, `L:2/16`, and a denominator with a leading zero are rejected with `header` field `L`. Reading result: one unit is `4/d` quarter notes.
 
-**H5 — tempo line.** Line 5 MUST match `Q:1/4=[1-9][0-9]*` exactly. The value is a positive integer BPM with no leading zero and no other characters. Reading imposes no upper bound; the tempo does not affect any position or duration. Anything else is rejected with `header` field `Q`. A writer MUST emit a value from 20 through 400 inclusive, the product tempo range. Reading result: the integer tempo.
+**H5 — tempo line.** Line 5 MUST match `Q:1/4=[1-9][0-9]*` exactly. The value is a positive integer BPM with no leading zero and no other characters. Reading imposes no upper bound; the tempo does not affect any position or duration. Anything else is rejected with `header` field `Q`. A writer MUST write a new tempo value from 20 through 400 inclusive, the product tempo range; an untouched `Q:` line keeps the bytes it was read with, even when its value is outside that range. Reading result: the integer tempo.
 
 **H6 — Vocal definition.** Line 6 MUST be exactly:
 
@@ -236,7 +236,7 @@ The empty string is a major triad. `Cmaj`, `Cmaj9`, `C13`, `A7alt`, `C:maj`, `CM
 
 **C7 — chords only in Vocal.** A chord token in `Ins` MUST be rejected with `chord` (parameter `voice` = `Ins`). This includes a chord string whose closing quote was removed by a cut; the token is still a chord start in `Ins`, and the score is rejected at the end of reading even though the unfinished string is not a finished chord event. A score without `Ins` has no such problem. Reading result: no chord events in `Ins`.
 
-**C8 — hasChords.** The reading result reports `hasChords: true` exactly when the text contains at least one chord token, finished or not. An unfinished chord string in a cut tail (X4) is not a chord event and has no name or position in `chords`, but it still counts here: a score that carries chord material is treated as carrying chords wherever that matters (for example a mode that forbids chords), and removing all chords removes those bytes too. Reading result: the boolean.
+**C8 — hasChords.** The reading result reports `hasChords: true` exactly when the text contains at least one chord token, finished or not. An unfinished chord string in a cut tail (X4) is not a chord event and has no name or position in `chords`, but it still counts here: a score that carries chord material is treated as carrying chords wherever that matters (for example a mode that forbids chords), and removing all chords removes those bytes too. When the cut ends inside such a string, the reading result also sets `truncation.unfinishedChord: true`; the field is absent otherwise, and the writer drops the tail with the last chord. Reading result: the boolean and the optional truncation field.
 
 ## V. Voice agreement
 
@@ -264,7 +264,8 @@ The empty string is a major triad. `Cmaj`, `Cmaj9`, `C13`, `A7alt`, `C:maj`, `CM
 
 - `voice`: the voice whose reading stopped, one of `Vocal` or `Ins`;
 - `measure`: the 1-based measure number within that voice where the cut is;
-- `short`: `true` when the cut is inside a measure whose finished tokens last less than the bar length, `false` otherwise.
+- `short`: `true` when the cut is inside a measure whose finished tokens last less than the bar length, `false` otherwise;
+- `unfinishedChord`: `true` only when the cut ends inside an unfinished chord string (X4, C8); the field is absent otherwise.
 
 `measure` is `1 + (number of complete measures already read in that voice)` for a cut before a new measure or between blocks, and is the partial measure’s own number when the cut is inside a measure. A complete text has `truncated: false` and no `truncation` value. The reader MUST report the cut even when all measures that can be read are complete (for example a missing final block).
 
@@ -281,7 +282,7 @@ The empty string is a major triad. `Cmaj`, `Cmaj9`, `C13`, `A7alt`, `C:maj`, `CM
 - (i) after a final note that continues a tie with a different pitch (P14);
 - (j) after a complete final block, when the `Ins` block of that group would be required but is absent.
 
-**X4 — unfinished tokens.** In the final measure of a cut, the remaining bytes MAY be one of these unfinished token forms: `"` followed by any characters up to the end of the line with no closing `"`; `[`, `[K`, or `[K:` followed by any characters up to the end of the line with no `]`; or a lone `^`, `^^`, `_`, `__`, or `=`. Such a remainder is accepted only as the end of the text. It is not a note, a rest, a chord, or a key change in the reading result; it has no start, duration, or pitch; it does not set an accidental or a key. Its bytes are kept. The cut is reported in the current measure (X2). Any other unrecognized remainder is rejected with `token`.
+**X4 — unfinished tokens.** In the final measure of a cut, the remaining bytes MAY be one of these unfinished token forms: `"` followed by any characters up to the end of the line with no closing `"`; `[`, `[K`, or `[K:` followed by any characters up to the end of the line with no `]`; or a lone `^`, `^^`, `_`, `__`, or `=`. Such a remainder is accepted only as the end of the text. It is not a note, a rest, a chord, or a key change in the reading result; it has no start, duration, or pitch; it does not set an accidental or a key. Its bytes are kept. The cut is reported in the current measure (X2), with `unfinishedChord: true` when the remainder is an unfinished chord string (C8). Any other unrecognized remainder is rejected with `token`.
 
 **X5 — a cut tie continuation before its octave marks.** If the last token of a cut measure is a note that continues a pending tie and its computed pitch differs from the tied pitch, the reader MUST accept the text as a cut and MUST treat that token as unfinished: it is absent from `notes`, contributes no duration, and does not set the letter state. The preceding tied note keeps `tie: true`. This is the only note token that may be unfinished; a note token that is complete apart from a possible later octave mark but whose pitch already matches is a finished note.
 
@@ -337,7 +338,7 @@ A writer that implements these rules MUST produce text that reads back to the sa
 
 **W1 — line endings and whitespace.** Write LF line endings only, no CR, no byte-order mark, no trailing spaces or tabs, and no blank lines except optionally one final LF after the last line. Do not rely on a reader’s trimming.
 
-**W2 — header.** Write the fixed header in order: `X:1`, `T:`, `M:<n>/<d>`, `L:1/<d>`, `Q:1/4=<bpm>`, the exact `Vocal` definition, optionally the exact `Ins` definition, and `K:<key>`. Write no other header field. Write `bpm` from 20 through 400. Write only a key from H9 and a meter and unit from H3 and H4.
+**W2 — header.** Write the fixed header in order: `X:1`, `T:`, `M:<n>/<d>`, `L:1/<d>`, `Q:1/4=<bpm>`, the exact `Vocal` definition, optionally the exact `Ins` definition, and `K:<key>`. Write no other header field. Write a new `bpm` from 20 through 400; keep an unchanged `Q:` line exactly as read (H5). Write only a key from H9 and a meter and unit from H3 and H4.
 
 **W3 — voices and groups.** Write `Vocal` first and, if used, `Ins` second in the header. In the body write one `Vocal` block and then, if `Ins` is present, one `Ins` block per group. Never write `Ins` before `Vocal`, never write an `Ins` block in a Vocal-only score, and never omit a required `Ins` block.
 
@@ -362,6 +363,8 @@ A writer that implements these rules MUST produce text that reads back to the sa
 **W13 — pitch spelling.** For a sharp key, C major, or A minor, spell chromatic notes with sharps; for a flat key, spell them with flats; use double accidentals only when the spelling requires them. Keep every sounding pitch within MIDI 0–127.
 
 **W14 — complete scores only.** A writer that produces a new score MUST write a complete score with every block and closing barline; it MUST NOT emit a cut tail. A writer that edits a cut score keeps its cut: an unchanged cut tail is emitted byte for byte (X17); bars before it MAY be rewritten under W2–W13; a rewritten partial measure keeps its finished tokens and its X4 remainder, and keeps an X5 remainder only while the tie into it is unchanged. An edit after which the text would read with a different cut, or with none, is not writable.
+
+**W15 — the two cut repairs end the cut.** A command that repairs a cut is not an ordinary edit under W14. `fill` pads every voice that stops before the score's last measure with rests, through that measure, so the text reads complete. `delete` removes the incomplete measure in every voice that has one, with its unfinished bytes, and removes the measure itself when no voice keeps material in it; it refuses when another voice still uses the measure. Both leave a complete score with no cut. Every rest is written in D1 values, splitting a longer length into consecutive rests.
 
 ## Reading diagnostic codes
 

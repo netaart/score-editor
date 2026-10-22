@@ -13,6 +13,9 @@ import {
   type Song2SourceBar,
   signatureOf,
 } from "./parser";
+import { serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
+import { keepsCutTail } from "./write-chords";
+import { sectionsMatchSource } from "./write-sections";
 
 const TICKS_PER_QUARTER = 256;
 const DURATIONS: ReadonlyArray<number> = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48];
@@ -63,7 +66,7 @@ function sourceOf(score: Score): Song2Source {
   return source as Song2Source;
 }
 
-function sameContent(left: BarContent, right: BarContent): boolean {
+export function sameContent(left: BarContent, right: BarContent): boolean {
   if (
     left.start !== right.start ||
     left.length !== right.length ||
@@ -84,7 +87,15 @@ function sameContent(left: BarContent, right: BarContent): boolean {
   for (let index = 0; index < left.notes.length; index += 1) {
     const a = left.notes[index] as BarContent["notes"][number];
     const b = right.notes[index] as BarContent["notes"][number];
-    if (a.start !== b.start || a.duration !== b.duration || a.midi !== b.midi || a.tie !== b.tie) return false;
+    if (
+      a.start !== b.start ||
+      a.duration !== b.duration ||
+      a.midi !== b.midi ||
+      a.tie !== b.tie ||
+      a.tiedFromPrevious !== b.tiedFromPrevious
+    ) {
+      return false;
+    }
   }
   for (let index = 0; index < left.chords.length; index += 1) {
     const a = left.chords[index] as BarContent["chords"][number];
@@ -166,7 +177,7 @@ function noteText(
 }
 
 /** Writes one bar from the model, including its chords and inline key changes at their offsets. */
-function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominator: number): string {
+export function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominator: number): string {
   const bar = score.bars[sourceBar.bar];
   if (bar === undefined) throw new Error(`song2: bar ${sourceBar.bar} has no model record`);
   const events = score.notes
@@ -178,7 +189,11 @@ function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominator: numb
       : [];
   const changes = [...bar.keyChanges];
   for (const inline of sourceBar.inlineKeys) {
-    if (!changes.some((change) => change.at === inline.at && change.key === inline.key)) changes.push(inline);
+    // The timeline is the authority, so a transposed inline key is written at its new spelling.
+    const key = score.keys[inline.timelineIndex]?.key ?? inline.key;
+    if (!changes.some((change) => change.at === inline.at && change.key === key)) {
+      changes.push({ at: inline.at, key });
+    }
   }
   changes.sort((a, b) => a.at - b.at);
 
@@ -231,32 +246,123 @@ function lastNoteOf(score: Score, voice: string): Note | undefined {
   return notes[notes.length - 1];
 }
 
+function sourceContentByBar(source: Song2Source): Map<number, BarContent> {
+  const byBar = new Map<number, BarContent>();
+  for (const line of source.musicLines) {
+    for (const segment of line.segments) {
+      for (const bar of segment.bars) {
+        if (!byBar.has(bar.bar)) byBar.set(bar.bar, bar.content);
+      }
+    }
+  }
+  return byBar;
+}
+
+/** The bar grid is the bars' count, starts and meters. Keys are not part of it: the header and `K:` lines carry them. */
+function gridMatchesSource(score: Score, source: Song2Source): boolean {
+  const content = sourceContentByBar(source);
+  return score.bars.every((bar, index) => {
+    const old = content.get(index);
+    return (
+      old !== undefined && old.start === bar.start && old.meter === `${bar.meter.numerator}/${bar.meter.denominator}`
+    );
+  });
+}
+
+function cutWasRepaired(score: Score, source: Song2Source): boolean {
+  return source.truncation !== null && score.truncation === null;
+}
+
+function barsFill(score: Score): boolean {
+  return score.bars.every((bar, index) =>
+    score.voices.every((voice) => {
+      const total = score.notes
+        .filter((note) => note.voice === voice && note.bar === index)
+        .reduce((sum, note) => sum + note.duration, 0);
+      return total === bar.length;
+    }),
+  );
+}
+
+function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
+  if (!sectionsMatchSource(score, source)) return true;
+  const content = sourceContentByBar(source);
+  let oldCount = 0;
+  for (const index of content.keys()) oldCount = Math.max(oldCount, index + 1);
+  if (score.bars.length !== oldCount) return true;
+  if (gridMatchesSource(score, source)) return false;
+  const metersOnly = score.bars.every((bar, index) => {
+    const old = content.get(index);
+    return (
+      old !== undefined && old.start === bar.start && old.meter !== `${bar.meter.numerator}/${bar.meter.denominator}`
+    );
+  });
+  if (!metersOnly) return true;
+  const lengthsFit = score.bars.every(
+    (bar) => bar.length === (4 * bar.meter.numerator * TICKS_PER_QUARTER) / bar.meter.denominator,
+  );
+  return lengthsFit && barsFill(score);
+}
+
+function headerValue(line: string | undefined): string {
+  return line === undefined ? "" : line.replace(/[ \t]+$/, "").slice(2);
+}
+
+function writeKeyLine(lines: string[], line: number, key: string): void {
+  if (headerValue(lines[line]) !== key) lines[line] = `K:${key}`;
+}
+
+/**
+ * Changes only the header lines the model changed, so an untouched header keeps its exact bytes.
+ * The header is fixed (RULES.md H1-H10): `Q:` is line 5 and the header `K:` follows the voice lines.
+ */
+function writeHeader(score: Score, source: Song2Source, lines: string[]): void {
+  const tempoLine = lines[4];
+  const tempo = tempoLine === undefined ? null : /^Q:1\/4=([0-9]+)$/.exec(tempoLine.replace(/[ \t]+$/, ""));
+  if (tempo === null || Number(tempo[1]) !== score.tempo.bpm) lines[4] = `Q:1/4=${score.tempo.bpm}`;
+
+  const headerKey = score.keys[0]?.key;
+  if (headerKey !== undefined) writeKeyLine(lines, score.voices.length > 1 ? 7 : 6, headerKey);
+
+  for (const field of source.keyFields) {
+    const entry = score.keys[field.timelineIndex];
+    if (entry !== undefined) writeKeyLine(lines, field.line, entry.key);
+  }
+}
+
 /** Writes a score: untouched bars keep their read bytes, changed bars are rewritten whole. */
 export function serializeSong2(score: Score): string {
   const source = sourceOf(score);
+  if (barGridNeedsWriting(score, source) || cutWasRepaired(score, source)) {
+    return score.truncation !== null ? serializeTruncatedBarsSong2(score, source) : serializeBarsSong2(score, source);
+  }
   const lines = source.text.split("\n");
+  writeHeader(score, source, lines);
   const dropped = new Set<number>();
   for (const musicLine of source.musicLines) {
     const tail = musicLine.cutTail;
     const last = lastNoteOf(score, musicLine.voice);
-    // RULES.md X17: an X4 remainder is kept byte for byte. An X5 remainder is kept only while the note
-    // before it still ties into it; once that tie is gone it would read as a finished note.
-    const keepTail = tail !== null && (tail.kind === "x4" || (last?.tie ?? false));
-    const force = tail !== null && tail.kind === "x5" && !keepTail;
-    let changed = force;
+    // RULES.md X17 and C8: an X4 remainder is kept byte for byte while it still belongs; an unfinished chord string
+    // goes with the last chord. An X5 remainder is kept only while the note before it still ties into it; once that
+    // tie is gone it would read as a finished note.
+    const keepTail = keepsCutTail(score, tail, last?.tie ?? false);
+    const dropTail = tail !== null && !keepTail;
+    const lastSegment = musicLine.segments.length - 1;
+    let changed = false;
     const pieces = musicLine.segments.map((segment, index) => {
-      const partial = !musicLine.endsWithBarline && index === musicLine.segments.length - 1;
+      const partial = !musicLine.endsWithBarline && index === lastSegment;
+      const forced = dropTail && partial;
       const unchanged =
-        !force && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
+        !forced && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
       if (unchanged) return segment.raw;
       changed = true;
       const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator)).join("|");
       // A rewritten partial measure keeps its finished tokens and its cut remainder at their end.
-      return partial && keepTail ? `${rendered}${tail.raw}` : rendered;
+      return partial && keepTail && tail !== null ? `${rendered}${tail.raw}` : rendered;
     });
     if (!changed) continue;
     const rendered = `${pieces.join("|")}${musicLine.endsWithBarline ? "|" : ""}`;
-    if (force && rendered === "") {
+    if (dropTail && rendered === "") {
       dropped.add(musicLine.line);
       continue;
     }

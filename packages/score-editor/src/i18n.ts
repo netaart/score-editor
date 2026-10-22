@@ -60,6 +60,16 @@ export interface Messages {
   staffDrawing: string;
   staffLoading: string;
   staffFailed: string;
+  /** The synth preview control: the two words on its button, the caption that says what the sound is, and what it says aloud. */
+  previewPlay: string;
+  previewStop: string;
+  previewCaption: string;
+  /** Said when the preview starts; `position` is null when it starts at the beginning of the score. */
+  previewStarted(position: BarPosition | null): string;
+  previewStopped: string;
+  previewNothing: string;
+  previewUnsupported: string;
+  previewBlocked: string;
 }
 
 const en: Messages = {
@@ -123,6 +133,17 @@ const en: Messages = {
   staffDrawing: "The score drawn on a staff",
   staffLoading: "Loading the staff…",
   staffFailed: "The staff couldn't be drawn. The other views still work.",
+  previewPlay: "Preview",
+  previewStop: "Stop",
+  previewCaption: "Synthetic preview, not the final sound",
+  previewStarted: (position) =>
+    position
+      ? `Playing the preview from bar ${position.bar} beat ${position.beat}`
+      : "Playing the preview from the start",
+  previewStopped: "Preview stopped",
+  previewNothing: "There is nothing to play from here",
+  previewUnsupported: "This browser can’t play the preview",
+  previewBlocked: "Blocked by the browser. Press Preview again.",
 };
 
 const zh: Messages = {
@@ -182,6 +203,14 @@ const zh: Messages = {
   staffDrawing: "用五线谱画出的乐谱",
   staffLoading: "正在载入五线谱…",
   staffFailed: "五线谱画不出来。其他视图不受影响。",
+  previewPlay: "试听",
+  previewStop: "停止",
+  previewCaption: "合成试听，不代表成品效果",
+  previewStarted: (position) => (position ? `从第 ${position.bar} 小节第 ${position.beat} 拍开始试听` : "从头开始试听"),
+  previewStopped: "试听已停止",
+  previewNothing: "从这里开始没有可以试听的内容",
+  previewUnsupported: "这个浏览器无法播放试听",
+  previewBlocked: "浏览器没有允许发声，请再按一次试听",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

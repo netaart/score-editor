@@ -1,13 +1,15 @@
-// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge and the screen-reader hint.
+// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
-import { create, lineIcon, requireDom } from "./dom";
+import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor, viewName } from "./i18n";
+import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
+import { mountSynthControl } from "./synth-preview";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
@@ -25,6 +27,11 @@ export interface ToolbarOptions extends EditingPartOptions {
    * it the toolbar has no switch and keeps its own title.
    */
   viewSwitch?: boolean;
+  /**
+   * Whether the toolbar holds the synth preview control. On by default, so a toolbar alone lets a person listen; a host
+   * that mounts `mountSynthPreview` in a place of its own turns it off, so the control is not there twice.
+   */
+  synthPreview?: boolean;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -35,7 +42,8 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
 
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
- * read-only badge (while it is not) and, when asked, the screen-reader hint. It follows the session's language.
+ * synth preview control, which is there either way unless `synthPreview` is off, the read-only badge (while the session
+ * is not editable), the view switch when asked, and, when asked, the screen-reader hint. It follows the session's language.
  */
 export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
   requireDom("mountToolbar");
@@ -63,14 +71,20 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   create(doc, "span", "sce-spacer", row);
-  // The badge and the switch are one item of the row, so a narrow row moves them to the next line together.
-  const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : row;
-  const badge = create(doc, "span", "sce-badge", end);
-  const views = options.viewSwitch ? mountViewSwitch(end, session) : null;
+  const badge = create(doc, "span", "sce-badge", row);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
+  const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
+  if (synth) row.dataset.synth = "";
+  let views: ViewPart | null = null;
+  if (options.viewSwitch) {
+    // The badge and the switch end the row as one item, so a narrow row moves them to the next line together.
+    const end = create(doc, "div", "sce-toolbar-end", row);
+    end.appendChild(badge);
+    views = mountViewSwitch(end, session);
+  }
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -138,6 +152,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       unsubscribe();
       zoom.destroy();
       views?.destroy();
+      synth?.destroy();
       root.remove();
       releaseStyles();
     },

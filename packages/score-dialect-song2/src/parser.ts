@@ -112,7 +112,7 @@ interface VoiceState {
   key: string;
   signature: Partial<Record<Letter, number>>;
   timeline: KeyChange[];
-  inlineKeys: KeyChange[];
+  inlineKeys: Song2SourceKey[];
   measures: MeasureRecord[];
   partial: PartialMeasure | null;
   notes: Note[];
@@ -146,6 +146,7 @@ class MeasureCut extends Error {
     readonly offset: number,
     readonly reason: "tie" | "unfinished" = "unfinished",
     readonly raw = "",
+    readonly chord = false,
   ) {
     super("cut");
   }
@@ -168,9 +169,16 @@ export interface BarContent {
     readonly duration: number;
     readonly midi: number | null;
     readonly tie: boolean;
+    /** True when a tie from the previous note of this voice ends at this note's start (P9-P11). */
+    readonly tiedFromPrevious: boolean;
   }>;
   readonly chords: ReadonlyArray<{ readonly start: number; readonly name: string }>;
   readonly incomplete: boolean;
+}
+
+/** A `[K:...]` token and its place in the score's shared key timeline, so a later write finds its new key. */
+export interface Song2SourceKey extends KeyChange {
+  readonly timelineIndex: number;
 }
 
 export interface Song2SourceBar {
@@ -178,7 +186,7 @@ export interface Song2SourceBar {
   readonly bar: number;
   readonly content: BarContent;
   /** The `[K:...]` tokens read in this bar, including one at its first instant. */
-  readonly inlineKeys: ReadonlyArray<KeyChange>;
+  readonly inlineKeys: ReadonlyArray<Song2SourceKey>;
 }
 
 /** One piece between barlines. A `Z2`-`Z4` piece expands to more than one bar. */
@@ -189,7 +197,8 @@ export interface Song2SourceSegment {
 
 /** The unfinished bytes at the end of a cut measure and the X rule that kept them. */
 export interface Song2CutTail {
-  readonly kind: "x4" | "x5";
+  /** `x4-chord` is an X4 remainder that is an unfinished chord string; C8 lets the writer drop it with the last chord. */
+  readonly kind: "x4" | "x4-chord" | "x5";
   readonly raw: string;
 }
 
@@ -205,12 +214,25 @@ export interface Song2SourceLine {
   readonly cutTail: Song2CutTail | null;
 }
 
+/** A `K:` field line at the start of a block, and the timeline entry it states, so a later write finds its new key. */
+export interface Song2SourceKeyField {
+  /** 0-based line index in the normalized text. */
+  readonly line: number;
+  readonly timelineIndex: number;
+}
+
 export interface Song2Source {
   /** The text with CRLF and lone CR already turned into LF. */
   readonly text: string;
   /** The denominator of the `L:1/d` line, so a duration can be written in the format's units. */
   readonly unitDenominator: number;
   readonly musicLines: ReadonlyArray<Song2SourceLine>;
+  /** The cut this text had when it was read. The writer compares it with the model's cut after an edit. */
+  readonly truncation: Truncation | null;
+  /** The block `K:` field lines the reader applied, in text order. A trailing cut field is not here. */
+  readonly keyFields: ReadonlyArray<Song2SourceKeyField>;
+  /** The sections this text stated, so an edit that changes them can force the bar-grid writer. */
+  readonly sections: ReadonlyArray<Section>;
 }
 
 interface PendingBar {
@@ -242,6 +264,13 @@ export function barContentOf(score: BarContentSource, voice: string, barIndex: n
   if (bar === undefined) throw new Error(`song2: bar ${barIndex} of ${voice} has no model record`);
   const start = bar.start;
   const end = start + bar.length;
+  const voiceNotes = score.notes.filter((note) => note.voice === voice).sort((a, b) => a.start - b.start);
+  const tiedFromPrevious = new Set<string>();
+  for (let index = 1; index < voiceNotes.length; index += 1) {
+    const previous = voiceNotes[index - 1] as Note;
+    const note = voiceNotes[index] as Note;
+    if (previous.tie && previous.start + previous.duration === note.start) tiedFromPrevious.add(note.id);
+  }
   return {
     start,
     length: bar.length,
@@ -251,7 +280,13 @@ export function barContentOf(score: BarContentSource, voice: string, barIndex: n
     notes: score.notes
       .filter((note) => note.voice === voice && note.bar === barIndex)
       .sort((a, b) => a.start - b.start)
-      .map((note) => ({ start: note.start, duration: note.duration, midi: note.midi, tie: note.tie })),
+      .map((note) => ({
+        start: note.start,
+        duration: note.duration,
+        midi: note.midi,
+        tie: note.tie,
+        tiedFromPrevious: tiedFromPrevious.has(note.id),
+      })),
     chords:
       voice === "Vocal"
         ? score.chords
@@ -361,6 +396,7 @@ class Song2Parser {
   private ins: VoiceState | null = null;
   private readonly groups: GroupCounts[] = [];
   private readonly plannedSections: PlannedSection[] = [];
+  private readonly keyFields: Song2SourceKeyField[] = [];
   private musicLines = 0;
   private readonly sourceLines: PendingLine[] = [];
   private lastCutReason: "tie" | "unfinished" = "unfinished";
@@ -670,15 +706,18 @@ class Song2Parser {
   private readKeyField(line: string, voice: VoiceState, lineNumber: number): void {
     const key = line.slice(2);
     if (!isKey(key)) this.failHeader("K", lineNumber, line, key);
-    this.setKey(voice, key, voice.measureStart);
+    const timelineIndex = this.setKey(voice, key, voice.measureStart);
+    this.keyFields.push({ line: lineNumber - 1, timelineIndex });
   }
 
-  private setKey(voice: VoiceState, key: string, at: number): void {
+  /** Sets a voice's key and returns the index of the timeline entry it added. */
+  private setKey(voice: VoiceState, key: string, at: number): number {
     const signature = signatureOf(key);
     voice.key = signature.key;
     voice.signature = signature.values;
     voice.accidental = {};
     voice.timeline.push({ at, key });
+    return voice.timeline.length - 1;
   }
 
   // --- music lines -------------------------------------------------------------------------------
@@ -778,7 +817,8 @@ class Song2Parser {
       cut = true;
       offset = error.offset;
       this.lastCutReason = error.reason;
-      this.cutTail = { kind: error.reason === "tie" ? "x5" : "x4", raw: error.raw };
+      const kind = error.reason === "tie" ? "x5" : error.chord ? "x4-chord" : "x4";
+      this.cutTail = { kind, raw: error.raw };
     }
 
     if (!cut && offset === length) {
@@ -834,7 +874,7 @@ class Song2Parser {
           if (voice.name === "Ins") {
             fail("chord", { voice: "Ins", bar: bar + 1 }, this.at(voice, lineNumber, bar + 1));
           }
-          if (partialBody) throw new MeasureCut(offset, "unfinished", body.slice(pos));
+          if (partialBody) throw new MeasureCut(offset, "unfinished", body.slice(pos), true);
           fail(
             "token",
             { reason: "unrecognized", token: body.slice(pos), bar: bar + 1 },
@@ -873,8 +913,12 @@ class Song2Parser {
         }
         this.requireRoom(voice, offset, length, bar, lineNumber);
         if (!isKey(key)) this.failHeader("K", lineNumber, key, key);
-        this.setKey(voice, key, measureStart + offset);
-        voice.inlineKeys.push({ at: measureStart + offset, key });
+        const timelineIndex = this.setKey(voice, key, measureStart + offset);
+        voice.inlineKeys.push({
+          at: measureStart + offset,
+          key,
+          timelineIndex,
+        });
         pos = end + 1;
         continue;
       }
@@ -1258,10 +1302,17 @@ class Song2Parser {
     });
 
     const contentSource: BarContentSource = { bars, notes, chords };
+    const lastTail = this.sourceLines[this.sourceLines.length - 1]?.cutTail ?? null;
+    const cut = this.truncation;
+    const truncation: Truncation | null =
+      cut?.short && lastTail?.kind === "x4-chord" ? { ...cut, unfinishedChord: true } : cut;
 
     const source: Song2Source = {
       text: this.normalized,
       unitDenominator: this.unitDenominator,
+      truncation,
+      keyFields: this.keyFields,
+      sections,
       musicLines: this.sourceLines.map((line) => ({
         line: line.line,
         voice: line.voice,
@@ -1296,7 +1347,7 @@ class Song2Parser {
       sections,
       notes,
       chords,
-      truncation: this.truncation,
+      truncation,
       hasChords: this.hasChords,
       source,
     };
