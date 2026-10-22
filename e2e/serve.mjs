@@ -1,4 +1,4 @@
-// ABOUTME: Static server for the test page: serves e2e/page, the built package files and the song2 test scores, nothing else.
+// ABOUTME: Static server for the test page: serves e2e/page, the built package files, the editor skill's shipped examples and the song2 test scores.
 // ABOUTME: Playwright starts it as its web server; run it by hand with E2E_PORT to look at the page.
 
 import { readFile } from "node:fs/promises";
@@ -19,6 +19,7 @@ const types = {
 const served = [
   /^\/e2e\/page\/[\w.-]+$/,
   /^\/packages\/[\w-]+\/dist\/[\w.-]+$/,
+  /^\/packages\/score-editor\/skills\/score-editor\/[\w./-]+$/,
   /^\/packages\/score-dialect-song2\/tests\/(samples\/[\w-]+\.abc|vectors\.json)$/,
 ];
 

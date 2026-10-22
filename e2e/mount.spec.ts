@@ -1,19 +1,7 @@
 // ABOUTME: Seam 5: the mounted editor driven in real Chromium through a bare test page.
 // ABOUTME: Covers the read-only arrangement of real song2 scores, zoom and scroll, and what update and destroy leave behind.
 import type { Locator, Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
-
-async function box(target: Locator) {
-  const found = await target.boundingBox();
-  if (!found) throw new Error("nothing is drawn for the locator");
-  return found;
-}
-
-/** A Vocal-only song2 score in C major, 4/4, with the given music lines under one section. */
-function vocalOnly(...music: string[]): string {
-  const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
-  return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
-}
+import { box, expect, test, vocalOnly } from "./fixtures";
 
 /** Per item: its text drawn whole inside its cell, left out (pushed out of sight), or cut off, which is a misreading. */
 function textFit(items: Locator) {
@@ -1155,5 +1143,230 @@ test.describe("a narrow host", () => {
     const view = await box(page.getByRole("region", { name: "Arrangement" }));
     expect(badge.x).toBeGreaterThanOrEqual(view.x);
     expect(badge.x + badge.width).toBeLessThanOrEqual(view.x + view.width + 0.5);
+  });
+});
+
+test.describe("editing in the default editor", () => {
+  const QUARTERS = vocalOnly("C4D4E4F4|G16|");
+  const noteNamed = (page: Page, name: RegExp | string) => page.getByRole("listitem", { name });
+  const D4 = "D4, bar 1 beat 2, length 1 beat";
+  const anyD4 = /^D4,/;
+  const undoButton = (page: Page) => page.getByRole("button", { name: "Undo", exact: true });
+  /**
+   * A place in the Vocal lane, 70 pixels in, that no note covers and that is on screen: the row of the G, which starts in
+   * bar 2. The editor pins its header over the top of the lane, so a place at the top edge is not one a finger can reach.
+   */
+  async function emptySpot(page: Page) {
+    const lane = await box(page.getByRole("list", { name: "Vocal" }));
+    const row = await box(noteNamed(page, /^G4,/));
+    return { x: 70, y: row.y + row.height / 2 - lane.y };
+  }
+  const redoButton = (page: Page) => page.getByRole("button", { name: "Redo", exact: true });
+  const deleteButton = (page: Page) => page.getByRole("button", { name: "Delete", exact: true });
+
+  // The cases of editing itself (every key, every refusal, the history) are in editing.spec.ts; these are the ones that
+  // need the assembled editor: its toolbar, its tracks and its frame wired to one session.
+  test("the assembled editor takes a note from select to Delete to undo, by keys and by pointer alone", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "true");
+
+    await press(noteNamed(page, D4));
+    await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
+    await page.keyboard.press("Delete");
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "false");
+    await page.keyboard.press("Control+z");
+    await expect(noteNamed(page, anyD4)).toHaveCount(1);
+
+    // The same round with a pointer alone: select, the Delete button, the Undo button.
+    await press(noteNamed(page, anyD4));
+    await press(deleteButton(page));
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
+    await press(undoButton(page));
+    await expect(noteNamed(page, anyD4)).toHaveCount(1);
+    await press(redoButton(page));
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
+    expect(await harness.notices()).toEqual([]);
+  });
+
+  test("with the focus on the scroller, the frame carries the keys to the insertion point a click dropped", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(page.getByRole("list", { name: "Vocal" }), await emptySpot(page));
+    const point = page.getByRole("separator", { name: /^Insertion point/ });
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 3");
+
+    await page.keyboard.press("ArrowRight");
+    await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 4");
+    await page.keyboard.press("End");
+    await expect(point).toHaveAccessibleName("Insertion point, end of the score");
+  });
+
+  test("a read-only editor offers no editing control, and its hint names no editing key", async ({ page, harness }) => {
+    await harness.mount({ score: { text: QUARTERS }, editable: false });
+    await expect(undoButton(page)).toBeHidden();
+    await expect(redoButton(page)).toBeHidden();
+    await expect(deleteButton(page)).toBeHidden();
+    await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Arrangement" })).not.toHaveAccessibleDescription(/Delete/);
+  });
+
+  test("update switches editing on and off without remounting, and the selection comes back with it", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(noteNamed(page, D4));
+    await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(/Delete/);
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(
+      /press Tab to reach the notes/,
+    );
+
+    await harness.update({ editable: false });
+    await expect(undoButton(page)).toBeHidden();
+    await expect(noteNamed(page, `${D4}, selected`)).toHaveCount(0);
+    await page.keyboard.press("Delete");
+    await expect(noteNamed(page, D4)).toBeVisible();
+
+    await harness.update({ editable: true });
+    await expect(undoButton(page)).toBeVisible();
+    await expect(noteNamed(page, `${D4}, selected`)).toBeVisible();
+    await expect(page.getByText("Read only", { exact: true })).toBeHidden();
+  });
+
+  test("the insertion point's flag stays in view under the pinned track head when the lane is scrolled past its top", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    // Three octaves of range make a lane taller than the editor, so the lane can be scrolled past its own top.
+    await harness.mount({ score: { text: vocalOnly("C,4C4c4c'4|") } });
+    const lane = page.getByRole("list", { name: "Vocal" });
+    // Scrolling down to the lowest note, as a user does, takes the top of the lane out of sight.
+    await noteNamed(page, /^C3,/).scrollIntoViewIfNeeded();
+    const row = await box(noteNamed(page, /^C4,/));
+    await press(lane, { x: 100, y: row.y + row.height / 2 - (await box(lane)).y });
+    const point = page.getByRole("separator", { name: /^Insertion point/ });
+    await expect(point).toHaveCount(1);
+    // The pinned head has no role or name of its own; the pixels under it are what this test looks at.
+    const head = await box(page.locator(".sce-track-head"));
+    const line = await box(point);
+    expect(line.y, "the lane's own top is scrolled out of sight").toBeLessThan(head.y);
+
+    const dark = (rgb: number[]) => Math.max(...rgb.slice(0, 3)) < 80;
+    const readPixel = async (x: number, y: number) => {
+      const png = await page.screenshot({ clip: { x: Math.floor(x), y: Math.floor(y), width: 1, height: 1 } });
+      return page.evaluate(async (base64) => {
+        const image = new Image();
+        image.src = `data:image/png;base64,${base64}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const context = canvas.getContext("2d");
+        context?.drawImage(image, 0, 0);
+        return Array.from(context?.getImageData(0, 0, 1, 1).data ?? []);
+      }, png.toString("base64"));
+    };
+    // The flag is a wedge about 10px wide at its top: the pixel on each side of the line, just under the head, is its.
+    const under = head.y + head.height + 1;
+    expect(dark(await readPixel(line.x - 1, under))).toBe(true);
+    expect(dark(await readPixel(line.x + line.width, under))).toBe(true);
+  });
+
+  test("a refusal with the focus on the scroller is said once by the frame and told to the host once", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: vocalOnly("C16-|B") } });
+    await press(noteNamed(page, /^C4,/));
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("region", { name: "Arrangement" })).toBeFocused();
+
+    await page.keyboard.press("Delete");
+
+    await expect(page.getByRole("status").filter({ hasText: "can't be written into the score" })).toHaveCount(1);
+    expect((await harness.notices()).map((notice) => notice.code)).toEqual(["command-refused"]);
+  });
+
+  test("tells the host once, in the current language, when the score would not take a delete", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    // The note is tied into a cut tail: writing it as a rest would turn the cut into a finished score.
+    await harness.mount({ score: { text: vocalOnly("C16-|B") } });
+    const tied = page.getByRole("list", { name: "Vocal" }).getByRole("listitem");
+    await press(tied);
+    await expect(noteNamed(page, /, selected$/)).toHaveCount(1);
+    await page.keyboard.press("Delete");
+
+    await expect.poll(async () => (await harness.notices()).length).toBe(1);
+    await expect(tied).toHaveCount(1);
+    expect(await harness.notices()).toEqual([
+      {
+        code: "command-refused",
+        level: "warning",
+        message: "This change can't be written into the score safely, so the score was left as it was. (bar 1, beat 1)",
+      },
+    ]);
+    await expect(undoButton(page)).toHaveAttribute("aria-disabled", "true");
+
+    await harness.update({ language: "zh" });
+    await page.keyboard.press("Delete");
+    await expect.poll(async () => (await harness.notices()).length).toBe(2);
+    expect((await harness.notices())[1]?.message).toBe(
+      "这个改动没法安全地写进乐谱，乐谱保持原样。（第 1 小节，第 1 拍）",
+    );
+  });
+});
+
+test.describe("an editable toolbar in a narrow host", () => {
+  test.skip(({ isMobile }) => isMobile, "the width is set once, on the desktop project");
+
+  test("keeps every control reachable when the toolbar has only 320 pixels", async ({ page, harness }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await harness.mount({ score: { text: vocalOnly("C4D4E4F4|G16|") } });
+    const last = page.getByRole("button", { name: "Delete", exact: true });
+    await last.focus();
+    const at = await box(last);
+    expect(at.x).toBeGreaterThanOrEqual(0);
+    expect(at.x + at.width).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+});
+
+test.describe("keyboard focus in a short editor", () => {
+  test("a note the keys step onto is scrolled clear of the pinned header, not left half under it", async ({
+    page,
+    harness,
+  }) => {
+    await page.setViewportSize({ width: 600, height: 360 });
+    await harness.mount({ score: { text: vocalOnly("c'4b4C,4z4|") } });
+    await page.getByRole("region", { name: "Arrangement" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("listitem", { name: /^C6, bar 1 beat 1/ })).toBeFocused();
+
+    // The user scrolls the arrangement until the next note, B5, sits half under the pinned header.
+    const head = await box(page.locator(".sce-track-head"));
+    const next = page.getByRole("listitem", { name: /^B5, bar 1 beat 2/ });
+    const half = head.y + head.height - 6;
+    await page.mouse.move(300, 250);
+    await page.mouse.wheel(0, (await box(next)).y - half);
+    await expect.poll(async () => Math.round((await box(next)).y)).toBe(Math.round(half));
+
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("listitem", { name: /^B5, bar 1 beat 2.*selected$/ })).toBeFocused();
+    await expect.poll(async () => (await box(next)).y).toBeGreaterThanOrEqual(head.y + head.height);
   });
 });

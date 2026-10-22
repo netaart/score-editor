@@ -26,6 +26,8 @@ export {
 } from "./diagnostics";
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
 export { createDialectRegistry } from "./dialect";
+export type { EditingInput, EditingInputResult } from "./editing-input";
+export { handleEditingInput } from "./editing-input";
 export { mount } from "./mount";
 export { mountProblemView } from "./problem-view";
 export type {
@@ -70,6 +72,8 @@ export type {
   ToolText,
 } from "./tool";
 export { createToolRegistry, previewTool, validateToolParameters } from "./tool";
+export type { ToolbarOptions } from "./toolbar";
+export { mountToolbar } from "./toolbar";
 export type {
   AxisPartOptions,
   ChordVocabulary,

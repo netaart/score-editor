@@ -20,7 +20,7 @@ export const READING_DIAGNOSTIC_CODES = [
 export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
 
 /**
- * The codes a command is refused with: the dialect-agnostic edit layer reports the first three when a command cannot be
+ * The codes a command is refused with: the dialect-agnostic headless layer reports the first three when a command cannot be
  * applied or checked, `session.dispatch` reports `no-dialect` for a model the registry has no dialect for, and a tool
  * run reports `tool-parameter` for a parameter of the wrong type or outside its declaration, or a tool with no builder.
  */
@@ -53,10 +53,12 @@ export type DiagnosticCode = ReadingDiagnosticCode | CommandDiagnosticCode | Not
 
 export type DiagnosticParams = Readonly<Record<string, string | number | boolean>>;
 
-/** Where a diagnostic points. `bar` is 1-based for people; `line` is 1-based. */
+/** Where a diagnostic points. `bar`, `beat` and `line` are 1-based, the numbers people count with. */
 export interface DiagnosticAt {
   readonly voice?: string;
   readonly bar?: number;
+  /** The beat in the bar's own meter; it may carry a fraction. */
+  readonly beat?: number;
   readonly noteId?: string;
   readonly line?: number;
 }
@@ -331,18 +333,13 @@ function chineseNotANote(params: DiagnosticParams): string {
   return `这个事件${quoted(value(params, "noteId"))}是休止符，不是音符。`;
 }
 
-function englishWriteMismatch(params: DiagnosticParams): string {
-  const field = value(params, "field");
-  return field === ""
-    ? "The written score does not read back the same."
-    : `The written score does not read back the same in ${field}.`;
+/** The model's field that differed stays in `params` for hosts and logs; a creator is told only what it means. */
+function englishWriteMismatch(): string {
+  return "This change can't be written into the score safely, so the score was left as it was.";
 }
 
-function chineseWriteMismatch(params: DiagnosticParams): string {
-  const field = value(params, "field");
-  return field === ""
-    ? "写回后的乐谱读回来和改动后的乐谱不一致。"
-    : `写回后的乐谱读回来和改动后的乐谱不一致，${field} 字段不同。`;
+function chineseWriteMismatch(): string {
+  return "这个改动没法安全地写进乐谱，乐谱保持原样。";
 }
 
 function englishNoDialect(params: DiagnosticParams): string {
@@ -672,6 +669,9 @@ function position(diagnostic: Diagnostic, language: Language): string {
   const parts: string[] = [];
   if (diagnostic.at.bar !== undefined) {
     parts.push(language === "zh" ? `第 ${diagnostic.at.bar} 小节` : `bar ${diagnostic.at.bar}`);
+  }
+  if (diagnostic.at.beat !== undefined) {
+    parts.push(language === "zh" ? `第 ${diagnostic.at.beat} 拍` : `beat ${diagnostic.at.beat}`);
   }
   if (diagnostic.at.line !== undefined) {
     parts.push(language === "zh" ? `第 ${diagnostic.at.line} 行` : `line ${diagnostic.at.line}`);

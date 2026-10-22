@@ -5,4 +5,5 @@ dist/
 .corepack/
 test-results/
 playwright-report/
+e2e/page/skill/
 .impeccable/critique/

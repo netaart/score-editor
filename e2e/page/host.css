@@ -40,6 +40,9 @@ body {
 .layout-indented {
   margin-left: 120px;
 }
+.layout-tight {
+  width: 190px;
+}
 .layout-clipped {
   position: fixed;
   left: 0;
