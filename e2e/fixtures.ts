@@ -7,14 +7,31 @@ export interface Point {
   y: number;
 }
 
+/** The box a locator occupies on the page; throws when nothing is drawn for it. */
+export async function box(target: Locator) {
+  const found = await target.boundingBox();
+  if (!found) throw new Error("nothing is drawn for the locator");
+  return found;
+}
+
+/** A Vocal-only song2 score in C major, 4/4, with the given music lines under one section. */
+export function vocalOnly(...music: string[]): string {
+  const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
+  return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
+}
+
 /** The editing session as the test page exposes it to the helpers below. */
 interface PageSession {
-  view: { zoom: number; scrollLeft: number; language: string };
+  project: { score: string };
+  selection: string[];
+  insertionPoint: { tick: number } | null;
+  view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
   reading: { kind: string; score?: { notes: Array<{ id: string; voice: string; midi: number | null }> } };
   canUndo: boolean;
   dispatch(command: unknown): { ok: boolean; diagnostics: Array<{ code: string }> };
   undo(): boolean;
   redo(): boolean;
+  select(noteIds: string[]): void;
   setView(patch: Record<string, unknown>): void;
 }
 
@@ -41,8 +58,16 @@ interface PageLayout {
   close(): void;
 }
 
+/** A one-time message the mounted editor sent to its host. */
+export interface PageNotice {
+  code: string;
+  level: string;
+  message: string;
+}
+
 interface PageHarness {
   stage: HTMLElement;
+  notices: PageNotice[];
   layout: PageLayout;
   host: { addRules(kind: "important" | "hostile"): void; addProbe(): void; setColorScheme(scheme: string): void };
   shadowRoot: ShadowRoot | null;
@@ -61,7 +86,10 @@ declare global {
 export class Layout {
   constructor(private readonly page: Page) {}
 
-  /** `score`, `language`, `project` and `shadow` as for mount; `parts` names the parts to mount; `scene` a host layout. */
+  /**
+   * `score`, `language`, `project`, `editable` and `shadow` as for mount; `parts` names the parts to mount; `scene` a host
+   * layout.
+   */
   open(options: Record<string, unknown> = {}) {
     return this.page.evaluate((o) => window.harness.layout.open(o), options);
   }
@@ -134,6 +162,34 @@ export class Layout {
     return this.page.evaluate(() => ({ ...window.harness.layout.live().view }));
   }
 
+  /** The ids of the selected notes, as the session holds them. */
+  selection() {
+    return this.page.evaluate(() => [...window.harness.layout.live().selection]);
+  }
+
+  /** Selects exactly these notes through the session, as a host or a later view part would. */
+  select(noteIds: string[]) {
+    return this.page.evaluate((ids) => window.harness.layout.live().select(ids), noteIds);
+  }
+
+  /** The insertion point, as the session holds it. */
+  insertionPoint() {
+    return this.page.evaluate(() => {
+      const { insertionPoint } = window.harness.layout.live();
+      return insertionPoint === null ? null : { ...insertionPoint };
+    });
+  }
+
+  /** The score text of the session's project. */
+  scoreText() {
+    return this.page.evaluate(() => window.harness.layout.live().project.score);
+  }
+
+  /** Says, as a host does with its permissions, whether the user may edit. */
+  setEditable(editable: boolean) {
+    return this.page.evaluate((value) => window.harness.layout.live().setView({ editable: value }), editable);
+  }
+
   setView(patch: Record<string, unknown>) {
     return this.page.evaluate((p) => window.harness.layout.live().setView(p), patch);
   }
@@ -194,6 +250,11 @@ export class Harness {
     return this.page.evaluate((value) => window.harness.host.setColorScheme(value), scheme);
   }
 
+  /** The notices the mounted editor has sent to its host so far, in order. */
+  notices() {
+    return this.page.evaluate(() => window.harness.notices.map((notice) => ({ ...notice })));
+  }
+
   /** Waits for the browser to render `count` frames, which is when scroll events reach the page. */
   frames(count = 2) {
     return this.page.evaluate(
@@ -234,7 +295,7 @@ export class Harness {
 
 export const test = base.extend<{
   harness: Harness;
-  press: (target: Locator) => Promise<void>;
+  press: (target: Locator, position?: Point) => Promise<void>;
   partNames: { all: string[]; axis: string[] };
 }>({
   harness: async ({ page }, use) => {
@@ -245,9 +306,12 @@ export const test = base.extend<{
   partNames: async ({ harness }, use) => {
     await use(await harness.layout.partNames());
   },
-  /** Taps where the project has a touch screen and clicks where it has a mouse. */
+  /** Taps where the project has a touch screen and clicks where it has a mouse, at `position` in the target when given. */
   press: async ({ isMobile }, use) => {
-    await use((target) => (isMobile ? target.tap() : target.click()));
+    await use((target, position) => {
+      const options = position ? { position } : {};
+      return isMobile ? target.tap(options) : target.click(options);
+    });
   },
 });
 

@@ -1,0 +1,120 @@
+/* ABOUTME: Host-page styles of the pnpm-and-bundler skill example; the editor's own look comes from the package. */
+/* ABOUTME: Nothing here targets editor classes or plain elements the editor uses, so the package keeps its isolation. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f4f4f5;
+  color: #18181b;
+}
+
+.skill-example {
+  display: grid;
+  gap: 16px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.skill-header h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.skill-header p {
+  margin: 0;
+  color: #52525b;
+}
+
+.skill-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.skill-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.skill-actions button {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid #a1a1aa;
+  border-radius: 6px;
+  background: #ffffff;
+  color: inherit;
+  cursor: pointer;
+}
+
+.skill-actions button:hover {
+  background: #f4f4f5;
+}
+
+.skill-status {
+  min-height: 1.5em;
+  font-size: 14px;
+  color: #3f3f46;
+}
+
+.skill-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.skill-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.skill-output {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #d4d4d8;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media (min-width: 720px) {
+  .skill-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #18181b;
+    color: #f4f4f5;
+  }
+
+  .skill-header p,
+  .skill-status {
+    color: #a1a1aa;
+  }
+
+  .skill-toolbar,
+  .skill-actions button,
+  .skill-card,
+  .skill-output {
+    background: #27272a;
+    border-color: #3f3f46;
+  }
+}

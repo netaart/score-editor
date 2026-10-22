@@ -42,7 +42,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
 ];
 
 describe("diagnostics", () => {
-  it("has exactly the reading codes RULES.md lists and the command codes the edit layer and tools report", () => {
+  it("has exactly the reading codes RULES.md lists and the command codes the headless layer and tools report", () => {
     expect([...READING_DIAGNOSTIC_CODES]).toEqual(READING_CODES);
     expect([...COMMAND_DIAGNOSTIC_CODES]).toEqual(COMMAND_CODES);
   });
@@ -78,6 +78,24 @@ describe("diagnostics", () => {
     }
   });
 
+  it("tells a creator a change could not be written, without naming a field of the score model", () => {
+    const fields = ["bars", "notes", "tempo", "voices", "keys", "sections", "chords", "truncation", "hasChords"];
+    for (const language of ["zh", "en"] as const) {
+      const plain = formatDiagnostic({ code: "write-mismatch", params: {}, at: {} }, language);
+      for (const field of fields) {
+        const text = formatDiagnostic({ code: "write-mismatch", params: { field }, at: {} }, language);
+        expect(text, `${language} ${field}`).toBe(plain);
+        expect(text).not.toContain(field);
+      }
+    }
+    expect(formatDiagnostic({ code: "write-mismatch", params: { field: "bars" }, at: {} }, "en")).toBe(
+      "This change can't be written into the score safely, so the score was left as it was.",
+    );
+    expect(formatDiagnostic({ code: "write-mismatch", params: { field: "bars" }, at: {} }, "zh")).toBe(
+      "这个改动没法安全地写进乐谱，乐谱保持原样。",
+    );
+  });
+
   it("fills parameters and puts the 1-based bar in both languages", () => {
     const diagnostic = {
       code: "bar-length",
@@ -92,6 +110,19 @@ describe("diagnostics", () => {
     expect(en).toContain("4/4");
     expect(zh).toContain("第 3 小节");
     expect(zh).toContain("4/4");
+  });
+
+  it("puts the 1-based beat after the bar in both languages, and the line after both", () => {
+    const at = { voice: "Vocal", bar: 3, beat: 2.5, noteId: "Vocal:2560" };
+    const refused = { code: "write-mismatch", params: {}, at } as const;
+    expect(formatDiagnostic(refused, "en")).toBe(
+      "This change can't be written into the score safely, so the score was left as it was. (bar 3, beat 2.5)",
+    );
+    expect(formatDiagnostic(refused, "zh")).toBe("这个改动没法安全地写进乐谱，乐谱保持原样。（第 3 小节，第 2.5 拍）");
+    expect(formatDiagnostic({ ...refused, at: { bar: 3, beat: 1, line: 9 } }, "en")).toContain(
+      "(bar 3, beat 1, line 9)",
+    );
+    expect(formatDiagnostic({ ...refused, at: { bar: 3 } }, "en")).toContain("(bar 3)");
   });
 
   it("uses a diagnostic's field and expected line parameters", () => {

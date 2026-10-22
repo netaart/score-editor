@@ -85,7 +85,8 @@ const css = `
 .sce-part.sce-part {
   display: block;
 }
-.sce-editor .sce-part.sce-part {
+.sce-editor .sce-part.sce-part,
+.sce-part-toolbar .sce-part.sce-part {
   display: contents;
 }
 .sce-root.sce-axis {
@@ -129,6 +130,10 @@ const css = `
   gap: 8px;
   min-height: 40px;
   padding: 4px 12px;
+  /* When the box is narrower than the controls the row scrolls; the title gives way before that. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
 }
@@ -189,7 +194,8 @@ const css = `
   margin: 4px 0 0;
   color: var(--sce-_muted);
 }
-.sce-root .sce-zoom {
+.sce-root .sce-zoom,
+.sce-root .sce-history {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -255,11 +261,32 @@ const css = `
   width: 2px;
   height: 10px;
 }
+/* Undo and redo draw an arrow; the stylesheet gives it its stroke, since the reset above would revert attributes. */
+.sce-root .sce-icon-button {
+  flex: none;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+}
+.sce-root .sce-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sce-root .sce-redo .sce-icon {
+  transform: scaleX(-1);
+}
 @media (pointer: coarse) {
   .sce-root .sce-button {
     min-height: 36px;
   }
-  .sce-root .sce-step {
+  .sce-root .sce-step,
+  .sce-root .sce-icon-button {
     width: 36px;
   }
 }
@@ -287,6 +314,15 @@ const css = `
   min-height: 0;
 }
 
+/*
+ * What the sticky header, track head and pitch column cover is not room to look at: a note the keys move the focus to
+ * is scrolled out from under them, with 4px for its focus ring, instead of being left half hidden. The editor scrolls
+ * in its scroller and a part mounted alone in its own root.
+ */
+.sce-root .sce-scroller,
+.sce-root.sce-axis {
+  scroll-padding: calc(var(--sce-_head-top, 0px) + var(--sce-_band) + 4px) 4px 4px calc(var(--sce-_keys) + 4px);
+}
 .sce-root .sce-scroller {
   position: relative;
   flex: 1 1 auto;
@@ -578,6 +614,26 @@ ${labelThinning()}
   border-radius: min(var(--sce-_radius), 3px);
   background: var(--sce-_note);
 }
+.sce-root[data-editable="true"] .sce-note {
+  cursor: pointer;
+}
+/* The selection frame answers a tap, so the browser's own flash over the tapped note would only blur it. */
+.sce-root[data-editable="true"] {
+  -webkit-tap-highlight-color: transparent;
+}
+/*
+ * A selected note keeps its box and thickens its border to 2px in the text colour, so shape and weight carry the
+ * state, not hue, and nothing moves. It comes before the tie rules, which take the border off a joined side.
+ */
+.sce-root .sce-note[data-selected] {
+  border-width: 2px;
+  border-color: var(--sce-_text);
+}
+/* A note reached by the keyboard gets the focus ring of the other controls, outside the selection frame. */
+.sce-root .sce-note:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: 2px;
+}
 /* A tie joins two notes into one bar: no gap, no border and no rounding where they meet. */
 .sce-root .sce-note[data-tie-next] {
   width: calc(var(--d) / var(--sce-ticks) * 100%);
@@ -589,6 +645,33 @@ ${labelThinning()}
   border-left-width: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+}
+
+/*
+ * The insertion point: a line through the lane, heavier and darker than a bar line, with a flag at its top. The flag
+ * sticks just under the pinned track head, so it stays in view when the lane is scrolled past its own top. At either
+ * end of the lane the line is kept whole inside it, where the pitch column and the focus ring would cover half of it.
+ */
+.sce-root .sce-insertion-point {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: clamp(1px, calc(var(--t) / var(--sce-ticks) * 100%), calc(100% - 1px));
+  width: 2px;
+  margin-left: -1px;
+  background: var(--sce-_text);
+  pointer-events: none;
+}
+.sce-root .sce-insertion-point::before {
+  content: "";
+  position: sticky;
+  top: calc(var(--sce-_head-top, 0px) + var(--sce-_band));
+  display: block;
+  margin-left: -4px;
+  border: 5px solid transparent;
+  border-top-color: var(--sce-_text);
+  border-bottom-width: 0;
 }
 
 .sce-root .sce-popover {

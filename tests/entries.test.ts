@@ -17,10 +17,12 @@ describe("package entries in a node environment", () => {
     const editor = await import("@neta-art/score-editor");
     const functions = [
       "createEditingSession",
+      "handleEditingInput",
       "mountChordTrack",
       "mountCutNotice",
       "mountProblemView",
       "mountTimeRuler",
+      "mountToolbar",
       "mountVoiceTrack",
       "mountZoomControl",
       // What 0.1.0 exported.
@@ -33,14 +35,13 @@ describe("package entries in a node environment", () => {
     ];
     for (const name of functions) expect(typeof editor[name as keyof typeof editor], name).toBe("function");
     expect(typeof editor.TICKS_PER_QUARTER).toBe("number");
-    expect(Array.isArray(editor.NOTICE_CODES)).toBe(true);
+    expect([...editor.NOTICE_CODES]).toEqual(["command-refused"]);
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });
 
   it("refuses to mount a view part without a DOM instead of failing obscurely", async () => {
-    const { createDialectRegistry, createEditingSession, mountTimeRuler, mountZoomControl } = await import(
-      "@neta-art/score-editor"
-    );
+    const { createDialectRegistry, createEditingSession, mountTimeRuler, mountToolbar, mountZoomControl } =
+      await import("@neta-art/score-editor");
     const project = {
       style: "",
       lyrics: "",
@@ -52,6 +53,7 @@ describe("package entries in a node environment", () => {
     } as const;
     const session = createEditingSession({ project, dialects: createDialectRegistry([]) });
     expect(() => mountTimeRuler({} as HTMLElement, session)).toThrow(/browser/i);
+    expect(() => mountToolbar({} as HTMLElement, session)).toThrow(/browser/i);
     expect(() => mountZoomControl({} as HTMLElement, session)).toThrow(/browser/i);
   });
 
