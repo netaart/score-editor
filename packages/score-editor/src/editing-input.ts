@@ -1,9 +1,16 @@
 // ABOUTME: The editing input layer: what a key or a click means for an editing session, with no DOM and no event objects.
 // ABOUTME: The view parts turn their events into these inputs, so a host's own views get the same keys and clicks.
 import { beatLineAfter, beatLineBefore, gridTicks, nearestBeatLine } from "./arrangement";
-import { type ScoreCommand, tieChain } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { Score } from "./score";
+import {
+  clearSelection,
+  invertSelection,
+  selectAll,
+  selectionActionOf,
+  selectNotes,
+  toggleNote,
+} from "./selection-input";
 import type { EditingSession, InsertionPoint } from "./session";
 import type { ScoreTool } from "./tool";
 
@@ -26,7 +33,20 @@ export type EditingInput =
   /** A click or tap on empty space, at a position of the time axis in ticks (it need not be a whole number). */
   | { readonly type: "click-empty"; readonly tick: number }
   /** A control that deletes, such as a toolbar button: it does what the Delete key does. */
-  | { readonly type: "delete" };
+  | { readonly type: "delete" }
+  /** A click or tap on a note with Shift held: the note joins the selection, or leaves it when it is selected. */
+  | { readonly type: "toggle-note"; readonly noteId: string }
+  /**
+   * A box drawn around notes: exactly the pitched notes among `noteIds` are selected, or with `add` they join the
+   * selection. A box with no note in it clears the selection, unless it adds.
+   */
+  | { readonly type: "select-notes"; readonly noteIds: ReadonlyArray<string>; readonly add?: boolean }
+  /** A control that selects every note, such as a menu item: it does what Ctrl+A does. */
+  | { readonly type: "select-all" }
+  /** A control that inverts the selection: it does what Ctrl+Shift+A does. */
+  | { readonly type: "invert-selection" }
+  /** A control that clears the selection: it does what Escape does. */
+  | { readonly type: "clear-selection" };
 
 /** What an input came to. */
 export interface EditingInputResult {
@@ -76,24 +96,15 @@ function pitchedSelection(score: Score, selection: ReadonlyArray<string>): strin
 
 /**
  * Delete as a tool, so the session runs it through the one path every tool takes: all of it applies as one history
- * step, or none of it does. A tie chain turns into rests as a whole, so it takes one command, whichever of its
- * segments are selected.
+ * step, or none of it does. It is one command on every selected pitched note, so the score is written and checked once.
  */
 function deleteTool(score: Score): ScoreTool {
   return {
     id: "delete",
     name: { en: "Delete", zh: "删除" },
     commands(_project, selection) {
-      const covered = new Set<string>();
-      const commands: ScoreCommand[] = [];
-      for (const id of pitchedSelection(score, selection)) {
-        if (covered.has(id)) continue;
-        const note = score.notes.find((found) => found.id === id);
-        if (note === undefined) continue;
-        for (const member of tieChain(score.notes, note)) covered.add(member.id);
-        commands.push({ type: "toRest", noteId: id });
-      }
-      return commands;
+      const noteIds = pitchedSelection(score, selection);
+      return noteIds.length === 0 ? [] : [{ type: "toRests", noteIds }];
     },
   };
 }
@@ -127,6 +138,12 @@ function clickEmpty(session: EditingSession, tick: number): EditingInputResult {
   return HANDLED;
 }
 
+/** Runs a selection input over the score, which must be readable: then there are no notes to select and nothing is handled. */
+function selectWith(session: EditingSession, act: (score: Score) => EditingInputResult): EditingInputResult {
+  const score = readableScore(session);
+  return score === null ? IGNORED : act(score);
+}
+
 function pressKey(session: EditingSession, input: EditingKeyInput): EditingInputResult {
   if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(session);
   const history = historyActionOf(input);
@@ -134,6 +151,8 @@ function pressKey(session: EditingSession, input: EditingKeyInput): EditingInput
     session[history]();
     return HANDLED;
   }
+  const selecting = selectionActionOf(input);
+  if (selecting !== null) return handleEditingInput(session, { type: selecting });
   const score = readableScore(session);
   const tick = score === null ? null : insertionPointTargetOf(score, session.insertionPoint, input);
   if (tick === null) return IGNORED;
@@ -153,6 +172,16 @@ export function handleEditingInput(session: EditingSession, input: EditingInput)
       return clickEmpty(session, input.tick);
     case "delete":
       return deleteSelection(session);
+    case "toggle-note":
+      return selectWith(session, (score) => toggleNote(session, score, input.noteId));
+    case "select-notes":
+      return selectWith(session, (score) => selectNotes(session, score, input.noteIds, input.add === true));
+    case "select-all":
+      return selectWith(session, (score) => selectAll(session, score));
+    case "invert-selection":
+      return selectWith(session, (score) => invertSelection(session, score));
+    case "clear-selection":
+      return selectWith(session, (score) => clearSelection(session, score));
     case "key":
       return pressKey(session, input);
   }
