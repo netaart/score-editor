@@ -546,7 +546,7 @@ test.describe("the view switch", () => {
 const toolbarWithViews = (page: Page) => slot(page, "toolbar-views");
 
 test.describe("the toolbar part with the view switch", () => {
-  test("ends the row with the switch, after the read-only badge, and keeps the switch while read-only", async ({
+  test("puts the switch after the read-only badge, and the preview control after the switch, also while read-only", async ({
     page,
     harness,
   }) => {
@@ -558,6 +558,33 @@ test.describe("the toolbar part with the view switch", () => {
     const row = await box(toolbarWithViews(page).locator(".sce-toolbar"));
     expect(switchAt.x + switchAt.width).toBeLessThanOrEqual(row.x + row.width + 0.5);
     expect(Math.abs(switchAt.y + switchAt.height / 2 - (badge.y + badge.height / 2))).toBeLessThan(6);
+
+    // The preview control is the last of the row, after the switch: on the same line, or on a later one.
+    const preview = await box(toolbarWithViews(page).getByRole("button", { name: "Preview", exact: true }));
+    expect(preview.x >= switchAt.x + switchAt.width || preview.y >= switchAt.y + switchAt.height).toBe(true);
+  });
+
+  test("is walked in the order it is drawn: undo and redo, Delete, the Select menu, the three views, then the preview", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ parts: ["toolbar-views", "vocal"] });
+    const bar = toolbarWithViews(page);
+    await bar.getByRole("button", { name: "Undo", exact: true }).focus();
+
+    const walked: string[] = [];
+    for (let step = 0; step < 8; step++) {
+      walked.push(
+        await page.evaluate(() => {
+          const el = document.activeElement;
+          return el?.getAttribute("aria-label") ?? el?.textContent?.trim() ?? "";
+        }),
+      );
+      await page.keyboard.press("Tab");
+    }
+
+    expect(walked.slice(0, 5)).toEqual(["Undo", "Redo", "Delete", "Select", "Arrangement"]);
+    expect(walked.slice(5, 8)).toEqual(["Staff", "Score text", "Preview"]);
   });
 
   test("names the shown view in its title, and leaves out what only means something on the arrangement", async ({
@@ -1357,12 +1384,28 @@ test.describe("the three views of the default editor", () => {
 
     await press(viewTab(page, "Score text"));
     await editorText(page).fill(QUARTERS);
-    // The project takes the text and the toolbar gains its history and preview controls, which at a phone's width moves the
-    // switch to another line; a person who waits for that before tapping it taps where it is.
-    await expect(undoButton(page)).toBeVisible();
+    // The tap comes before the project has taken the text: the box loses the focus, the project takes the text, and the
+    // toolbar gains its history and preview controls while the finger is on the switch. The switch has not moved.
     await press(viewTab(page, "Staff"));
     await expect(staffNotes(page)).toHaveCount(5);
     await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("keeps the switch where it is when the project takes the text and the toolbar gains its history and preview controls", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: BROKEN } });
+    await press(viewTab(page, "Score text"));
+    await expect(undoButton(page)).toBeHidden();
+    const before = await box(viewTab(page, "Staff"));
+
+    await editorText(page).fill(QUARTERS);
+    await editorText(page).blur();
+    await expect(undoButton(page)).toBeVisible();
+
+    expect(await box(viewTab(page, "Staff"))).toEqual(before);
   });
 
   /** Scrolls the arrangement in time with the wheel, as a person with a mouse does. */
@@ -1430,6 +1473,29 @@ test.describe("the three views of the default editor", () => {
 
 test.describe("the view switch in a narrow host", () => {
   test.skip(({ isMobile }) => isMobile, "the width is set once, on the desktop project");
+
+  for (const language of ["en", "zh"] as const) {
+    test(`keeps the switch where it is, with 320 pixels, when the project takes a text typed into the box (${language})`, async ({
+      page,
+      harness,
+      press,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 700 });
+      await harness.mount({ score: { text: BROKEN }, language });
+      const tabs = page.getByRole("group", { name: VIEW_NAMES_BY_LANGUAGE[language].group });
+      const [, staff, text] = VIEW_NAMES_BY_LANGUAGE[language].names;
+      await press(tabs.getByRole("button", { name: text, exact: true }));
+      const scoreBox = page.getByRole("textbox");
+      const staffButton = tabs.getByRole("button", { name: staff, exact: true });
+      const before = await box(staffButton);
+
+      await scoreBox.fill(QUARTERS);
+      await scoreBox.blur();
+      await expect(page.locator(".sce-history")).toBeVisible();
+
+      expect(await box(staffButton)).toEqual(before);
+    });
+  }
 
   for (const editable of [true, false]) {
     test(`keeps the switch inside the box, in reach, and the page from scrolling sideways when the editor has 320 pixels and ${editable ? "can edit" : "is read-only"}`, async ({

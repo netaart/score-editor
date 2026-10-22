@@ -43,8 +43,9 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
 
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
- * synth preview control, which is there either way unless `synthPreview` is off, the read-only badge (while the session
- * is not editable), the view switch when asked, and, when asked, the screen-reader hint. It follows the session's language.
+ * read-only badge (while the session is not editable), the view switch when asked, the synth preview control, which is
+ * there either way unless `synthPreview` is off, and, when asked, the screen-reader hint. The controls are in that order
+ * in the row and in the tab order, the preview control last. It follows the session's language.
  */
 export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
   requireDom("mountToolbar");
@@ -73,20 +74,20 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
   create(doc, "span", "sce-spacer", row);
-  const badge = create(doc, "span", "sce-badge", row);
+  // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
+  // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
+  // (it is there only while the score reads), and what comes after the switch cannot push it to the next line between a
+  // person's typing and the tap that follows. Its place is kept while it is not there, so it cannot move the switch along
+  // the line either (styles.ts).
+  const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
+  const badge = create(doc, "span", "sce-badge", end ?? row);
+  const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
-  let views: ViewPart | null = null;
-  if (options.viewSwitch) {
-    // The badge and the switch end the row as one item, so a narrow row moves them to the next line together.
-    const end = create(doc, "div", "sce-toolbar-end", row);
-    end.appendChild(badge);
-    views = mountViewSwitch(end, session);
-  }
 
   const abort = new AbortController();
   const { signal } = abort;

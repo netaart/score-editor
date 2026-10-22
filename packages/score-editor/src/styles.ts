@@ -157,6 +157,16 @@ const css = `
   flex: 0 1 auto;
   max-width: 100%;
 }
+/*
+ * In a toolbar with the view switch, the preview control keeps its place while the score does not read. It comes after the
+ * switch, so that it can never push the switch to the next line; but it is the widest thing on the line, and where it shares
+ * the line with the switch, its coming would move the switch along. A text typed into the text view is taken as the box loses
+ * the focus, which can be the press on the switch, and the switch must not have moved by then. DESIGN.md, "Toolbar".
+ */
+.sce-root .sce-toolbar[data-views] .sce-synth[hidden] {
+  display: inline-flex;
+  visibility: hidden;
+}
 .sce-root .sce-spacer {
   flex: 1 1 auto;
 }
