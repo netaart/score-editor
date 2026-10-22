@@ -1410,3 +1410,84 @@ test.describe("the view switch in a narrow host", () => {
     });
   }
 });
+
+/** The names of the three views, in each language, as the view switch and the toolbar's title say them. */
+const VIEW_NAMES_BY_LANGUAGE = {
+  en: { group: "View", names: ["Arrangement", "Staff", "Score text"] },
+  zh: { group: "视图", names: ["编曲视图", "五线谱", "乐谱文本"] },
+} as const;
+
+/** Whether the title is cut short (its text wider than its box), its text, its tooltip and the row it stands on. */
+function titleState(page: Page) {
+  return page.locator(".sce-title").evaluate((el) => {
+    const text = document.createRange();
+    text.selectNodeContents(el);
+    return {
+      cut: el.scrollWidth > el.clientWidth,
+      textWidth: text.getBoundingClientRect().width,
+      boxWidth: el.getBoundingClientRect().width,
+      text: el.textContent,
+      tooltip: el.getAttribute("title"),
+      bottom: el.getBoundingClientRect().bottom,
+    };
+  });
+}
+
+test.describe("the title of a wrapped toolbar", () => {
+  for (const language of ["en", "zh"] as const) {
+    test(`is never narrower than its own text at a phone's width, in ${language}: a control moves to a later row first`, async ({
+      page,
+      harness,
+      press,
+      isMobile,
+    }) => {
+      // The phone project is a Pixel 7; the desktop project is made as narrow as the narrowest hosts.
+      for (const width of isMobile ? [null] : [320, 412]) {
+        if (width !== null) await page.setViewportSize({ width, height: 700 });
+        await harness.mount({ score: { text: QUARTERS }, language });
+        const { group, names } = VIEW_NAMES_BY_LANGUAGE[language];
+        const tabs = page.getByRole("group", { name: group });
+        for (const name of names) {
+          await press(tabs.getByRole("button", { name, exact: true }));
+          const state = await titleState(page);
+          const where = `${language} ${width ?? "Pixel 7"}px, ${name}`;
+          expect(state.text, where).toBe(name);
+          expect(state.cut, `${where}: the title is not cut`).toBe(false);
+          expect(state.boxWidth, `${where}: the title is as wide as its text`).toBeGreaterThanOrEqual(
+            state.textWidth - 0.5,
+          );
+          expect(state.tooltip, `${where}: the tooltip holds the whole name`).toBe(name);
+        }
+        await harness.destroy();
+      }
+    });
+  }
+
+  test("is cut with an ellipsis only when it does not fit on a row of its own, and keeps its whole text and a tooltip", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the width is set once, on the desktop project");
+    for (const [language, width] of [
+      ["en", 100],
+      ["zh", 64],
+    ] as const) {
+      await page.setViewportSize({ width, height: 700 });
+      await harness.mount({ score: { text: QUARTERS }, language });
+      const name = VIEW_NAMES_BY_LANGUAGE[language].names[0];
+
+      const state = await titleState(page);
+      const zoom = await box(page.getByRole("group", { name: language === "en" ? "Zoom" : "缩放" }));
+
+      expect(state.text, language).toBe(name);
+      expect(state.cut, `${language}: the title is cut`).toBe(true);
+      expect(state.tooltip, `${language}: the tooltip holds the whole name`).toBe(name);
+      expect(await page.locator(".sce-title").evaluate((el) => getComputedStyle(el).textOverflow)).toBe("ellipsis");
+      expect(zoom.y, `${language}: the controls are on a later row than the title`).toBeGreaterThanOrEqual(
+        state.bottom - 0.5,
+      );
+      await harness.destroy();
+    }
+  });
+});

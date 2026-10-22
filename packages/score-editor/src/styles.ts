@@ -143,14 +143,18 @@ const css = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* With the preview control or the view switch the row wraps instead of scrolling, and the title is what gives way: DESIGN.md, "Toolbar". */
+/*
+ * With the preview control or the view switch the row wraps instead of scrolling: DESIGN.md, "Toolbar". The title counts at
+ * the width of its own text when the row is broken into lines, so a control moves to a later row before the title gets
+ * narrower; only a title that does not fit on a row of its own is cut, with an ellipsis.
+ */
 .sce-root .sce-toolbar:is([data-synth], [data-views]) {
   flex-wrap: wrap;
   row-gap: 4px;
 }
 .sce-root .sce-toolbar:is([data-synth], [data-views]) .sce-title {
-  flex: 1000 1 0;
-  max-width: max-content;
+  flex: 0 1 auto;
+  max-width: 100%;
 }
 .sce-root .sce-spacer {
   flex: 1 1 auto;

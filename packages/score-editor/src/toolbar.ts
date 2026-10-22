@@ -104,11 +104,18 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   let drawn = "";
   let language: Language | null = null;
   let t = messagesFor(session.view.language);
+  /** The title is the shown view's name; its tooltip holds the whole name, for where the row cuts it short. */
+  function setTitle(): void {
+    const name = options.viewSwitch ? viewName(t, session.activeView) : t.title;
+    title.textContent = name;
+    title.title = name;
+  }
+
   function applyLanguage(): void {
     language = session.view.language;
     t = messagesFor(language);
     root.lang = language;
-    title.textContent = options.viewSwitch ? viewName(t, session.activeView) : t.title;
+    setTitle();
     badge.textContent = t.readOnly;
     history.setAttribute("aria-label", t.history);
     for (const [button, label, keys] of [
@@ -132,7 +139,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (shown === drawn) return;
     drawn = shown;
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
-    if (options.viewSwitch) title.textContent = viewName(t, session.activeView);
+    if (options.viewSwitch) setTitle();
     history.hidden = !editable || !readable;
     remove.hidden = history.hidden || !arrangement;
     badge.hidden = editable;
