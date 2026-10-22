@@ -2,29 +2,31 @@
 // ABOUTME: A legacy project's computed lines are carried too, but a command that changes no line writes nothing.
 import type { ScoreCommand } from "./commands";
 import type { ScoreDialect } from "./dialect";
-import { joinLyrics, type LyricLine, type LyricPhrase, lyricLinesOf } from "./lyrics";
+import { clipPhraseToSection, joinLyrics, type LyricLine, lyricLinesOf, sectionIndexAt } from "./lyrics";
 import type { Score, SongProject } from "./score";
 
 interface BarPlacement {
   readonly oldBar: number;
   readonly newBar: number;
-  readonly instance: number;
+  readonly block: string;
 }
 
 interface BlockChoice {
-  /** The old section this new block came from. */
   readonly oldSection: number;
-  /** Distinguishes an original block from a duplicate of it. */
-  readonly instance: number;
+  readonly block: string;
 }
 
-function sectionIndexAt(score: Score, bar: number): number {
-  return score.sections.findIndex((section) => bar >= section.firstBar && bar < section.firstBar + section.barCount);
+function sectionBlock(index: number): string {
+  return `section:${index}`;
+}
+
+function blockAt(score: Score, bar: number): string {
+  return sectionBlock(Math.max(0, sectionIndexAt(score, bar)));
 }
 
 /** The bar mapping of the three section commands that rearrange whole section blocks. */
 function sectionChoices(score: Score, command: ScoreCommand): BlockChoice[] | null {
-  const choices = score.sections.map((_section, index) => ({ oldSection: index, instance: index }));
+  const choices = score.sections.map((_section, index) => ({ oldSection: index, block: sectionBlock(index) }));
   switch (command.type) {
     case "deleteSection":
       choices.splice(command.section, 1);
@@ -32,7 +34,7 @@ function sectionChoices(score: Score, command: ScoreCommand): BlockChoice[] | nu
     case "duplicateSection":
       choices.splice(command.section + 1, 0, {
         oldSection: command.section,
-        instance: -command.section - 1,
+        block: `copy:${command.section}`,
       });
       return choices;
     case "moveSection": {
@@ -61,7 +63,7 @@ function structuralPlacements(score: Score, after: Score, choices: ReadonlyArray
       placements.push({
         oldBar: oldSection.firstBar + offset,
         newBar: newSection.firstBar + offset,
-        instance: choice.instance,
+        block: choice.block,
       });
     }
   }
@@ -76,7 +78,7 @@ function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPl
   const placements: BarPlacement[] = [];
   const push = (oldBar: number, newBar: number | null): void => {
     if (newBar === null || after.bars[newBar] === undefined) return;
-    placements.push({ oldBar, newBar, instance: Math.max(0, sectionIndexAt(score, oldBar)) });
+    placements.push({ oldBar, newBar, block: blockAt(score, oldBar) });
   };
 
   if (command.type === "setSectionMeter") {
@@ -124,23 +126,14 @@ function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPl
   return placements;
 }
 
-function groupByInstance(placements: ReadonlyArray<BarPlacement>): BarPlacement[][] {
-  const groups = new Map<number, BarPlacement[]>();
+function groupByBlock(placements: ReadonlyArray<BarPlacement>): BarPlacement[][] {
+  const groups = new Map<string, BarPlacement[]>();
   for (const placement of placements) {
-    const list = groups.get(placement.instance) ?? [];
+    const list = groups.get(placement.block) ?? [];
     list.push(placement);
-    groups.set(placement.instance, list);
+    groups.set(placement.block, list);
   }
   return [...groups.values()];
-}
-
-/** Keeps only the part of a phrase inside the new section that starts at its first new bar. */
-function clipToSection(after: Score, firstBar: number, lastBar: number): LyricPhrase | null {
-  const section = after.sections[sectionIndexAt(after, firstBar)];
-  if (section === undefined) return null;
-  const start = Math.max(firstBar, section.firstBar);
-  const end = Math.min(lastBar + 1, section.firstBar + section.barCount, after.bars.length);
-  return end <= start ? null : { firstBar: start, barCount: end - start };
 }
 
 /**
@@ -161,27 +154,18 @@ export function remapLyricLines(
       unaligned.push(line);
       continue;
     }
-    const oldSection = sectionIndexAt(score, line.phrase.firstBar);
-    const section = score.sections[oldSection];
-    if (section === undefined) {
+    const oldPhrase = clipPhraseToSection(score, line.phrase.firstBar, line.phrase.firstBar + line.phrase.barCount - 1);
+    if (oldPhrase === null) {
       unaligned.push({ text: line.text, phrase: null });
       continue;
     }
-    const oldFirst = Math.max(line.phrase.firstBar, section.firstBar);
-    const oldEnd = Math.min(
-      line.phrase.firstBar + line.phrase.barCount,
-      section.firstBar + section.barCount,
-      score.bars.length,
-    );
-    if (oldEnd <= oldFirst) {
-      unaligned.push({ text: line.text, phrase: null });
-      continue;
-    }
+    const oldFirst = oldPhrase.firstBar;
+    const oldEnd = oldFirst + oldPhrase.barCount;
     const inRange = placements.filter((placement) => placement.oldBar >= oldFirst && placement.oldBar < oldEnd);
-    for (const group of groupByInstance(inRange)) {
+    for (const group of groupByBlock(inRange)) {
       const newBars = group.map((placement) => placement.newBar);
       const first = Math.min(...newBars);
-      const phrase = clipToSection(after, first, Math.max(...newBars));
+      const phrase = clipPhraseToSection(after, first, Math.max(...newBars));
       if (phrase !== null) aligned.push({ text: line.text, phrase });
     }
   }

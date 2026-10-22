@@ -23,19 +23,27 @@ export interface LyricAlignment {
   readonly notes: ReadonlyArray<LyricSyllableNote> | null;
 }
 
-function sectionOf(score: Score, bar: number): Section | undefined {
-  return score.sections.find((section) => bar >= section.firstBar && bar < section.firstBar + section.barCount);
+/** The index of the section that holds a 0-based bar, or -1 when no section does. */
+export function sectionIndexAt(score: Score, bar: number): number {
+  return score.sections.findIndex((section) => bar >= section.firstBar && bar < section.firstBar + section.barCount);
 }
 
-/** Clamps a phrase to the score and to the section that owns its first bar. */
-export function clampPhrase(score: Score, phrase: LyricPhrase): LyricPhrase | null {
+/** Clips a run of bars, first through last inclusive, to the section that holds its first bar. */
+export function clipPhraseToSection(score: Score, firstBar: number, lastBar: number): LyricPhrase | null {
+  const first = Math.max(0, Math.floor(firstBar));
+  const last = Math.floor(lastBar);
+  if (last < first || first >= score.bars.length) return null;
+  const section = score.sections[sectionIndexAt(score, first)];
+  if (section === undefined) return null;
+  const start = Math.max(first, section.firstBar);
+  const end = Math.min(last + 1, section.firstBar + section.barCount, score.bars.length);
+  return end <= start ? null : { firstBar: start, barCount: end - start };
+}
+
+function clampPhrase(score: Score, phrase: LyricPhrase): LyricPhrase | null {
   const first = Math.max(0, Math.floor(phrase.firstBar));
   const count = Math.max(0, Math.floor(phrase.barCount));
-  if (count === 0 || first >= score.bars.length) return null;
-  const section = sectionOf(score, first);
-  if (section === undefined) return null;
-  const end = Math.min(first + count, section.firstBar + section.barCount, score.bars.length);
-  return end <= first ? null : { firstBar: first, barCount: end - first };
+  return count === 0 ? null : clipPhraseToSection(score, first, first + count - 1);
 }
 
 /** The label on a legacy lyrics line, or `null` when the line is a lyric line rather than a `[section]` label. */
