@@ -121,27 +121,32 @@ export function installLanePointer(
 ): void {
   let gesture: Gesture | null = null;
 
+  /** Takes from the page all that a gesture put there: its timer and listeners, the box, the preview and the lane's tint. */
+  function tidy(g: Gesture): void {
+    clearTimeout(g.hold);
+    g.ends.abort();
+    g.box?.remove();
+    g.box = null;
+    for (const id of g.boxed) unmark(g, id);
+    g.boxed = new Set();
+    delete g.geometry.lane.dataset.boxing;
+  }
+
   function finish(): void {
     const g = gesture;
     if (!g) return;
     gesture = null;
-    clearTimeout(g.hold);
-    g.ends.abort();
-    g.box?.remove();
-    for (const id of g.boxed) g.geometry.blocks.get(id)?.removeAttribute("data-boxed");
-    delete g.geometry.lane.dataset.boxing;
+    tidy(g);
   }
 
   /** Gives the box up and leaves the press to end on its own release. */
   function giveUp(g: Gesture): void {
-    clearTimeout(g.hold);
+    tidy(g);
     g.phase = "done";
-    g.ends.abort();
-    g.box?.remove();
-    g.box = null;
-    for (const id of g.boxed) g.geometry.blocks.get(id)?.removeAttribute("data-boxed");
-    g.boxed = new Set();
-    delete g.geometry.lane.dataset.boxing;
+  }
+
+  function unmark(g: Gesture, id: string): void {
+    g.geometry.blocks.get(id)?.removeAttribute("data-boxed");
   }
 
   /** Starts watching what can end a box without its pointer: Escape, a scroll under the pointer, a lost focus, a change of the session. */
@@ -181,7 +186,7 @@ export function installLanePointer(
     g.box.style.setProperty("--r", String(r0));
     g.box.style.setProperty("--h", String(r1 - r0));
     const { shown } = reachOf(g.geometry, t0, t1, r0, r1);
-    for (const id of g.boxed) if (!shown.has(id)) g.geometry.blocks.get(id)?.removeAttribute("data-boxed");
+    for (const id of g.boxed) if (!shown.has(id)) unmark(g, id);
     for (const id of shown) if (!g.boxed.has(id)) g.geometry.blocks.get(id)?.setAttribute("data-boxed", "");
     g.boxed = shown;
   }
@@ -257,12 +262,8 @@ export function installLanePointer(
     }
     // Shift on empty space is an aim that missed, and must not cost the selection.
     if (g.shift) return;
-    const area = g.geometry.lane.getBoundingClientRect();
-    if (!(area.width > 0)) return;
-    handleEditingInput(session, {
-      type: "click-empty",
-      tick: ((event.clientX - area.left) / area.width) * g.geometry.ticks,
-    });
+    const at = placeIn(g.geometry, event.clientX, event.clientY);
+    if (at) handleEditingInput(session, { type: "click-empty", tick: at.tick });
   }
 
   root.addEventListener(
