@@ -21,6 +21,11 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 
 - A score that cannot be read shows the dialect's diagnostics in the interface language instead of the view. A project whose model has no dialect in the registry shows one short sentence.
 - `editable` (default `true`) has no effect on what can be done yet: the view is read-only either way, and `editable: false` shows a read-only badge.
+- Importing the package runs nothing that touches the DOM, so a server render can import it. `mount` and the view parts' mount functions need a browser and throw a clear error elsewhere; call them from client-side code. `createEditingSession` needs none.
+- The edit layer is dialect-agnostic: `applyScoreCommand(dialect, text, command)` and `applyProjectCommand(dialect, project, command)` apply one command to the shared score model, write it with the dialect, and run `dialect.check`. A failure returns a diagnostic and changes nothing.
+- Styles: every class is prefixed `sce-`. The host maps its theme onto `--sce-color-bg`, `--sce-color-text`, `--sce-color-accent` and a few more; unmapped colours fall back to neutral defaults derived from the mapped ones. The full list is in [DESIGN.md](../../DESIGN.md).
+- A host whose own CSS uses ID selectors or `!important` on plain elements should mount the editor inside a shadow root. See [docs/spike.md](../../docs/spike.md).
+- The package assumes a browser with native popovers, `:has()` and `light-dark()`. Only Chromium has been run so far.
 
 ## The editing session and view parts
 
@@ -49,7 +54,7 @@ const parts = [
   mountVoiceTrack(vocalElement, session, { voice: "Vocal" }),
 ];
 
-const done = session.dispatch({ type: "toRest", noteId }); // { ok: true, project } or { ok: false, diagnostics }
+const done = session.dispatch({ type: "toRest", noteId }); // { ok, project, diagnostics }: a refused command returns the project it left untouched
 session.undo(); // the whole project before that command
 const stop = session.subscribe((change) => save(session.project)); // change.cause: "dispatch", "undo", "view", ...
 
@@ -58,14 +63,8 @@ stop();
 ```
 
 - The session is headless: it touches no DOM, so it runs in Node and in a worker. `dispatch` applies a command through `applyProjectCommand`; a refused command changes nothing and returns its diagnostics. The history keeps whole song projects. Selection (note ids), insertion point, zoom, scroll and language are not in the history. `replaceProject` starts a new document from outside, the way `update({ project })` does.
-- Parts: `mountZoomControl`, `mountCutNotice`, `mountProblemView`, `mountTimeRuler`, `mountChordTrack` and `mountVoiceTrack(el, session, { voice })`. Each returns `{ destroy() }`, and a second `destroy` does nothing. Each part keeps what `mount` guarantees: isolated styles under a strict style policy and inside a shadow root, the popover layer for the zoom menu, theme variables and the session's language.
-- The ruler, the chord track and a voice track scroll in time on their own element, each by its own width. A part mounted late starts at the session's zoom and scroll.
+- Parts: `mountZoomControl`, `mountCutNotice`, `mountProblemView`, `mountTimeRuler`, `mountChordTrack` and `mountVoiceTrack(el, session, { voice })`. Each returns `{ destroy() }`, and a second `destroy` does nothing. Each part is styled and isolated as `mount` is, and the zoom menu uses the popover layer; the decisions are in [docs/spike.md](../../docs/spike.md).
+- The ruler, the chord track and a voice track scroll in time on their own element, each by its own width. Each is a named region that Tab reaches, and the plus and minus keys zoom around the middle of the one that has the focus. Pass `{ scroller }` as the last argument to put several of them in one scroller of your own, as `mount` does. A part mounted late starts at the session's zoom and scroll.
 - `mount` builds one session and assembles these parts in a toolbar, a scroller and a problem view; its options and what `update` does are unchanged.
-
-- Importing the package runs nothing that touches the DOM, so a server render can import it. `mount` and the view parts' mount functions need a browser and throw a clear error elsewhere; call them from client-side code. `createEditingSession` needs none.
-- The edit layer is dialect-agnostic: `applyScoreCommand(dialect, text, command)` and `applyProjectCommand(dialect, project, command)` apply one command to the shared score model, write it with the dialect, and run `dialect.check`. A failure returns a diagnostic and changes nothing.
-- Styles: every class is prefixed `sce-`. The host maps its theme onto `--sce-color-bg`, `--sce-color-text`, `--sce-color-accent` and a few more; unmapped colours fall back to neutral defaults derived from the mapped ones. The full list is in [DESIGN.md](../../DESIGN.md).
-- A host whose own CSS uses ID selectors or `!important` on plain elements should mount the editor inside a shadow root. See [docs/spike.md](../../docs/spike.md).
-- The package assumes a browser with native popovers, `:has()` and `light-dark()`. Only Chromium has been run so far.
 
 MIT licensed.
