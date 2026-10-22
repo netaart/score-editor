@@ -366,6 +366,24 @@ test.describe("the stale notice", () => {
     await expect(staleNotice(page)).toHaveCount(0);
   });
 
+  test("marks itself with an edge at its start and draws none of the cut notice's hatch swatch", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness, { parts: ["stale", "text", "vocal"] });
+    await textBox(page).fill(BROKEN);
+
+    const drawn = await staleNotice(page).evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        swatch: getComputedStyle(el, "::before").content,
+        edge: [style.borderInlineStartWidth, style.borderInlineStartStyle],
+      };
+    });
+
+    expect(drawn).toEqual({ swatch: "none", edge: ["3px", "solid"] });
+  });
+
   test("says it in the session's language, and follows it when it changes", async ({ page, harness }) => {
     await openText(harness, { parts: ["stale", "text", "vocal"], language: "zh" });
     await slot(page, "text").getByRole("textbox", { name: "乐谱文本" }).fill(BROKEN);

@@ -212,6 +212,15 @@ test.describe("the arrangement of a song2 score", () => {
     await expect(page.getByRole("list", { name: "Marks" }).getByText("Incomplete bar")).toBeVisible();
   });
 
+  test("the cut notice leads with a swatch of the hatch", async ({ page, harness }) => {
+    await harness.mount({ score: { vector: "truncate-partial-measure" } });
+    const swatch = await page.getByRole("note").evaluate((el) => ({
+      content: getComputedStyle(el, "::before").content,
+      display: getComputedStyle(el, "::before").display,
+    }));
+    expect(swatch).toEqual({ content: '""', display: "inline-block" });
+  });
+
   test("a cut in the Ins voice of a long score is marked at the bar where Ins stops", async ({ page, harness }) => {
     // Vocal has 235 bars; its last line starts at bar 232, and the Ins line there stops after e6f6g (bar 232 of Ins).
     await harness.mount({ score: { sample: "melody-cut-tail" } });

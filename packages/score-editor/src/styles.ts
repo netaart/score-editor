@@ -162,7 +162,7 @@ const css = `
   border-bottom: 1px solid var(--sce-_line);
 }
 /* A swatch of the cut's hatch ties the sentence to the hatched tail it explains. */
-.sce-root .sce-notice::before {
+.sce-root .sce-cut-notice::before {
   content: "";
   display: inline-block;
   width: 1.1em;
@@ -924,12 +924,9 @@ ${labelThinning()}
   z-index: 2;
 }
 
-/* The stale notice is a note like the cut notice, with a mark of its own in place of the hatch swatch. */
+/* The stale notice is a note like the cut notice, with an edge at its start in place of the hatch swatch. */
 .sce-root .sce-stale-notice {
   border-inline-start: 3px solid var(--sce-_text);
-}
-.sce-root .sce-stale-notice::before {
-  content: none;
 }
 
 /* The staff view; see DESIGN.md, "Staff view". */
