@@ -893,7 +893,7 @@ test.describe("selecting a note by keyboard", () => {
     await tabToNotes(page);
     await page.keyboard.press("Enter");
     await page.keyboard.press("Shift+ArrowRight");
-    await page.keyboard.press("Control+ArrowRight");
+    await page.keyboard.press("Alt+ArrowRight");
     await expect(selected(page, C4)).toBeFocused();
     expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
 
