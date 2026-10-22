@@ -146,6 +146,7 @@ class MeasureCut extends Error {
     readonly offset: number,
     readonly reason: "tie" | "unfinished" = "unfinished",
     readonly raw = "",
+    readonly chord = false,
   ) {
     super("cut");
   }
@@ -189,7 +190,8 @@ export interface Song2SourceSegment {
 
 /** The unfinished bytes at the end of a cut measure and the X rule that kept them. */
 export interface Song2CutTail {
-  readonly kind: "x4" | "x5";
+  /** `x4-chord` is an X4 remainder that is an unfinished chord string; C8 lets the writer drop it with the last chord. */
+  readonly kind: "x4" | "x4-chord" | "x5";
   readonly raw: string;
 }
 
@@ -778,7 +780,8 @@ class Song2Parser {
       cut = true;
       offset = error.offset;
       this.lastCutReason = error.reason;
-      this.cutTail = { kind: error.reason === "tie" ? "x5" : "x4", raw: error.raw };
+      const kind = error.reason === "tie" ? "x5" : error.chord ? "x4-chord" : "x4";
+      this.cutTail = { kind, raw: error.raw };
     }
 
     if (!cut && offset === length) {
@@ -834,7 +837,7 @@ class Song2Parser {
           if (voice.name === "Ins") {
             fail("chord", { voice: "Ins", bar: bar + 1 }, this.at(voice, lineNumber, bar + 1));
           }
-          if (partialBody) throw new MeasureCut(offset, "unfinished", body.slice(pos));
+          if (partialBody) throw new MeasureCut(offset, "unfinished", body.slice(pos), true);
           fail(
             "token",
             { reason: "unrecognized", token: body.slice(pos), bar: bar + 1 },

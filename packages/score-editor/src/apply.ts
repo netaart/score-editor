@@ -30,7 +30,7 @@ export function applyScoreCommand(dialect: ScoreDialect, text: string, command: 
     return { ok: false, diagnostic: parsed.diagnostics[0] ?? fallbackDiagnostic() };
   }
 
-  const applied = runScoreCommand(parsed.score, command);
+  const applied = runScoreCommand(parsed.score, command, dialect.constraints);
   if (!applied.ok) return applied;
 
   const written = dialect.serialize(applied.score);

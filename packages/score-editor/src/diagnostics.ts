@@ -22,7 +22,8 @@ export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
 /**
  * The codes a command is refused with: the dialect-agnostic headless layer reports the first three when a command cannot be
  * applied or checked, `session.dispatch` reports `no-dialect` for a model the registry has no dialect for, and a tool
- * run reports `tool-parameter` for a parameter of the wrong type or outside its declaration, or a tool with no builder.
+ * run reports `tool-parameter` for a parameter of the wrong type or outside its declaration, or a tool with no builder,
+ * and `setChord` reports the voice and the vocabulary failures.
  */
 export const COMMAND_DIAGNOSTIC_CODES = [
   "note-not-found",
@@ -30,6 +31,8 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "write-mismatch",
   "no-dialect",
   "tool-parameter",
+  "chord-voice",
+  "chord-vocabulary",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -73,6 +76,8 @@ interface Catalog {
   readonly writeMismatch: Text;
   readonly noDialect: Text;
   readonly toolParameter: Text;
+  readonly chordVoice: Text;
+  readonly chordVocabulary: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -251,13 +256,15 @@ function chineseTie(params: DiagnosticParams): string {
 function englishChord(params: DiagnosticParams): string {
   if (value(params, "voice") === "Ins") return "Chords are only allowed in Vocal.";
   const name = value(params, "name");
-  return name === "" ? "This chord name is not allowed." : `The chord${quoted(name)} is not allowed.`;
+  return name === ""
+    ? "This chord is not in the score format's chord vocabulary."
+    : `The chord${quoted(name)} is not in the score format's chord vocabulary.`;
 }
 
 function chineseChord(params: DiagnosticParams): string {
   if (value(params, "voice") === "Ins") return "和弦只能写在 Vocal 声部。";
   const name = value(params, "name");
-  return name === "" ? "这个和弦名不在允许的范围内。" : `和弦${quoted(name)}不在允许的范围内。`;
+  return name === "" ? "这个和弦不在乐谱方言的和弦词表里。" : `和弦${quoted(name)}不在乐谱方言的和弦词表里。`;
 }
 
 function englishPitchRange(params: DiagnosticParams): string {
@@ -393,6 +400,28 @@ function chineseToolParameter(params: DiagnosticParams): string {
   return `工具${tool}的参数${parameter}需要${chineseToolParameterType(params)}。`;
 }
 
+function englishChordVoice(params: DiagnosticParams): string {
+  const voice = value(params, "voice");
+  return voice === "" ? "This voice cannot take a chord." : `The ${voice} voice cannot take a chord.`;
+}
+
+function chineseChordVoice(params: DiagnosticParams): string {
+  const voice = value(params, "voice");
+  return voice === "" ? "这个声部不能挂和弦。" : `${voice} 声部不能挂和弦。`;
+}
+
+function englishChordVocabulary(params: DiagnosticParams): string {
+  const name = value(params, "name");
+  return name === ""
+    ? "This chord is not in the score format's chord vocabulary."
+    : `The chord${quoted(name)} is not in the score format's chord vocabulary.`;
+}
+
+function chineseChordVocabulary(params: DiagnosticParams): string {
+  const name = value(params, "name");
+  return name === "" ? "这个和弦不在乐谱方言的和弦词表里。" : `和弦${quoted(name)}不在乐谱方言的和弦词表里。`;
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -410,6 +439,8 @@ const en: Catalog = {
   writeMismatch: englishWriteMismatch,
   noDialect: englishNoDialect,
   toolParameter: englishToolParameter,
+  chordVoice: englishChordVoice,
+  chordVocabulary: englishChordVocabulary,
 };
 
 const zh: Catalog = {
@@ -429,6 +460,8 @@ const zh: Catalog = {
   writeMismatch: chineseWriteMismatch,
   noDialect: chineseNoDialect,
   toolParameter: chineseToolParameter,
+  chordVoice: chineseChordVoice,
+  chordVocabulary: chineseChordVocabulary,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -468,6 +501,10 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.noDialect(diagnostic.params);
     case "tool-parameter":
       return catalog.toolParameter(diagnostic.params);
+    case "chord-voice":
+      return catalog.chordVoice(diagnostic.params);
+    case "chord-vocabulary":
+      return catalog.chordVocabulary(diagnostic.params);
     default:
       return "";
   }

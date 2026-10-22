@@ -1,11 +1,15 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
 import { positionOf } from "./arrangement";
+import { setChord } from "./commands-chords";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Score, Note as ScoreNote } from "./score";
+import type { DialectConstraints } from "./types";
 
 /** A dialect-agnostic edit of a Score. More commands join this union in later tickets. */
-export type ScoreCommand = { readonly type: "toRest"; readonly noteId: string };
+export type ScoreCommand =
+  | { readonly type: "toRest"; readonly noteId: string }
+  | { readonly type: "setChord"; readonly noteId: string; readonly name: string };
 
 export type ScoreCommandResult =
   | { readonly ok: true; readonly score: Score }
@@ -49,9 +53,15 @@ function toRest(score: Score, command: ScoreCommand): ScoreCommandResult {
 }
 
 /** Applies one score command to a model. It never writes text and never touches a DOM. */
-export function runScoreCommand(score: Score, command: ScoreCommand): ScoreCommandResult {
+export function runScoreCommand(
+  score: Score,
+  command: ScoreCommand,
+  constraints: DialectConstraints,
+): ScoreCommandResult {
   switch (command.type) {
     case "toRest":
       return toRest(score, command);
+    case "setChord":
+      return setChord(score, command.noteId, command.name, constraints);
   }
 }

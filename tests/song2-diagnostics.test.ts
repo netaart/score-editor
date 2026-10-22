@@ -30,6 +30,8 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "write-mismatch",
   "no-dialect",
   "tool-parameter",
+  "chord-voice",
+  "chord-vocabulary",
 ];
 
 describe("diagnostics", () => {
@@ -59,6 +61,32 @@ describe("diagnostics", () => {
       );
       expect(missing).toContain("Vocal:0");
       expect(rest).toContain("Vocal:0");
+    }
+  });
+
+  it("names the voice that cannot take a chord and the name outside the vocabulary", () => {
+    for (const language of ["zh", "en"] as const) {
+      const voice = formatDiagnostic(
+        { code: "chord-voice", params: { voice: "Ins" }, at: { voice: "Ins", noteId: "Ins:0" } },
+        language,
+      );
+      expect(voice).toContain("Ins");
+      const vocabulary = formatDiagnostic(
+        { code: "chord-vocabulary", params: { name: "C13" }, at: { noteId: "Vocal:0" } },
+        language,
+      );
+      expect(vocabulary).toContain("C13");
+    }
+  });
+
+  it("uses the same vocabulary wording for a reading chord and a refused chord", () => {
+    for (const language of ["zh", "en"] as const) {
+      const reading = formatDiagnostic({ code: "chord", params: { name: "C13" }, at: {} }, language);
+      const refused = formatDiagnostic(
+        { code: "chord-vocabulary", params: { name: "C13" }, at: { noteId: "Vocal:0" } },
+        language,
+      );
+      expect(reading).toBe(refused);
     }
   });
 
