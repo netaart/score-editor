@@ -634,6 +634,32 @@ describe("a listener that throws", () => {
   });
 });
 
+describe("a project command through the session", () => {
+  it("is one step of the history that undo takes back, told with the command it was", () => {
+    const session = open();
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "setStyle", style: "jazz" });
+
+    expect(result).toMatchObject({ ok: true, diagnostics: [] });
+    expect(session.project).toEqual({ ...project, style: "jazz" });
+    expect(changes).toEqual([
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        command: { type: "setStyle", style: "jazz" },
+      },
+    ]);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual(project);
+    expect(session.canUndo).toBe(false);
+  });
+});
+
 describe("replacing the score text", () => {
   const typed = `${HEADER}
 K:C
@@ -682,7 +708,22 @@ C4D4E4F4|G16|C16|`;
     expect(changes[2]).not.toHaveProperty("command");
   });
 
-  it("is the only change that names its command: an edit of the notes is told by the project alone", () => {
+  it("is checked with the song-project rules too, and the check says what the dispatch says", () => {
+    const withChords = `${HEADER}
+K:C
+V: Vocal
+"C"C16|`;
+    const session = open({ scoreMode: "melody" });
+
+    const checked = session.checkScoreText(withChords);
+    const result = session.dispatch({ type: "replaceScoreText", text: withChords });
+
+    expect(checked.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
+    expect(result.diagnostics).toEqual(checked);
+    expect(result.ok).toBe(checked.length === 0);
+  });
+
+  it("names its command on the change, which a command on the notes does not: that is told by the project alone", () => {
     const session = open();
     const changes = listen(session);
 

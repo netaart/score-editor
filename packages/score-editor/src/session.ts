@@ -1,12 +1,13 @@
 // ABOUTME: The editing session: the song project, its undo history, the selection and the insertion point, and the UI state view parts share.
 // ABOUTME: Headless: it touches no DOM, so it imports and runs in Node and in a Worker like the rest of the headless layer.
+
+import { applyProjectCommand } from "./apply";
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
 import { isProjectCommand, type ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
-import { readScoreText } from "./score-text";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
 import type { Language } from "./types";
@@ -139,8 +140,9 @@ export interface EditingSession {
    */
   dispatch(command: ScoreCommand | ProjectCommand): DispatchResult;
   /**
-   * What the project's dialect makes of `text` as the score, without changing or announcing anything: every diagnostic it
-   * would be refused with, in reading order, and none when `dispatch` of `replaceScoreText` would take it.
+   * What `dispatch` of `replaceScoreText` with `text` would say, without changing or announcing anything: the diagnostics
+   * it would be refused with, and none when it would take the text. The check is that command's own path, the song-project
+   * rules included, so the two cannot disagree.
    */
   checkScoreText(text: string): ReadonlyArray<Diagnostic>;
   /**
@@ -383,10 +385,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     checkScoreText(text) {
       return withDialect<ReadonlyArray<Diagnostic>>(
-        (dialect) => {
-          const read = readScoreText(dialect, text);
-          return read.ok ? [] : read.diagnostics;
-        },
+        (dialect) => applyProjectCommand(dialect, project, { type: "replaceScoreText", text }).diagnostics,
         (modelId) => [noDialectDiagnostic(modelId)],
       );
     },

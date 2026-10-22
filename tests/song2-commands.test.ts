@@ -557,6 +557,24 @@ V: Vocal
 C4D4E4F4|G16|`;
   const broken = UNREADABLE_SCORE;
 
+  it("runs the song-project rules after the replacement: a melody project given chords carries the notice", () => {
+    const withChords = `${HEADER}
+K:C
+V: Vocal
+"C"C16|`;
+
+    const melody = applyProjectCommand(
+      song2Dialect,
+      { ...project, scoreMode: "melody" },
+      { type: "replaceScoreText", text: withChords },
+    );
+    const full = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: withChords });
+
+    expect(melody.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
+    expect(melody.project.score).toBe(withChords);
+    expect(full.diagnostics).toEqual([]);
+  });
+
   it("replaces the score text with a readable one and changes no other field", () => {
     const result = applyProjectCommand(song2Dialect, project, { type: "replaceScoreText", text: typed });
 

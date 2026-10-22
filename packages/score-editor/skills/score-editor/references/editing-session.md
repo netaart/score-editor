@@ -45,7 +45,7 @@ const session = createEditingSession({
 | Method | Effect |
 | --- | --- |
 | `dispatch(command: ScoreCommand \| ProjectCommand)` | Applies one command as one history step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. |
-| `checkScoreText(text)` | What the project's dialect makes of `text` as the score: every diagnostic a `replaceScoreText` would be refused with, in reading order, and none when it would be taken. Changes and announces nothing. |
+| `checkScoreText(text)` | What `dispatch` of `replaceScoreText` with `text` would say: the diagnostics it would be refused with, the song-project rules included, and none when it would take the text. Changes and announces nothing. |
 | `setActiveView(name)` | Shows another view. Throws `RangeError` for a name outside `VIEW_NAMES`. |
 | `setRejectedText(next \| null)` | Says which unreadable text the text view holds, or that it holds none. No-op for the same text. |
 | `runTool(tool, values?)` | Validates a tool's parameters, builds its commands once and applies them as one history step. Returns `ToolResult`. One failing step refuses the whole run. |
