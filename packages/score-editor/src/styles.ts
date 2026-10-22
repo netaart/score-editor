@@ -742,21 +742,13 @@ ${labelThinning()}
   white-space: nowrap;
 }
 
-/*
- * The synth preview: a button with a line icon and a word, and beside it the caption that says the sound is not the
- * finished song. The caption wraps at its comma into two short lines, so the toolbar row stays short; it is never cut.
- */
+/* The synth preview: DESIGN.md, "Synth preview". */
 .sce-root .sce-synth {
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 8px;
 }
-.sce-root .sce-synth-button {
-  gap: 6px;
-  padding: 0 10px 0 8px;
-}
-/* The word changes between two states; a minimum width keeps the caption from shifting when it does. */
 .sce-root .sce-synth-label {
   min-width: 3.8em;
   text-align: start;
@@ -773,16 +765,10 @@ ${labelThinning()}
   word-break: keep-all;
   text-wrap: balance;
 }
-/* What the person needs to know now takes the caption's place, in the text colour so it is read as news. */
 .sce-root .sce-synth-told {
   color: var(--sce-_text);
 }
-/*
- * The playhead: a hairline through every lane at the tick being played. Its edges are the ground colour, so it reads
- * over a note as well as over the lane. It is a thinner line than the insertion point and has no flag, so the two are
- * told apart by shape, not by colour. It is the one thing that moves: its position is set from the audio clock on every
- * frame, with no transition.
- */
+/* The playhead: DESIGN.md, "Playhead". */
 .sce-root .sce-playhead {
   position: absolute;
   z-index: 2;

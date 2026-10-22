@@ -3,10 +3,7 @@
 
 const SVG = "http://www.w3.org/2000/svg";
 
-/**
- * A 16 by 16 line drawing. It is built of polylines, since the reset that isolates the parts reverts every CSS
- * property, and a path's `d` is one, where `points` is not; the stylesheet gives the lines their stroke.
- */
+/** A 16 by 16 line drawing of polylines, which the stylesheet strokes (DESIGN.md, "Do's and Don'ts": why not a path). */
 export function lineIcon(doc: Document, polylines: ReadonlyArray<string>): SVGSVGElement {
   const icon = doc.createElementNS(SVG, "svg");
   icon.setAttribute("class", "sce-icon");
