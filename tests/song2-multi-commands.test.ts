@@ -309,7 +309,7 @@ function oneByOne(text: string, ids: string[]) {
 }
 
 /**
- * Turns the notes named by `ids` into rests with one command, and holds the result to what ticket 08 asked of one note:
+ * Turns the notes named by `ids` into rests with one command, and holds the result to what is asked of the command for one note:
  * it reads, untouched bars are the same bytes, untouched notes keep their pitch and start, every target is a rest. A
  * refused set changes nothing and points at the note where the notes taken in order stop passing the check.
  */
