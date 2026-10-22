@@ -249,15 +249,13 @@ function sourceContentByBar(source: Song2Source): Map<number, BarContent> {
   return byBar;
 }
 
+/** The bar grid is the bars' count, starts and meters. Keys are not part of it: the header and `K:` lines carry them. */
 function gridMatchesSource(score: Score, source: Song2Source): boolean {
   const content = sourceContentByBar(source);
   return score.bars.every((bar, index) => {
     const old = content.get(index);
     return (
-      old !== undefined &&
-      old.start === bar.start &&
-      old.meter === `${bar.meter.numerator}/${bar.meter.denominator}` &&
-      old.key === bar.key
+      old !== undefined && old.start === bar.start && old.meter === `${bar.meter.numerator}/${bar.meter.denominator}`
     );
   });
 }
@@ -286,10 +284,7 @@ function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
   const metersOnly = score.bars.every((bar, index) => {
     const old = content.get(index);
     return (
-      old !== undefined &&
-      old.start === bar.start &&
-      old.key === bar.key &&
-      old.meter !== `${bar.meter.numerator}/${bar.meter.denominator}`
+      old !== undefined && old.start === bar.start && old.meter !== `${bar.meter.numerator}/${bar.meter.denominator}`
     );
   });
   if (!metersOnly) return true;
