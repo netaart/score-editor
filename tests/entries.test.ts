@@ -17,6 +17,7 @@ describe("package entries in a node environment", () => {
     const editor = await import("@neta-art/score-editor");
     const functions = [
       "createEditingSession",
+      "handleEditingInput",
       "mountChordTrack",
       "mountCutNotice",
       "mountProblemView",
