@@ -34,6 +34,14 @@ V: Vocal
 ${body}`;
 }
 
+const TWO_VOICE_TEXT = `${HEADER}
+${INS_HEADER}
+K:C
+V: Vocal
+C16|
+V: Ins
+C16|`;
+
 function parse(text: string): Score {
   const { score, diagnostics } = song2Dialect.parse(text);
   expect(diagnostics).toEqual([]);
@@ -54,26 +62,29 @@ function wholeRestCount(body: string): number {
   return 1;
 }
 
-/** Splits a score text into the raw piece of every bar, keyed by voice and 0-based bar number, plus every other line. */
-function splitBars(text: string): { pieces: Map<string, string>; otherLines: string[] } {
-  const lines = text
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((line) => line.replace(/[ \t]+$/, ""));
-  let bodyStart = lines.findIndex((line) => line.startsWith("K:"));
+interface RawBar {
+  readonly raw: string;
+  readonly group: string;
+}
+
+/** Splits a score text into the raw piece of every bar, delimiters and whitespace included, plus every other line. */
+function splitBars(text: string): { pieces: Map<string, RawBar>; otherLines: string[] } {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  let bodyStart = lines.findIndex((line) => line.replace(/[ \t]+$/, "").startsWith("K:"));
   bodyStart = bodyStart < 0 ? lines.length : bodyStart + 1;
-  const pieces = new Map<string, string>();
+  const pieces = new Map<string, RawBar>();
   const otherLines = lines.slice(0, bodyStart);
   const nextBar = new Map<string, number>();
   let voice: string | null = null;
 
-  for (const line of lines.slice(bodyStart)) {
-    if (line === "V: Vocal" || line === "V: Ins") {
-      voice = line.slice(3);
+  for (const [lineIndex, line] of lines.slice(bodyStart).entries()) {
+    const clean = line.replace(/[ \t]+$/, "");
+    if (clean === "V: Vocal" || clean === "V: Ins") {
+      voice = clean.slice(3);
       otherLines.push(line);
       continue;
     }
-    if (line === "" || line.startsWith("M:") || line.startsWith("K:") || line.startsWith("%")) {
+    if (clean === "" || clean.startsWith("M:") || clean.startsWith("K:") || clean.startsWith("%")) {
       otherLines.push(line);
       continue;
     }
@@ -82,15 +93,18 @@ function splitBars(text: string): { pieces: Map<string, string>; otherLines: str
       continue;
     }
 
-    const closes = line.endsWith("|");
-    const bodies = line.split("|");
+    const suffix = line.slice(clean.length);
+    const closes = clean.endsWith("|");
+    const bodies = clean.split("|");
     if (closes) bodies.pop();
-    for (const raw of bodies) {
-      const body = raw.replace(/^[ \t]+/, "").replace(/[ \t]+$/, "");
-      const count = wholeRestCount(body);
+    for (const [segmentIndex, body] of bodies.entries()) {
+      const count = wholeRestCount(body.replace(/^[ \t]+/, "").replace(/[ \t]+$/, ""));
       const first = nextBar.get(voice) ?? 0;
+      const endsBar = segmentIndex < bodies.length - 1 || closes;
+      const raw = `${body}${endsBar ? "|" : ""}${segmentIndex === bodies.length - 1 ? suffix : ""}`;
+      const group = `${voice}:${lineIndex}:${segmentIndex}`;
       for (let offset = 0; offset < count; offset += 1) {
-        pieces.set(`${voice}:${first + offset}`, raw);
+        pieces.set(`${voice}:${first + offset}`, { raw, group });
       }
       nextBar.set(voice, first + count);
     }
@@ -103,14 +117,22 @@ function noteFacts(note: Note): [string, string, number, number, number, number 
   return [note.id, note.voice, note.bar, note.start, note.duration, note.midi, note.tie];
 }
 
-function expectOnlyBar(label: string, beforeText: string, afterText: string, voice: string, bar: number): void {
+function expectOnlyBar(
+  label: string,
+  beforeText: string,
+  afterText: string,
+  voice: string,
+  bars: number | ReadonlyArray<number>,
+): void {
   const before = splitBars(beforeText);
   const after = splitBars(afterText);
   expect(after.otherLines, `${label}: non-music lines`).toEqual(before.otherLines);
-  const target = `${voice}:${bar}`;
+  const changed = new Set(
+    (Array.isArray(bars) ? bars : [bars]).map((bar) => before.pieces.get(`${voice}:${bar}`)?.group),
+  );
   for (const [key, piece] of before.pieces) {
-    if (key === target) continue;
-    expect(after.pieces.get(key), `${label}: untouched bar ${key}`).toBe(piece);
+    if (changed.has(piece.group)) continue;
+    expect(after.pieces.get(key)?.raw, `${label}: untouched bar ${key}`).toBe(piece.raw);
   }
   expect(
     [...after.pieces.keys()].filter((key) => !before.pieces.has(key)),
@@ -144,9 +166,30 @@ function applyOk(text: string, noteId: string, name: string): string {
   return result.text;
 }
 
+type SetChordCommand = { readonly type: "setChord"; readonly noteId: string; readonly name: string };
+
+function projectWithScore(score: string): SongProject {
+  return {
+    style: "pop",
+    lyrics: "la",
+    score,
+    scoreMode: "full",
+    seed: 7,
+    modelId: "song2",
+    sourceKey: "source",
+  };
+}
+
+/** Runs a refusal through the project entry and returns its codes after asserting the project was left untouched. */
+function refusedProject(text: string, command: SetChordCommand): ReadonlyArray<string> {
+  const project = projectWithScore(text);
+  const result = applyProjectCommand(song2Dialect, project, command);
+  expect(result.project).toBe(project);
+  return result.diagnostics.map((diagnostic) => diagnostic.code);
+}
+
 function exercise(label: string, text: string, target: Note): void {
   let current = text;
-  // Set, then replace, then remove, each on the text the previous command produced.
   for (const name of ["C", "G7", ""]) {
     const beforeText = current;
     const before = parse(beforeText);
@@ -206,6 +249,15 @@ describe("hand-worked write-back", () => {
     check(parse(removed));
   });
 
+  it("reads and writes a chord-only cut tail byte for byte", () => {
+    const text = scoreText('C16|D8"C');
+    const score = parse(text);
+
+    expect(score.hasChords).toBe(true);
+    expect(score.chords).toEqual([]);
+    expect(song2Dialect.serialize(score)).toBe(text);
+  });
+
   it("drops an unfinished chord tail when the last chord is removed", () => {
     const original = scoreText('"C"C16|D8"C');
     const input = parse(original);
@@ -216,6 +268,19 @@ describe("hand-worked write-back", () => {
     expect(output.hasChords).toBe(false);
     expect(output.truncation).toEqual(input.truncation);
     expect(output.notes.map(noteFacts)).toEqual(input.notes.map(noteFacts));
+    check(output);
+  });
+
+  it("rewrites only the partial measure when removing the last chord drops its unfinished chord", () => {
+    const original = scoreText('C16 |"C"C16|D8"C');
+    const input = parse(original);
+    const result = applyOk(original, "Vocal:1024", "");
+
+    expect(result).toBe(scoreText("C16 |C16|D8"));
+    expectOnlyBar("cut-tail drop", original, result, "Vocal", [1, 2]);
+    const output = parse(result);
+    expect(output.hasChords).toBe(false);
+    expect(output.truncation).toEqual(input.truncation);
     check(output);
   });
 
@@ -287,27 +352,20 @@ describe("hand-worked write-back", () => {
 
 describe("setChord failures", () => {
   it("reports note-not-found for an unknown id and leaves the text unchanged", () => {
-    const result = applyScoreCommand(song2Dialect, scoreText("C16|"), {
-      type: "setChord",
-      noteId: "Vocal:999",
-      name: "C",
-    });
+    const text = scoreText("C16|");
+    const command = { type: "setChord", noteId: "Vocal:999", name: "C" } as const;
+    const result = applyScoreCommand(song2Dialect, text, command);
 
     expect(result).toEqual({
       ok: false,
       diagnostic: { code: "note-not-found", params: { noteId: "Vocal:999" }, at: { noteId: "Vocal:999" } },
     });
+    expect(refusedProject(text, command)).toEqual(["note-not-found"]);
   });
 
   it("reports chord-voice for a note in Ins", () => {
-    const text = `${HEADER}
-${INS_HEADER}
-K:C
-V: Vocal
-C16|
-V: Ins
-C16|`;
-    const result = applyScoreCommand(song2Dialect, text, { type: "setChord", noteId: "Ins:0", name: "C" });
+    const command = { type: "setChord", noteId: "Ins:0", name: "C" } as const;
+    const result = applyScoreCommand(song2Dialect, TWO_VOICE_TEXT, command);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -315,61 +373,40 @@ C16|`;
     expect(result.diagnostic.params.voice).toBe("Ins");
     expect(result.diagnostic.at.voice).toBe("Ins");
     expect(result.diagnostic.at.noteId).toBe("Ins:0");
+    expect(refusedProject(TWO_VOICE_TEXT, command)).toEqual(["chord-voice"]);
   });
 
   it("reports chord-vocabulary for a name outside the dialect vocabulary", () => {
     const text = scoreText("C16|");
-    const result = applyScoreCommand(song2Dialect, text, { type: "setChord", noteId: "Vocal:0", name: "C13" });
+    const command = { type: "setChord", noteId: "Vocal:0", name: "C13" } as const;
+    const result = applyScoreCommand(song2Dialect, text, command);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.diagnostic.code).toBe("chord-vocabulary");
     expect(result.diagnostic.params.name).toBe("C13");
     expect(result.diagnostic.at.noteId).toBe("Vocal:0");
+    expect(refusedProject(text, command)).toEqual(["chord-vocabulary"]);
   });
 
   it("reports chord-vocabulary for a malformed slash bass", () => {
+    const text = scoreText("C16|");
     for (const name of ["C/E/G", "C/", "/E", "C/3"]) {
-      const result = applyScoreCommand(song2Dialect, scoreText("C16|"), { type: "setChord", noteId: "Vocal:0", name });
+      const command = { type: "setChord", noteId: "Vocal:0", name } as const;
+      const result = applyScoreCommand(song2Dialect, text, command);
       expect(result.ok, name).toBe(false);
       if (result.ok) continue;
-      expect(result.diagnostic.code).toBe("chord-vocabulary");
+      expect(result.diagnostic.code, name).toBe("chord-vocabulary");
+      expect(refusedProject(text, command), name).toEqual(["chord-vocabulary"]);
     }
   });
 
   it("treats removing a chord from a voice that never had one as a successful no-op", () => {
-    const text = `${HEADER}
-${INS_HEADER}
-K:C
-V: Vocal
-C16|
-V: Ins
-C16|`;
-    const result = applyScoreCommand(song2Dialect, text, { type: "setChord", noteId: "Ins:0", name: "" });
+    const result = applyScoreCommand(song2Dialect, TWO_VOICE_TEXT, { type: "setChord", noteId: "Ins:0", name: "" });
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.text).toBe(text);
+    expect(result.text).toBe(TWO_VOICE_TEXT);
     expect(parse(result.text).hasChords).toBe(false);
-  });
-
-  it("returns the project unchanged when the command fails", () => {
-    const project: SongProject = {
-      style: "pop",
-      lyrics: "la",
-      score: scoreText("C16|"),
-      scoreMode: "full",
-      seed: 7,
-      modelId: "song2",
-      sourceKey: "source",
-    };
-    const result = applyProjectCommand(song2Dialect, project, {
-      type: "setChord",
-      noteId: "Vocal:0",
-      name: "C13",
-    });
-
-    expect(result.project).toBe(project);
-    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["chord-vocabulary"]);
   });
 });

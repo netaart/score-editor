@@ -79,6 +79,17 @@ describe("diagnostics", () => {
     }
   });
 
+  it("uses the same vocabulary wording for a reading chord and a refused chord", () => {
+    for (const language of ["zh", "en"] as const) {
+      const reading = formatDiagnostic({ code: "chord", params: { name: "C13" }, at: {} }, language);
+      const refused = formatDiagnostic(
+        { code: "chord-vocabulary", params: { name: "C13" }, at: { noteId: "Vocal:0" } },
+        language,
+      );
+      expect(reading).toBe(refused);
+    }
+  });
+
   it("tells the user which model has no score format in this editor", () => {
     for (const language of ["zh", "en"] as const) {
       const text = formatDiagnostic({ code: "no-dialect", params: { modelId: "other-model" }, at: {} }, language);
