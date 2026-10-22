@@ -52,7 +52,7 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
     told = null;
     clearTimeout(toldTimer);
     drawCaption();
-    // Spoken with the button, so the warning reaches a person who never sees the caption, in a toolbar that scrolls.
+    // Spoken with the button, so the warning reaches a person who never sees the caption.
     button.setAttribute("aria-description", t.previewCaption);
     drawn = "";
   }
