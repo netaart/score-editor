@@ -76,14 +76,14 @@ function trackTimers() {
     live.set(id, { repeats: true });
     return id;
   }) as typeof window.setInterval;
-  window.clearTimeout = (id?: number) => {
+  window.clearTimeout = ((id?: number) => {
     if (id !== undefined) live.delete(id);
     real.clearTimeout(id);
-  };
-  window.clearInterval = (id?: number) => {
+  }) as typeof window.clearTimeout;
+  window.clearInterval = ((id?: number) => {
     if (id !== undefined) live.delete(id);
     real.clearInterval(id);
-  };
+  }) as typeof window.clearInterval;
 }
 
 /** Opens the test page with the audio spy installed, before any of the page's own scripts run. */
