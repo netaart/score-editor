@@ -196,6 +196,14 @@ Small, even corners. The base radius is 4px and comes from `--sce-radius`. Notes
 
 ## Components
 
+### View parts
+
+The arrangement is built from view parts bound to one editing session: the zoom control, the cut notice, the problem view, the time ruler, the chord track and one voice track for each voice. A host can mount any of them on its own element; the default editor mounts all of them in the layout described above. Every part's root carries the same context as the editor's root (the theme variables, the reset, the text size), so a part is styled alike wherever it stands, and a host's own styles do not reach in. The root is a `div.sce-root.sce-part`. Inside the default editor it draws no box (`display: contents`), so the layout above is the layout of the parts; mounted alone it is a block as wide as its element.
+
+- **The time axis.** The ruler, the chord track and a voice track share the session's zoom and horizontal scroll. Zoom writes the same width formula as above on every part in one pass, and only then scrolls them, so the document lays out once. Mounted alone, each of the three is its own horizontal scroll surface (`overflow-x: auto`) whose scroll offset the session sets and whose user scrolling the session takes back, so parts of different widths scroll together and each stops at its own end without pulling the others back. The ruler and the chord track hide their scrollbar; a track shows it. Zoom actions (the menu, the steps, "Fit whole song", control plus the wheel on any part) measure the first part on the axis.
+- **Pinning.** The default editor pins its header block, which holds the ruler and the chord track, above the tracks. A part mounted alone pins nothing itself. A track head pins under whatever the host pins above it: `top` is `var(--sce-_head-top, 0px)`, which the editor sets to the height of its header block.
+- **Opening view.** Centring the first voice's notes in pitch is the default editor's own step; a track mounted alone opens at the top.
+
 ### Toolbar
 
 Surface-tone strip, minimum 40px high, 1px line under it. Title at the start in 600 weight, the zoom group (minus button, zoom value button with a chevron, plus button), a flexible spacer, and at the end the read-only badge when the editor is not editable. The title is the one thing that gives way in a narrow host (it is cut with an ellipsis), so the zoom group and the badge stay whole down to 320px. The zoom group is hidden when the view is not shown (an unreadable score, no dialect).
