@@ -44,6 +44,19 @@ test.describe("the text view", () => {
     await expect(problems(page)).toHaveCount(0);
   });
 
+  test("numbers its lines in lining, tabular numerals, as every number that can change is", async ({
+    page,
+    harness,
+  }) => {
+    await openText(harness);
+
+    const numerals = await slot(page, "text")
+      .locator(".sce-gutter")
+      .evaluate((el) => getComputedStyle(el).fontVariantNumeric);
+
+    expect(numerals).toBe("lining-nums tabular-nums");
+  });
+
   test("hands a readable change to the project after a pause, as one step, and the other parts follow", async ({
     page,
     harness,

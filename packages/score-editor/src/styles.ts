@@ -773,7 +773,7 @@ ${labelThinning()}
   background: var(--sce-_surface);
   border-right: 1px solid var(--sce-_line);
   color: var(--sce-_muted);
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
   text-align: end;
   -webkit-user-select: none;
   user-select: none;
@@ -913,6 +913,7 @@ ${labelThinning()}
 .sce-root .sce-view-button[aria-pressed="true"] .sce-icon {
   stroke-width: 2px;
 }
+/* Five lines at the 2px of the others would merge into one block; see DESIGN.md, "View switch". */
 .sce-root .sce-view-staff .sce-icon {
   stroke-width: 1px;
 }
@@ -931,10 +932,7 @@ ${labelThinning()}
   content: none;
 }
 
-/*
- * The staff view: a box that scrolls, with the drawing in it. The drawing is abcjs's, inside a shadow root of its own, and
- * takes this box's text colour. The scrollbar's room is kept, so the drawing's width does not change when it appears.
- */
+/* The staff view; see DESIGN.md, "Staff view". */
 .sce-root.sce-part-staff {
   display: flex;
   flex-direction: column;
