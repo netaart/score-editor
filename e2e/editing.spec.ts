@@ -109,6 +109,7 @@ test.describe("selecting a note in a voice track", () => {
 const toolbar = (page: Page) => slot(page, "toolbar");
 const undoButton = (page: Page) => toolbar(page).getByRole("button", { name: "Undo", exact: true });
 const redoButton = (page: Page) => toolbar(page).getByRole("button", { name: "Redo", exact: true });
+const deleteButton = (page: Page) => toolbar(page).getByRole("button", { name: "Delete", exact: true });
 
 test.describe("the toolbar part", () => {
   test("shows the title, the zoom group, and undo and redo that follow the history", async ({
@@ -149,6 +150,27 @@ test.describe("the toolbar part", () => {
     expect(await harness.layout.scoreText()).toBe(score);
   });
 
+  test("offers Delete beside undo and redo, muted until a pitched note is selected, and a forced press does nothing", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await expect(deleteButton(page)).toBeVisible();
+    await expect(deleteButton(page)).toHaveAttribute("title", "Delete (Del/Backspace)");
+    await expect(deleteButton(page)).toHaveAttribute("aria-disabled", "true");
+
+    const score = await harness.layout.scoreText();
+    await deleteButton(page).click({ force: true });
+    expect(await harness.layout.scoreText()).toBe(score);
+    expect(await harness.layout.canUndo()).toBe(false);
+
+    await press(note(page, D4));
+    await expect(deleteButton(page)).toHaveAttribute("aria-disabled", "false");
+    await harness.layout.select([]);
+    await expect(deleteButton(page)).toHaveAttribute("aria-disabled", "true");
+  });
+
   test("offers no undo and redo while read-only, shows the badge instead, and follows the session's flag", async ({
     page,
     harness,
@@ -158,14 +180,17 @@ test.describe("the toolbar part", () => {
     await expect(toolbar(page).getByRole("group", { name: "Zoom" })).toBeVisible();
     await expect(undoButton(page)).toBeHidden();
     await expect(redoButton(page)).toBeHidden();
+    await expect(deleteButton(page)).toBeHidden();
     await expect(toolbar(page).getByRole("group", { name: "History" })).toBeHidden();
 
     await harness.layout.setEditable(true);
     await expect(undoButton(page)).toBeVisible();
+    await expect(deleteButton(page)).toBeVisible();
     await expect(toolbar(page).getByText("Read only", { exact: true })).toBeHidden();
 
     await harness.layout.setEditable(false);
     await expect(undoButton(page)).toBeHidden();
+    await expect(deleteButton(page)).toBeHidden();
     await expect(toolbar(page).getByText("Read only", { exact: true })).toBeVisible();
   });
 
@@ -174,10 +199,12 @@ test.describe("the toolbar part", () => {
     await expect(toolbar(page).getByRole("group", { name: "历史" })).toBeVisible();
     await expect(toolbar(page).getByRole("button", { name: "撤销", exact: true })).toBeVisible();
     await expect(toolbar(page).getByRole("button", { name: "重做", exact: true })).toBeVisible();
+    await expect(toolbar(page).getByRole("button", { name: "删除", exact: true })).toBeVisible();
     await expect(toolbar(page).getByText("编曲视图", { exact: true })).toBeVisible();
 
     await harness.layout.setView({ language: "en" });
     await expect(undoButton(page)).toBeVisible();
+    await expect(deleteButton(page)).toBeVisible();
     await expect(toolbar(page).getByText("Arrangement", { exact: true })).toBeVisible();
   });
 
@@ -253,6 +280,41 @@ test.describe("deleting the selected note", () => {
       expect(await harness.layout.scoreText()).toContain("C4z4E4F4|G16|");
     });
   }
+
+  test("the Delete button does it with a tap or a click alone, and the Undo button brings the note back: no keyboard", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    const others = [C4, E4, F4, G4];
+    const before = await layoutOf(page, others);
+
+    await press(note(page, D4));
+    await press(deleteButton(page));
+
+    await expect(note(page, D4)).toHaveCount(0);
+    expect(await layoutOf(page, others)).toEqual(before);
+    expect(await harness.layout.scoreText()).toContain("C4z4E4F4|G16|");
+    await expect(deleteButton(page)).toHaveAttribute("aria-disabled", "true");
+
+    await press(undoButton(page));
+    await expect(selected(page, D4)).toBeVisible();
+    expect(await harness.layout.scoreText()).toBe(QUARTERS);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("the Delete button takes every selected note as one step", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await harness.layout.select(["Vocal:256", "Vocal:768"]);
+
+    await press(deleteButton(page));
+
+    await expect(slot(page, "vocal").getByRole("listitem")).toHaveCount(3);
+    await press(undoButton(page));
+    await expect(slot(page, "vocal").getByRole("listitem")).toHaveCount(5);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
 
   test("does nothing when no note is selected", async ({ page, harness }) => {
     await openTrack(harness);

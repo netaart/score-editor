@@ -2,6 +2,7 @@
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
+import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor } from "./i18n";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -19,22 +20,28 @@ export interface ToolbarOptions extends EditingPartOptions {
 const SVG = "http://www.w3.org/2000/svg";
 
 /**
- * An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. It is built of polylines,
- * since the reset that isolates the parts reverts every CSS property, and a path's `d` is one, where `points` is not.
+ * A 16 by 16 line drawing. It is built of polylines, since the reset that isolates the parts reverts every CSS
+ * property, and a path's `d` is one, where `points` is not; the stylesheet gives the lines their stroke.
  */
-function arrowIcon(doc: Document): SVGSVGElement {
+function lineIcon(doc: Document, polylines: ReadonlyArray<string>): SVGSVGElement {
   const icon = doc.createElementNS(SVG, "svg");
   icon.setAttribute("class", "sce-icon");
   icon.setAttribute("viewBox", "0 0 16 16");
   icon.setAttribute("aria-hidden", "true");
   icon.setAttribute("focusable", "false");
-  for (const points of ["5.5,2.5 2.5,5.5 5.5,8.5", "2.5,5.5 9.5,5.5 12.5,7.5 12.5,10.5 9.5,12.5 5,12.5"]) {
+  for (const points of polylines) {
     const line = doc.createElementNS(SVG, "polyline");
     line.setAttribute("points", points);
     icon.appendChild(line);
   }
   return icon;
 }
+
+/** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
+const ARROW = ["5.5,2.5 2.5,5.5 5.5,8.5", "2.5,5.5 9.5,5.5 12.5,7.5 12.5,10.5 9.5,12.5 5,12.5"];
+
+/** A bin: the lid and its handle, then the body. */
+const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11.2,13.5 12,4.5"];
 
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
@@ -55,11 +62,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const historyButton = (action: "undo" | "redo"): HTMLButtonElement => {
     const button = create(doc, "button", `sce-button sce-icon-button sce-${action}`, history);
     button.type = "button";
-    button.appendChild(arrowIcon(doc));
+    button.appendChild(lineIcon(doc, ARROW));
     return button;
   };
   const undo = historyButton("undo");
   const redo = historyButton("redo");
+  const remove = create(doc, "button", "sce-button sce-icon-button sce-delete", row);
+  remove.type = "button";
+  remove.appendChild(lineIcon(doc, BIN));
   create(doc, "span", "sce-spacer", row);
   const badge = create(doc, "span", "sce-badge", row);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
@@ -69,6 +79,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const { signal } = abort;
   undo.addEventListener("click", () => session.undo(), { signal });
   redo.addEventListener("click", () => session.redo(), { signal });
+  remove.addEventListener(
+    "click",
+    () => {
+      const result = handleEditingInput(session, { type: "delete" });
+      if (result.refused.length > 0) options.onRefused?.(result.refused);
+    },
+    { signal },
+  );
   installEditKeys(root, session, signal, options);
 
   /** What the last draw showed, so a change of zoom or scroll, which this part does not draw, costs nothing here. */
@@ -85,6 +103,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     for (const [button, label, keys] of [
       [undo, t.undo, "Ctrl/Cmd+Z"],
       [redo, t.redo, "Ctrl/Cmd+Shift+Z"],
+      [remove, t.delete, "Del/Backspace"],
     ] as const) {
       button.setAttribute("aria-label", label);
       button.title = `${label} (${keys})`;
@@ -95,14 +114,18 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   function draw(): void {
     if (session.view.language !== language) applyLanguage();
     const { editable } = session.view;
-    const shown = [editable, session.reading.kind === "score", session.canUndo, session.canRedo].join();
+    const readable = session.reading.kind === "score";
+    const deletable = canDeleteSelection(session);
+    const shown = [editable, readable, session.canUndo, session.canRedo, deletable].join();
     if (shown === drawn) return;
     drawn = shown;
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
-    history.hidden = !editable || session.reading.kind !== "score";
+    history.hidden = !editable || !readable;
+    remove.hidden = history.hidden;
     badge.hidden = editable;
     undo.setAttribute("aria-disabled", String(!session.canUndo));
     redo.setAttribute("aria-disabled", String(!session.canRedo));
+    remove.setAttribute("aria-disabled", String(!deletable));
   }
 
   draw();

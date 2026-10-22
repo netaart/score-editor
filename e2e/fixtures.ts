@@ -31,6 +31,7 @@ interface PageSession {
   dispatch(command: unknown): { ok: boolean; diagnostics: Array<{ code: string }> };
   undo(): boolean;
   redo(): boolean;
+  select(noteIds: string[]): void;
   setView(patch: Record<string, unknown>): void;
 }
 
@@ -164,6 +165,11 @@ export class Layout {
   /** The ids of the selected notes, as the session holds them. */
   selection() {
     return this.page.evaluate(() => [...window.harness.layout.live().selection]);
+  }
+
+  /** Selects exactly these notes through the session, as a host or a later view part would. */
+  select(noteIds: string[]) {
+    return this.page.evaluate((ids) => window.harness.layout.live().select(ids), noteIds);
   }
 
   /** The insertion point, as the session holds it. */

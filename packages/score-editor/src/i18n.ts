@@ -16,6 +16,7 @@ export interface Messages {
   history: string;
   undo: string;
   redo: string;
+  delete: string;
   bars: string;
   timeRuler: string;
   sections: string;
@@ -50,6 +51,7 @@ const en: Messages = {
   history: "History",
   undo: "Undo",
   redo: "Redo",
+  delete: "Delete",
   bars: "Bars",
   timeRuler: "Time ruler",
   sections: "Sections",
@@ -94,6 +96,7 @@ const zh: Messages = {
   history: "历史",
   undo: "撤销",
   redo: "重做",
+  delete: "删除",
   bars: "小节",
   timeRuler: "时间尺",
   sections: "段落",

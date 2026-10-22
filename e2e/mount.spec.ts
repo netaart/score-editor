@@ -1162,6 +1162,7 @@ test.describe("editing in the default editor", () => {
     return { x: 70, y: row.y + row.height / 2 - lane.y };
   }
   const redoButton = (page: Page) => page.getByRole("button", { name: "Redo", exact: true });
+  const deleteButton = (page: Page) => page.getByRole("button", { name: "Delete", exact: true });
 
   test("a click or tap selects a note, Delete turns it into a rest, and the keys and the buttons walk the history", async ({
     page,
@@ -1191,6 +1192,12 @@ test.describe("editing in the default editor", () => {
     await expect(noteNamed(page, anyD4)).toHaveCount(1);
     await press(redoButton(page));
     await expect(noteNamed(page, anyD4)).toHaveCount(0);
+    await press(undoButton(page));
+
+    // The same edit with a pointer alone: select, then the Delete button.
+    await press(noteNamed(page, anyD4));
+    await press(deleteButton(page));
+    await expect(noteNamed(page, anyD4)).toHaveCount(0);
     expect(await harness.notices()).toEqual([]);
   });
 
@@ -1212,6 +1219,7 @@ test.describe("editing in the default editor", () => {
     await harness.mount({ score: { text: QUARTERS }, editable: false });
     await expect(undoButton(page)).toBeHidden();
     await expect(redoButton(page)).toBeHidden();
+    await expect(deleteButton(page)).toBeHidden();
     await expect(page.getByText("Read only", { exact: true })).toBeVisible();
 
     await press(noteNamed(page, D4));

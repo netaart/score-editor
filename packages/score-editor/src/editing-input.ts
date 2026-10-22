@@ -24,7 +24,9 @@ export type EditingInput =
   /** A click or tap on a note. */
   | { readonly type: "click-note"; readonly noteId: string }
   /** A click or tap on empty space, at a position of the time axis in ticks (it need not be a whole number). */
-  | { readonly type: "click-empty"; readonly tick: number };
+  | { readonly type: "click-empty"; readonly tick: number }
+  /** A control that deletes, such as a toolbar button: it does what the Delete key does. */
+  | { readonly type: "delete" };
 
 /** What an input came to. */
 export interface EditingInputResult {
@@ -96,6 +98,12 @@ function deleteTool(score: Score): ScoreTool {
   };
 }
 
+/** Whether Delete has a note to act on: the session is editable and a pitched note is selected. */
+export function canDeleteSelection(session: EditingSession): boolean {
+  const score = readableScore(session);
+  return session.view.editable && score !== null && pitchedSelection(score, session.selection).length > 0;
+}
+
 /** Turns the selected notes into rests, as one edit. Nothing is handled when no selected note is pitched. */
 function deleteSelection(session: EditingSession): EditingInputResult {
   const score = readableScore(session);
@@ -143,6 +151,8 @@ export function handleEditingInput(session: EditingSession, input: EditingInput)
       return clickNote(session, input.noteId);
     case "click-empty":
       return clickEmpty(session, input.tick);
+    case "delete":
+      return deleteSelection(session);
     case "key":
       return pressKey(session, input);
   }

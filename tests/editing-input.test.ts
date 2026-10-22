@@ -179,6 +179,30 @@ A4z12|z16|`;
   });
 });
 
+describe("the delete input, which a control without a key sends", () => {
+  const press = { type: "delete" } as const;
+
+  it("does what the Delete key does: the selected note becomes a rest, in one step to undo", () => {
+    const session = open();
+    session.select(["Vocal:256"]);
+
+    expect(handleEditingInput(session, press)).toEqual({ handled: true, refused: [] });
+    expect(session.project.score).toContain("C4z4E4F4|");
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+  });
+
+  it("is not handled when no pitched note is selected, and not while the session is read-only", () => {
+    const session = open();
+    expect(handleEditingInput(session, press)).toEqual({ handled: false, refused: [] });
+
+    const readOnly = open({}, false);
+    readOnly.select(["Vocal:256"]);
+    expect(handleEditingInput(readOnly, press)).toEqual({ handled: false, refused: [] });
+    expect(readOnly.project.score).toBe(SCORE);
+  });
+});
+
 describe("the undo and redo keys", () => {
   /** A session with one applied command: the D of bar 1 is a rest. */
   function afterDelete(editable = true): EditingSession {
