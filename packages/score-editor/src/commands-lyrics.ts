@@ -1,8 +1,8 @@
 // ABOUTME: Carries lyric lines through score commands: one bar mapping per command and one remapping step for every line.
-// ABOUTME: A project without stored lyric lines is left exactly as it was, so a legacy project opens and edits unchanged.
+// ABOUTME: A legacy project's computed lines are carried too, but a command that changes no line writes nothing.
 import type { ScoreCommand } from "./commands";
 import type { ScoreDialect } from "./dialect";
-import { joinLyrics, type LyricLine, type LyricPhrase } from "./lyrics";
+import { joinLyrics, type LyricLine, type LyricPhrase, lyricLinesOf } from "./lyrics";
 import type { Score, SongProject } from "./score";
 
 interface BarPlacement {
@@ -87,21 +87,15 @@ function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPl
       if (section === undefined || bar.index < section.firstBar) {
         push(bar.index, bar.index);
       } else if (bar.index < section.firstBar + section.barCount) {
-        let mapped: number | null = null;
         if (newSection !== undefined) {
           for (let index = newSection.firstBar; index < newSection.firstBar + newSection.barCount; index += 1) {
             const candidate = after.bars[index];
-            if (
-              candidate !== undefined &&
-              candidate.start <= bar.start &&
-              bar.start < candidate.start + candidate.length
-            ) {
-              mapped = index;
-              break;
+            if (candidate === undefined) continue;
+            if (candidate.start < bar.start + bar.length && bar.start < candidate.start + candidate.length) {
+              push(bar.index, index);
             }
           }
         }
-        push(bar.index, mapped);
       } else {
         push(bar.index, bar.index + delta);
       }
@@ -207,19 +201,22 @@ function sameLines(left: ReadonlyArray<LyricLine>, right: ReadonlyArray<LyricLin
   });
 }
 
-/** Remaps and rejoins the lines of a project that stores them; a project without them is returned as it was. */
+/** Remaps a project's stored or computed lines and writes them back only when the lines or their join changed. */
 export function withRemappedLyrics(
   dialect: ScoreDialect,
   project: SongProject,
   command: ScoreCommand,
   scoreText: string,
 ): SongProject {
-  if (project.lyricLines === undefined) return { ...project, score: scoreText };
   const before = dialect.parse(project.score).score;
   const after = dialect.parse(scoreText).score;
   if (before === null || after === null) return { ...project, score: scoreText };
-  const lines = remapLyricLines(before, after, command, project.lyricLines);
-  const lyrics = joinLyrics(after, lines);
-  if (lyrics === project.lyrics && sameLines(lines, project.lyricLines)) return { ...project, score: scoreText };
-  return { ...project, score: scoreText, lyricLines: lines, lyrics };
+  const source = project.lyricLines ?? lyricLinesOf(project, before);
+  const lines = remapLyricLines(before, after, command, source);
+  const joined = joinLyrics(after, lines);
+  const linesChanged = !sameLines(lines, source);
+  const joinChanged = joined !== joinLyrics(before, source);
+  if (!linesChanged && !joinChanged) return { ...project, score: scoreText };
+  if (project.lyricLines === undefined && source.length === 0) return { ...project, score: scoreText };
+  return { ...project, score: scoreText, lyricLines: lines, lyrics: joined };
 }
