@@ -11,9 +11,11 @@
     "format": "biome format --write .",
     "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "build:skill": "node scripts/build-skill-examples.mjs",
+    "test:e2e": "pnpm build:skill && playwright test",
     "check:pack": "node scripts/check-pack.mjs",
-    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm test:e2e"
+    "check:skill": "node scripts/check-skill-exports.mjs",
+    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm check:skill && pnpm test:e2e"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",

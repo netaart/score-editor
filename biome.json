@@ -8,7 +8,8 @@
       "!.pnpm-store",
       "!.corepack",
       "!test-results",
-      "!playwright-report"
+      "!playwright-report",
+      "!e2e/page/skill"
     ]
   },
   "formatter": {

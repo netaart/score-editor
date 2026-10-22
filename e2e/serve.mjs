@@ -18,7 +18,9 @@ const types = {
 };
 const served = [
   /^\/e2e\/page\/[\w.-]+$/,
+  /^\/e2e\/page\/skill\/[\w.-]+$/,
   /^\/packages\/[\w-]+\/dist\/[\w.-]+$/,
+  /^\/packages\/score-editor\/skill\/[\w./-]+$/,
   /^\/packages\/score-dialect-song2\/tests\/(samples\/[\w-]+\.abc|vectors\.json)$/,
 ];
 
