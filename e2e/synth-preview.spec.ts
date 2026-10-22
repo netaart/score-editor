@@ -150,6 +150,7 @@ test.describe("the play control", () => {
     const button = slot(page, "synth").getByRole("button");
     await expect(button).toHaveAttribute("aria-disabled", "true");
     await expect(button).toHaveAttribute("title", "This browser can’t play the preview");
+    await expect(slot(page, "synth").locator(".sce-synth-caption")).toHaveText("This browser can’t play the preview");
 
     // The control is aria-disabled so that it stays focusable and can say why; Playwright treats that as disabled.
     await (isMobile ? button.tap({ force: true }) : button.click({ force: true }));
@@ -163,6 +164,11 @@ test.describe("the play control", () => {
     await openLayout(harness, vocalOnly("z16|"));
     await press(slot(page, "synth").getByRole("button"));
     await expect(slot(page, "synth").getByRole("status")).toHaveText("There is nothing to play from here");
+    const caption = slot(page, "synth").locator(".sce-synth-caption");
+    await expect(caption).toHaveText("There is nothing to play from here");
+    await expect(caption, "the caption comes back").toHaveText("Synthetic preview, not the final sound", {
+      timeout: 7000,
+    });
     await expect(slot(page, "synth").getByRole("button")).toHaveText("Preview");
     await expect(playhead(page)).toHaveCount(0);
   });
@@ -189,12 +195,16 @@ test.describe("without a user gesture", () => {
     await expect(page.getByRole("status").filter({ hasText: "did not allow sound" })).toHaveText(
       "The browser did not allow sound. Press Preview again.",
     );
+    await expect(page.locator(".sce-synth-caption")).toHaveText(
+      "The browser did not allow sound. Press Preview again.",
+    );
     await expect(previewButton(page)).toHaveText("Preview");
     await expect(playhead(page)).toHaveCount(0);
 
     // A real press is a gesture, and the control plays.
     await press(previewButton(page));
     await expect(previewButton(page)).toHaveText("Stop");
+    await expect(page.locator(".sce-synth-caption")).toHaveText("Synthetic preview, not the final sound");
     // One line in each of the two voice tracks of the demo score.
     await expect(playhead(page)).toHaveCount(2);
   });
@@ -273,6 +283,55 @@ test.describe("the playhead", () => {
     expect((await harness.layout.view()).scrollLeft).toBe(0);
     await press(slot(page, "synth").getByRole("button"));
     await expect.poll(async () => (await harness.layout.view()).scrollLeft, { timeout: 5000 }).toBeGreaterThan(100);
+  });
+});
+
+test.describe("stopping and following", () => {
+  test("Escape stops the preview from wherever the focus is, and does nothing when nothing plays", async ({
+    page,
+    press,
+  }) => {
+    const harness = await visit(page);
+    await openLayout(harness);
+    await page.keyboard.press("Escape");
+    await expect(playhead(page)).toHaveCount(0);
+
+    await press(slot(page, "synth").getByRole("button"));
+    await expect(playhead(page)).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(playhead(page)).toHaveCount(0);
+    await expect(slot(page, "synth").getByRole("button")).toHaveText("Preview");
+    await expect(slot(page, "synth").getByRole("status")).toHaveText("Preview stopped");
+  });
+
+  test("the page is turned a beat before the line reaches the right edge, so it never touches it", async ({
+    page,
+    press,
+  }) => {
+    const harness = await visit(page);
+    await openLayout(
+      harness,
+      vocalOnly(...Array.from({ length: 12 }, () => "C4D4E4F4|")).replace("Q:1/4=100", "Q:1/4=480"),
+    );
+    const region = slot(page, "vocal").getByRole("region", { name: "Vocal" });
+    await press(slot(page, "synth").getByRole("button"));
+    await expect(playhead(page)).toHaveCount(1);
+    // Every frame for three seconds: how close the line comes to the right edge of what the view shows.
+    const closest = await page.evaluate(async () => {
+      const view = document.querySelector('[data-slot="vocal"] [role="region"]');
+      if (!view) throw new Error("no view");
+      let nearest = Number.NEGATIVE_INFINITY;
+      const end = performance.now() + 3000;
+      while (performance.now() < end) {
+        await new Promise((next) => requestAnimationFrame(next));
+        const line = document.querySelector(".sce-playhead");
+        if (line) nearest = Math.max(nearest, line.getBoundingClientRect().right - view.getBoundingClientRect().right);
+      }
+      return nearest;
+    });
+    expect(closest, "the line stays at least a beat short of the edge").toBeLessThan(-30);
+    expect((await harness.layout.view()).scrollLeft, "and the view was turned").toBeGreaterThan(100);
+    await expect(region).toBeVisible();
   });
 });
 
