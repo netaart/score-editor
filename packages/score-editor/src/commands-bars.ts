@@ -13,7 +13,7 @@ import {
   TICKS_PER_QUARTER,
   type Truncation,
 } from "./score";
-import type { MeterRule } from "./types";
+import type { DialectConstraints, DurationSet, MeterRule } from "./types";
 
 const VOICE_NOTE_ID = /^([^:]+):(-?[0-9]+)$/;
 
@@ -120,7 +120,23 @@ function truncationFromCoverage(score: Score): Truncation | null {
   return null;
 }
 
-function fillBar(score: Score, barIndex: number, voice: string): { notes: Note[]; clearedTies: Set<string> } {
+function gcd(left: number, right: number): number {
+  let a = left;
+  let b = right;
+  while (b !== 0) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+  return a;
+}
+
+function fillBar(
+  score: Score,
+  barIndex: number,
+  voice: string,
+  durations: DurationSet,
+): { notes: Note[]; clearedTies: Set<string> } {
   const bar = score.bars[barIndex] as Bar;
   const voiceNotes = score.notes
     .filter((note) => note.voice === voice && note.bar === barIndex)
@@ -131,7 +147,20 @@ function fillBar(score: Score, barIndex: number, voice: string): { notes: Note[]
   const notes = [...score.notes];
   const clearedTies = new Set<string>();
   if (gap > 0) {
-    notes.push({ id: noteId(voice, end), voice, bar: barIndex, start: end, duration: gap, midi: null, tie: false });
+    let step = bar.length;
+    for (const note of score.notes.filter((item) => item.bar === barIndex)) step = gcd(step, note.duration);
+    step = Math.max(1, step);
+    const whole = gap / step;
+    const pieces: number[] =
+      Number.isInteger(whole) && durations.includes(whole)
+        ? [gap]
+        : Array.from({ length: Math.ceil(whole) }, () => step);
+    let at = end;
+    for (const duration of pieces) {
+      if (duration <= 0) continue;
+      notes.push({ id: noteId(voice, at), voice, bar: barIndex, start: at, duration, midi: null, tie: false });
+      at += duration;
+    }
     const before = [...notes]
       .filter((note) => note.voice === voice && note.start < end)
       .sort((left, right) => left.start - right.start);
@@ -530,7 +559,7 @@ function setSectionMeter(score: Score, sectionIndex: number, meter: Meter, rule:
   };
 }
 
-function fillTruncatedBar(score: Score): ScoreCommandResult {
+function fillTruncatedBar(score: Score, durations: DurationSet): ScoreCommandResult {
   if (score.truncation === null) return fail("no-truncation", {}, {});
   if (!score.truncation.short) {
     return fail("no-incomplete-bar", { bar: score.truncation.bar + 1 }, { bar: score.truncation.bar + 1 });
@@ -538,7 +567,7 @@ function fillTruncatedBar(score: Score): ScoreCommandResult {
   const index = score.truncation.bar;
   const bar = score.bars[index];
   if (bar === undefined) return fail("no-incomplete-bar", { bar: index + 1 }, { bar: index + 1 });
-  const filled = fillBar(score, index, score.truncation.voice);
+  const filled = fillBar(score, index, score.truncation.voice, durations);
   const bars = bar.incomplete
     ? score.bars.map((item) => (item.index === index ? { ...item, incomplete: false } : item))
     : score.bars;
@@ -602,7 +631,7 @@ export function runBarsCommand(
     | { readonly type: "setSectionMeter"; readonly section: number; readonly meter: Meter }
     | { readonly type: "fillTruncatedBar" }
     | { readonly type: "deleteTruncatedBar" },
-  meterRule: MeterRule,
+  constraints: DialectConstraints,
 ): ScoreCommandResult {
   switch (command.type) {
     case "insertBar":
@@ -610,9 +639,9 @@ export function runBarsCommand(
     case "deleteBars":
       return deleteBars(score, command.from, command.count);
     case "setSectionMeter":
-      return setSectionMeter(score, command.section, command.meter, meterRule);
+      return setSectionMeter(score, command.section, command.meter, constraints.meter);
     case "fillTruncatedBar":
-      return fillTruncatedBar(score);
+      return fillTruncatedBar(score, constraints.durations);
     case "deleteTruncatedBar":
       return deleteTruncatedBar(score);
   }

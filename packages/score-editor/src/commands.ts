@@ -3,7 +3,7 @@
 import { runBarsCommand } from "./commands-bars";
 import type { Diagnostic } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
-import type { MeterRule } from "./types";
+import type { DialectConstraints } from "./types";
 
 /** A dialect-agnostic edit of a Score. More commands join this union in later tickets. */
 export type ScoreCommand =
@@ -44,7 +44,11 @@ function toRest(score: Score, id: string): ScoreCommandResult {
 }
 
 /** Applies one score command to a model. It never writes text and never touches a DOM. */
-export function runScoreCommand(score: Score, command: ScoreCommand, meterRule: MeterRule): ScoreCommandResult {
+export function runScoreCommand(
+  score: Score,
+  command: ScoreCommand,
+  constraints: DialectConstraints,
+): ScoreCommandResult {
   switch (command.type) {
     case "toRest":
       return toRest(score, command.noteId);
@@ -53,6 +57,6 @@ export function runScoreCommand(score: Score, command: ScoreCommand, meterRule: 
     case "setSectionMeter":
     case "fillTruncatedBar":
     case "deleteTruncatedBar":
-      return runBarsCommand(score, command, meterRule);
+      return runBarsCommand(score, command, constraints);
   }
 }

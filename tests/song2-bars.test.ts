@@ -472,6 +472,24 @@ C16|D8E4z4|`);
     expect(output.truncation).toBeNull();
   });
 
+  it("fills a gap that is not one allowed duration with several rests", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+V: Vocal
+C16|C8D3`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "fillTruncatedBar" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${VOCAL_HEADER}
+K:C
+V: Vocal
+C16|C8D3zzzzz|`);
+    const output = parse(result.text);
+    check(output);
+    expect(output.truncation).toBeNull();
+  });
+
   it("deletes a Vocal-only incomplete bar and its unfinished bytes", () => {
     const result = applyScoreCommand(song2Dialect, vocalCut, { type: "deleteTruncatedBar" });
 
