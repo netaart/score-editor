@@ -53,7 +53,8 @@ interface PageLayout {
   open(options?: Record<string, unknown>): Promise<void>;
   replace(options: Record<string, unknown>): Promise<void>;
   replaceDialects(): void;
-  mountPart(name: string): void;
+  mountPart(name: string, hidden?: boolean): void;
+  setSlotHidden(name: string, hidden: boolean): void;
   destroyPart(name: string, times?: number): void;
   roots(): Record<string, string>;
   freshRoots(): Record<string, string>;
@@ -76,7 +77,7 @@ interface PageHarness {
   notices: PageNotice[];
   layout: PageLayout;
   host: {
-    addRules(kind: "important" | "hostile" | "hostile-svg"): void;
+    addRules(kind: "important" | "hostile" | "hostile-svg", inShadowRoot?: boolean): void;
     addProbe(): void;
     setColorScheme(scheme: string): void;
   };
@@ -111,6 +112,16 @@ export class Layout {
   /** Replaces the project from outside, the way a host does with new data. */
   replace(options: Record<string, unknown>) {
     return this.page.evaluate((o) => window.harness.layout.replace(o), options);
+  }
+
+  /** Mounts a part in a box that is not shown, as a host does whose tab is not the open one. */
+  mountHiddenPart(name: string) {
+    return this.page.evaluate((n) => window.harness.layout.mountPart(n, true), name);
+  }
+
+  /** Shows or hides the box a mounted part stands in. */
+  setSlotHidden(name: string, hidden: boolean) {
+    return this.page.evaluate(([n, value]) => window.harness.layout.setSlotHidden(n, value), [name, hidden] as const);
   }
 
   mountPart(...names: string[]) {
@@ -286,9 +297,12 @@ export class Harness {
     return this.page.evaluate(() => window.harness.destroy());
   }
 
-  /** Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones. */
-  addHostRules(kind: "important" | "hostile" | "hostile-svg") {
-    return this.page.evaluate((k) => window.harness.host.addRules(k), kind);
+  /**
+   * Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones; `inShadowRoot`
+   * adds them to the open shadow root the editor or the layout stands in.
+   */
+  addHostRules(kind: "important" | "hostile" | "hostile-svg", inShadowRoot = false) {
+    return this.page.evaluate(([k, inside]) => window.harness.host.addRules(k, inside), [kind, inShadowRoot] as const);
   }
 
   /** Switches the page's `color-scheme`, as a host with a dark mode does. */

@@ -1,6 +1,6 @@
 // ABOUTME: Seam 5 for the staff view, the text view, the view switch and the stale notice: parts on one session, and the default editor.
 // ABOUTME: Tests type, click and tap as a user does, and read what the session holds, in desktop and phone projects.
-import type { CDPSession, Page } from "@playwright/test";
+import type { CDPSession, Locator, Page } from "@playwright/test";
 import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
@@ -639,6 +639,8 @@ test.describe("the toolbar part with the view switch", () => {
 });
 
 const staffSlot = (page: Page) => slot(page, "staff");
+/** The root of the staff view part: in the layout's slot, or in the default editor wherever it stands. */
+const staffPart = (page: Page) => staffSlot(page).locator(".sce-part-staff");
 const staffRegion = (page: Page) => staffSlot(page).getByRole("region", { name: "Staff" });
 const drawing = (page: Page) => staffSlot(page).getByRole("img", { name: "The score drawn on a staff" });
 /** What abcjs drew, by the classes it puts on its elements: they reach through the open shadow root the drawing sits in. */
@@ -649,8 +651,8 @@ const ABCJS_URL = "**/e2e/page/vendor/abcjs.js";
 const AIRY = vocalOnly("C4D4E4F4|G4A4B4c4|C8D8|E16|", "C4D4E4F4|G4A4B4c4|");
 
 /** The colour and font abcjs's first note and first text are drawn with, as the browser computed them. */
-function drawnStyle(page: Page) {
-  return staffSlot(page)
+function drawnStyle(page: Page, part: Locator = staffPart(page)) {
+  return part
     .locator("svg")
     .first()
     .evaluate((svg) => {
@@ -669,10 +671,8 @@ function drawnStyle(page: Page) {
 }
 
 /** The text colour the part computes for its own text: what the drawing has to follow. */
-function partColour(page: Page) {
-  return staffSlot(page)
-    .locator(".sce-part-staff")
-    .evaluate((el) => getComputedStyle(el).color);
+function partColour(page: Page, part: Locator = staffPart(page)) {
+  return part.evaluate((el) => getComputedStyle(el).color);
 }
 
 test.describe("the staff view", () => {
@@ -920,6 +920,7 @@ test.describe("style isolation of the staff view", () => {
     await harness.addHostRules(HOSTILE_SVG);
     for (const shadow of [false, true]) {
       await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], shadow });
+      if (shadow) await harness.addHostRules(HOSTILE_SVG, true);
       await expect(drawnNotes(page)).toHaveCount(5);
 
       const drawn = await drawnStyle(page);
@@ -930,10 +931,45 @@ test.describe("style isolation of the staff view", () => {
     }
   });
 
-  test("is drawn under a strict style policy, where a style element that abcjs adds is blocked", async ({
+  test("is out of reach of those rules in the default editor too, with the page's rules and with the rules of a host's shadow root", async ({
     page,
     harness,
   }) => {
+    await harness.addHostRules(HOSTILE_SVG);
+    // The control: the same rules do reach an svg that stands in the page with nothing between it and them.
+    const bare = await page.evaluate(() => {
+      document.body.insertAdjacentHTML("beforeend", '<svg id="bare"><path d="M0 0L9 9"/></svg>');
+      const fill = getComputedStyle(document.querySelector("#bare path") as Element).fill;
+      document.getElementById("bare")?.remove();
+      return fill;
+    });
+    expect(bare, "the hostile rules have teeth").toBe("rgb(255, 0, 0)");
+
+    for (const shadow of [false, true]) {
+      await harness.mount({ score: { text: QUARTERS }, shadow });
+      if (shadow) await harness.addHostRules(HOSTILE_SVG, true);
+      await page.getByRole("group", { name: "View" }).getByRole("button", { name: "Staff", exact: true }).click();
+      const part = page.locator(".sce-part-staff");
+      await expect(part.locator("svg .abcjs-note")).toHaveCount(5);
+
+      const drawn = await drawnStyle(page, part);
+      expect(drawn.fill, `fill, shadow ${shadow}`).toBe(await partColour(page, part));
+      expect(drawn.font, `font, shadow ${shadow}`).not.toContain("cursive");
+      expect(drawn.width, `width, shadow ${shadow}`).toBeGreaterThan(200);
+      await harness.destroy();
+    }
+  });
+
+  test("is drawn under a strict style policy, which refused the style abcjs wrote and left the drawing as it is", async ({
+    page,
+    harness,
+  }) => {
+    await page.addInitScript(() => {
+      (window as unknown as { refused: string[] }).refused = [];
+      document.addEventListener("securitypolicyviolation", (event) =>
+        (window as unknown as { refused: string[] }).refused.push(event.effectiveDirective),
+      );
+    });
     await page.route("**/", async (route) => {
       const response = await route.fetch();
       await route.fulfill({
@@ -943,12 +979,46 @@ test.describe("style isolation of the staff view", () => {
     });
     await page.goto("/");
 
-    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    const refusedSoFar = () => page.evaluate(() => (window as unknown as { refused: string[] }).refused);
+
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["vocal"] });
+    await expect(vocalNote(page, D4)).toBeVisible();
+    expect(await refusedSoFar(), "the parts other than the staff write nothing the policy refuses").toEqual([]);
+
+    await harness.layout.mountPart("staff");
 
     await expect(drawnNotes(page)).toHaveCount(5);
     const drawn = await drawnStyle(page);
     expect(drawn.fill).toBe(await partColour(page));
     expect(drawn.width).toBeGreaterThan(200);
+    const refused = await refusedSoFar();
+    expect(refused.length, "the policy refused a style element abcjs added").toBeGreaterThan(0);
+    expect(new Set(refused)).toEqual(new Set(["style-src-elem"]));
+  });
+
+  test("waits in a box that is not shown, draws without a fault once it is, and keeps its drawing while it is hidden again", async ({
+    page,
+    harness,
+  }) => {
+    const faults: string[] = [];
+    page.on("pageerror", (error) => faults.push(error.message));
+    const arrived = page.waitForResponse(ABCJS_URL);
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["vocal"] });
+    await harness.layout.mountHiddenPart("staff");
+    await arrived;
+    await expect(drawnNotes(page)).toHaveCount(0);
+
+    await harness.layout.setSlotHidden("staff", false);
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    await harness.layout.setSlotHidden("staff", true);
+    await harness.layout.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await expect(vocalNote(page, D4)).toHaveCount(0);
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    await harness.layout.setSlotHidden("staff", false);
+    await expect(drawnNotes(page)).toHaveCount(4);
+    expect(faults).toEqual([]);
   });
 
   test("puts no svg and no style element into the page itself, and leaves the page as it was once the layout is closed", async ({

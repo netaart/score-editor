@@ -216,13 +216,18 @@ const layout = {
   replaceDialects() {
     layout.session.replaceDialects(createDialectRegistry([song2Dialect]));
   },
-  /** Mounts one more part on the open session, as a host does that adds a view later. */
-  mountPart(name) {
+  /** Mounts one more part on the open session, as a host does that adds a view later; `hidden` mounts it in a slot that is not shown. */
+  mountPart(name, hidden = false) {
     if (!layout.slots[name]) {
       const container = layout.host.shadowRoot ?? layout.host;
       layout.slots[name] = buildSlots(container, [name])[name];
     }
+    layout.slots[name].closest(".layout-card").style.display = hidden ? "none" : "";
     layout.parts[name] = PART_FACTORIES[name](layout.slots[name], layout.session);
+  },
+  /** Shows or hides the box a mounted part stands in, as a host with tabs does. */
+  setSlotHidden(name, hidden) {
+    layout.slots[name].closest(".layout-card").style.display = hidden ? "none" : "";
   },
   /** Destroys one part, `times` times over: a second destroy must be harmless. */
   destroyPart(name, times = 1) {
@@ -292,10 +297,11 @@ const HOST_RULES = {
 
 /** Things a host page does to the document around the editor and its parts. */
 const hostPage = {
-  addRules(kind) {
+  /** `inShadowRoot` puts the rules inside the open shadow root the editor or the layout was mounted in, instead of in the page. */
+  addRules(kind, inShadowRoot = false) {
     const rules = document.createElement("style");
     rules.textContent = HOST_RULES[kind];
-    document.head.append(rules);
+    (inShadowRoot ? (layout.shadowRoot ?? window.harness.shadowRoot) : document.head).append(rules);
   },
   setColorScheme(scheme) {
     document.documentElement.style.colorScheme = scheme;
