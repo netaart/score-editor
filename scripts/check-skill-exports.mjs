@@ -115,8 +115,8 @@ const ownerGroups = {
     "schedulePreview",
     "PreviewSchedule",
     "PreviewEvent",
-    "PreviewNote",
-    "PreviewChord",
+    "PreviewNoteEvent",
+    "PreviewChordEvent",
   ],
   "references/editing-session.md": [
     "createEditingSession",

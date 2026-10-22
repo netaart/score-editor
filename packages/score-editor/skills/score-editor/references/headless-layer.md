@@ -100,16 +100,16 @@ browser player and the playhead are in [view-parts.md](view-parts.md#the-synth-p
 
 ```ts
 import { schedulePreview } from "@neta-art/score-editor";
-import type { PreviewChord, PreviewEvent, PreviewNote, PreviewSchedule } from "@neta-art/score-editor";
+import type { PreviewChordEvent, PreviewEvent, PreviewNoteEvent, PreviewSchedule } from "@neta-art/score-editor";
 
 const { score } = song2Dialect.parse(project.score);
 if (score) {
   const schedule: PreviewSchedule = schedulePreview(score, 512); // from tick 512, the third beat of a 4/4 bar
   for (const event of schedule.events satisfies ReadonlyArray<PreviewEvent>) {
     if (event.kind === "note") {
-      const note: PreviewNote = event; // { voice, midi, at, length }, seconds from the start
+      const note: PreviewNoteEvent = event; // { voice, midi, at, length }, seconds from the start
     } else {
-      const chord: PreviewChord = event; // { name, midis (bass first), at, length }
+      const chord: PreviewChordEvent = event; // { name, midis (bass first), at, length }
     }
   }
   console.log(schedule.length, "seconds; a tick lasts", schedule.secondsPerTick);

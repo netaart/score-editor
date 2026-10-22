@@ -131,6 +131,6 @@ change. The tests in the repository check that the list stays complete.
 | `PreviewStart` | What `start()` resolves: `"started"`, `"nothing-to-play"`, `"unsupported"`, `"blocked"` or `"cancelled"`. |
 | `PreviewNoteOptions` | `{ duration? }` in seconds for `previewNote`. |
 | `PreviewSchedule` | `{ events, fromTick, secondsPerTick, length }`. |
-| `PreviewEvent` | A `PreviewNote` or a `PreviewChord`. |
-| `PreviewNote` | `{ kind: "note", voice, midi, at, length }`. |
-| `PreviewChord` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |
+| `PreviewEvent` | A `PreviewNoteEvent` or a `PreviewChordEvent`. |
+| `PreviewNoteEvent` | `{ kind: "note", voice, midi, at, length }`. |
+| `PreviewChordEvent` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |

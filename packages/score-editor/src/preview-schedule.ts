@@ -4,7 +4,7 @@ import { notesByVoice, tieJoins } from "./arrangement";
 import type { Score } from "./score";
 
 /** One note to sound: `at` seconds after the start, for `length` seconds. */
-export interface PreviewNote {
+export interface PreviewNoteEvent {
   readonly kind: "note";
   readonly voice: string;
   readonly midi: number;
@@ -13,7 +13,7 @@ export interface PreviewNote {
 }
 
 /** One chord to sound: its notes together, from `at` seconds after the start, for `length` seconds. */
-export interface PreviewChord {
+export interface PreviewChordEvent {
   readonly kind: "chord";
   /** The name as the score writes it. */
   readonly name: string;
@@ -23,7 +23,7 @@ export interface PreviewChord {
   readonly length: number;
 }
 
-export type PreviewEvent = PreviewNote | PreviewChord;
+export type PreviewEvent = PreviewNoteEvent | PreviewChordEvent;
 
 /** What a preview plays: the events in time order, and how long it lasts. */
 export interface PreviewSchedule {
