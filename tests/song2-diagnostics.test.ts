@@ -63,6 +63,26 @@ describe("diagnostics", () => {
     }
   });
 
+  it("tells a creator a change could not be written, without naming a field of the score model", () => {
+    const fields = ["bars", "notes", "tempo", "voices", "keys", "sections", "chords", "truncation", "hasChords"];
+    for (const language of ["zh", "en"] as const) {
+      const plain = formatDiagnostic({ code: "write-mismatch", params: {}, at: {} }, language);
+      for (const field of fields) {
+        const diagnostic = { code: "write-mismatch", params: { field }, at: {} } as const;
+        const text = formatDiagnostic(diagnostic, language);
+        expect(text, `${language} ${field}`).toBe(plain);
+        expect(text).not.toContain(field);
+        expect(diagnostic.params.field).toBe(field);
+      }
+    }
+    expect(formatDiagnostic({ code: "write-mismatch", params: { field: "bars" }, at: {} }, "en")).toBe(
+      "This change can't be written into the score safely, so the score was left as it was.",
+    );
+    expect(formatDiagnostic({ code: "write-mismatch", params: { field: "bars" }, at: {} }, "zh")).toBe(
+      "这个改动没法安全地写进乐谱，乐谱保持原样。",
+    );
+  });
+
   it("fills parameters and puts the 1-based bar in both languages", () => {
     const diagnostic = {
       code: "bar-length",

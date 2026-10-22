@@ -296,18 +296,13 @@ function chineseNotANote(params: DiagnosticParams): string {
   return `这个事件${quoted(value(params, "noteId"))}是休止符，不是音符。`;
 }
 
-function englishWriteMismatch(params: DiagnosticParams): string {
-  const field = value(params, "field");
-  return field === ""
-    ? "The written score does not read back the same."
-    : `The written score does not read back the same in ${field}.`;
+/** The model's field that differed stays in `params` for hosts and logs; a creator is told only what it means. */
+function englishWriteMismatch(): string {
+  return "This change can't be written into the score safely, so the score was left as it was.";
 }
 
-function chineseWriteMismatch(params: DiagnosticParams): string {
-  const field = value(params, "field");
-  return field === ""
-    ? "写回后的乐谱读回来和改动后的乐谱不一致。"
-    : `写回后的乐谱读回来和改动后的乐谱不一致，${field} 字段不同。`;
+function chineseWriteMismatch(): string {
+  return "这个改动没法安全地写进乐谱，乐谱保持原样。";
 }
 
 function englishNoDialect(params: DiagnosticParams): string {
