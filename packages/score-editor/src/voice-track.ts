@@ -17,6 +17,7 @@ import { create } from "./dom";
 import { handleEditingInput } from "./editing-input";
 import type { Messages } from "./i18n";
 import { createInsertionPointLine, type InsertionPointLine } from "./insertion-point";
+import { installLanePointer } from "./lane-pointer";
 import { mountNoteFocus, type NoteFocus } from "./note-focus";
 import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from "./playhead";
 import { previewPlayer } from "./preview-player";
@@ -30,15 +31,15 @@ export interface VoiceTrackOptions extends AxisPartOptions {
   voice: string;
 }
 
-/** A press that moves farther than this, in pixels, is a drag or a scroll and not a click or a tap. */
-const TAP_SLOP = 6;
-
 /** What the track drew for the current score, kept so a change of selection touches only the notes it concerns. */
 interface Drawn {
   readonly score: Score;
   readonly t: Messages;
   readonly lane: HTMLElement;
   readonly ticks: number;
+  readonly rows: number;
+  /** The pitch of the first row, which is the top one. */
+  readonly top: number;
   readonly joins: ReadonlySet<string>;
   readonly notes: ReadonlyArray<Note>;
   readonly blocks: Map<string, HTMLElement>;
@@ -59,7 +60,8 @@ function labelOf(drawn: Pick<Drawn, "score" | "t" | "joins">, note: Note, select
  * Mounts one voice's track on `el`. It draws from the session's score and follows its zoom, scroll and language. A
  * track of its own scrolls in time with the session's scroll; the default editor scrolls its tracks together. While the
  * session is editable a click or tap on a note selects it (a tie chain as a whole), a click or tap on empty space
- * drops the insertion point, and both are drawn.
+ * drops the insertion point, and both are drawn; Shift, a box and a touch and hold select several notes (see
+ * `installLanePointer`).
  */
 export function mountVoiceTrack(el: HTMLElement, session: EditingSession, options: VoiceTrackOptions): ViewPart {
   const { voice } = options;
@@ -105,27 +107,6 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     noteFocus?.sync(editable, selection);
   }
 
-  /** A click or tap that landed inside the track: on a note, or else on the lane at some position in time. */
-  function press(event: PointerEvent): void {
-    if (!drawn || !(event.target instanceof Element)) return;
-    const block = event.target.closest(".sce-note");
-    const noteId = block ? drawn.owners.get(block) : undefined;
-    if (noteId !== undefined) {
-      const { handled } = handleEditingInput(session, { type: "click-note", noteId });
-      // A mouse press has focused the note by now. A touch or pen release comes before the browser moves the focus, so
-      // moving it from here would draw the keyboard ring on a tap; the browser focuses the note next, without the ring.
-      if (handled && event.pointerType === "mouse") noteFocus?.focus(noteId);
-      return;
-    }
-    if (!event.target.closest(".sce-lane")) return;
-    const area = drawn.lane.getBoundingClientRect();
-    if (!(area.width > 0)) return;
-    handleEditingInput(session, {
-      type: "click-empty",
-      tick: ((event.clientX - area.left) / area.width) * drawn.ticks,
-    });
-  }
-
   const part = mountAxisPart(
     el,
     session,
@@ -135,9 +116,10 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       region: () => voice,
       attach(own, signal, live) {
         root = own;
-        const focus = mountNoteFocus(own, session, signal, (noteId) =>
-          handleEditingInput(session, { type: "click-note", noteId }),
-        );
+        const focus = mountNoteFocus(own, session, signal, {
+          select: (noteId) => handleEditingInput(session, { type: "click-note", noteId }),
+          toggle: (noteId) => handleEditingInput(session, { type: "toggle-note", noteId }),
+        });
         noteFocus = focus;
         announceVoice(session, voice, live, signal, () => focus.stepping);
         const player = previewPlayer(session);
@@ -148,33 +130,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         });
         signal.addEventListener("abort", unsubscribePlayer, { once: true });
         own.setAttribute("data-editable", String(session.view.editable));
-        let down: { id: number; x: number; y: number } | null = null;
-        own.addEventListener(
-          "pointerdown",
-          (event) => {
-            const primary = event.isPrimary && (event.pointerType !== "mouse" || event.button === 0);
-            down = primary ? { id: event.pointerId, x: event.clientX, y: event.clientY } : null;
-          },
-          { signal },
-        );
-        own.addEventListener(
-          "pointercancel",
-          () => {
-            down = null;
-          },
-          { signal },
-        );
-        own.addEventListener(
-          "pointerup",
-          (event) => {
-            const start = down;
-            down = null;
-            if (!start || start.id !== event.pointerId) return;
-            if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP) return;
-            press(event);
-          },
-          { signal },
-        );
+        installLanePointer(own, session, signal, { lane: () => drawn, focus: (noteId) => focus.focus(noteId) });
       },
       refresh,
       build(canvas, score, t): BuiltAxis | null {
@@ -218,6 +174,8 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           t,
           lane,
           ticks: gridTicks(score),
+          rows: range.hi - range.lo,
+          top: range.hi - 1,
           joins,
           notes,
           blocks: new Map(),

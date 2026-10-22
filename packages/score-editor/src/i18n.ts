@@ -18,6 +18,10 @@ export interface Messages {
   undo: string;
   redo: string;
   delete: string;
+  select: string;
+  selectAll: string;
+  selectInvert: string;
+  selectClear: string;
   bars: string;
   timeRuler: string;
   sections: string;
@@ -76,7 +80,7 @@ const en: Messages = {
   title: "Arrangement",
   hint: "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel.",
   hintEditing:
-    "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel. Click or tap a note to select it, or press Tab to reach the notes, then Left and Right to step from note to note, selecting each, and Enter or Space to select the one you are on. Press Delete, Backspace or the Delete button to turn the selected notes into rests. Click or tap empty space to set the insertion point, then move it with Left, Right, Home and End. Ctrl and Z undoes, Ctrl and Y redoes.",
+    "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel. Click or tap a note to select it, or press Tab to reach the notes, then Left and Right to step from note to note, selecting each, and Enter or Space to select the one you are on. Shift-click or Shift-tap adds a note to the selection or takes it out. Drag across empty space to select the notes in a box. On a touch screen, touch and hold a note to add it or take it out, or touch and hold empty space and then drag to draw the box. Ctrl and A selects all, Ctrl and Shift and A selects the others instead, and Escape clears the selection. To pick notes one by one from the keyboard, Ctrl and Left, Right, Home or End move from note to note without selecting, and Shift and Space adds the note you are on or takes it out. Press Delete, Backspace or the Delete button to turn the selected notes into rests. Click or tap empty space to set the insertion point, then move it with Left, Right, Home and End. Ctrl and Z undoes, Ctrl and Y redoes.",
   zoom: "Zoom",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
@@ -86,6 +90,10 @@ const en: Messages = {
   undo: "Undo",
   redo: "Redo",
   delete: "Delete",
+  select: "Select",
+  selectAll: "Select all",
+  selectInvert: "Invert selection",
+  selectClear: "Clear selection",
   bars: "Bars",
   timeRuler: "Time ruler",
   sections: "Sections",
@@ -150,7 +158,7 @@ const zh: Messages = {
   title: "编曲视图",
   hint: "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。",
   hintEditing:
-    "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。点击或轻点音符来选中它，也可以按 Tab 到达音符，再用左、右键在音符之间逐个移动并选中，用 Enter 或空格选中当前所在的音符。按 Delete、Backspace 或删除按钮把选中的音符变成休止符。点击或轻点空白处来放置插入点，再用左、右、Home、End 键移动。Ctrl 加 Z 撤销，Ctrl 加 Y 重做。",
+    "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。点击或轻点音符来选中它，也可以按 Tab 到达音符，再用左、右键在音符之间逐个移动并选中，用 Enter 或空格选中当前所在的音符。按住 Shift 点击或轻点音符，可把它加进选中或移出选中；在空白处拖动，可框选框里的音符；在触屏上，长按音符可加进或移出选中，长按空白处再拖动可画出选框。Ctrl 加 A 全选，Ctrl 加 Shift 加 A 反选，Esc 取消选中。用键盘逐个挑选时，Ctrl 加左、右、Home 或 End 在音符之间移动但不改变选中，Shift 加空格把当前音符加进或移出选中。按 Delete、Backspace 或删除按钮把选中的音符变成休止符。点击或轻点空白处来放置插入点，再用左、右、Home、End 键移动。Ctrl 加 Z 撤销，Ctrl 加 Y 重做。",
   zoom: "缩放",
   zoomIn: "放大",
   zoomOut: "缩小",
@@ -160,6 +168,10 @@ const zh: Messages = {
   undo: "撤销",
   redo: "重做",
   delete: "删除",
+  select: "选择",
+  selectAll: "全选",
+  selectInvert: "反选",
+  selectClear: "取消选中",
   bars: "小节",
   timeRuler: "时间尺",
   sections: "段落",

@@ -1,6 +1,6 @@
 // ABOUTME: Playwright fixtures of seam 5: a harness that drives the test page, a press that taps or clicks, and real touch input.
 // ABOUTME: Tests talk to the page only through window.harness and through what a user can see and do.
-import { test as base, type Locator, type Page } from "@playwright/test";
+import { test as base, type CDPSession, type Locator, type Page } from "@playwright/test";
 
 export interface Point {
   x: number;
@@ -73,9 +73,17 @@ export interface PageNotice {
   message: string;
 }
 
+/** What the helpers below have the page keep for a test to read: stand-ins and listeners they install themselves. */
+interface PageProbes {
+  vibrations: unknown[];
+  pointerId: number | null;
+  keysSeen: boolean[];
+}
+
 interface PageHarness {
   stage: HTMLElement;
   notices: PageNotice[];
+  probes?: Partial<PageProbes>;
   layout: PageLayout;
   host: {
     addRules(kind: "important" | "hostile" | "hostile-svg", inShadowRoot?: boolean): void;
@@ -342,6 +350,108 @@ export class Harness {
   }
 
   /**
+   * Stands in for the device's buzz and keeps what the page asked of it. A browser buzzes only for a page that has been
+   * touched, so the test touches the page first. Gives back a way to read the patterns asked for so far.
+   */
+  async recordVibrations(): Promise<() => Promise<unknown[]>> {
+    await this.page.evaluate(() => {
+      const asked: unknown[] = [];
+      window.harness.probes ??= {};
+      window.harness.probes.vibrations = asked;
+      Object.assign(navigator, {
+        vibrate: (pattern: unknown) => {
+          asked.push(pattern);
+          return true;
+        },
+      });
+    });
+    return () => this.page.evaluate(() => window.harness.probes?.vibrations?.slice() ?? []);
+  }
+
+  /**
+   * Keeps the id of the last pointer that went down, so a test can cancel it the way a browser does when it takes a
+   * touch for a gesture of its own. `cancel` sends the `pointercancel` to `target`, which the pointer is over.
+   */
+  async watchPointer(): Promise<{ cancel(target: Locator): Promise<void> }> {
+    await this.page.evaluate(() => {
+      window.harness.probes ??= {};
+      const probes = window.harness.probes;
+      addEventListener("pointerdown", (event) => (probes.pointerId = event.pointerId), true);
+    });
+    return {
+      cancel: (target) =>
+        target.evaluate((el) => {
+          const pointerId = window.harness.probes?.pointerId ?? -1;
+          el.dispatchEvent(new PointerEvent("pointercancel", { pointerId, bubbles: true }));
+        }),
+    };
+  }
+
+  /** Sends `blur` to the window, as a switch to another window does. */
+  loseWindowFocus() {
+    return this.page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  }
+
+  /** Whether the browser would open its own menu on `target`: false when the page called `preventDefault` on it. */
+  contextMenuOpensOn(target: Locator): Promise<boolean> {
+    return target.evaluate((el) =>
+      el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })),
+    );
+  }
+
+  /**
+   * Listens on the document, as a host does, for presses of `key`. Gives back a way to read, for each press so far,
+   * whether the press had been handled (`defaultPrevented`) by the time it reached the document.
+   */
+  async watchKey(key: string): Promise<() => Promise<boolean[]>> {
+    await this.page.evaluate((watched) => {
+      const seen: boolean[] = [];
+      window.harness.probes ??= {};
+      window.harness.probes.keysSeen = seen;
+      document.addEventListener("keydown", (event) => {
+        if (event.key === watched) seen.push(event.defaultPrevented);
+      });
+    }, key);
+    return () => this.page.evaluate(() => window.harness.probes?.keysSeen?.slice() ?? []);
+  }
+
+  /** The text the page has selected, as the browser's own select all leaves it. */
+  hostSelection() {
+    return this.page.evaluate(() => window.getSelection()?.toString() ?? "");
+  }
+
+  clearHostSelection() {
+    return this.page.evaluate(() => window.getSelection()?.removeAllRanges());
+  }
+
+  /** How far `target` has scrolled. */
+  scrollOf(target: Locator) {
+    return target.evaluate((el) => ({ left: el.scrollLeft, top: el.scrollTop }));
+  }
+
+  /**
+   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` or
+   * inside it; null when none is. A part may pin a header over `target`, so the first free spot is found by looking.
+   */
+  firstYOn(target: Locator, x: number, from: number, until: number) {
+    return target.evaluate(
+      (el, { at, start, end }) => {
+        for (let y = start; y < end; y += 4) {
+          const top = document.elementFromPoint(at, y);
+          if (top && el.contains(top)) return y;
+        }
+        return null;
+      },
+      { at: x, start: from, end: until },
+    );
+  }
+
+  /** A finger to put down, slide and lift by hand; close it when the test is done with it. */
+  finger(options: { shift?: boolean } = {}) {
+    return Finger.open(this.page, options);
+  }
+
+  /**
    * A one-finger gesture from `from` to `to`, sent as real touch input so the browser decides scroll or not. The
    * finger rests before it lifts: lifting at speed starts a fling, and the next tap would only stop that.
    */
@@ -359,6 +469,76 @@ export class Harness {
     await this.page.waitForTimeout(150);
     await touch("touchEnd");
     await cdp.detach();
+  }
+}
+
+/** One finger sent as real touch input, a step at a time, so a test can look at the page between the steps. */
+export class Finger {
+  private at: Point | null = null;
+
+  private constructor(
+    private readonly page: Page,
+    private readonly cdp: CDPSession,
+    private readonly modifiers: number,
+  ) {}
+
+  /** `shift` holds Shift on a keyboard that is attached to the touch screen, for the whole life of the finger. */
+  static async open(page: Page, options: { shift?: boolean } = {}) {
+    return new Finger(page, await page.context().newCDPSession(page), options.shift ? 8 : 0);
+  }
+
+  private send(type: "touchStart" | "touchMove" | "touchEnd", point?: Point) {
+    return this.cdp.send("Input.dispatchTouchEvent", {
+      type,
+      modifiers: this.modifiers,
+      touchPoints: point ? [{ x: point.x, y: point.y, id: 1 }] : [],
+    });
+  }
+
+  /** Puts the finger down at `point`, and keeps it there for `holdMs` before it does anything else. */
+  async down(point: Point, holdMs = 0) {
+    this.at = point;
+    await this.send("touchStart", point);
+    if (holdMs > 0) await this.page.waitForTimeout(holdMs);
+  }
+
+  /** Slides the finger to `point` in a few steps, as a finger does. */
+  async move(point: Point, steps = 8) {
+    const from = this.at;
+    if (!from) throw new Error("the finger is not down");
+    for (let step = 1; step <= steps; step++) {
+      await this.send("touchMove", {
+        x: from.x + ((point.x - from.x) * step) / steps,
+        y: from.y + ((point.y - from.y) * step) / steps,
+      });
+      await this.page.waitForTimeout(16);
+    }
+    this.at = point;
+  }
+
+  /** Puts a second finger down at `point`, while the first stays where it is. */
+  async addSecond(point: Point) {
+    const first = this.at;
+    if (!first) throw new Error("the finger is not down");
+    await this.cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      modifiers: this.modifiers,
+      touchPoints: [
+        { x: first.x, y: first.y, id: 1 },
+        { x: point.x, y: point.y, id: 2 },
+      ],
+    });
+  }
+
+  /** Rests, then lifts: lifting at speed would start a fling. */
+  async up() {
+    await this.page.waitForTimeout(100);
+    await this.send("touchEnd");
+    this.at = null;
+  }
+
+  async close() {
+    await this.cdp.detach();
   }
 }
 

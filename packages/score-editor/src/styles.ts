@@ -1,6 +1,7 @@
 // ABOUTME: The stylesheet of the editor and its view parts as a string, injected by mount() and by each part, and removed again by destroy().
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
+import { boxCss } from "./box-styles";
 import { TICKS_PER_QUARTER } from "./score";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
@@ -244,7 +245,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root .sce-zoom-value::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -252,6 +253,11 @@ const css = `
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: rotate(45deg);
+}
+/* The Select button is a word, and is trimmed a little so that a phone's toolbar keeps its controls in reach without scrolling. */
+.sce-root .sce-select-button {
+  gap: 4px;
+  padding: 0 8px;
 }
 /* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
 .sce-root .sce-step {
@@ -638,7 +644,8 @@ ${labelThinning()}
  * A selected note keeps its box and thickens its border to 2px in the text colour, so shape and weight carry the
  * state, not hue, and nothing moves. It comes before the tie rules, which take the border off a joined side.
  */
-.sce-root .sce-note[data-selected] {
+.sce-root .sce-note[data-selected],
+.sce-root .sce-note[data-boxed] {
   border-width: 2px;
   border-color: var(--sce-_text);
 }
@@ -734,6 +741,13 @@ ${labelThinning()}
 }
 .sce-root .sce-menu-item:hover {
   background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
+}
+.sce-root .sce-menu-item[aria-disabled="true"] {
+  color: var(--sce-_muted);
+  cursor: default;
+}
+.sce-root .sce-menu-item[aria-disabled="true"]:hover {
+  background: transparent;
 }
 .sce-root .sce-menu-rule {
   height: 1px;
@@ -1019,7 +1033,7 @@ ${labelThinning()}
   background: linear-gradient(to right, var(--sce-_bg) 0 1px, var(--sce-_text) 1px 2px, var(--sce-_bg) 2px 3px);
   pointer-events: none;
 }
-`;
+${boxCss}`;
 
 interface Injection {
   remove(): void;

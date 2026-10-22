@@ -99,7 +99,7 @@ async function expectInStep(page: Page, harness: Harness, names: string[]) {
 }
 
 /** Presses Tab until `target` has the focus, as a keyboard user gets to a part. */
-async function tabTo(page: Page, target: Locator, limit = 12) {
+async function tabTo(page: Page, target: Locator, limit = 16) {
   for (let presses = 0; presses < limit; presses++) {
     await page.keyboard.press("Tab");
     if (await target.evaluate((el) => el === el.ownerDocument.activeElement)) return;
