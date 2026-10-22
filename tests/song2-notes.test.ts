@@ -290,6 +290,15 @@ describe("resizeNotes on a hand-worked score", () => {
     });
   });
 
+  it("splits a note that now crosses a mid-bar key change there and ties the pieces", () => {
+    // C runs from 0 to 768, over the inline [K:G] at 512: it is C8 in C tied to C4 in G. D's start is covered.
+    const text = scoreOf("C8[K:G]D8|G8D8|");
+    expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:0"], "end", 256, 16))).toEqual({
+      ok: true,
+      text: scoreOf("C8-[K:G]C4z4|G8D8|"),
+    });
+  });
+
   it("shortens a tie chain to a new end when the middle segment is named", () => {
     const text = scoreOf("C8-C8|z16|");
     expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:512"], "end", -256, 4))).toEqual({
@@ -468,7 +477,7 @@ function gridFor(score: Score): { value: GridValue; dotted: boolean } | null {
  * bars keep their bytes and untouched notes their facts, the voice stays one note at a time, and the target reaches the
  * place the grid gives it.
  */
-function exercise(label: string, text: string, command: ScoreCommand, target: ScoreNote, voice: string): void {
+function exercise(label: string, text: string, command: ScoreCommand, target: ScoreNote, voice: string): boolean {
   const input = parse(text);
   const chain = chainAround(input, target.id);
   const first = chain[0] as ScoreNote;
@@ -494,7 +503,7 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
   if (!result.ok) {
     expect(REFUSALS.has(result.diagnostic.code), `${label}: refusal ${result.diagnostic.code}`).toBe(true);
     expectUnchanged(text, command);
-    return;
+    return false;
   }
 
   const output = parse(result.text);
@@ -532,6 +541,22 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
 
   const before = splitBars(text);
   const after = splitBars(result.text);
+  // One Z, Z2, Z3 or Z4 writes several bars; a rewrite of one bar rewrites the whole run, so a touched bar touches
+  // every bar that run carries.
+  const wholeRestRuns: string[][] = [];
+  for (const [key, piece] of before.pieces) {
+    const run = /^Z([234])$/.exec(piece.trim());
+    if (run === null) continue;
+    const [runVoice = "", barText = ""] = key.split(":");
+    const first = Number(barText);
+    wholeRestRuns.push(
+      Array.from({ length: Number(run[1]) }, (_item, offset) => `${runVoice}:${first + offset}`),
+    );
+  }
+  for (const run of wholeRestRuns) {
+    if (!run.some((key) => touchedBars.has(key))) continue;
+    for (const key of run) touchedBars.add(key);
+  }
   for (const [key, piece] of before.pieces) {
     if (touchedBars.has(key)) continue;
     expect(after.pieces.get(key), `${label}: untouched bar ${key}`).toBe(piece);
@@ -568,7 +593,7 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
   const reached = chainFrom(output, voice, newStart);
   const reachedFirst = reached[0];
   expect(reachedFirst, `${label}: the target starts at ${newStart}`).toBeDefined();
-  if (reachedFirst === undefined) return;
+  if (reachedFirst === undefined) return false;
   expect(reachedFirst.midi, `${label}: the target pitch`).toBe(
     target.midi === null ? null : target.midi + (isMove ? command.semitones : 0),
   );
@@ -578,25 +603,51 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
     const movedEdge = command.edge === "start" ? newStart : newStart + lengthOf(reached);
     expect(movedEdge % step, `${label}: the moved edge is on the grid`).toBe(0);
   }
+  return true;
 }
 
-function exerciseAll(label: string, text: string): void {
+function exerciseAll(label: string, text: string, requireSuccess: boolean): void {
   const input = parse(text);
   const grid = gridFor(input);
   if (grid === null) return;
+  let succeeded = 0;
   for (const note of spread(input)) {
     const target = input.notes.find((candidate) => candidate.id === note);
     if (target === undefined) continue;
     const step = gridStep(grid.value, false);
-    exercise(`${label}: move ${note}`, text, move([note], step, 1, grid.value), target, target.voice);
-    exercise(`${label}: resize ${note}`, text, resize([note], "end", step, grid.value), target, target.voice);
+    if (exercise(`${label}: move ${note}`, text, move([note], step, 1, grid.value), target, target.voice)) {
+      succeeded += 1;
+    }
+    if (exercise(`${label}: resize ${note}`, text, resize([note], "end", step, grid.value), target, target.voice)) {
+      succeeded += 1;
+    }
   }
+  if (requireSuccess) expect(succeeded, `${label}: at least one target was moved or resized`).toBeGreaterThan(0);
 }
 
 describe("note commands on every sample", () => {
   for (const fact of facts) {
     it(`${fact.file}`, () => {
-      exerciseAll(fact.file, readFileSync(new URL(`samples/${fact.file}`, directory), "utf8"));
+      exerciseAll(fact.file, readFileSync(new URL(`samples/${fact.file}`, directory), "utf8"), true);
+    });
+  }
+
+  for (const fact of facts) {
+    it(`${fact.file}: moves the first pitched note`, () => {
+      const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
+      const input = parse(text);
+      const note = input.notes.find((candidate) => candidate.midi !== null);
+      const grid = gridFor(input);
+      expect(note, `${fact.file}: a pitched note`).toBeDefined();
+      expect(grid, `${fact.file}: an offered grid`).not.toBeNull();
+      if (note === undefined || grid === null) return;
+      const result = applyScoreCommand(
+        song2Dialect,
+        text,
+        move([note.id], gridStep(grid.value, false), 1, grid.value),
+      );
+      expect(result.ok, `${fact.file}: ${result.ok ? "" : result.diagnostic.code}`).toBe(true);
+      if (result.ok) expect(song2Dialect.check(parse(result.text)), `${fact.file}: check`).toEqual([]);
     });
   }
 });
@@ -605,7 +656,7 @@ describe("note commands on every accepted vector with notes", () => {
   for (const vector of vectors) {
     if (vector.expect !== "accept" || vector.notes === undefined) continue;
     it(`${vector.id}`, () => {
-      exerciseAll(vector.id, vector.text);
+      exerciseAll(vector.id, vector.text, false);
     });
   }
 

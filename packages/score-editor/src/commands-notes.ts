@@ -3,7 +3,7 @@
 import { positionOf } from "./arrangement";
 import { commandRefusal } from "./command-refusal";
 import type { ScoreCommandResult } from "./commands";
-import { splitLength } from "./commands-shared";
+import { orderNotes, splitLength } from "./commands-shared";
 import type { DiagnosticAt } from "./diagnostics";
 import { type Chord, type Note, noteId, type Score, TICKS_PER_QUARTER } from "./score";
 import type { DialectConstraints, DurationSet } from "./types";
@@ -198,18 +198,25 @@ function restPieces(
   return pieces;
 }
 
-/** How far a voice's material reaches in each bar: a complete bar's end, or the cut's last finished token. */
+/**
+ * How far a voice's material reaches in each bar: a complete bar's end, or the last finished token of a bar where
+ * the voice is cut. A bar with no material for that voice has no entry, so an untouched short voice grows no rests.
+ */
 function fillEnds(score: Score): Map<string, number> {
   const ends = new Map<string, number>();
-  for (const bar of score.bars) {
-    for (const voice of score.voices) {
-      ends.set(`${voice}:${bar.index}`, bar.incomplete ? bar.start : bar.start + bar.length);
-    }
-  }
   for (const note of score.notes) {
     const key = `${note.voice}:${note.bar}`;
     const end = note.start + note.duration;
     if (end > (ends.get(key) ?? 0)) ends.set(key, end);
+  }
+  for (const bar of score.bars) {
+    for (const voice of score.voices) {
+      const key = `${voice}:${bar.index}`;
+      const reached = ends.get(key);
+      if (reached === undefined) continue;
+      const cutHere = score.truncation?.voice === voice && bar.index >= score.truncation.bar;
+      ends.set(key, bar.incomplete || cutHere ? reached : bar.start + bar.length);
+    }
   }
   return ends;
 }
@@ -224,18 +231,21 @@ function fillVoice(
 ): Note[] {
   const filled = [...notes];
   for (const bar of score.bars) {
+    const key = `${voice}:${bar.index}`;
     const events = filled
       .filter((note) => note.voice === voice && note.bar === bar.index)
       .sort((left, right) => left.start - right.start);
+    if (!ends.has(key) && events.length === 0) continue;
+    const cutHere = score.truncation?.voice === voice && bar.index >= score.truncation.bar;
     let cursor = bar.start;
-    let reached = bar.incomplete ? (ends.get(`${voice}:${bar.index}`) ?? bar.start) : bar.start + bar.length;
+    let reached = ends.get(key) ?? bar.start;
     for (const event of events) {
       if (event.start > cursor)
         filled.push(...restPieces(score, voice, bar.index, cursor, event.start - cursor, constraints.durations));
       cursor = Math.max(cursor, event.start + event.duration);
       reached = Math.max(reached, event.start + event.duration);
     }
-    const end = bar.incomplete ? Math.min(reached, bar.start + bar.length) : bar.start + bar.length;
+    const end = bar.incomplete || cutHere ? Math.min(reached, bar.start + bar.length) : bar.start + bar.length;
     if (cursor < end) filled.push(...restPieces(score, voice, bar.index, cursor, end - cursor, constraints.durations));
   }
   return filled;
@@ -275,32 +285,50 @@ function repairTies(score: Score, notes: Note[], affected: ReadonlySet<string>):
   return notes.map((note) => (cleared.has(note.id) ? { ...note, tie: false } : note));
 }
 
+/**
+ * Splits the one event that covers `at` into pieces the dialect can write, so the writer has a token boundary there;
+ * the pieces stay tied while they sound the same note.
+ */
+function splitEventAt(notes: Note[], at: number, score: Score, durations: DurationSet): boolean {
+  const index = notes.findIndex((note) => note.start < at && at < note.start + note.duration);
+  if (index < 0) return false;
+  const event = notes[index] as Note;
+  const pieces: Note[] = [];
+  let start = event.start;
+  const lengths = [
+    ...splitLength(at - event.start, score.unitTicks, durations),
+    ...splitLength(event.start + event.duration - at, score.unitTicks, durations),
+  ];
+  for (const duration of lengths) {
+    pieces.push({ ...event, id: noteId(event.voice, start), start, duration, tie: false });
+    start += duration;
+  }
+  const last = pieces[pieces.length - 1];
+  if (last !== undefined) pieces[pieces.length - 1] = { ...last, tie: event.tie };
+  for (let piece = 0; piece < pieces.length - 1; piece += 1) {
+    pieces[piece] = { ...(pieces[piece] as Note), tie: (pieces[piece] as Note).midi !== null };
+  }
+  notes.splice(index, 1, ...pieces);
+  return true;
+}
+
+/** Splits every event that a mid-bar key change now falls inside, so `[K:...]` has a token boundary (W7). */
+function splitAtKeyChanges(score: Score, notes: Note[], durations: DurationSet): Note[] {
+  for (const change of score.keys) {
+    if (change.at > 0) splitEventAt(notes, change.at, score, durations);
+  }
+  return notes;
+}
+
 /** Keeps every chord at its position and points it at the Vocal event that now starts there, splitting one if needed. */
-function placeChords(score: Score, notes: Note[]): { notes: Note[]; chords: Chord[] } {
+function placeChords(score: Score, notes: Note[], durations: DurationSet): { notes: Note[]; chords: Chord[] } {
   const next = [...notes];
   const chords = score.chords.map((chord) => {
     let event = next.find((note) => note.voice === "Vocal" && note.start === chord.start);
-    if (event === undefined) {
-      const covering = next.find(
-        (note) => note.voice === "Vocal" && note.start < chord.start && chord.start < note.start + note.duration,
-      );
-      if (covering === undefined) return { ...chord, noteId: null };
-      const index = next.indexOf(covering);
-      const first: Note = {
-        ...covering,
-        duration: chord.start - covering.start,
-        tie: covering.midi !== null,
-      };
-      const second: Note = {
-        ...covering,
-        id: noteId(covering.voice, chord.start),
-        start: chord.start,
-        duration: covering.start + covering.duration - chord.start,
-      };
-      next.splice(index, 1, first, second);
-      event = second;
+    if (event === undefined && splitEventAt(next, chord.start, score, durations)) {
+      event = next.find((note) => note.voice === "Vocal" && note.start === chord.start);
     }
-    return { ...chord, noteId: event.id };
+    return { ...chord, noteId: event?.id ?? null };
   });
   return { notes: next, chords };
 }
@@ -436,8 +464,9 @@ export function runNoteCommand(
     notes.push(...fillVoice(score, voice, voiceNotes, ends, constraints));
   }
 
-  const repaired = repairTies(score, notes, affected);
-  const placed = placeChords(score, repaired);
-  const orderedNotes = [...placed.notes].sort((left, right) => left.start - right.start);
+  const split = splitAtKeyChanges(score, notes, constraints.durations);
+  const repaired = repairTies(score, split, affected);
+  const placed = placeChords(score, repaired, constraints.durations);
+  const orderedNotes = orderNotes(score, placed.notes);
   return { ok: true, score: { ...score, notes: orderedNotes, chords: placed.chords } };
 }
