@@ -1,6 +1,7 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge and the screen-reader hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 import { create, requireDom } from "./dom";
+import { installEditKeys } from "./edit-keys";
 import { messagesFor } from "./i18n";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -68,6 +69,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const { signal } = abort;
   undo.addEventListener("click", () => session.undo(), { signal });
   redo.addEventListener("click", () => session.redo(), { signal });
+  installEditKeys(root, session, signal, options);
 
   let language: Language | null = null;
   function applyLanguage(): void {

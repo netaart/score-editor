@@ -237,3 +237,280 @@ test.describe("the toolbar part", () => {
     expect(sizes.content).toBe(sizes.shown);
   });
 });
+
+/** Every note of the track as it stands, by name: where it is and how wide, for telling that nothing else moved. */
+async function layoutOf(page: Page, names: string[]) {
+  const found: Record<string, { x: number; width: number }> = {};
+  for (const name of names) {
+    const { x, width } = await box(note(page, name));
+    found[name] = { x, width };
+  }
+  return found;
+}
+
+test.describe("deleting the selected note", () => {
+  for (const deleteKey of ["Delete", "Backspace"]) {
+    test(`${deleteKey} turns the note into a rest and leaves every other note where it was`, async ({
+      page,
+      harness,
+      isMobile,
+    }) => {
+      await openTrack(harness);
+      const others = [C4, E4, F4, G4];
+      const before = await layoutOf(page, others);
+
+      await pressAt(isMobile, note(page, D4));
+      await page.keyboard.press(deleteKey);
+
+      await expect(note(page, D4)).toHaveCount(0);
+      await expect(slot(page, "vocal").getByRole("listitem")).toHaveCount(4);
+      expect(await layoutOf(page, others)).toEqual(before);
+      expect(await harness.layout.scoreText()).toContain("C4z4E4F4|G16|");
+    });
+  }
+
+  test("does nothing when no note is selected", async ({ page, harness }) => {
+    await openTrack(harness);
+    const score = await harness.layout.scoreText();
+    await page.locator('[data-slot="vocal"] [role="region"]').focus();
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("Backspace");
+    expect(await harness.layout.scoreText()).toBe(score);
+    expect(await harness.layout.canUndo()).toBe(false);
+    await expect(slot(page, "vocal").getByRole("listitem")).toHaveCount(5);
+  });
+
+  test("takes a whole tie chain with the note that was selected, and undo brings the chain back", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, vocalOnly("C16-|C16|"));
+    await pressAt(isMobile, note(page, "C4, bar 1 beat 1, length 4 beats, tied to the next note"));
+    await page.keyboard.press("Delete");
+    await expect(slot(page, "vocal").getByRole("listitem")).toHaveCount(0);
+
+    await page.keyboard.press("Control+z");
+    await expect(slot(page, "vocal").getByRole("listitem")).toHaveCount(2);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("leaves the score, the history and the selection alone when the score would not take the edit", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    // The first note is tied into a cut tail: writing it as a rest would turn the cut into a complete score.
+    const cut = vocalOnly("C16-|B");
+    await openTrack(harness, cut);
+    await pressAt(isMobile, slot(page, "vocal").getByRole("listitem").first());
+    await page.keyboard.press("Delete");
+
+    await expect(slot(page, "vocal").getByRole("listitem")).toHaveCount(1);
+    expect(await harness.layout.scoreText()).toBe(cut);
+    expect(await harness.layout.canUndo()).toBe(false);
+    expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
+  });
+});
+
+test.describe("undo and redo by keyboard and by the toolbar", () => {
+  test("Ctrl+Z, Cmd+Z, Ctrl+Shift+Z, Cmd+Shift+Z and Ctrl+Y move through the history of the deleted note", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness);
+    const anyD = slot(page, "vocal").getByRole("listitem", { name: /^D4,/ });
+    await pressAt(isMobile, note(page, D4));
+    await page.keyboard.press("Delete");
+    await expect(anyD).toHaveCount(0);
+
+    await page.keyboard.press("Control+z");
+    await expect(anyD).toHaveCount(1);
+    // The selection stayed on the note, so it comes back selected.
+    await expect(selected(page, D4)).toBeVisible();
+    await page.keyboard.press("Control+Shift+z");
+    await expect(anyD).toHaveCount(0);
+    await page.keyboard.press("Meta+z");
+    await expect(anyD).toHaveCount(1);
+    await page.keyboard.press("Meta+Shift+z");
+    await expect(anyD).toHaveCount(0);
+    await page.keyboard.press("Control+z");
+    await expect(anyD).toHaveCount(1);
+    await page.keyboard.press("Control+y");
+    await expect(anyD).toHaveCount(0);
+    // Nothing is left to redo, and the keys say nothing.
+    await page.keyboard.press("Control+y");
+    await expect(anyD).toHaveCount(0);
+  });
+
+  test("the toolbar's buttons undo and redo the same steps, and its keys keep working after a press", async ({
+    page,
+    harness,
+    isMobile,
+    press,
+  }) => {
+    await openTrack(harness);
+    const anyD = slot(page, "vocal").getByRole("listitem", { name: /^D4,/ });
+    await pressAt(isMobile, note(page, D4));
+    await page.keyboard.press("Delete");
+    await expect(anyD).toHaveCount(0);
+
+    await press(undoButton(page));
+    await expect(anyD).toHaveCount(1);
+    // The pressed button has the focus now; the editing keys still reach the session from there.
+    await page.keyboard.press("Control+y");
+    await expect(anyD).toHaveCount(0);
+    await page.keyboard.press("Control+z");
+    await expect(anyD).toHaveCount(1);
+    await press(redoButton(page));
+    await expect(anyD).toHaveCount(0);
+  });
+});
+
+test.describe("read-only", () => {
+  test("a click selects nothing, Delete and the history keys do nothing, and no insertion point appears", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, QUARTERS, { editable: false });
+    const score = await harness.layout.scoreText();
+
+    await pressAt(isMobile, note(page, D4));
+    await pressAt(isMobile, lane(page), { x: 100, y: 4 });
+    await page.locator('[data-slot="vocal"] [role="region"]').focus();
+    for (const keys of ["Delete", "Backspace", "Control+z", "Control+y", "ArrowRight", "End", "Home"]) {
+      await page.keyboard.press(keys);
+    }
+
+    expect(await harness.layout.selection()).toEqual([]);
+    expect(await harness.layout.insertionPoint()).toBeNull();
+    expect(await harness.layout.scoreText()).toBe(score);
+    await expect(slot(page, "vocal").getByRole("listitem", { name: /, selected$/ })).toHaveCount(0);
+    await expect(slot(page, "vocal").getByRole("separator")).toHaveCount(0);
+    await expect(note(page, D4)).toHaveCSS("cursor", "auto");
+  });
+
+  test("hides the frame and the insertion point when the session stops being editable, and shows them again", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, vocalOnly("C4z4E4F4|G16|"));
+    await pressAt(isMobile, note(page, C4));
+    await pressAt(isMobile, lane(page), { x: 100, y: 4 });
+    await pressAt(isMobile, note(page, E4));
+    const marker = slot(page, "vocal").getByRole("separator");
+    await expect(selected(page, E4)).toBeVisible();
+    await expect(marker).toHaveCount(1);
+
+    await harness.layout.setEditable(false);
+    await expect(selected(page, E4)).toHaveCount(0);
+    await expect(marker).toHaveCount(0);
+    await page.locator('[data-slot="vocal"] [role="region"]').focus();
+    await page.keyboard.press("Delete");
+    await expect(note(page, E4)).toBeVisible();
+
+    await harness.layout.setEditable(true);
+    await expect(selected(page, E4)).toBeVisible();
+    await expect(marker).toHaveCount(1);
+  });
+});
+
+test.describe("the insertion point", () => {
+  /** Where the insertion marker stands, in pixels from the left edge of the lane. */
+  async function markerAt(page: Page) {
+    const marker = await box(slot(page, "vocal").getByRole("separator"));
+    return marker.x + marker.width / 2 - (await box(lane(page))).x;
+  }
+
+  test("a click or tap on empty space drops it on the nearest beat line and clears the selection; a note keeps it", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, vocalOnly("C4z4E4F4|G16|"));
+    const marker = slot(page, "vocal").getByRole("separator");
+    await expect(marker).toHaveCount(0);
+
+    await pressAt(isMobile, note(page, C4));
+    expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
+    // Beats are 40 pixels wide at this zoom: 70 pixels in is nearer the line at 80 than the one at 40.
+    await pressAt(isMobile, lane(page), { x: 70, y: 4 });
+    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 3");
+    expect(Math.abs((await markerAt(page)) - 80)).toBeLessThan(1.5);
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(marker).toHaveCSS("width", "2px");
+
+    await pressAt(isMobile, note(page, E4));
+    expect(await harness.layout.selection()).toEqual(["Vocal:512"]);
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
+
+    await pressAt(isMobile, lane(page), { x: 12, y: 4 });
+    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 1");
+    expect(Math.abs(await markerAt(page))).toBeLessThan(1.5);
+  });
+
+  test("Left and Right move it a beat, Home and End send it to the ends, and it is no step of the history", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, vocalOnly("C4z4E4F4|G16|"));
+    const marker = slot(page, "vocal").getByRole("separator");
+    await pressAt(isMobile, lane(page), { x: 70, y: 4 });
+
+    await page.keyboard.press("ArrowRight");
+    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 4");
+    expect(Math.abs((await markerAt(page)) - 120)).toBeLessThan(1.5);
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 2");
+    expect(Math.abs((await markerAt(page)) - 40)).toBeLessThan(1.5);
+
+    await page.keyboard.press("End");
+    await expect(marker).toHaveAccessibleName("Insertion point, end of the score");
+    expect(Math.abs((await markerAt(page)) - 320)).toBeLessThan(1.5);
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 2048 });
+    await page.keyboard.press("ArrowRight");
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 2048 });
+    await page.keyboard.press("Home");
+    await expect(marker).toHaveAccessibleName("Insertion point, bar 1 beat 1");
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 0 });
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("the part scrolls to keep it in view as the keys carry it away", async ({ page, harness, isMobile }) => {
+    await openTrack(harness, vocalOnly(...Array(3).fill("C16|C16|C16|C16|")));
+    const region = page.locator('[data-slot="vocal"] [role="region"]');
+    const marker = slot(page, "vocal").getByRole("separator");
+    await pressAt(isMobile, lane(page), { x: 30, y: 4 });
+    await expect(marker).toBeVisible();
+
+    await page.keyboard.press("End");
+    await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(100);
+    const inView = async () => {
+      const shown = await box(region);
+      const at = await box(marker);
+      return at.x >= shown.x + 44 - 1 && at.x + at.width <= shown.x + shown.width + 1;
+    };
+    expect(await inView()).toBe(true);
+
+    await page.keyboard.press("Home");
+    await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBe(0);
+    expect(await inView()).toBe(true);
+    for (let step = 0; step < 14; step++) await page.keyboard.press("ArrowRight");
+    expect(await inView()).toBe(true);
+  });
+
+  test("Left and Right keep scrolling the part while there is no insertion point", async ({ page, harness }) => {
+    await openTrack(harness, vocalOnly(...Array(3).fill("C16|C16|C16|C16|")));
+    const region = page.locator('[data-slot="vocal"] [role="region"]');
+    await region.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(() => region.evaluate((el) => el.scrollLeft)).toBeGreaterThan(10);
+    expect(await harness.layout.insertionPoint()).toBeNull();
+  });
+});

@@ -4,6 +4,7 @@
 import { barLabelStep, type GridRun, gridTicks, MIN_BAR_LINE_PIXELS, MIN_BEAT_LINE_PIXELS } from "./arrangement";
 import { type AxisFrame, type AxisMember, installZoomGestures, joinAxis } from "./axis";
 import { create, requireDom } from "./dom";
+import { installEditKeys } from "./edit-keys";
 import { type Messages, messagesFor } from "./i18n";
 import { type Score, TICKS_PER_QUARTER } from "./score";
 import type { EditingSession } from "./session";
@@ -161,6 +162,10 @@ export function mountAxisPart(
   }
 
   installZoomGestures(root, session, abort.signal, { wheel: true, frame: () => member.frame() });
+  installEditKeys(root, session, abort.signal, {
+    frame: () => member.frame(),
+    ...(options.onRefused ? { onRefused: options.onRefused } : {}),
+  });
   render();
   const unsubscribe = session.subscribe(() => {
     if (session.reading !== reading || session.view.language !== language) render();
