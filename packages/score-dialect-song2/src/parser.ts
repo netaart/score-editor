@@ -169,6 +169,8 @@ export interface BarContent {
     readonly duration: number;
     readonly midi: number | null;
     readonly tie: boolean;
+    /** True when a tie from the previous note of this voice ends at this note's start (P9-P11). */
+    readonly tiedFromPrevious: boolean;
   }>;
   readonly chords: ReadonlyArray<{ readonly start: number; readonly name: string }>;
   readonly incomplete: boolean;
@@ -229,6 +231,8 @@ export interface Song2Source {
   readonly truncation: Truncation | null;
   /** The block `K:` field lines the reader applied, in text order. A trailing cut field is not here. */
   readonly keyFields: ReadonlyArray<Song2SourceKeyField>;
+  /** The sections this text stated, so an edit that changes them can force the bar-grid writer. */
+  readonly sections: ReadonlyArray<Section>;
 }
 
 interface PendingBar {
@@ -260,6 +264,13 @@ export function barContentOf(score: BarContentSource, voice: string, barIndex: n
   if (bar === undefined) throw new Error(`song2: bar ${barIndex} of ${voice} has no model record`);
   const start = bar.start;
   const end = start + bar.length;
+  const voiceNotes = score.notes.filter((note) => note.voice === voice).sort((a, b) => a.start - b.start);
+  const tiedFromPrevious = new Set<string>();
+  for (let index = 1; index < voiceNotes.length; index += 1) {
+    const previous = voiceNotes[index - 1] as Note;
+    const note = voiceNotes[index] as Note;
+    if (previous.tie && previous.start + previous.duration === note.start) tiedFromPrevious.add(note.id);
+  }
   return {
     start,
     length: bar.length,
@@ -269,7 +280,13 @@ export function barContentOf(score: BarContentSource, voice: string, barIndex: n
     notes: score.notes
       .filter((note) => note.voice === voice && note.bar === barIndex)
       .sort((a, b) => a.start - b.start)
-      .map((note) => ({ start: note.start, duration: note.duration, midi: note.midi, tie: note.tie })),
+      .map((note) => ({
+        start: note.start,
+        duration: note.duration,
+        midi: note.midi,
+        tie: note.tie,
+        tiedFromPrevious: tiedFromPrevious.has(note.id),
+      })),
     chords:
       voice === "Vocal"
         ? score.chords
@@ -1285,12 +1302,17 @@ class Song2Parser {
     });
 
     const contentSource: BarContentSource = { bars, notes, chords };
+    const lastTail = this.sourceLines[this.sourceLines.length - 1]?.cutTail ?? null;
+    const cut = this.truncation;
+    const truncation: Truncation | null =
+      cut?.short && lastTail?.kind === "x4-chord" ? { ...cut, unfinishedChord: true } : cut;
 
     const source: Song2Source = {
       text: this.normalized,
       unitDenominator: this.unitDenominator,
-      truncation: this.truncation,
+      truncation,
       keyFields: this.keyFields,
+      sections,
       musicLines: this.sourceLines.map((line) => ({
         line: line.line,
         voice: line.voice,
@@ -1325,7 +1347,7 @@ class Song2Parser {
       sections,
       notes,
       chords,
-      truncation: this.truncation,
+      truncation,
       hasChords: this.hasChords,
       source,
     };

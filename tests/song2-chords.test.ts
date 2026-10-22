@@ -255,6 +255,7 @@ describe("hand-worked write-back", () => {
 
     expect(score.hasChords).toBe(true);
     expect(score.chords).toEqual([]);
+    expect(score.truncation?.unfinishedChord).toBe(true);
     expect(song2Dialect.serialize(score)).toBe(text);
   });
 
@@ -266,7 +267,12 @@ describe("hand-worked write-back", () => {
     expect(result).toBe(scoreText("C16|D8"));
     const output = parse(result);
     expect(output.hasChords).toBe(false);
-    expect(output.truncation).toEqual(input.truncation);
+    expect(input.truncation?.unfinishedChord).toBe(true);
+    expect(output.truncation).toEqual({
+      voice: input.truncation?.voice,
+      bar: input.truncation?.bar,
+      short: input.truncation?.short,
+    });
     expect(output.notes.map(noteFacts)).toEqual(input.notes.map(noteFacts));
     check(output);
   });
@@ -280,7 +286,12 @@ describe("hand-worked write-back", () => {
     expectOnlyBar("cut-tail drop", original, result, "Vocal", [1, 2]);
     const output = parse(result);
     expect(output.hasChords).toBe(false);
-    expect(output.truncation).toEqual(input.truncation);
+    expect(input.truncation?.unfinishedChord).toBe(true);
+    expect(output.truncation).toEqual({
+      voice: input.truncation?.voice,
+      bar: input.truncation?.bar,
+      short: input.truncation?.short,
+    });
     check(output);
   });
 

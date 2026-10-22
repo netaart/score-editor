@@ -55,6 +55,14 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "style-invalid",
   "score-mode-invalid",
   "not-a-score-command",
+  "section-unnamed",
+  "section-move-start",
+  "section-move-end",
+  "section-before-unnamed",
+  "section-name-empty",
+  "section-name-blank",
+  "section-name-line-break",
+  "section-name-trailing-space",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = ["style-no-bpm", "melody-with-chords"];

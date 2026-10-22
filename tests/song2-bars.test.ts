@@ -790,6 +790,77 @@ describe("every sample", () => {
   }
 });
 
+describe("review fixes", () => {
+  it("rewrites a bar from the model when deleting the bar that tied into it", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+V: Vocal
+C16|^F16-|F16|`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "deleteBars", from: 1, count: 1 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${VOCAL_HEADER}
+K:C
+V: Vocal
+C16|^F16|`);
+    const after = parse(result.text);
+    check(after);
+    expect(after.notes.map((note) => [note.start, note.midi, note.tie])).toEqual([
+      [0, 60, false],
+      [1024, 66, false],
+    ]);
+  });
+
+  it("drops a short non-chord cut's hasChords after deleting the chord bar", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+"C"C16|
+% b
+V: Vocal
+D16|D8`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "deleteBars", from: 0, count: 1 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${VOCAL_HEADER}
+K:C
+% b
+V: Vocal
+D16|D8`);
+    const after = parse(result.text);
+    check(after);
+    expect(after.hasChords).toBe(false);
+    expect(after.truncation).toEqual({ voice: "Vocal", bar: 1, short: true });
+  });
+
+  it("keeps hasChords and the tail bytes when the surviving cut is an unfinished chord string", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+"C"C16|
+% b
+V: Vocal
+D16|D8"G`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "deleteBars", from: 0, count: 1 });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${VOCAL_HEADER}
+K:C
+% b
+V: Vocal
+D16|D8"G`);
+    const after = parse(result.text);
+    check(after);
+    expect(after.hasChords).toBe(true);
+    expect(after.truncation).toEqual({ voice: "Vocal", bar: 1, short: true, unfinishedChord: true });
+  });
+});
+
 describe("review reproduction cases", () => {
   it("inserts a rest in 5/8 by splitting it into writable values", () => {
     const text = `X:1
@@ -895,7 +966,7 @@ V: Vocal
 C8"G`);
     const output = parse(result.text);
     check(output);
-    expect(output.truncation).toEqual({ voice: "Vocal", bar: 0, short: true });
+    expect(output.truncation).toEqual({ voice: "Vocal", bar: 0, short: true, unfinishedChord: true });
     expect(output.hasChords).toBe(true);
   });
 

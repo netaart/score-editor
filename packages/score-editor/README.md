@@ -34,6 +34,8 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 
 `applyScoreCommand` takes one `ScoreCommand` and changes the score text; it refuses a `ProjectCommand`. `applyProjectCommand` takes a `ScoreCommand` or a `ProjectCommand`, the one-word name of the second union, for edits to the project itself. A refusal is what the headless layer above describes; a notice is the third, non-failure diagnostic class, and it comes with the changed project. `isNoticeDiagnostic` tells it from a refusal.
 
+A cut score's `Truncation` has an optional `unfinishedChord: true` when the cut ends inside an unfinished chord string (RULES.md C8 and X4). It is absent otherwise, and it is why `hasChords` stays true for such a tail; removing all chords drops both the flag and the tail bytes.
+
 Keys and chord roots in `constraints` share one spelling: a letter A-G, then `#`, `##`, `b` or `bb`, and `m` for a minor key; a chord name is a root, one quality from the vocabulary, and optionally `/` and a bass root.
 
 Score commands, in the order `ScoreCommand` lists them:
@@ -48,6 +50,11 @@ Score commands, in the order `ScoreCommand` lists them:
 - `setKey`: moves the notes and chords to the chosen key, like `transpose` by the shortest interval between the two tonics, and forces the chosen key's spelling. With `from`, only the score from that key-change position on moves; the header and earlier key changes stay. Refuses with `key-not-allowed` or `key-change-not-found`, and like `transpose` otherwise.
 - `setTempo`: writes `Q:1/4=<bpm>` from the dialect's tempo range and changes no pitch. Refuses with `tempo-out-of-range`.
 - `removeChords`: removes every chord from the score. It is the one-step fix for a `melody` project that carries chords.
+- `deleteSection` (`section`, counted from 0): deletes the section's bars and marker. Deleting the unnamed section is allowed, and so is deleting the last section when it holds the cut tail; the result is then a complete score. Refuses with `section-out-of-range`, `truncated-tail` for a cut outside the last section, or `last-bar` when no bars would remain.
+- `duplicateSection` (`section`): puts a copy of the section directly after it. The copy keeps the section's name, because the copy is the same musical material and the same label a lyric line binds to; rename it if it should read differently. A copy also keeps a tie at its end into the following section: in A, A copy, B the boundary A copy→B repeats the original A→B, so keeping it is the original music; only the newly formed boundary at the copy's start clears a tie. Refuses with `section-out-of-range`, `section-unnamed` for the unnamed section, or `truncated-tail` for a section that holds the cut tail.
+- `moveSection` (`section`, `direction` = `"earlier"` or `"later"`): swaps the section with its neighbour. A named section cannot move before the unnamed section, which has no marker and can only stand first, and a move that would carry the cut tail out of last place is refused. Refuses with `section-out-of-range`, `section-unnamed`, `section-move-start`, `section-move-end`, `section-before-unnamed` or `truncated-tail`.
+- `renameSection` (`section`, `name`): gives an existing section a new name; naming the unnamed section puts a marker at bar 0. `section-name-trailing-space` is refused because T2 trims `% verse ` to `verse`, so such a name would not read back as written. Refuses with `section-out-of-range`, `section-name-empty`, `section-name-blank`, `section-name-line-break` or `section-name-trailing-space`.
+- `nameSection` (`bar`, counted from 0, and `name`): starts a named section at that bar. A bar at an existing section start renames that section; any other bar splits the section there, which the writer turns into a group boundary as W11 describes, with the group shape in W3 and W4. Refuses with `bar-out-of-range` or the same name codes as `renameSection`.
 
 Any score command also fails with `write-mismatch`, or with a reading code, when the dialect cannot write the result or read it back the same.
 

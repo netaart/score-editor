@@ -5,6 +5,7 @@ import type { ScoreCommandResult } from "./commands";
 import {
   barTicks,
   effectiveKeyAt,
+  hasChordsAfter,
   isIndex,
   keyChangesInside,
   orderNotes,
@@ -265,7 +266,7 @@ function deleteBars(score: Score, from: number, count: number): ScoreCommandResu
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
       truncation,
-      hasChords: score.hasChords && (chords.length > 0 || score.truncation?.short === true),
+      hasChords: hasChordsAfter(chords, truncation),
     },
   };
 }
