@@ -209,6 +209,33 @@ test.describe("the play control", () => {
   });
 });
 
+test.describe("the caption at rest on a narrow screen", () => {
+  // The phone project is the width of a phone (412 pixels); the desktop project is made as narrow as the narrowest host.
+  for (const editable of [true, false]) {
+    test(`is whole and in view with nothing to scroll to, ${editable ? "editable" : "read-only"}`, async ({
+      page,
+      isMobile,
+      press,
+    }) => {
+      if (!isMobile) await page.setViewportSize({ width: 320, height: 700 });
+      const harness = await visit(page);
+      await harness.mount({ score: { text: QUARTERS }, editable });
+      await expect(previewButton(page)).toBeInViewport({ ratio: 1 });
+      await expect(page.locator(".sce-synth-caption")).toHaveText("Synthetic preview, not the final sound");
+      await expect(
+        page.locator(".sce-synth-caption"),
+        "a caption that is out of the toolbar's box is cut",
+      ).toBeInViewport({
+        ratio: 1,
+      });
+
+      await press(previewButton(page));
+      await expect(previewButton(page)).toHaveText("Stop");
+      await expect(page.locator(".sce-synth-caption"), "and it stays so while it plays").toBeInViewport({ ratio: 1 });
+    });
+  }
+});
+
 test.describe("without a user gesture", () => {
   test("a sound the browser refuses to start, with no user gesture behind it, is said and does not play", async ({
     page,
