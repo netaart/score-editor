@@ -94,26 +94,14 @@ whether the written text reads back as the same model.
 
 ## Lyrics
 
-`lyricLinesOf(project, score)` returns `project.lyricLines` when present and otherwise computes the layout from the
-legacy text with `layoutLyrics(score, project.lyrics)`: a `[name]` line picks the first unused section with that name
-and its lines go one per bar, lines before the first label go into the unnamed opening section or the first section,
-and lines that do not fit go to the unaligned area. The layout is not written into the project. `alignedLyricLines` and
-`unalignedLyricLines` split a line list by its area.
+The call surface is `lyricLinesOf(project, score)` (the stored lines, or the legacy layout from `layoutLyrics`),
+`joinLyrics(score, lines)`, `alignedLyricLines` and `unalignedLyricLines`, `lyricSyllables` and `syllableCount`,
+`noteOnsets`, `alignLyricLine` (`LyricAlignment`, `LyricSyllableNote`), `lyricCharacterCount` and
+`LYRICS_MAX_CHARACTERS`. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`.
 
-`joinLyrics(score, lines)` writes the joined text in section order, labels each named section and leaves unaligned
-lines out. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`; `LYRICS_MAX_CHARACTERS` is 2000 and
-`lyricCharacterCount` counts Unicode code points, line breaks included.
-
-`lyricSyllables` and `syllableCount` count Han and kana one each, Latin by vowel groups (a `-` splits by hand), digits
-and other letters one each, and ignore spaces and punctuation. `noteOnsets(score, phrase)` gives the `Vocal` notes in
-a phrase that are not rests or tie continuations. `alignLyricLine(score, line)` returns `LyricAlignment` with the
-syllables, onsets, whether the counts are equal, and one `LyricSyllableNote` per syllable when they are.
-
-A score command through `applyProjectCommand` remaps stored lines, or an old project's computed layout: a deleted
-section takes its lines, a copied section copies them, a moved section moves them, and bar commands shift their
-bindings. A new section marker inside a phrase keeps the line in the section of its first bar, on the bars that remain
-there. The result is stored and `lyrics` is rewritten only when the lines or their join changed; a command that
-changes neither adds no field and leaves `lyrics` as it was. Every result of `applyScoreCommand` is unchanged by this.
+The rules — what a label matches, where unaligned lines go, what counts as a syllable, how a command carries the
+lines and when `lyrics` is rewritten — are the contract in the package README's
+[lyrics section](../../../README.md#lyrics-on-the-song-project). Do not restate them here.
 
 ## The dialect and its constraints
 

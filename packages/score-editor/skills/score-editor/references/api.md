@@ -83,7 +83,7 @@ change. The tests in the repository check that the list stays complete.
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |
-| `LyricAlignment`, `LyricSyllableNote` | A line's syllables, onsets and match, and one syllable placed on its note. |
+| `LyricAlignment`, `LyricSyllableNote` | A line's syllables, onsets and whether their counts are equal, and one syllable placed on its note. |
 
 ## Diagnostics types
 
