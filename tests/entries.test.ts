@@ -1,7 +1,7 @@
 // ABOUTME: Imports both published package entries in a plain node environment.
 // ABOUTME: Guards the rule that makes server-side imports in host apps safe: no side effects, no DOM at import time.
 import { execFileSync } from "node:child_process";
-import module, { createRequire } from "node:module";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -106,22 +106,15 @@ describe("abcjs stays out of the entries", () => {
   const abcjs = pathToFileURL(createRequire(new URL("packages/score-editor/package.json", root)).resolve("abcjs")).href;
 
   /**
-   * A plain Node process, with no DOM, imports the built entries and then abcjs itself, and reports how many modules of
-   * abcjs its resolution hook saw after each. Where nothing is shared with this test, the entries are loaded as a server
-   * loads them, and the second figure shows the hook can see abcjs when it is loaded.
+   * A plain Node process, with no DOM, imports the built entries and then abcjs itself, and reports how many files of
+   * abcjs the CommonJS loader holds after each. Where nothing is shared with this test, the entries are loaded as a server
+   * loads them, and the second figure shows the check can see abcjs when it is loaded.
    */
   function modulesOfAbcjsSeen(): { afterEntries: number; afterAbcjs: number } {
     const script = `
-      import module from "node:module";
-      const resolved = [];
-      module.registerHooks({
-        resolve(specifier, context, nextResolve) {
-          const result = nextResolve(specifier, context);
-          resolved.push(result.url);
-          return result;
-        },
-      });
-      const seen = () => resolved.filter((url) => url.includes("/abcjs/")).length;
+      import { createRequire } from "node:module";
+      const loaded = createRequire(import.meta.url).cache;
+      const seen = () => Object.keys(loaded).filter((file) => /[\\\\/]abcjs[\\\\/]/.test(file)).length;
       for (const entry of ${JSON.stringify(entries)}) await import(entry);
       const afterEntries = seen();
       await import(${JSON.stringify(abcjs)});
@@ -130,13 +123,10 @@ describe("abcjs stays out of the entries", () => {
     return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8" }));
   }
 
-  it.skipIf(typeof module.registerHooks !== "function")(
-    "is not loaded by importing either package entry, which only a view part's mount asks for",
-    () => {
-      const { afterEntries, afterAbcjs } = modulesOfAbcjsSeen();
+  it("is not loaded by importing either package entry, which only a view part's mount asks for", () => {
+    const { afterEntries, afterAbcjs } = modulesOfAbcjsSeen();
 
-      expect(afterAbcjs, "the check can see abcjs when it is loaded").toBeGreaterThan(0);
-      expect(afterEntries).toBe(0);
-    },
-  );
+    expect(afterAbcjs, "the check can see abcjs when it is loaded").toBeGreaterThan(0);
+    expect(afterEntries).toBe(0);
+  });
 });
