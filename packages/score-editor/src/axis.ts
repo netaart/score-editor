@@ -212,6 +212,43 @@ export function revealTick(session: EditingSession, tick: number, frame?: AxisFr
   if (Math.abs(to - from) >= SCROLL_TOLERANCE) session.setView({ scrollLeft: to });
 }
 
+/** Where a tick stands against what the axis shows: before its left edge, inside it, or after its right edge. */
+type TickPlace = "before" | "inside" | "after";
+
+/** The axis `frame` measures (default: the first part on the axis) and the width of its timeline, or null when nothing is drawn. */
+function measuredAxis(session: EditingSession, frame?: AxisFrame | null): { axis: AxisFrame; width: number } | null {
+  const axis = frame ?? controllers.get(session)?.frame();
+  if (!axis || !(axis.ticks > 0)) return null;
+  const width = axis.timeline.offsetWidth;
+  return width > 0 ? { axis, width } : null;
+}
+
+/**
+ * The place of `tick` on the axis `frame` measures (default: the first part on the axis), or null when nothing is drawn.
+ * A `margin` in pixels counts the strip that far in from the right edge as already past it.
+ */
+export function tickPlace(
+  session: EditingSession,
+  tick: number,
+  frame?: AxisFrame | null,
+  margin = 0,
+): TickPlace | null {
+  const measured = measuredAxis(session, frame);
+  if (!measured) return null;
+  const { scroller, corner, ticks } = measured.axis;
+  const at = (tick / ticks) * measured.width;
+  const from = scroller.scrollLeft;
+  if (at < from) return "before";
+  return at > from + scroller.clientWidth - corner.offsetWidth - margin ? "after" : "inside";
+}
+
+/** Scrolls the time axis so that `tick` stands a little in from its left edge: a page turn, for a tick that moves on. */
+export function turnTo(session: EditingSession, tick: number, frame?: AxisFrame | null): void {
+  const measured = measuredAxis(session, frame);
+  if (!measured) return;
+  session.setView({ scrollLeft: Math.max(0, (tick / measured.axis.ticks) * measured.width - REVEAL_MARGIN) });
+}
+
 /** Zooms so that the whole score is exactly as wide as the first part on the axis shows, and scrolls to its start. */
 export function fitZoom(session: EditingSession): void {
   const controller = controllers.get(session);
