@@ -1283,6 +1283,22 @@ test.describe("editing in the default editor", () => {
     expect(dark(await readPixel(line.x + line.width, under))).toBe(true);
   });
 
+  test("a refusal with the focus on the scroller is said once by the frame and told to the host once", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: vocalOnly("C16-|B") } });
+    await press(noteNamed(page, /^C4,/));
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("region", { name: "Arrangement" })).toBeFocused();
+
+    await page.keyboard.press("Delete");
+
+    await expect(page.getByRole("status").filter({ hasText: "can't be written into the score" })).toHaveCount(1);
+    expect((await harness.notices()).map((notice) => notice.code)).toEqual(["command-refused"]);
+  });
+
   test("tells the host once, in the current language, when the score would not take a delete", async ({
     page,
     harness,

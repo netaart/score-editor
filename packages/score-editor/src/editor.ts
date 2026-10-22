@@ -9,6 +9,7 @@ import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { messagesFor } from "./i18n";
+import { createLiveRegion, sayRefusals } from "./live-region";
 import { mountProblemView } from "./problem-view";
 import { createEditingSession, type EditingSession, type ScoreReading, type SessionChange } from "./session";
 import { acquireStyles } from "./styles";
@@ -82,7 +83,11 @@ export class Editor implements MountedEditor {
 
     installZoomGestures(this.root, this.session, this.abort.signal, { wheel: false });
     installZoomGestures(this.scroller, this.session, this.abort.signal, { wheel: true });
-    installEditKeys(this.root, this.session, this.abort.signal, { onRefused });
+    // Keys pressed with the focus on the scroller, outside every part, are heard here, so the frame says their refusals.
+    const live = createLiveRegion(this.root);
+    installEditKeys(this.root, this.session, this.abort.signal, {
+      onRefused: sayRefusals(live, this.session, onRefused),
+    });
 
     this.applyLanguage();
     this.applyEditable();
