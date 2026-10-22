@@ -47,11 +47,8 @@ function styleDrawing(doc: Document, shadow: ShadowRoot): void {
 }
 
 /**
- * Mounts the staff view on `el`: the project's score drawn on a staff by abcjs, as wide as the box it has and drawn again
- * when the box changes width. It is read-only. abcjs is loaded by this call, not by importing the package; until it has
- * arrived the part says it is loading, and if it cannot be loaded the part says so and the others go on working. The drawing
- * sits in a shadow root of its own, so rules of the host page for svg and text do not reach it, and it takes the colour of
- * the part's text. A score that cannot be read is not drawn.
+ * Mounts the staff view on `el`: the project's score drawn by abcjs, read-only. abcjs is loaded by this call and not by
+ * importing the package. The states of the part and the isolation of the drawing are in DESIGN.md, "Staff view".
  */
 export function mountStaffView(el: HTMLElement, session: EditingSession): ViewPart {
   requireDom("mountStaffView");

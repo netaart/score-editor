@@ -22,7 +22,7 @@ export interface ToolbarOptions extends EditingPartOptions {
   /**
    * Whether to end the row with the view switch (`mountViewSwitch`), as the default editor does. The title then names the
    * view that is shown, and the controls that only mean something on the arrangement are left out of the others. Without
-   * it the toolbar is the one it was before the views existed.
+   * it the toolbar has no switch and keeps its own title.
    */
   viewSwitch?: boolean;
 }
