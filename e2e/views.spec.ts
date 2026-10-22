@@ -1081,6 +1081,30 @@ test.describe("the three views of the default editor", () => {
     expect(requests).toHaveLength(1);
   });
 
+  test("leaves selecting and deleting to the arrangement: Delete pressed while the staff or the text is shown deletes nothing", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "a keyboard, checked on the desktop project");
+    await harness.mount({ score: { text: QUARTERS } });
+    await press(note(page, D4));
+    await expect(note(page, `${D4}, selected`)).toBeVisible();
+
+    for (const name of ["Staff", "Score text"]) {
+      await press(viewTab(page, name));
+      await page.keyboard.press("Delete");
+      await press(viewTab(page, "Arrangement"));
+
+      await expect(note(page, `${D4}, selected`), name).toBeVisible();
+      await expect(undoButton(page), name).toHaveAttribute("aria-disabled", "true");
+    }
+
+    await page.keyboard.press("Delete");
+    await expect(note(page, `${D4}, selected`), "the arrangement does delete").toHaveCount(0);
+  });
+
   test("follows an edit made in the text: the arrangement and the staff show the new score, as one step to undo", async ({
     page,
     harness,
