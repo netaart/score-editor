@@ -3,7 +3,9 @@
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
+export { mountChordTrack } from "./chord-track";
 export type { ScoreCommand } from "./commands";
+export { mountCutNotice } from "./cut-notice";
 export type {
   CommandDiagnosticCode,
   Diagnostic,
@@ -20,6 +22,7 @@ export {
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
 export { createDialectRegistry } from "./dialect";
 export { mount } from "./mount";
+export { mountProblemView } from "./problem-view";
 export type {
   Bar,
   Chord,
@@ -45,6 +48,7 @@ export type {
   ViewState,
 } from "./session";
 export { createEditingSession } from "./session";
+export { mountTimeRuler } from "./time-ruler";
 export type {
   ChordVocabulary,
   DialectConstraints,
@@ -55,5 +59,9 @@ export type {
   MountOptions,
   Notice,
   NoticeCode,
+  ViewPart,
 } from "./types";
 export { NOTICE_CODES } from "./types";
+export type { VoiceTrackOptions } from "./voice-track";
+export { mountVoiceTrack } from "./voice-track";
+export { mountZoomControl } from "./zoom-control";

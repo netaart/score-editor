@@ -50,13 +50,6 @@ const css = `
   --sce-_chords: round(2em, 1px);
   --sce-_top: calc(var(--sce-_ruler) + 2 * var(--sce-_band) + var(--sce-_chords));
 
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 288px;
-  overflow: hidden;
   background: var(--sce-_bg);
   color: var(--sce-_text);
   font-family: var(--sce-font-family, inherit);
@@ -74,13 +67,58 @@ const css = `
 }
 
 /*
+ * The default editor is a root that lays out its parts in a column and fills its host. A view part is a root too, so it
+ * has the theme, the reset and the text size wherever a creator mounts it; inside the editor its wrapper draws no box,
+ * so the parts sit in the editor's own layout.
+ */
+.sce-editor.sce-editor {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 288px;
+  overflow: hidden;
+  /* Where the track heads pin: right under the header block that the editor pins above the tracks. */
+  --sce-_head-top: var(--sce-_top);
+}
+.sce-part.sce-part {
+  display: block;
+}
+.sce-editor .sce-part.sce-part {
+  display: contents;
+}
+/*
+ * A part on the time axis that is mounted on its own scrolls in time itself: it is the horizontal scroll surface the
+ * session's scroll offset is applied to. In the editor one scroller around all the parts does that instead.
+ */
+.sce-root.sce-axis {
+  overflow-x: auto;
+  direction: ltr;
+  touch-action: pan-x pan-y pinch-zoom;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.sce-root.sce-part-time-ruler,
+.sce-root.sce-part-chord-track {
+  scrollbar-width: none;
+}
+.sce-root.sce-axis:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: -2px;
+}
+.sce-editor .sce-axis.sce-axis {
+  overflow: visible;
+}
+
+/*
  * Hard reset: a host's element selectors must not reach inside. Revert rolls back to browser defaults.
  * Notes are left out on purpose: all: revert on each of a few thousand nodes made first render
  * three times slower (style recalculation), so a note resets the few properties it needs by hand.
  */
-.sce-root.sce-root :where(:not(.sce-note)),
-.sce-root.sce-root :where(:not(.sce-note))::before,
-.sce-root.sce-root :where(:not(.sce-note))::after {
+.sce-root.sce-root :where(:not(.sce-note, .sce-part)),
+.sce-root.sce-root :where(:not(.sce-note, .sce-part))::before,
+.sce-root.sce-root :where(:not(.sce-note, .sce-part))::after {
   all: revert;
   box-sizing: border-box;
 }
@@ -271,8 +309,11 @@ const css = `
  * restyle on each step: about 70 ms at 1500 notes, against about 3 ms this way.
  */
 .sce-root .sce-canvas {
-  position: relative;
   width: calc(var(--sce-_keys) + var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+}
+/* The editor's own content block: as tall as all the parts together, so the header can pin for the whole scroll. */
+.sce-root .sce-content {
+  position: relative;
 }
 
 .sce-root .sce-row {
@@ -436,7 +477,7 @@ ${labelThinning()}
 }
 .sce-root .sce-track-head {
   position: sticky;
-  top: var(--sce-_top);
+  top: var(--sce-_head-top, 0px);
   z-index: 4;
   display: flex;
   align-items: center;

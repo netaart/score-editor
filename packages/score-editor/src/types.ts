@@ -45,6 +45,15 @@ export interface MountedEditor {
   destroy(): void;
 }
 
+/**
+ * A view part mounted on an element and bound to one editing session. It draws from the session and redraws when the
+ * session announces a change, in the session's language.
+ */
+export interface ViewPart {
+  /** Removes every listener, node and stylesheet the part added. Safe to call twice. */
+  destroy(): void;
+}
+
 /** The durations a dialect writes, as the numbers it puts after a note under its written unit. */
 export type DurationSet = ReadonlyArray<number>;
 

@@ -4,7 +4,7 @@ import type { BarPosition, Cut } from "./arrangement";
 import type { Meter } from "./score";
 import type { Language } from "./types";
 
-interface Messages {
+export interface Messages {
   title: string;
   hint: string;
   zoom: string;
