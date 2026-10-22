@@ -45,7 +45,7 @@ const session = createEditingSession({
 | `runTool(tool, values?)` | Validates a tool's parameters, builds its commands once and applies them as one history step. Returns `ToolResult`. One failing step refuses the whole run. |
 | `previewTool(tool, values?)` | Returns what the tool would produce without dispatching, changing the history or notifying anyone. |
 | `undo()` / `redo()` | Move one whole project step. Return false when there is none. |
-| `select(noteIds)` | Selects exactly these notes; ids that name no note are left out. |
+| `select(noteIds)` | Selects exactly these notes; ids that name no note are left out. It works while the session is read-only, so a host's own control can select when the parts refuse to. |
 | `setInsertionPoint(point \| null)` | Sets the insertion point; `tick` is a whole number, zero or more. Throws `RangeError` otherwise. |
 | `setView(patch)` | Changes zoom, scroll, language or editable by the given keys. Zoom is clamped to 0.01-4, scroll to zero or more. |
 | `replaceProject(next)` | Starts a new document from outside: history, selection and insertion point go; view state stays. No-op when every field is the same. |

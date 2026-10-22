@@ -21,7 +21,7 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 | `project: SongProject` | The song project. This version reads its `score` text and `modelId`. |
 | `dialects: DialectRegistry` | The dialects the editor can read, from `createDialectRegistry`. |
 | `language: Language` | Interface language, `"zh"` or `"en"`. |
-| `editable?: boolean` | Defaults to true. While true the toolbar offers undo, redo and Delete, a click or tap selects a note or sets the insertion point, and the editing keys act; see [view-parts.md](view-parts.md#editing-in-the-parts). While false the score is only shown and the toolbar shows a read-only badge. |
+| `editable?: boolean` | Defaults to true. While true the toolbar offers undo, redo, Delete and a Select menu, a click or tap selects a note or sets the insertion point, and the editing keys act; see [view-parts.md](view-parts.md#editing-in-the-parts). While false the score is only shown and the toolbar shows a read-only badge. |
 | `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language. Its one code today is `command-refused`: an edit the user asked for that the score would not take, with nothing changed; the message says why and where. |
 
 `MountedEditor`:

@@ -9,7 +9,7 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- | --- |
 | `mount` | core | Mounts the default editor on an element; returns `MountedEditor`. |
 | `createEditingSession` | core | Builds an `EditingSession` from a project and a `DialectRegistry`. |
-| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo and Delete; takes `ToolbarOptions`. |
+| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete and the Select menu; takes `ToolbarOptions`. |
 | `mountZoomControl` | core | Mounts the zoom control view part on `(el, session)`. |
 | `mountCutNotice` | core | Mounts the cut-notice view part. |
 | `mountProblemView` | core | Mounts the problem view part. |
@@ -26,7 +26,7 @@ change. The tests in the repository check that the list stays complete.
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
-| `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete) to a session; returns `EditingInputResult`. |
+| `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete, a toggle, a box, select all, invert, clear) to a session; returns `EditingInputResult`. |
 | `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
@@ -108,7 +108,7 @@ change. The tests in the repository check that the list stays complete.
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
 | `ToolbarOptions` | `{ hintId?, onRefused?, synthPreview? }` for the toolbar. |
-| `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, or a delete. |
+| `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
 ## Tool types
