@@ -59,6 +59,9 @@ export interface Messages {
   previewNothing: string;
   previewUnsupported: string;
   previewBlocked: string;
+  /** Draft keeper notices: the source changed under a draft, and a write or removal did not reach the host store. */
+  draftSourceChanged: string;
+  draftSaveFailed: string;
 }
 
 const en: Messages = {
@@ -125,6 +128,8 @@ const en: Messages = {
   previewNothing: "There is nothing to play from here",
   previewUnsupported: "This browser can’t play the preview",
   previewBlocked: "Blocked by the browser. Press Preview again.",
+  draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
+  draftSaveFailed: "The draft was not saved. The next change tries again.",
 };
 
 const zh: Messages = {
@@ -186,6 +191,8 @@ const zh: Messages = {
   previewNothing: "从这里开始没有可以试听的内容",
   previewUnsupported: "这个浏览器无法播放试听",
   previewBlocked: "浏览器没有允许发声，请再按一次试听",
+  draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
+  draftSaveFailed: "草稿没有保存成功，下一次改动会再试。",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

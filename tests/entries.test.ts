@@ -25,6 +25,10 @@ describe("package entries in a node environment", () => {
       "mountToolbar",
       "mountVoiceTrack",
       "mountZoomControl",
+      "createDraftKeeper",
+      "contentHash",
+      "draftText",
+      "readDraft",
       // What 0.1.0 exported.
       "mount",
       "applyProjectCommand",
@@ -35,7 +39,8 @@ describe("package entries in a node environment", () => {
     ];
     for (const name of functions) expect(typeof editor[name as keyof typeof editor], name).toBe("function");
     expect(typeof editor.TICKS_PER_QUARTER).toBe("number");
-    expect([...editor.NOTICE_CODES]).toEqual(["command-refused"]);
+    expect(typeof editor.DRAFT_FORMAT_VERSION).toBe("number");
+    expect([...editor.NOTICE_CODES]).toEqual(["command-refused", "draft-source-changed", "draft-save-failed"]);
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });
 

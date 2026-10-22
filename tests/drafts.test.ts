@@ -96,7 +96,9 @@ describe("the draft document", () => {
     expect(readDraft(JSON.stringify({ ...draft, updatedAt: "yesterday" }))).toBeNull();
     expect(readDraft(JSON.stringify({ ...draft, project: { ...project, scoreMode: "other" } }))).toBeNull();
     expect(
-      readDraft(JSON.stringify({ ...draft, project: { ...project, lyricLines: [{ text: "x", phrase: { firstBar: -1 } }] } })),
+      readDraft(
+        JSON.stringify({ ...draft, project: { ...project, lyricLines: [{ text: "x", phrase: { firstBar: -1 } }] } }),
+      ),
     ).toBeNull();
   });
 

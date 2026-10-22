@@ -26,6 +26,17 @@ export {
 } from "./diagnostics";
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
 export { createDialectRegistry } from "./dialect";
+// Drafts below the UI.
+export type {
+  DraftHandoffResult,
+  DraftKeeper,
+  DraftKeeperChange,
+  DraftKeeperOptions,
+  DraftKeeperStatus,
+} from "./draft-keeper";
+export { createDraftKeeper } from "./draft-keeper";
+export type { DraftProject, ScoreDraft } from "./drafts";
+export { contentHash, DRAFT_FORMAT_VERSION, draftText, readDraft } from "./drafts";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
 export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
@@ -102,6 +113,9 @@ export type {
   AxisPartOptions,
   ChordVocabulary,
   DialectConstraints,
+  DraftStore,
+  DraftStoreEntry,
+  DraftWriteResult,
   DurationSet,
   Language,
   MeterRule,
@@ -115,7 +129,3 @@ export { NOTICE_CODES } from "./types";
 export type { VoiceTrackOptions } from "./voice-track";
 export { mountVoiceTrack } from "./voice-track";
 export { mountZoomControl } from "./zoom-control";
-
-// Drafts below the UI.
-export type { DraftProject, ScoreDraft } from "./drafts";
-export { contentHash, DRAFT_FORMAT_VERSION, draftText, readDraft } from "./drafts";

@@ -11,7 +11,7 @@ export type Language = "zh" | "en";
  * The reasons of the one-time messages the editor sends to the host. The set is closed; a later ticket adds its codes
  * here. `command-refused`: the user asked for an edit and the score would not take it, so nothing changed.
  */
-export const NOTICE_CODES = ["command-refused"] as const;
+export const NOTICE_CODES = ["command-refused", "draft-source-changed", "draft-save-failed"] as const;
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */
 export type NoticeCode = (typeof NOTICE_CODES)[number];
@@ -120,4 +120,37 @@ export interface DialectConstraints {
   meter: MeterRule;
   /** The chord vocabulary the dialect accepts. */
   chords: ChordVocabulary;
+}
+
+/**
+ * What a draft store returns for one key: the text it holds, and a version whose shape is the host's business.
+ * `version` is opaque to the package and is only handed back in the next write or remove.
+ */
+export interface DraftStoreEntry {
+  readonly text: string;
+  readonly version: string;
+}
+
+/**
+ * The answer to a versioned write or remove. A success carries the new version; a conflict says someone else
+ * wrote the key since `expected`; a failure is any other reason the host could not store it.
+ */
+export type DraftWriteResult =
+  | { readonly ok: true; readonly version: string }
+  | { readonly ok: false; readonly reason: "conflict" | "failed" };
+
+/**
+ * The host's storage for drafts. The package passes source keys and text; where a key maps (a file, a path, a
+ * record) is the host's business. A host without deletion may keep a tombstone, as long as `read` answers null
+ * and `list` leaves the key out. Removing is required by the "a draft equal to the original leaves nothing" rule.
+ */
+export interface DraftStore {
+  /** The stored text and version for a key, or null when there is none. */
+  read(key: string): Promise<DraftStoreEntry | null>;
+  /** Writes `text` for `key`; `expected` is the version last read or written, or null to create the key. */
+  write(key: string, text: string, expected: string | null): Promise<DraftWriteResult>;
+  /** Removes `key`; `expected` answers as it does for `write`. */
+  remove(key: string, expected: string | null): Promise<DraftWriteResult>;
+  /** The keys that hold a draft. */
+  list(): Promise<ReadonlyArray<string>>;
 }
