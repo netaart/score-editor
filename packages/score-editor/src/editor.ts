@@ -30,6 +30,9 @@ import { mountVoiceTrack } from "./voice-track";
 
 let instanceCount = 0;
 
+/** A region of the frame for one part: the view switch shows and hides the whole region, not the part's own nodes. */
+const pane = (parent: HTMLElement): HTMLElement => create(parent.ownerDocument, "div", "sce-pane", parent);
+
 export class Editor implements MountedEditor {
   private options: MountOptions;
   private readonly doc: Document;
@@ -87,7 +90,7 @@ export class Editor implements MountedEditor {
     const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
     this.parts.push(mountToolbar(this.root, this.session, { hintId, onRefused, viewSwitch: true }));
     this.parts.push(mountCutNotice(this.root, this.session));
-    this.stalePane = create(doc, "div", "sce-pane", this.root);
+    this.stalePane = pane(this.root);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));
     const body = create(doc, "div", "sce-body", this.root);
     this.scroller = create(doc, "div", "sce-scroller", body);
@@ -100,11 +103,11 @@ export class Editor implements MountedEditor {
     this.parts.push(mountTimeRuler(this.top, this.session, { scroller: this.scroller, onRefused }));
     this.parts.push(mountChordTrack(this.top, this.session, { scroller: this.scroller, onRefused }));
     this.syncTracks();
-    this.problemPane = create(doc, "div", "sce-pane", body);
+    this.problemPane = pane(body);
     this.parts.push(mountProblemView(this.problemPane, this.session));
     // The staff view is mounted when it is first shown, since mounting it asks for abcjs.
-    this.staffPane = create(doc, "div", "sce-pane", body);
-    this.textPane = create(doc, "div", "sce-pane", body);
+    this.staffPane = pane(body);
+    this.textPane = pane(body);
     this.parts.push(mountTextView(this.textPane, this.session));
 
     installZoomGestures(this.root, this.session, this.abort.signal, { wheel: false });
