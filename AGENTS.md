@@ -21,7 +21,7 @@ Playwright needs its Chromium once: `pnpm exec playwright install chromium`. `PL
 
 Three seams, and no others:
 
-- Importing each package entry in a node environment (`tests/entries.test.ts`), and the editing session driven through the entry with real commands (`tests/session.test.ts`).
+- Importing each package entry in a node environment (`tests/entries.test.ts`), the editing session driven through the entry with real commands (`tests/session.test.ts`), and custom tools driven through the entry (`tests/tools.test.ts`).
 - The dialect's `parse` and `serialize`, the registry and `formatDiagnostic`, through the package entries (`tests/song2-*.test.ts`).
 - The mounted editor, and view parts mounted on one editing session in a layout of the page's own, in real Chromium, driven only through `window.harness` on the test page (`e2e/page/harness.js`) and through what a user can see and do (`e2e/mount.spec.ts`, `e2e/parts.spec.ts`). The page is the bare host: it builds the dialect registry and fetches the test scores itself. Prefer locators by role, name and text over class names.
 
