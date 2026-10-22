@@ -81,15 +81,20 @@ export type {
   DispatchResult,
   EditingSession,
   InsertionPoint,
+  RejectedText,
   ScoreReading,
   SessionChange,
   SessionChangeCause,
   SessionListener,
   SessionOptions,
+  ViewName,
   ViewState,
 } from "./session";
-export { createEditingSession } from "./session";
+export { createEditingSession, VIEW_NAMES } from "./session";
+export { mountStaffView } from "./staff-view";
+export { mountStaleNotice } from "./stale-notice";
 export { mountSynthPreview } from "./synth-preview";
+export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
 export type {
   BooleanToolParameter,
@@ -126,6 +131,7 @@ export type {
   ViewPart,
 } from "./types";
 export { NOTICE_CODES } from "./types";
+export { mountViewSwitch } from "./view-switch";
 export type { VoiceTrackOptions } from "./voice-track";
 export { mountVoiceTrack } from "./voice-track";
 export { mountZoomControl } from "./zoom-control";

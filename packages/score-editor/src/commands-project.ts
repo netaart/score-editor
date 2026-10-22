@@ -1,19 +1,25 @@
-// ABOUTME: The song-project commands and the song-project rules: style, score mode, seed, the style BPM and melody chords.
-// ABOUTME: A project command never touches the score text; applyProjectCommand is the one entry that runs these rules.
+// ABOUTME: The song-project commands and the song-project rules: style, score mode, seed, replacing the score text, the style BPM and melody chords.
+// ABOUTME: Only replaceScoreText reads or writes the score text, and only through the dialect; applyProjectCommand is the one entry that runs the rules.
 
 import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import { joinLyrics, LYRICS_MAX_CHARACTERS, lyricCharacterCount, lyricLinesOf, unalignedLyricLines } from "./lyrics";
 import type { SongProject } from "./score";
+import { fallbackDiagnostic, readScoreText } from "./score-text";
 
-const PROJECT_COMMAND_TYPES = ["setStyle", "setScoreMode", "setSeed"] as const;
+const PROJECT_COMMAND_TYPES = ["setStyle", "setScoreMode", "setSeed", "replaceScoreText"] as const;
 
-/** A song-project edit that is not a score edit. The name is one word so the two command kinds stay apart. */
+/**
+ * A song-project edit that is not a score edit. The name is one word so the two command kinds stay apart.
+ * `replaceScoreText` replaces the whole score text with another one, and is how a person's typing reaches the project: a
+ * readable text is taken, an unreadable one is refused with its first diagnostic.
+ */
 export type ProjectCommand =
   | { readonly type: "setStyle"; readonly style: string }
   | { readonly type: "setScoreMode"; readonly scoreMode: "full" | "melody" }
-  | { readonly type: "setSeed"; readonly seed: number | null };
+  | { readonly type: "setSeed"; readonly seed: number | null }
+  | { readonly type: "replaceScoreText"; readonly text: string };
 
 export type ProjectCommandResult =
   | { readonly ok: true; readonly project: SongProject }
@@ -24,8 +30,12 @@ export function isProjectCommand(command: { readonly type: string }): command is
   return (PROJECT_COMMAND_TYPES as ReadonlyArray<string>).includes(command.type);
 }
 
-/** Applies one project field edit. It never reads or writes the score text. */
-export function runProjectCommand(project: SongProject, command: ProjectCommand): ProjectCommandResult {
+/** Applies one project command. Only `replaceScoreText` touches the score text, and the dialect reads and writes it. */
+export function runProjectCommand(
+  dialect: ScoreDialect,
+  project: SongProject,
+  command: ProjectCommand,
+): ProjectCommandResult {
   switch (command.type) {
     case "setStyle":
       if (typeof command.style !== "string") {
@@ -45,6 +55,11 @@ export function runProjectCommand(project: SongProject, command: ProjectCommand)
         };
       }
       return { ok: true, project: { ...project, seed: command.seed } };
+    case "replaceScoreText": {
+      const read = readScoreText(dialect, command.text);
+      if (!read.ok) return { ok: false, diagnostic: read.diagnostics[0] ?? fallbackDiagnostic() };
+      return { ok: true, project: { ...project, score: read.text } };
+    }
   }
 }
 

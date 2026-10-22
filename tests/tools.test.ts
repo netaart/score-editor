@@ -324,6 +324,91 @@ describe("running a tool on a session", () => {
     expect(one.project.score).toBe(two.project.score);
   });
 
+  describe("when a step comes back with a notice", () => {
+    /** Two tempo changes and a note to a rest. A style without a BPM makes each tempo change a notice. */
+    const tempoTwiceAndRest: ScoreTool = {
+      id: "tempo-twice-and-rest",
+      name: { en: "Tempo twice and rest", zh: "两次变速并休止" },
+      parameters: [],
+      commands() {
+        return [
+          { type: "setTempo", bpm: 100 },
+          { type: "toRest", noteId: "Vocal:256" },
+          { type: "setTempo", bpm: 90 },
+        ];
+      },
+    };
+    const tempoThenMissingNote: ScoreTool = {
+      id: "tempo-then-missing-note",
+      name: { en: "Tempo then a missing note", zh: "先变速再找不到音" },
+      parameters: [],
+      commands() {
+        return [
+          { type: "setTempo", bpm: 100 },
+          { type: "toRest", noteId: "Vocal:999" },
+        ];
+      },
+    };
+    /** The score with the D of bar 1 a rest and the tempo at 90, which the tool above leaves. */
+    const SCORE_AT_90_WITHOUT_D = `${HEADER}
+K:C
+V: Vocal
+C4z4E4F4|G16|`.replace("Q:1/4=120", "Q:1/4=90");
+
+    it("runs on, commits the whole list as one step, and carries each notice once", () => {
+      const session = open({ style: "warm pop" });
+      const changes = listen(session);
+
+      const result = session.runTool(tempoTwiceAndRest, {});
+
+      expect(result.ok).toBe(true);
+      expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+      expect(result.commands).toHaveLength(3);
+      expect(result.project).toBe(session.project);
+      expect(session.project.score).toBe(SCORE_AT_90_WITHOUT_D);
+      expect(changes).toHaveLength(1);
+
+      expect(session.undo()).toBe(true);
+      expect(session.project.score).toBe(SCORE);
+      expect(session.canUndo).toBe(false);
+    });
+
+    it("refuses the whole list when a refusal follows the notice, and commits nothing", () => {
+      const session = open({ style: "warm pop" });
+      const before = session.project;
+      const changes = listen(session);
+
+      const result = session.runTool(tempoThenMissingNote, {});
+
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["note-not-found"]);
+      expect(result.project).toBe(before);
+      expect(session.project).toBe(before);
+      expect(session.canUndo).toBe(false);
+      expect(changes).toEqual([]);
+    });
+
+    it("is previewed as the project it would make, with the notice, and changes nothing", () => {
+      const session = open({ style: "warm pop" });
+      const changes = listen(session);
+
+      const preview = session.previewTool(tempoTwiceAndRest, {});
+
+      expect(preview.ok).toBe(true);
+      expect(preview.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+      expect(preview.project.score).toBe(SCORE_AT_90_WITHOUT_D);
+      expect(session.project.score).toBe(SCORE);
+      expect(changes).toEqual([]);
+    });
+
+    it("gives the same result without a session as the session gives", () => {
+      const withoutSession = previewTool(tempoTwiceAndRest, { ...project, style: "warm pop" }, [], {}, song2Dialect);
+
+      expect(withoutSession.ok).toBe(true);
+      expect(withoutSession.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+    });
+  });
+
   it("adds no history step for a run whose commands leave the project as it was", () => {
     const noCommand: ScoreTool = {
       id: "no-command",

@@ -14,7 +14,7 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession): ViewPa
   const releaseStyles = acquireStyles(el);
   const root = create(doc, "div", "sce-root sce-part sce-part-notice");
   el.appendChild(root);
-  const notice = create(doc, "div", "sce-notice", root);
+  const notice = create(doc, "div", "sce-notice sce-cut-notice", root);
   notice.setAttribute("role", "note");
 
   let reading = session.reading;
