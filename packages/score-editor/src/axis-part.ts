@@ -95,6 +95,7 @@ export function mountAxisPart(host: HTMLElement, session: EditingSession, spec: 
     language = session.view.language;
     root.lang = language;
     root.replaceChildren();
+    delete root.dataset.labelStep;
     canvas = null;
     built = null;
     ticks = 0;
