@@ -144,7 +144,7 @@ export function installLanePointer(
     delete g.geometry.lane.dataset.boxing;
   }
 
-  /** Starts watching what can end a box without its pointer: Escape, a scroll under the pointer, a change of the session. */
+  /** Starts watching what can end a box without its pointer: Escape, a scroll under the pointer, a lost focus, a change of the session. */
   function watch(g: Gesture): void {
     const own = { signal: g.ends.signal };
     const scope = root.getRootNode();
@@ -159,6 +159,8 @@ export function installLanePointer(
       { capture: true, ...own },
     );
     scope.addEventListener("scroll", () => draw(g), { capture: true, passive: true, ...own });
+    // A page that loses the focus mid-gesture (a switch of window) may never hear the release.
+    root.ownerDocument.defaultView?.addEventListener("blur", () => giveUp(g), own);
     const unsubscribe = session.subscribe(() => {
       if (!session.view.editable || options.lane() !== g.geometry) giveUp(g);
     });

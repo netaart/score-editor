@@ -340,6 +340,32 @@ test.describe("the box", () => {
     expect(await harness.layout.selection()).toEqual([IDS.F4]);
   });
 
+  test("is given up when the page loses the focus while it is open: the release that may never come is not waited for", async ({
+    page,
+    harness,
+    isMobile,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(note(page, F4));
+    const { from, to } = await aroundCAndD(page);
+    const pointer = await pointerOf(page, harness, isMobile);
+    try {
+      await pointer.down(from);
+      await pointer.move(to);
+      await expect(theBox(page)).toBeVisible();
+
+      await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+      await expect(theBox(page)).toHaveCount(0);
+      await expect(page.locator(".sce-lane[data-boxing]")).toHaveCount(0);
+      await pointer.up();
+    } finally {
+      await pointer.close();
+    }
+
+    expect(await harness.layout.selection()).toEqual([IDS.F4]);
+  });
+
   test("is given up when the editor stops being editable while it is open", async ({
     page,
     harness,
