@@ -43,6 +43,13 @@ export {
   unalignedLyricLines,
 } from "./lyrics";
 export { mount } from "./mount";
+// The synth preview.
+export type { PreviewNoteOptions } from "./preview-note";
+export { previewNote } from "./preview-note";
+export type { PreviewPlayer, PreviewStart } from "./preview-player";
+export { previewPlayer } from "./preview-player";
+export type { PreviewChordEvent, PreviewEvent, PreviewNoteEvent, PreviewSchedule } from "./preview-schedule";
+export { schedulePreview } from "./preview-schedule";
 export { mountProblemView } from "./problem-view";
 export type {
   Bar,
@@ -71,6 +78,7 @@ export type {
   ViewState,
 } from "./session";
 export { createEditingSession } from "./session";
+export { mountSynthPreview } from "./synth-preview";
 export { mountTimeRuler } from "./time-ruler";
 export type {
   BooleanToolParameter,

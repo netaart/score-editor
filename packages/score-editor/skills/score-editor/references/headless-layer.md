@@ -121,3 +121,36 @@ tempo range, section marker, lyric rule, durations, meter rule and chord vocabul
 
 `Language` is `"zh" | "en"`. `Notice` is a one-time message for the host's own toast system, `NoticeCode` its
 machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-refused"`, sent when the score would not take an edit the user asked for).
+
+## The preview schedule
+
+`schedulePreview(score, fromTick = 0)` turns a `Score` into what a synthetic preview plays: a `PreviewSchedule`, which is
+`{ events, fromTick, secondsPerTick, length }`. It is pure, needs no browser, and runs in Node and in a worker. The
+browser player and the playhead are in [view-parts.md](view-parts.md#the-synth-preview).
+
+```ts
+import { schedulePreview } from "@neta-art/score-editor";
+import type { PreviewChordEvent, PreviewEvent, PreviewNoteEvent, PreviewSchedule } from "@neta-art/score-editor";
+
+const { score } = song2Dialect.parse(project.score);
+if (score) {
+  const schedule: PreviewSchedule = schedulePreview(score, 512); // from tick 512, the third beat of a 4/4 bar
+  for (const event of schedule.events satisfies ReadonlyArray<PreviewEvent>) {
+    if (event.kind === "note") {
+      const note: PreviewNoteEvent = event; // { voice, midi, at, length }, seconds from the start
+    } else {
+      const chord: PreviewChordEvent = event; // { name, midis (bass first), at, length }
+    }
+  }
+  console.log(schedule.length, "seconds; a tick lasts", schedule.secondsPerTick);
+}
+```
+
+- Events are the `Vocal` and `Ins` notes (a tied chain once, from its first note to the end of its last; a rest is
+  silent) and each chord span, in time order. `at` and `length` are seconds counted from `fromTick`.
+- Seconds come from the score's tempo, of which a score has one (`score.tempo`; the format has no tempo changes).
+  Positions come from the score's own ticks, so a bar in 3/4 or 6/8 and a change of meter are already in them.
+- From a start tick, a note that began before it is not sounded again, and the chord in force at the start is heard to
+  its end. A cut score ends where its music ends, not at the end of the bar the cut is in. `length` is 0 when there is
+  nothing to play.
+- A position in the score is `fromTick + seconds / secondsPerTick`, which is how the player places its playhead.

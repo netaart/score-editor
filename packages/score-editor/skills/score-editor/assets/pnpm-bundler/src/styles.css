@@ -13,6 +13,7 @@ body {
 
 .skill-example {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   max-width: 960px;
   margin: 0 auto;
@@ -38,6 +39,11 @@ body {
   border: 1px solid #d4d4d8;
   border-radius: 8px;
   background: #ffffff;
+}
+
+/* The toolbar wraps in a box narrower than its controls, but only when the box is allowed to be narrow. */
+.skill-toolbar > [data-slot="toolbar"] {
+  min-width: 0;
 }
 
 .skill-actions {
