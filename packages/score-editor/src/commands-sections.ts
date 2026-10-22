@@ -46,6 +46,11 @@ function blocksOf(score: Score): Block[] {
   }));
 }
 
+function cutRefusal(section: Section): ScoreCommandResult {
+  const bar = Math.max(1, section.firstBar + 1);
+  return commandRefusal("truncated-tail", { bar }, { bar });
+}
+
 function sectionRefusal(score: Score, index: number): ScoreCommandResult {
   const section = score.sections[index];
   const at: DiagnosticAt = { bar: section === undefined ? 1 : Math.max(1, section.firstBar + 1) };
@@ -283,11 +288,7 @@ function deleteSection(score: Score, index: number): ScoreCommandResult {
   if (!isIndex(index) || index >= score.sections.length) return sectionRefusal(score, index);
   const section = score.sections[index] as Section;
   if (sectionHasCut(score, section) && index !== score.sections.length - 1) {
-    return commandRefusal(
-      "truncated-tail",
-      { bar: Math.max(1, section.firstBar + 1) },
-      { bar: Math.max(1, section.firstBar + 1) },
-    );
+    return cutRefusal(section);
   }
   const blocks = blocksOf(score);
   const block = blocks[index] as Block;
@@ -303,11 +304,7 @@ function duplicateSection(score: Score, index: number): ScoreCommandResult {
     return commandRefusal("section-unnamed", { section: index + 1 }, { bar: Math.max(1, section.firstBar + 1) });
   }
   if (sectionHasCut(score, section)) {
-    return commandRefusal(
-      "truncated-tail",
-      { bar: Math.max(1, section.firstBar + 1) },
-      { bar: Math.max(1, section.firstBar + 1) },
-    );
+    return cutRefusal(section);
   }
   const blocks = blocksOf(score);
   const block = blocks[index] as Block;
@@ -334,11 +331,7 @@ function moveSection(score: Score, index: number, direction: "earlier" | "later"
     return commandRefusal("section-before-unnamed", { section: index + 1 }, { bar: Math.max(1, section.firstBar + 1) });
   }
   if (sectionHasCut(score, section) || sectionHasCut(score, neighbour)) {
-    return commandRefusal(
-      "truncated-tail",
-      { bar: Math.max(1, section.firstBar + 1) },
-      { bar: Math.max(1, section.firstBar + 1) },
-    );
+    return cutRefusal(section);
   }
   const blocks = blocksOf(score);
   const current = blocks[index] as Block;
