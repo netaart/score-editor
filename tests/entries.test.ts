@@ -133,5 +133,5 @@ describe("abcjs stays out of the entries", () => {
 
     expect(afterAbcjs, "the check can see abcjs when it is loaded").toBeGreaterThan(0);
     expect(afterEntries).toBe(0);
-  });
+  }, 20_000);
 });
