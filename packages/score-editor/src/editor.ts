@@ -50,6 +50,7 @@ export class Editor implements MountedEditor {
   private readonly textPane: HTMLElement;
   private readonly parts: ViewPart[] = [];
   private staffMounted = false;
+  private textMounted = false;
   private shownView: ViewName = "arrangement";
   /** A project was opened while another view was shown: the arrangement opens at its start when it is shown again. */
   private centreDue = false;
@@ -105,10 +106,10 @@ export class Editor implements MountedEditor {
     this.syncTracks();
     this.problemPane = pane(body);
     this.parts.push(mountProblemView(this.problemPane, this.session));
-    // The staff view is mounted when it is first shown, since mounting it asks for abcjs.
+    // The staff view and the text view are mounted when each is first shown: the staff view asks for abcjs, and the text
+    // view draws a number for each line of the score, a cost nobody pays who never opens it.
     this.staffPane = pane(body);
     this.textPane = pane(body);
-    this.parts.push(mountTextView(this.textPane, this.session));
 
     installZoomGestures(this.root, this.session, this.abort.signal, { wheel: false });
     installZoomGestures(this.scroller, this.session, this.abort.signal, { wheel: true });
@@ -206,6 +207,10 @@ export class Editor implements MountedEditor {
     if (view === "staff" && !this.staffMounted) {
       this.staffMounted = true;
       this.parts.push(mountStaffView(this.staffPane, this.session));
+    }
+    if (view === "text" && !this.textMounted) {
+      this.textMounted = true;
+      this.parts.push(mountTextView(this.textPane, this.session));
     }
     if (returning && arrangement && this.centreDue) {
       this.centreDue = false;

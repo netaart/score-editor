@@ -1152,6 +1152,30 @@ test.describe("the three views of the default editor", () => {
     expect(requests).toHaveLength(1);
   });
 
+  test("mounts the text view when it is first shown, and keeps it, with what it holds, once it is mounted", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await expect(page.locator(".sce-part-text"), "no text view before it is shown").toHaveCount(0);
+    await press(viewTab(page, "Staff"));
+    await expect(staffNotes(page)).toHaveCount(5);
+    await expect(page.locator(".sce-part-text"), "the staff does not bring it").toHaveCount(0);
+
+    await press(viewTab(page, "Score text"));
+    await expect(page.locator(".sce-part-text")).toHaveCount(1);
+    await expect(editorText(page)).toHaveValue(QUARTERS);
+    await editorText(page).fill(BROKEN);
+    await expect(editorProblems(page).getByRole("listitem")).toHaveCount(1);
+
+    await press(viewTab(page, "Arrangement"));
+    await press(viewTab(page, "Score text"));
+    await expect(page.locator(".sce-part-text"), "mounted once").toHaveCount(1);
+    await expect(editorText(page)).toHaveValue(BROKEN);
+    await expect(editorProblems(page).getByRole("listitem")).toHaveCount(1);
+  });
+
   test("leaves selecting and deleting to the arrangement: Delete pressed while the staff or the text is shown deletes nothing", async ({
     page,
     harness,
