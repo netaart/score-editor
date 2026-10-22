@@ -25,6 +25,10 @@ export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
 export { mount } from "./mount";
 // The synth preview (ticket 11).
+export type { PreviewNoteOptions } from "./preview-note";
+export { previewNote } from "./preview-note";
+export type { PreviewPlayer, PreviewStart } from "./preview-player";
+export { previewPlayer } from "./preview-player";
 export type { PreviewChord, PreviewEvent, PreviewNote, PreviewSchedule } from "./preview-schedule";
 export { schedulePreview } from "./preview-schedule";
 export { mountProblemView } from "./problem-view";
