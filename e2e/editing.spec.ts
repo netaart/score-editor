@@ -773,6 +773,22 @@ test.describe("selecting a note by keyboard", () => {
     expect(await harness.layout.canUndo()).toBe(false);
   });
 
+  test("a click or a tap puts the focus on the note it selects, so the keys go on from there, without the keyboard ring", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(note(page, D4));
+    await expect(selected(page, D4)).toBeFocused();
+    // The ring says where the keys act when the keys brought the focus there; a pointer already knows.
+    expect(await selected(page, D4).evaluate((el) => el.matches(":focus-visible"))).toBe(false);
+
+    await page.keyboard.press("ArrowRight");
+    await expect(selected(page, E4)).toBeFocused();
+    expect(await selected(page, E4).evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+  });
+
   test("Enter and Space select the note in focus without moving", async ({ page, harness }) => {
     await openTrack(harness);
     await tabToNotes(page);

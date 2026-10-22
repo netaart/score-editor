@@ -108,7 +108,10 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     const block = event.target.closest(".sce-note");
     const noteId = block ? drawn.owners.get(block) : undefined;
     if (noteId !== undefined) {
-      if (handleEditingInput(session, { type: "click-note", noteId }).handled) noteFocus?.focus(noteId);
+      const { handled } = handleEditingInput(session, { type: "click-note", noteId });
+      // A mouse press has focused the note by now. A touch or pen release comes before the browser moves the focus, so
+      // moving it from here would draw the keyboard ring on a tap; the browser focuses the note next, without the ring.
+      if (handled && event.pointerType === "mouse") noteFocus?.focus(noteId);
       return;
     }
     if (!event.target.closest(".sce-lane")) return;
