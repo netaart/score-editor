@@ -237,6 +237,8 @@ test.describe("the toolbar part", () => {
     await harness.layout.undo();
     const shown = await box(toolbar(page));
     expect(shown.width).toBe(190);
+    // A host narrower than the row makes it scroll; it never squeezes Delete, the touch way to delete, below its neighbours.
+    expect((await box(deleteButton(page))).width).toBe((await box(undoButton(page))).width);
     const rightEdge = async (control: Locator) => {
       const area = await box(control);
       return area.x + area.width;
@@ -249,7 +251,7 @@ test.describe("the toolbar part", () => {
 
     if (isMobile) {
       const at = { x: shown.x + shown.width / 2, y: shown.y + shown.height / 2 };
-      await harness.swipe({ x: at.x + 60, y: at.y }, { x: at.x - 60, y: at.y });
+      await harness.swipe({ x: at.x + 80, y: at.y }, { x: at.x - 80, y: at.y });
       await expect.poll(async () => (await box(deleteButton(page))).x).toBeLessThan(shown.x + shown.width);
     } else {
       await deleteButton(page).focus();

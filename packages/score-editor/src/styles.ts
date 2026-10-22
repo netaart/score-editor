@@ -263,6 +263,7 @@ const css = `
 }
 /* Undo and redo draw an arrow; the stylesheet gives it its stroke, since the reset above would revert attributes. */
 .sce-root .sce-icon-button {
+  flex: none;
   justify-content: center;
   width: 28px;
   padding: 0;
