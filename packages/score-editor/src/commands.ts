@@ -1,7 +1,8 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
 import { positionOf } from "./arrangement";
-import { runBarsCommand } from "./commands-bars";
+import { runBarCommand } from "./commands-bars";
+import { runTruncationCommand } from "./commands-truncation";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
 import type { DialectConstraints } from "./types";
@@ -71,8 +72,9 @@ export function runScoreCommand(
     case "insertBar":
     case "deleteBars":
     case "setSectionMeter":
+      return runBarCommand(score, command, constraints);
     case "fillTruncatedBar":
     case "deleteTruncatedBar":
-      return runBarsCommand(score, command, constraints);
+      return runTruncationCommand(score, command, constraints);
   }
 }

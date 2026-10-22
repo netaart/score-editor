@@ -39,6 +39,7 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "truncated-tail",
   "meter-does-not-fit",
   "last-bar",
+  "cut-in-complete-bar",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -91,6 +92,7 @@ interface Catalog {
   readonly truncatedTail: Text;
   readonly meterDoesNotFit: Text;
   readonly lastBar: Text;
+  readonly cutInCompleteBar: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -442,19 +444,19 @@ function chineseMeterNotAllowed(params: DiagnosticParams): string {
 }
 
 function englishNoTruncation(): string {
-  return "This score has no truncated end.";
+  return "This score has no cut.";
 }
 
 function chineseNoTruncation(): string {
-  return "这份乐谱的末尾没有被截断。";
+  return "这份乐谱没有截断处。";
 }
 
 function englishNoIncompleteBar(): string {
-  return "The truncated end has no incomplete bar to change.";
+  return "The cut has no incomplete bar to change.";
 }
 
 function chineseNoIncompleteBar(): string {
-  return "被截断的末尾没有不完整的小节可以改。";
+  return "截断处没有不完整的小节可以改。";
 }
 
 function englishTieAcrossBar(params: DiagnosticParams): string {
@@ -466,11 +468,11 @@ function chineseTieAcrossBar(params: DiagnosticParams): string {
 }
 
 function englishTruncatedTail(): string {
-  return "That would touch the truncated end of the score; use the truncation commands for it.";
+  return "That would touch the score's cut; use the truncation commands for it.";
 }
 
 function chineseTruncatedTail(): string {
-  return "这样会动到乐谱被截断的末尾；请用截断专用的操作处理它。";
+  return "这样会动到乐谱的截断处；请用截断专用的操作处理它。";
 }
 
 function englishMeterDoesNotFit(params: DiagnosticParams): string {
@@ -479,6 +481,14 @@ function englishMeterDoesNotFit(params: DiagnosticParams): string {
 
 function chineseMeterDoesNotFit(params: DiagnosticParams): string {
   return `这个段落的长度不是 ${value(params, "numerator")}/${value(params, "denominator")} 拍的整小节。`;
+}
+
+function englishCutInCompleteBar(): string {
+  return "The cut is inside a measure another voice still uses; fill it with rests instead.";
+}
+
+function chineseCutInCompleteBar(): string {
+  return "截断落在另一个声部还在用的小节里；请改用休止把它补齐。";
 }
 
 function englishLastBar(): string {
@@ -515,6 +525,7 @@ const en: Catalog = {
   truncatedTail: englishTruncatedTail,
   meterDoesNotFit: englishMeterDoesNotFit,
   lastBar: englishLastBar,
+  cutInCompleteBar: englishCutInCompleteBar,
 };
 
 const zh: Catalog = {
@@ -543,6 +554,7 @@ const zh: Catalog = {
   truncatedTail: chineseTruncatedTail,
   meterDoesNotFit: chineseMeterDoesNotFit,
   lastBar: chineseLastBar,
+  cutInCompleteBar: chineseCutInCompleteBar,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -600,6 +612,8 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.meterDoesNotFit(diagnostic.params);
     case "last-bar":
       return catalog.lastBar(diagnostic.params);
+    case "cut-in-complete-bar":
+      return catalog.cutInCompleteBar(diagnostic.params);
     default:
       return "";
   }

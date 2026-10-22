@@ -14,7 +14,6 @@ import {
   signatureOf,
 } from "./parser";
 import { serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
-import { serializeTruncationSong2 } from "./write-truncation";
 
 const TICKS_PER_QUARTER = 256;
 const DURATIONS: ReadonlyArray<number> = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48];
@@ -245,11 +244,6 @@ function sourceContentByBar(source: Song2Source): Map<number, BarContent> {
   return byBar;
 }
 
-function sameTruncation(left: Score["truncation"], right: Score["truncation"]): boolean {
-  if (left === null || right === null) return left === right;
-  return left.voice === right.voice && left.bar === right.bar && left.short === right.short;
-}
-
 function gridMatchesSource(score: Score, source: Song2Source): boolean {
   const content = sourceContentByBar(source);
   return score.bars.every((bar, index) => {
@@ -263,46 +257,8 @@ function gridMatchesSource(score: Score, source: Song2Source): boolean {
   });
 }
 
-function tailContentMatches(score: Score, source: Song2Source): boolean {
-  const content = sourceContentByBar(source);
-  const voiceFor = new Map<number, string>();
-  for (const line of source.musicLines) {
-    for (const segment of line.segments) {
-      for (const bar of segment.bars) if (!voiceFor.has(bar.bar)) voiceFor.set(bar.bar, bar.voice);
-    }
-  }
-  return score.bars.every((bar, index) => {
-    const old = content.get(index);
-    if (old === undefined) return false;
-    if (
-      old.start !== bar.start ||
-      old.key !== bar.key ||
-      old.meter !== `${bar.meter.numerator}/${bar.meter.denominator}`
-    )
-      return false;
-    const voice = voiceFor.get(index);
-    if (voice === undefined) return false;
-    const before = old.notes.map((note) => [note.start - old.start, note.duration, note.midi]);
-    const after = score.notes
-      .filter((note) => note.voice === voice && note.bar === index)
-      .map((note) => [note.start - bar.start, note.duration, note.midi]);
-    return JSON.stringify(before) === JSON.stringify(after);
-  });
-}
-
-function isTruncationEdit(score: Score, source: Song2Source): boolean {
-  if (sameTruncation(score.truncation, source.truncation)) return false;
-  const content = sourceContentByBar(source);
-  let oldCount = 0;
-  for (const index of content.keys()) oldCount = Math.max(oldCount, index + 1);
-  const sameCount = score.bars.length === oldCount && gridMatchesSource(score, source);
-  const removingIncompleteTail =
-    score.bars.length === oldCount - 1 &&
-    source.truncation !== null &&
-    source.truncation.bar === oldCount - 1 &&
-    content.get(oldCount - 1)?.incomplete === true;
-  const tailRemoved = removingIncompleteTail && tailContentMatches(score, source);
-  return sameCount || tailRemoved;
+function cutWasRepaired(score: Score, source: Song2Source): boolean {
+  return source.truncation !== null && score.truncation === null;
 }
 
 function barsFill(score: Score): boolean {
@@ -316,7 +272,7 @@ function barsFill(score: Score): boolean {
   );
 }
 
-function gridMoved(score: Score, source: Song2Source): boolean {
+function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
   const content = sourceContentByBar(source);
   let oldCount = 0;
   for (const index of content.keys()) oldCount = Math.max(oldCount, index + 1);
@@ -341,11 +297,8 @@ function gridMoved(score: Score, source: Song2Source): boolean {
 /** Writes a score: untouched bars keep their read bytes, changed bars are rewritten whole. */
 export function serializeSong2(score: Score): string {
   const source = sourceOf(score);
-  if (isTruncationEdit(score, source)) return serializeTruncationSong2(score, source);
-  if (gridMoved(score, source)) {
-    return score.truncation !== null
-      ? serializeTruncatedBarsSong2(score, source, source.unitDenominator)
-      : serializeBarsSong2(score, source, source.unitDenominator);
+  if (barGridNeedsWriting(score, source) || cutWasRepaired(score, source)) {
+    return score.truncation !== null ? serializeTruncatedBarsSong2(score, source) : serializeBarsSong2(score, source);
   }
   const lines = source.text.split("\n");
   const dropped = new Set<number>();

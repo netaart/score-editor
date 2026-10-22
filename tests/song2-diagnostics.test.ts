@@ -39,6 +39,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "truncated-tail",
   "meter-does-not-fit",
   "last-bar",
+  "cut-in-complete-bar",
 ];
 
 describe("diagnostics", () => {

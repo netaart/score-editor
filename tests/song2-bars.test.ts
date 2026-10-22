@@ -2,7 +2,7 @@
 // ABOUTME: Untouched bars are compared as raw music-line pieces, and the cut-tail bytes of an untouched tail stay verbatim.
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
-import { applyScoreCommand, type Note, type Score, type ScoreCommand } from "@neta-art/score-editor";
+import { applyScoreCommand, formatDiagnostic, type Note, type Score } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
 const HEADER = `X:1
@@ -430,10 +430,12 @@ V: Ins
 z16|z16|
 % outro
 V: Vocal
-C16|D8E4z4|`);
+C16|D8E4z4|
+V: Ins
+z16|z16|`);
     const output = parse(result.text);
     check(output);
-    expect(output.truncation).toEqual({ voice: "Ins", bar: 2, short: false });
+    expect(output.truncation).toBeNull();
   });
 
   it("fills an Ins cut and keeps the Vocal bars before it", () => {
@@ -481,13 +483,19 @@ C16|C8D3`;
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.text).toBe(`${VOCAL_HEADER}
-K:C
-V: Vocal
-C16|C8D3zzzzz|`);
     const output = parse(result.text);
     check(output);
     expect(output.truncation).toBeNull();
+    const filled = output.notes.filter((note) => note.bar === 1);
+    expect(filled.map((note) => [note.start, note.duration, note.midi])).toEqual([
+      [1024, 512, 60],
+      [1536, 192, 62],
+      [1728, 64, null],
+      [1792, 64, null],
+      [1856, 64, null],
+      [1920, 64, null],
+      [1984, 64, null],
+    ]);
   });
 
   it("deletes a Vocal-only incomplete bar and its unfinished bytes", () => {
@@ -505,7 +513,7 @@ C16|`);
     expect(output.bars).toHaveLength(1);
   });
 
-  it("deletes an Ins cut measure and leaves a short Ins block", () => {
+  it("refuses to delete an Ins cut that sits inside a complete Vocal measure", () => {
     const text = `${HEADER}
 K:C
 V: Vocal
@@ -514,17 +522,29 @@ V: Ins
 z16|C8`;
     const result = applyScoreCommand(song2Dialect, text, { type: "deleteTruncatedBar" });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.text).toBe(`${HEADER}
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("cut-in-complete-bar");
+    expect(result.diagnostic.at.bar).toBe(2);
+  });
+
+  it("cuts a tie into the deleted incomplete measure", () => {
+    const text = `${VOCAL_HEADER}
 K:C
 V: Vocal
-C16|D16|
-V: Ins
-z16|`);
+C16-|C8^`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "deleteTruncatedBar" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(`${VOCAL_HEADER}
+K:C
+V: Vocal
+C16|`);
     const output = parse(result.text);
     check(output);
-    expect(output.truncation).toEqual({ voice: "Ins", bar: 1, short: false });
+    expect(output.notes[0]?.tie).toBe(false);
+    expect(output.truncation).toBeNull();
   });
 
   it("refuses both commands on a score with no truncation", () => {
@@ -587,6 +607,7 @@ describe("every sample", () => {
     it(`${fact.file}`, () => {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const input = parse(text);
+      const pieces = splitBars(text);
       const firstLength = (input.bars[0] as Score["bars"][number]).length;
 
       const inserted = applyScoreCommand(song2Dialect, text, { type: "insertBar", bar: 0 });
@@ -595,66 +616,246 @@ describe("every sample", () => {
       const afterInsert = parse(inserted.text);
       check(afterInsert);
       expect(afterInsert.bars).toHaveLength(input.bars.length + 1);
-      expect(afterInsert.notes.filter((note) => note.bar > 0).map(noteFacts)).toEqual(
-        input.notes.map((note) => {
-          const moved = { ...note, bar: note.bar + 1, start: note.start + firstLength };
-          return noteFacts(moved);
-        }),
-      );
-      const before = splitBars(text);
+      for (const note of input.notes) {
+        const moved = { ...note, bar: note.bar + 1, start: note.start + firstLength };
+        expect(afterInsert.notes.find((candidate) => candidate.id === `${moved.voice}:${moved.start}`)).toMatchObject({
+          voice: moved.voice,
+          bar: moved.bar,
+          start: moved.start,
+          duration: moved.duration,
+          midi: moved.midi,
+          tie: moved.tie,
+        });
+      }
       const insertedPieces = splitBars(inserted.text);
-      for (const [key, piece] of before) {
+      for (const [key, piece] of pieces) {
         const [voice, index] = key.split(":");
         expect(insertedPieces.get(`${voice}:${Number(index) + 1}`)).toBe(piece);
       }
 
-      const sourceLines = (
-        input.source as {
-          musicLines: ReadonlyArray<{ segments: ReadonlyArray<{ bars: ReadonlyArray<{ bar: number }> }> }>;
-        }
-      ).musicLines;
-      let remove = 0;
-      for (const line of sourceLines) {
-        for (const segment of line.segments) {
-          const bar = segment.bars[0]?.bar;
-          if (
-            bar !== undefined &&
-            bar > 0 &&
-            segment.bars.length === 1 &&
-            (input.truncation === null || bar < input.truncation.bar)
-          ) {
-            remove = bar;
-            break;
-          }
-        }
-        if (remove > 0) break;
+      const barKey = (bar: number) =>
+        JSON.stringify(
+          input.voices.map((voice) => {
+            const start = (input.bars[bar] as Score["bars"][number]).start;
+            return input.notes
+              .filter((note) => note.voice === voice && note.bar === bar)
+              .map((note) => [note.start - start, note.duration, note.midi, note.tie]);
+          }),
+        );
+      const counts = new Map<string, number>();
+      for (let index = 0; index < input.bars.length; index += 1) {
+        const key = barKey(index);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
       }
+      let remove = -1;
+      for (let index = 1; index < input.bars.length; index += 1) {
+        if (input.truncation !== null && index >= input.truncation.bar) break;
+        const vocalPiece = pieces.get(`Vocal:${index}`) ?? "";
+        const insPiece = pieces.get(`Ins:${index}`) ?? "";
+        if (/^Z[234]?$/.test(vocalPiece.trim()) || /^Z[234]?$/.test(insPiece.trim())) continue;
+        if ((counts.get(barKey(index)) ?? 0) === 1) {
+          remove = index;
+          break;
+        }
+      }
+      expect(remove).toBeGreaterThan(0);
+      const removedLength = (input.bars[remove] as Score["bars"][number]).length;
       const deleted = applyScoreCommand(song2Dialect, text, { type: "deleteBars", from: remove, count: 1 });
       expect(deleted.ok).toBe(true);
       if (!deleted.ok) return;
       const afterDelete = parse(deleted.text);
       check(afterDelete);
       expect(afterDelete.bars).toHaveLength(input.bars.length - 1);
-      // Deleting inside a repeated whole-rest run can choose any equal bar; the hand-worked cases pin the bytes.
+      const deletedPieces = splitBars(deleted.text);
+      const localFacts = (score: Score, voice: string, bar: number) => {
+        const start = score.bars[bar]?.start ?? 0;
+        return score.notes
+          .filter((note) => note.voice === voice && note.bar === bar)
+          .map((note) => [note.start - start, note.duration, note.midi, note.tie]);
+      };
+      for (const [key, piece] of pieces) {
+        const [voice, index] = key.split(":");
+        const at = Number(index);
+        if (at === remove) continue;
+        const mapped = at > remove ? at - 1 : at;
+        if (
+          JSON.stringify(localFacts(input, voice ?? "", at)) !==
+          JSON.stringify(localFacts(afterDelete, voice ?? "", mapped))
+        ) {
+          continue;
+        }
+        expect(deletedPieces.get(`${voice}:${mapped}`)).toBe(piece);
+      }
+      for (const note of input.notes) {
+        if (note.bar === remove) continue;
+        const movedStart = note.bar > remove ? note.start - removedLength : note.start;
+        const movedBar = note.bar > remove ? note.bar - 1 : note.bar;
+        expect(
+          afterDelete.notes.find(
+            (candidate) =>
+              candidate.voice === note.voice &&
+              candidate.start === movedStart &&
+              candidate.duration === note.duration &&
+              candidate.bar === movedBar,
+          )?.midi,
+        ).toBe(note.midi);
+      }
+
+      const section = input.sections[0] as Score["sections"][number];
+      const changed = applyScoreCommand(song2Dialect, text, {
+        type: "setSectionMeter",
+        section: 0,
+        meter: { numerator: 2, denominator: 4 },
+      });
+      expect(changed.ok).toBe(true);
+      if (!changed.ok) return;
+      const afterMeter = parse(changed.text);
+      check(afterMeter);
+      const delta = afterMeter.bars.length - input.bars.length;
+      expect(afterMeter.truncation).toEqual(
+        input.truncation === null ? null : { ...input.truncation, bar: input.truncation.bar + delta },
+      );
+      const lastSectionBar = section.firstBar + section.barCount - 1;
+      for (const [key, piece] of pieces) {
+        const [voice, index] = key.split(":");
+        const at = Number(index);
+        if (at <= lastSectionBar) continue;
+        expect(splitBars(changed.text).get(`${voice}:${at + delta}`)).toBe(piece);
+      }
+      for (const note of input.notes) {
+        if (note.bar <= lastSectionBar) continue;
+        expect(
+          afterMeter.notes.find(
+            (candidate) =>
+              candidate.voice === note.voice && candidate.start === note.start && candidate.bar === note.bar + delta,
+          )?.midi,
+        ).toBe(note.midi);
+      }
+
+      if (input.truncation !== null) {
+        const filled = applyScoreCommand(song2Dialect, text, { type: "fillTruncatedBar" });
+        expect(filled.ok).toBe(true);
+        if (filled.ok) {
+          const afterFill = parse(filled.text);
+          check(afterFill);
+          expect(afterFill.truncation).toBeNull();
+          for (const note of input.notes) {
+            expect(
+              afterFill.notes.find(
+                (candidate) =>
+                  candidate.voice === note.voice && candidate.start === note.start && candidate.midi === note.midi,
+              ),
+            ).toBeDefined();
+          }
+        }
+
+        const deletedCut = applyScoreCommand(song2Dialect, text, { type: "deleteTruncatedBar" });
+        if (deletedCut.ok) {
+          const afterCutDelete = parse(deletedCut.text);
+          check(afterCutDelete);
+          expect(afterCutDelete.truncation).toBeNull();
+        } else {
+          expect(deletedCut.diagnostic.code).toBe("cut-in-complete-bar");
+        }
+
+        const cutNote = input.notes.find(
+          (note) => note.voice === input.truncation?.voice && note.bar === input.truncation?.bar && note.midi !== null,
+        );
+        if (cutNote !== undefined) {
+          const rested = applyScoreCommand(song2Dialect, text, { type: "toRest", noteId: cutNote.id });
+          expect(rested.ok).toBe(true);
+          if (rested.ok) expect(parse(rested.text).truncation).toEqual(input.truncation);
+        }
+      }
     });
   }
 });
 
+describe("failure branches", () => {
+  const cutSample = `${HEADER}
+K:C
+V: Vocal
+C16|D16|
+V: Ins
+z16|C8`;
+
+  it("refuses insert, delete and meter change at the cut with truncated-tail", () => {
+    const inserted = applyScoreCommand(song2Dialect, cutSample, { type: "insertBar", bar: 2 });
+    expect(inserted.ok).toBe(false);
+    if (!inserted.ok) expect(inserted.diagnostic.code).toBe("truncated-tail");
+
+    const deleted = applyScoreCommand(song2Dialect, cutSample, { type: "deleteBars", from: 1, count: 1 });
+    expect(deleted.ok).toBe(false);
+    if (!deleted.ok) expect(deleted.diagnostic.code).toBe("truncated-tail");
+
+    const metered = applyScoreCommand(song2Dialect, cutSample, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 2, denominator: 4 },
+    });
+    expect(metered.ok).toBe(false);
+    if (!metered.ok) expect(metered.diagnostic.code).toBe("truncated-tail");
+  });
+
+  it("refuses to delete the only bar with last-bar", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+V: Vocal
+C8^`;
+    const result = applyScoreCommand(song2Dialect, text, { type: "deleteTruncatedBar" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostic.code).toBe("last-bar");
+  });
+
+  it("refuses a final section with a trailing cut when its length does not fill the new meter", () => {
+    const text = `${VOCAL_HEADER}
+K:C
+% a
+V: Vocal
+C16|D16|
+% outro`;
+    const result = applyScoreCommand(song2Dialect, text, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 3, denominator: 4 },
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostic.code).toBe("meter-does-not-fit");
+  });
+
+  it("turns a writer throw into write-mismatch", () => {
+    const throwing = {
+      ...song2Dialect,
+      serialize() {
+        throw new Error("writer refused");
+      },
+    };
+    const note = parse(SECTION_SCORE).notes.find((candidate) => candidate.midi !== null);
+    if (note === undefined) throw new Error("the test score has no note");
+    const result = applyScoreCommand(throwing, SECTION_SCORE, { type: "toRest", noteId: note.id });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostic.code).toBe("write-mismatch");
+  });
+});
+
 describe("failure texts", () => {
   it("gives every new code a sentence in both languages", () => {
-    const commands: ScoreCommand[] = [
-      { type: "insertBar", bar: 99 },
-      { type: "deleteBars", from: 99, count: 1 },
-      { type: "setSectionMeter", section: 99, meter: { numerator: 3, denominator: 4 } },
-      { type: "fillTruncatedBar" },
-      { type: "deleteTruncatedBar" },
-    ];
-    const codes = new Set<string>();
-    for (const command of commands) {
-      const result = applyScoreCommand(song2Dialect, KEY_METER_SCORE, command);
-      if (result.ok) continue;
-      codes.add(result.diagnostic.code);
+    const codes = [
+      "bar-out-of-range",
+      "section-out-of-range",
+      "meter-not-allowed",
+      "no-truncation",
+      "no-incomplete-bar",
+      "tie-across-bar",
+      "truncated-tail",
+      "meter-does-not-fit",
+      "last-bar",
+      "cut-in-complete-bar",
+    ] as const;
+    for (const code of codes) {
+      for (const language of ["zh", "en"] as const) {
+        expect(formatDiagnostic({ code, params: {}, at: {} }, language).length).toBeGreaterThan(0);
+      }
     }
-    expect(codes).toEqual(new Set(["bar-out-of-range", "section-out-of-range", "no-truncation"]));
   });
 });
