@@ -516,7 +516,10 @@ test.describe("the insertion point", () => {
     isMobile,
     press,
   }) => {
-    await openTrack(harness, vocalOnly("C4D4E4F4|G16|"));
+    await openTrack(harness);
+    // One step of history to undo, so that an undo key reaching the session would show, and a point to move.
+    await pressAt(isMobile, note(page, D4));
+    await page.keyboard.press("Delete");
     await pressAt(isMobile, lane(page), { x: 70, y: 4 });
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
     await press(toolbar(page).getByRole("button", { name: /^Zoom \d+%$/ }));
@@ -524,10 +527,11 @@ test.describe("the insertion point", () => {
     await expect(toolbar(page).getByRole("menuitemradio", { checked: true })).toBeFocused();
     const first = toolbar(page).getByRole("menuitemradio").first();
 
-    for (const keys of ["ArrowRight", "ArrowLeft", "End", "Home", "Control+z"]) await page.keyboard.press(keys);
+    for (const keys of ["ArrowRight", "ArrowRight", "End", "Home", "Control+z"]) await page.keyboard.press(keys);
 
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
-    expect(await harness.layout.canUndo()).toBe(false);
+    expect(await harness.layout.canUndo()).toBe(true);
+    await expect(note(page, D4)).toHaveCount(0);
     await expect(first).toBeFocused();
   });
 
