@@ -192,6 +192,32 @@ test.describe("the play control", () => {
     );
   });
 
+  test("starting from the keyboard does not scroll the host page, even with the caption half below the fold", async ({
+    page,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the key is pressed on the desktop project");
+    const harness = await visit(page);
+    await openLayout(harness);
+    // Push the control down the page, then scroll until the lower half of the caption is below the bottom of the window.
+    await page.evaluate(() => {
+      document.body.style.paddingTop = "1500px";
+      document.body.style.paddingBottom = "2000px";
+    });
+    const words = await box(caption(slot(page, "synth")));
+    const viewHeight = page.viewportSize()?.height ?? 0;
+    await page.evaluate((y) => window.scrollTo(0, y), Math.round(words.y + words.height / 2 - viewHeight));
+    await slot(page, "synth")
+      .getByRole("button")
+      .evaluate((button) => button.focus({ preventScroll: true }));
+    const before = await page.evaluate(() => window.scrollY);
+    expect(before, "the page is scrolled to where the test wants it").toBeGreaterThan(1000);
+
+    await page.keyboard.press("Enter");
+    await expect(slot(page, "synth").getByRole("button")).toHaveText("Stop");
+    expect(await page.evaluate(() => window.scrollY), "the host page stays where it was").toBe(before);
+  });
+
   test("a browser with no Web Audio gets a control that says so, and no preview", async ({ page, isMobile }) => {
     const harness = await visit(page, withoutAudio);
     await openLayout(harness);
