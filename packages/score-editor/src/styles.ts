@@ -116,9 +116,9 @@ const css = `
  * Notes are left out on purpose: all: revert on each of a few thousand nodes made first render
  * three times slower (style recalculation), so a note resets the few properties it needs by hand.
  */
-.sce-root.sce-root :where(:not(.sce-note, .sce-part)),
-.sce-root.sce-root :where(:not(.sce-note, .sce-part))::before,
-.sce-root.sce-root :where(:not(.sce-note, .sce-part))::after {
+.sce-root.sce-root :where(:not(.sce-note)),
+.sce-root.sce-root :where(:not(.sce-note))::before,
+.sce-root.sce-root :where(:not(.sce-note))::after {
   all: revert;
   box-sizing: border-box;
 }
