@@ -113,9 +113,10 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       region: () => voice,
       attach(own, signal, live) {
         root = own;
-        const focus = mountNoteFocus(own, session, signal, (noteId) =>
-          handleEditingInput(session, { type: "click-note", noteId }),
-        );
+        const focus = mountNoteFocus(own, session, signal, {
+          select: (noteId) => handleEditingInput(session, { type: "click-note", noteId }),
+          toggle: (noteId) => handleEditingInput(session, { type: "toggle-note", noteId }),
+        });
         noteFocus = focus;
         announceVoice(session, voice, live, signal, () => focus.stepping);
         own.setAttribute("data-editable", String(session.view.editable));

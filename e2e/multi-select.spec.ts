@@ -734,13 +734,14 @@ test.describe("a finger", () => {
   });
 });
 
-test.describe("Ctrl+A, Ctrl+Shift+A and Escape", () => {
-  const keyNames = [
-    ["Control", "Control"],
-    ["Meta", "Meta"],
-  ] as const;
+/** The two keys that stand for "the command key": Control, and Cmd on a Mac. */
+const COMMAND_KEYS = [
+  ["Control", "Control"],
+  ["Meta", "Meta"],
+] as const;
 
-  for (const [label, modifier] of keyNames) {
+test.describe("Ctrl+A, Ctrl+Shift+A and Escape", () => {
+  for (const [label, modifier] of COMMAND_KEYS) {
     test(`${label}+A selects every note, ${label}+Shift+A swaps the selected and the unselected, Escape clears`, async ({
       page,
       harness,
@@ -838,6 +839,108 @@ test.describe("Ctrl+A, Ctrl+Shift+A and Escape", () => {
   });
 });
 
+/** A note by its pitch, whether or not it is selected, which its name says. */
+const pitch = (page: Page, name: string) =>
+  slot(page, "vocal").getByRole("listitem", { name: new RegExp(`^${name},`) });
+
+test.describe("a subset from the keyboard", () => {
+  for (const [label, modifier] of COMMAND_KEYS) {
+    test(`${label}+Left, Right, Home and End move the focus and leave the selection; Shift+Space and Shift+Enter add the note in focus or take it out`, async ({
+      page,
+      harness,
+      press,
+    }) => {
+      await openTrack(harness);
+      await press(note(page, C4));
+      expect(await harness.layout.selection()).toEqual([IDS.C4]);
+
+      await page.keyboard.press(`${modifier}+ArrowRight`);
+      await page.keyboard.press(`${modifier}+ArrowRight`);
+      await expect(pitch(page, "E4")).toBeFocused();
+      expect(await harness.layout.selection()).toEqual([IDS.C4]);
+
+      await page.keyboard.press("Shift+Space");
+      expect(await harness.layout.selection()).toEqual([IDS.C4, IDS.E4]);
+      await expect(said(page)).toHaveText("Selected 2 notes");
+      await framed(page, `${E4}, selected`);
+      await expect(pitch(page, "E4")).toBeFocused();
+
+      await page.keyboard.press(`${modifier}+End`);
+      await expect(pitch(page, "G4")).toBeFocused();
+      await page.keyboard.press("Shift+Enter");
+      expect(await harness.layout.selection()).toEqual([IDS.C4, IDS.E4, IDS.G4]);
+      await expect(said(page)).toHaveText("Selected 3 notes");
+
+      await page.keyboard.press(`${modifier}+Home`);
+      await expect(pitch(page, "C4")).toBeFocused();
+      await page.keyboard.press("Shift+Space");
+      expect(await harness.layout.selection()).toEqual([IDS.E4, IDS.G4]);
+      await unframed(page, C4);
+
+      // The first note has no neighbour on its left; the focus stays and nothing is selected by the key.
+      await page.keyboard.press(`${modifier}+ArrowLeft`);
+      await expect(pitch(page, "C4")).toBeFocused();
+      expect(await harness.layout.selection()).toEqual([IDS.E4, IDS.G4]);
+
+      // Enter and Space still select only the note in focus, as before.
+      await page.keyboard.press("Enter");
+      expect(await harness.layout.selection()).toEqual([IDS.C4]);
+    });
+  }
+
+  test("takes a tie chain in or out as a whole, from whichever segment has the focus", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    // A, then F sharp as a dotted half note that ties into the F of bar 2: ids Vocal:0, Vocal:256 and Vocal:1024.
+    await openTrack(harness, vocalOnly("A4^F12-|F16|"));
+    const notes = slot(page, "vocal").getByRole("listitem");
+    await press(notes.nth(0));
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(notes.nth(1)).toBeFocused();
+
+    await page.keyboard.press("Shift+Space");
+    expect(await harness.layout.selection()).toEqual(["Vocal:0", "Vocal:256"]);
+    await expect(notes.nth(2)).toHaveAccessibleName(/, selected$/);
+
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(notes.nth(2)).toBeFocused();
+    await page.keyboard.press("Shift+Space");
+    expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
+    await expect(notes.nth(2)).not.toHaveAccessibleName(/, selected$/);
+  });
+
+  test("are left to the others with Alt or other modifiers, and while the focus is not on a note", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(note(page, D4));
+
+    await page.keyboard.press("Alt+Shift+Space");
+    await page.keyboard.press("Alt+Control+ArrowRight");
+    // Shift with the arrows is kept for what the spec plans for it, and Control with Shift for the selection keys.
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Control+Shift+ArrowRight");
+    await page.keyboard.press("Control+Shift+Space");
+    await expect(pitch(page, "D4")).toBeFocused();
+    expect(await harness.layout.selection()).toEqual([IDS.D4]);
+
+    // Control or Cmd with Space is the system's (input source, Spotlight), so it does not select the note it lands on.
+    await page.keyboard.press("Control+ArrowRight");
+    await page.keyboard.press("Control+Space");
+    await expect(pitch(page, "E4")).toBeFocused();
+    expect(await harness.layout.selection()).toEqual([IDS.D4]);
+
+    await trackRegion(page).focus();
+    await page.keyboard.press("Shift+Space");
+    await page.keyboard.press("Shift+Enter");
+    expect(await harness.layout.selection()).toEqual([IDS.D4]);
+  });
+});
+
 test.describe("deleting what several notes selected", () => {
   test("turns every selected note into a rest, and undo brings them back with the selection on the same notes", async ({
     page,
@@ -891,6 +994,20 @@ test.describe("deleting what several notes selected", () => {
     expect(await harness.layout.scoreText()).toBe(QUARTERS);
     expect(await harness.layout.canUndo()).toBe(false);
     expect(await harness.layout.selection()).toEqual([IDS.C4, IDS.D4]);
+  });
+
+  test("leaves the ids of the rests selected, and Escape clears them", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await press(note(page, D4));
+    await page.keyboard.press("Delete");
+    expect(await harness.layout.selection()).toEqual([IDS.D4]);
+
+    await page.keyboard.press("Escape");
+
+    expect(await harness.layout.selection()).toEqual([]);
+    await press(undoButton(page));
+    expect(await harness.layout.scoreText()).toBe(QUARTERS);
+    await unframed(page, D4);
   });
 });
 
@@ -1018,12 +1135,12 @@ test.describe("the assembled editor", () => {
   test("tells a screen reader how to select several notes, in both languages", async ({ page, harness }) => {
     await harness.mount({ score: { sample: "compact-three-sections" } });
     await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(
-      /Shift-click or Shift-tap.*Drag across empty space.*touch and hold.*Ctrl and A.*Escape/s,
+      /Shift-click or Shift-tap.*Drag across empty space.*touch and hold.*Ctrl and A.*Escape.*Ctrl and Left.*Shift and Space/s,
     );
 
     await harness.update({ language: "zh" });
     await expect(page.getByRole("region", { name: "编曲视图" })).toHaveAccessibleDescription(
-      /Shift.*在空白处拖动.*长按.*Ctrl 加 A.*Esc/s,
+      /Shift.*在空白处拖动.*长按.*Ctrl 加 A.*Esc.*Ctrl 加左.*Shift 加空格/s,
     );
   });
 });

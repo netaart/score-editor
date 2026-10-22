@@ -22,16 +22,26 @@ export interface NoteFocus {
   focus(noteId: string): void;
 }
 
+/** What the keys of the notes do to the selection; the track says how, since it owns the inputs. */
+export interface NoteKeyActions {
+  /** Selects only this note. */
+  select(noteId: string): void;
+  /** Adds this note to the selection, or takes it out when it is selected. */
+  toggle(noteId: string): void;
+}
+
 /**
  * Wires the keys of the notes on `root`: Left and Right step to the neighbouring note and select it, Home and End go
- * to the first and last, Enter and Space select the note in focus. A key with a modifier is left to the others, and so
- * is any key while the focus is not on a note.
+ * to the first and last, Enter and Space select the note in focus. With Ctrl or Cmd the same four keys move the focus
+ * and leave the selection as it is, and Shift with Enter or Space adds the note in focus or takes it out, so a subset
+ * can be built from the keyboard. Any other key with a modifier is left to the others, and so is any key while the
+ * focus is not on a note.
  */
 export function mountNoteFocus(
   root: HTMLElement,
   session: EditingSession,
   signal: AbortSignal,
-  select: (noteId: string) => void,
+  actions: NoteKeyActions,
 ): NoteFocus {
   let drawn: DrawnNotes | null = null;
   let stop: string | null = null;
@@ -66,7 +76,8 @@ export function mountNoteFocus(
     "keydown",
     (event) => {
       if (!drawn || event.defaultPrevented || event.isComposing || !session.view.editable) return;
-      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      const command = event.ctrlKey || event.metaKey;
+      if (event.altKey || (command && event.shiftKey)) return;
       const noteId = noteIn(event.target);
       if (noteId === undefined) return;
       const { order } = drawn;
@@ -77,15 +88,21 @@ export function mountNoteFocus(
       else if (event.key === "Home") to = order[0];
       else if (event.key === "End") to = order[order.length - 1];
       else if (event.key === "Enter" || event.key === " ") {
-        select(noteId);
+        if (command) return;
+        if (event.shiftKey) actions.toggle(noteId);
+        else actions.select(noteId);
         event.preventDefault();
         return;
       }
-      if (to === undefined) return;
+      if (to === undefined || event.shiftKey) return;
       event.preventDefault();
+      if (command) {
+        focus(to);
+        return;
+      }
       stepping = true;
       try {
-        select(to);
+        actions.select(to);
       } finally {
         stepping = false;
       }
