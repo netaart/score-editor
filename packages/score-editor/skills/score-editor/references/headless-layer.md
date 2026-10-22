@@ -22,7 +22,7 @@ interface SongProject {
 ```
 
 `LyricLine` is `{ text, phrase }`, where `LyricPhrase` is `{ firstBar, barCount }`; `phrase: null` puts the line in
-the unaligned area. Only that binding is stored; syllables, note onsets and the match are computed.
+the unaligned area. Only that binding is stored; syllables, note onsets and whether their counts are equal are computed.
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, `voices`, `bars`, `keys`, `sections`, `notes`, `chords`, `truncation`,
