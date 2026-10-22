@@ -115,3 +115,7 @@ export { NOTICE_CODES } from "./types";
 export type { VoiceTrackOptions } from "./voice-track";
 export { mountVoiceTrack } from "./voice-track";
 export { mountZoomControl } from "./zoom-control";
+
+// Drafts below the UI.
+export type { DraftProject, ScoreDraft } from "./drafts";
+export { contentHash, DRAFT_FORMAT_VERSION, draftText, readDraft } from "./drafts";
