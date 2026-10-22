@@ -307,7 +307,6 @@ test.describe("zoom shared through the session", () => {
     const fitted = await harness.layout.view();
     expect(fitted.zoom).toBeLessThan(1);
     expect(fitted.scrollLeft).toBe(0);
-    // The song is fitted to the first part on the axis, the ruler: it and the parts as wide as it show the whole song.
     for (const name of partNames.axis.filter((part) => part !== "vocal")) {
       const widths = await scrollSurface(page, name).evaluate((el) => ({
         shown: el.clientWidth,
@@ -462,7 +461,6 @@ test.describe("scroll shared through the session", () => {
       expect(end, `${name} can scroll`).toBeGreaterThan(150);
       await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBeCloseTo(end, 0);
     }
-    // A part that stopped short did not pull the offset the others were sent to back with it.
     await harness.frames();
     expect((await harness.layout.view()).scrollLeft).toBe(100000);
 
