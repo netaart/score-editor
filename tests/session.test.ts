@@ -875,6 +875,52 @@ V: Vocal
   });
 });
 
+describe("replacing the score text of a project that has lyrics", () => {
+  const bars = (count: number) =>
+    `${HEADER}
+K:C
+V: Vocal
+${["C16", "D16", "E16"].slice(0, count).join("|")}|`;
+  const THREE_BARS = bars(3);
+  const ONE_BAR = bars(1);
+
+  it("keeps the lyrics as they are, and the lines that no longer fit the new bars come back as the notice", () => {
+    const session = open({ score: THREE_BARS, lyrics: "la\nla\nla" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "replaceScoreText", text: ONE_BAR });
+
+    // One line fits the one bar; the other two are in the unaligned area. That is a notice, so the text is taken.
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.params])).toEqual([
+      ["lyrics-unaligned", { count: 2 }],
+    ]);
+    expect(session.project).toEqual({ ...project, score: ONE_BAR, lyrics: "la\nla\nla" });
+    expect(session.project.lyricLines).toBeUndefined();
+    expect(changes).toHaveLength(1);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(THREE_BARS);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("keeps stored lyric lines as they are: the command writes no lyric field", () => {
+    const lyricLines = [
+      { text: "la", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "la", phrase: { firstBar: 1, barCount: 1 } },
+      { text: "la", phrase: { firstBar: 2, barCount: 1 } },
+    ];
+    const session = open({ score: THREE_BARS, lyrics: "la\nla\nla", lyricLines });
+
+    const result = session.dispatch({ type: "replaceScoreText", text: ONE_BAR });
+
+    expect(result.ok).toBe(true);
+    expect(session.project.score).toBe(ONE_BAR);
+    expect(session.project.lyrics).toBe("la\nla\nla");
+    expect(session.project.lyricLines).toEqual(lyricLines);
+  });
+});
+
 describe("checking a text without taking it", () => {
   it("says what the dialect finds wrong with an unreadable text and where, and nothing for a readable one", () => {
     const session = open();
