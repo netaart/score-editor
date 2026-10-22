@@ -50,6 +50,7 @@ export type {
 export { createEditingSession } from "./session";
 export { mountTimeRuler } from "./time-ruler";
 export type {
+  AxisPartOptions,
   ChordVocabulary,
   DialectConstraints,
   DurationSet,

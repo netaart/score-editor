@@ -8,7 +8,7 @@ import { type Messages, messagesFor } from "./i18n";
 import { type Score, TICKS_PER_QUARTER } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
-import type { Language, ViewPart } from "./types";
+import type { AxisPartOptions, Language, ViewPart } from "./types";
 
 /** The grid lines of a lane: one element for each stretch of bars in one meter. */
 export interface Grid {
@@ -34,35 +34,58 @@ export interface AxisSpec {
   readonly kind: "time-ruler" | "chord-track" | "voice-track";
   /** The public function that mounts it, named in the error where there is no DOM. */
   readonly who: string;
+  /** What the part is called where it is its own focusable scroll surface. */
+  region(t: Messages): string;
   /** Builds the part's content into `canvas`, or returns null when the score has nothing for this part. */
   build(canvas: HTMLElement, score: Score, t: Messages, language: Language): BuiltAxis | null;
 }
 
+/** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
+export function headerRow(
+  canvas: HTMLElement,
+  className: string,
+  label: string,
+): { corner: HTMLElement; timeline: HTMLElement } {
+  const doc = canvas.ownerDocument;
+  const row = create(doc, "div", `sce-row ${className}`, canvas);
+  const corner = create(doc, "div", "sce-corner", row);
+  const timeline = create(doc, "div", "sce-timeline", row);
+  timeline.setAttribute("role", "list");
+  timeline.setAttribute("aria-label", label);
+  return { corner, timeline };
+}
+
 /**
- * Draws the bar and beat lines: a strong line at every bar start and a light one at every beat of the bar's meter,
- * from the position the stretch of bars starts at. They are gradients, so they cost no nodes per line.
+ * Says which grid lines a lane draws and how far apart they are, in beats; the stylesheet draws them as gradients,
+ * so they cost no nodes per line. A line is left out where lines would sit too close to read.
  */
 function drawGrid(grids: ReadonlyArray<Grid>, zoom: number, pixelsPerTick: number): void {
   for (const { element, run } of grids) {
-    const line = (color: string, ticks: number) => {
-      const period = `calc(var(--sce-_beat) * ${(zoom * ticks) / TICKS_PER_QUARTER})`;
-      return `repeating-linear-gradient(to right, ${color} 0 1px, transparent 1px ${period})`;
-    };
-    const layers: string[] = [];
-    if (run.barTicks * pixelsPerTick >= MIN_BAR_LINE_PIXELS) layers.push(line("var(--sce-_line-strong)", run.barTicks));
-    if (run.beatTicks * pixelsPerTick >= MIN_BEAT_LINE_PIXELS) layers.push(line("var(--sce-_line)", run.beatTicks));
-    element.style.backgroundImage = layers.join(", ");
+    const lines: string[] = [];
+    if (run.barTicks * pixelsPerTick >= MIN_BAR_LINE_PIXELS) lines.push("bar");
+    if (run.beatTicks * pixelsPerTick >= MIN_BEAT_LINE_PIXELS) lines.push("beat");
+    element.style.setProperty("--bar-beats", String((zoom * run.barTicks) / TICKS_PER_QUARTER));
+    element.style.setProperty("--beat-beats", String((zoom * run.beatTicks) / TICKS_PER_QUARTER));
+    if (lines.length > 0) element.dataset.lines = lines.join(" ");
+    else delete element.dataset.lines;
   }
 }
 
-export function mountAxisPart(host: HTMLElement, session: EditingSession, spec: AxisSpec): ViewPart {
+export function mountAxisPart(
+  host: HTMLElement,
+  session: EditingSession,
+  spec: AxisSpec,
+  options: AxisPartOptions = {},
+): ViewPart {
   requireDom(spec.who);
   const doc = host.ownerDocument;
   const abort = new AbortController();
   const releaseStyles = acquireStyles(host);
   const root = create(doc, "div", `sce-root sce-part sce-axis sce-part-${spec.kind}`);
   host.appendChild(root);
-  const surface = root.closest<HTMLElement>(".sce-scroller") ?? root;
+  const ownSurface = options.scroller === undefined;
+  const surface = options.scroller ?? root;
+  if (!ownSurface) root.classList.add("sce-in-scroller");
 
   let reading = session.reading;
   let language = session.view.language;
@@ -99,21 +122,36 @@ export function mountAxisPart(host: HTMLElement, session: EditingSession, spec: 
     canvas = null;
     built = null;
     ticks = 0;
+    const t = messagesFor(language);
     if (reading.kind === "score") {
       ticks = gridTicks(reading.score);
       const fresh = create(doc, "div", "sce-canvas");
       fresh.style.setProperty("--sce-ticks", String(ticks));
-      const result = spec.build(fresh, reading.score, messagesFor(language), language);
+      const result = spec.build(fresh, reading.score, t, language);
       if (result) {
         root.appendChild(fresh);
         canvas = fresh;
         built = result;
       }
     }
+    if (ownSurface) markAsRegion(built !== null, t);
     axis.place();
   }
 
-  installZoomGestures(root, session, abort.signal, { wheel: true });
+  /** A part that scrolls itself must be reachable and named for a keyboard or a screen reader, as a region is. */
+  function markAsRegion(drawn: boolean, t: Messages): void {
+    if (drawn) {
+      root.tabIndex = 0;
+      root.setAttribute("role", "region");
+      root.setAttribute("aria-label", spec.region(t));
+    } else {
+      root.removeAttribute("tabindex");
+      root.removeAttribute("role");
+      root.removeAttribute("aria-label");
+    }
+  }
+
+  installZoomGestures(root, session, abort.signal, { wheel: true, frame: () => member.frame() });
   render();
   const unsubscribe = session.subscribe(() => {
     if (session.reading !== reading || session.view.language !== language) render();

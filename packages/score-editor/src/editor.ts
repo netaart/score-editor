@@ -35,7 +35,7 @@ export class Editor implements MountedEditor {
   private voices: string[] = [];
   private reading: ScoreReading;
   private language: Language;
-  private reopen = false;
+  private openingViewDue = false;
   private readonly unsubscribe: Array<() => void> = [];
   private destroyed = false;
 
@@ -80,8 +80,8 @@ export class Editor implements MountedEditor {
     this.content = create(doc, "div", "sce-content", this.scroller);
     this.top = create(doc, "div", "sce-top", this.content);
 
-    this.parts.push(mountTimeRuler(this.top, this.session));
-    this.parts.push(mountChordTrack(this.top, this.session));
+    this.parts.push(mountTimeRuler(this.top, this.session, { scroller: this.scroller }));
+    this.parts.push(mountChordTrack(this.top, this.session, { scroller: this.scroller }));
     this.syncTracks();
     this.parts.push(mountProblemView(body, this.session));
 
@@ -143,7 +143,9 @@ export class Editor implements MountedEditor {
     if (voices.length === this.voices.length && voices.every((voice, at) => voice === this.voices[at])) return;
     for (const track of this.tracks) track.destroy();
     this.voices = voices;
-    this.tracks = voices.map((voice) => mountVoiceTrack(this.content, this.session, { voice }));
+    this.tracks = voices.map((voice) =>
+      mountVoiceTrack(this.content, this.session, { voice, scroller: this.scroller }),
+    );
   }
 
   private beforeParts(change: SessionChange): void {
@@ -152,18 +154,17 @@ export class Editor implements MountedEditor {
     this.reading = this.session.reading;
     this.scroller.hidden = this.reading.kind !== "score";
     this.syncTracks();
-    if (change.cause === "replace") this.reopen = true;
+    if (change.cause === "replace") this.openingViewDue = true;
   }
 
   private afterParts(): void {
-    if (!this.reopen) return;
-    this.reopen = false;
+    if (!this.openingViewDue) return;
+    this.openingViewDue = false;
     this.session.setView({ scrollLeft: 0 });
     this.scroller.scrollTop = 0;
     this.centreFirstTrack();
   }
 
-  /** The opening view: scrolled to the middle of the first voice's notes in pitch. */
   private centreFirstTrack(): void {
     const { reading, scroller } = this;
     if (reading.kind !== "score" || scroller.scrollHeight <= scroller.clientHeight) return;

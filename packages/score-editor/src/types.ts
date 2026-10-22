@@ -22,6 +22,15 @@ export interface Notice {
   message: string;
 }
 
+/** What every view part on the time axis takes besides its element and its session. */
+export interface AxisPartOptions {
+  /**
+   * The element that scrolls the part in time, when the host puts several parts in one scroller, as the default editor
+   * does. Without it the part is its own scroll surface.
+   */
+  scroller?: HTMLElement;
+}
+
 export interface MountOptions {
   /** Interface language. */
   language: Language;

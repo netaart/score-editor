@@ -1,27 +1,12 @@
 // ABOUTME: The time ruler view part: the bar numbers, the section bands and the key and meter marks above the tracks.
 // ABOUTME: Bar numbers thin out as the zoom narrows the bars; a cut score ends its marks with the cut.
 import { gridTicks, labelRank, marksOf } from "./arrangement";
-import { type BuiltAxis, mountAxisPart } from "./axis-part";
+import { type BuiltAxis, headerRow, mountAxisPart } from "./axis-part";
 import { create } from "./dom";
 import type { Messages } from "./i18n";
 import type { Score } from "./score";
 import type { EditingSession } from "./session";
-import type { ViewPart } from "./types";
-
-/** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
-export function headerRow(
-  canvas: HTMLElement,
-  className: string,
-  label: string,
-): { corner: HTMLElement; timeline: HTMLElement } {
-  const doc = canvas.ownerDocument;
-  const row = create(doc, "div", `sce-row ${className}`, canvas);
-  const corner = create(doc, "div", "sce-corner", row);
-  const timeline = create(doc, "div", "sce-timeline", row);
-  timeline.setAttribute("role", "list");
-  timeline.setAttribute("aria-label", label);
-  return { corner, timeline };
-}
+import type { AxisPartOptions, ViewPart } from "./types";
 
 function buildRuler(canvas: HTMLElement, score: Score, t: Messages): { corner: HTMLElement; timeline: HTMLElement } {
   const doc = canvas.ownerDocument;
@@ -94,21 +79,27 @@ function buildMarks(canvas: HTMLElement, score: Score, t: Messages): HTMLElement
  * Mounts the time ruler on `el`: the bar numbers, the section bands and the key and meter marks. It draws from the
  * session's score and follows its zoom, scroll and language. Place it above the tracks; it scrolls with them.
  */
-export function mountTimeRuler(el: HTMLElement, session: EditingSession): ViewPart {
-  return mountAxisPart(el, session, {
-    kind: "time-ruler",
-    who: "mountTimeRuler",
-    build(canvas, score, t): BuiltAxis {
-      const ruler = buildRuler(canvas, score, t);
-      const sections = buildSections(canvas, score, t);
-      const marks = buildMarks(canvas, score, t);
-      return {
-        axes: [ruler.timeline, sections, marks],
-        grids: [],
-        corner: ruler.corner,
-        timeline: ruler.timeline,
-        barCount: score.bars.length,
-      };
+export function mountTimeRuler(el: HTMLElement, session: EditingSession, options?: AxisPartOptions): ViewPart {
+  return mountAxisPart(
+    el,
+    session,
+    {
+      kind: "time-ruler",
+      who: "mountTimeRuler",
+      region: (t) => t.timeRuler,
+      build(canvas, score, t): BuiltAxis {
+        const ruler = buildRuler(canvas, score, t);
+        const sections = buildSections(canvas, score, t);
+        const marks = buildMarks(canvas, score, t);
+        return {
+          axes: [ruler.timeline, sections, marks],
+          grids: [],
+          corner: ruler.corner,
+          timeline: ruler.timeline,
+          barCount: score.bars.length,
+        };
+      },
     },
-  });
+    options,
+  );
 }

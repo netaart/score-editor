@@ -1,4 +1,4 @@
-// ABOUTME: The editor's stylesheet as a string, injected by mount() and removed again by destroy().
+// ABOUTME: The stylesheet of the editor and its view parts as a string, injected by mount() and by each part, and removed again by destroy().
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
 import { TICKS_PER_QUARTER } from "./score";
@@ -26,10 +26,17 @@ function labelThinning(): string {
   return rules.join("\n");
 }
 
+/** One kind of grid line, drawn as a gradient: a one pixel line at the start of every period of `beats` beats. */
+function gridLines(color: string, beats: string): string {
+  return `repeating-linear-gradient(to right, var(${color}) 0 1px, transparent 1px calc(var(--sce-_beat) * var(${beats})))`;
+}
+
 const css = `
 /* The doubled class lifts specificity above the typical host rule such as ".page div". */
 .sce-root.sce-root {
   all: initial;
+  position: relative;
+  isolation: isolate;
   --sce-_bg: var(--sce-color-bg, light-dark(#ffffff, #1b1c1f));
   --sce-_text: var(--sce-color-text, light-dark(#18181b, #ececee));
   /* Unmapped greys are derived from the two that are mapped, so a host that maps only these stays readable. */
@@ -66,14 +73,7 @@ const css = `
   }
 }
 
-/*
- * The default editor is a root that lays out its parts in a column and fills its host. A view part is a root too, so it
- * has the theme, the reset and the text size wherever a creator mounts it; inside the editor its wrapper draws no box,
- * so the parts sit in the editor's own layout.
- */
 .sce-editor.sce-editor {
-  position: relative;
-  isolation: isolate;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -88,10 +88,6 @@ const css = `
 .sce-editor .sce-part.sce-part {
   display: contents;
 }
-/*
- * A part on the time axis that is mounted on its own scrolls in time itself: it is the horizontal scroll surface the
- * session's scroll offset is applied to. In the editor one scroller around all the parts does that instead.
- */
 .sce-root.sce-axis {
   overflow-x: auto;
   direction: ltr;
@@ -107,7 +103,7 @@ const css = `
   outline: 2px solid var(--sce-_accent);
   outline-offset: -2px;
 }
-.sce-editor .sce-axis.sce-axis {
+.sce-root.sce-in-scroller {
   overflow: visible;
 }
 
@@ -537,6 +533,16 @@ ${labelThinning()}
   left: calc(var(--t) / var(--sce-ticks) * 100%);
   width: calc(var(--d) / var(--sce-ticks) * 100%);
   pointer-events: none;
+}
+/* The part sets which lines show (data-lines) and how far apart they are (--bar-beats, --beat-beats). */
+.sce-root .sce-grid[data-lines~="bar"] {
+  background-image: ${gridLines("--sce-_line-strong", "--bar-beats")};
+}
+.sce-root .sce-grid[data-lines~="bar"][data-lines~="beat"] {
+  background-image: ${gridLines("--sce-_line-strong", "--bar-beats")}, ${gridLines("--sce-_line", "--beat-beats")};
+}
+.sce-root .sce-grid[data-lines="beat"] {
+  background-image: ${gridLines("--sce-_line", "--beat-beats")};
 }
 /* The part of a cut voice that the text never reached: hatched, so a gap is not mistaken for a rest. */
 .sce-root .sce-cut {

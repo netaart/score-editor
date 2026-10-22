@@ -74,7 +74,6 @@ export function mountZoomControl(el: HTMLElement, session: EditingSession): View
   zoomButton.popoverTargetElement = menu;
   zoomButton.popoverTargetAction = "toggle";
 
-  /** Puts the menu under its button. A popover lives in the top layer, so its position is viewport based. */
   menu.addEventListener(
     "beforetoggle",
     (event) => {

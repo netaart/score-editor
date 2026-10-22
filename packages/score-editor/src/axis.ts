@@ -45,7 +45,7 @@ class AxisController {
   private zoom: number;
   private scrollLeft: number;
   /** The width of the time axis at zoom 1, in pixels; 0 until somebody has measured it. */
-  unit = 0;
+  private widthAtZoomOne = 0;
   private readonly unsubscribe: () => void;
 
   constructor(private readonly session: EditingSession) {
@@ -57,10 +57,10 @@ class AxisController {
   join(member: AxisMember): () => void {
     this.members.add(member);
     this.holdSurface(member.surface);
-    let left = false;
+    let released = false;
     return () => {
-      if (left) return;
-      left = true;
+      if (released) return;
+      released = true;
       this.members.delete(member);
       this.releaseSurface(member.surface);
       if (this.members.size === 0) {
@@ -73,9 +73,13 @@ class AxisController {
   /** Lays `member` out for the session's zoom, measuring it, and brings its surface to the session's scroll offset. */
   place(member: AxisMember): void {
     const { zoom, scrollLeft } = this.session.view;
-    const width = member.layout(zoom, null);
-    if (width > 0) this.unit = width / zoom;
+    this.rememberWidth(member.layout(zoom, null), zoom);
     this.scrollTo(member.surface, scrollLeft);
+  }
+
+  /** Learns the width of the time axis at zoom 1 from a measurement of it at `zoom`; a width of nothing teaches nothing. */
+  rememberWidth(width: number, zoom: number): void {
+    if (width > 0) this.widthAtZoomOne = width / zoom;
   }
 
   frame(): AxisFrame | null {
@@ -92,10 +96,8 @@ class AxisController {
     const zoomed = zoom !== this.zoom;
     if (zoomed) {
       this.zoom = zoom;
-      for (const member of this.members) {
-        const width = member.layout(zoom, this.unit > 0 ? this.unit * zoom : null);
-        if (this.unit === 0 && width > 0) this.unit = width / zoom;
-      }
+      const known = this.widthAtZoomOne > 0 ? this.widthAtZoomOne * zoom : null;
+      for (const member of this.members) this.rememberWidth(member.layout(zoom, known), zoom);
     }
     if (zoomed || scrollLeft !== this.scrollLeft) {
       this.scrollLeft = scrollLeft;
@@ -103,11 +105,11 @@ class AxisController {
     }
   }
 
-  private scrollTo(surface: HTMLElement, left: number): void {
+  private scrollTo(surface: HTMLElement, offset: number): void {
     const entry = this.surfaces.get(surface);
-    if (!entry || Math.abs(surface.scrollLeft - left) < SCROLL_TOLERANCE) return;
+    if (!entry || Math.abs(surface.scrollLeft - offset) < SCROLL_TOLERANCE) return;
     const before = surface.scrollLeft;
-    surface.scrollLeft = left;
+    surface.scrollLeft = offset;
     const after = surface.scrollLeft;
     entry.expected = after === before ? null : after;
   }
@@ -123,10 +125,10 @@ class AxisController {
     surface.addEventListener(
       "scroll",
       () => {
-        const left = surface.scrollLeft;
-        const echo = entry.expected !== null && Math.abs(left - entry.expected) < SCROLL_TOLERANCE;
+        const offset = surface.scrollLeft;
+        const echo = entry.expected !== null && Math.abs(offset - entry.expected) < SCROLL_TOLERANCE;
         entry.expected = null;
-        if (!echo) this.session.setView({ scrollLeft: left });
+        if (!echo) this.session.setView({ scrollLeft: offset });
       },
       { signal: abort.signal, passive: true },
     );
@@ -154,16 +156,21 @@ export function joinAxis(session: EditingSession, member: AxisMember): { place()
   return { place: () => joined.place(member), leave: joined.join(member) };
 }
 
-/**
- * Changes the zoom and keeps the instant under `anchorClientX` where it was on screen; without an anchor, the middle of
- * what the first part on the axis shows. Layout is read once, before the change.
- */
-export function zoomTo(session: EditingSession, next: number, anchorClientX?: number): void {
+/** The instant a zoom keeps where it was on screen, and the part whose geometry it is measured in. */
+export interface ZoomAnchor {
+  /** The pointer's x in the page; without it, the middle of what `frame` shows. */
+  clientX?: number | undefined;
+  /** The part the gesture reached, so its own left edge and scroll offset are used; default: the first part on the axis. */
+  frame?: AxisFrame | null | undefined;
+}
+
+/** Changes the zoom and keeps the anchor where it was on screen. Layout is read once, before the change. */
+export function zoomTo(session: EditingSession, next: number, anchor: ZoomAnchor = {}): void {
   const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
   const before = session.view.zoom;
   if (Math.abs(zoom - before) < 1e-9) return;
   const controller = controllers.get(session);
-  const frame = controller?.frame();
+  const frame = anchor.frame ?? controller?.frame();
   if (!controller || !frame) {
     session.setView({ zoom });
     return;
@@ -172,13 +179,13 @@ export function zoomTo(session: EditingSession, next: number, anchorClientX?: nu
   const box = scroller.getBoundingClientRect();
   const scale = box.width / scroller.offsetWidth || 1;
   const keys = corner.offsetWidth;
-  const anchor =
-    anchorClientX === undefined ? keys + (scroller.clientWidth - keys) / 2 : (anchorClientX - box.left) / scale;
+  const at =
+    anchor.clientX === undefined ? keys + (scroller.clientWidth - keys) / 2 : (anchor.clientX - box.left) / scale;
   const width = timeline.offsetWidth;
   const pixelsPerTick = ticks > 0 ? width / ticks : 0;
-  const tick = pixelsPerTick > 0 ? (scroller.scrollLeft + anchor - keys) / pixelsPerTick : 0;
-  if (width > 0) controller.unit = width / before;
-  session.setView({ zoom, scrollLeft: tick * pixelsPerTick * (zoom / before) + keys - anchor });
+  const tick = pixelsPerTick > 0 ? (scroller.scrollLeft + at - keys) / pixelsPerTick : 0;
+  controller.rememberWidth(width, before);
+  session.setView({ zoom, scrollLeft: tick * pixelsPerTick * (zoom / before) + keys - at });
 }
 
 /** Zooms so that the whole score is exactly as wide as the first part on the axis shows, and scrolls to its start. */
@@ -190,49 +197,51 @@ export function fitZoom(session: EditingSession): void {
   const width = timeline.offsetWidth;
   const wholeScore = width / session.view.zoom;
   if (!(wholeScore > 0)) return;
-  controller.unit = wholeScore;
+  controller.rememberWidth(width, session.view.zoom);
   const zoom = Math.floor(((scroller.clientWidth - corner.offsetWidth) / wholeScore) * 1000) / 1000;
   session.setView({ zoom, scrollLeft: 0 });
 }
 
-export function stepZoomBy(session: EditingSession, direction: "in" | "out"): void {
+export function stepZoomBy(session: EditingSession, direction: "in" | "out", frame?: AxisFrame | null): void {
   const next = stepZoom(session.view.zoom, direction);
-  if (next !== null) zoomTo(session, next);
+  if (next !== null) zoomTo(session, next, { frame });
 }
 
-function onZoomKey(event: KeyboardEvent, session: EditingSession): void {
+function onZoomKey(event: KeyboardEvent, session: EditingSession, frame: () => AxisFrame | null): void {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
   if (event.target instanceof Element && event.target.closest(".sce-menu-item")) return;
   if (event.key === "+" || event.key === "=") {
     event.preventDefault();
-    stepZoomBy(session, "in");
+    stepZoomBy(session, "in", frame());
   } else if (event.key === "-" || event.key === "_") {
     event.preventDefault();
-    stepZoomBy(session, "out");
+    stepZoomBy(session, "out", frame());
   }
 }
 
-function onZoomWheel(event: WheelEvent, session: EditingSession): void {
+function onZoomWheel(event: WheelEvent, session: EditingSession, frame: () => AxisFrame | null): void {
   if (event.defaultPrevented || !event.ctrlKey || !(event.target instanceof Element)) return;
   // A trackpad pinch arrives as a control-wheel too. Without this the page itself would zoom.
   event.preventDefault();
   const lines = event.deltaMode === 1 ? 16 : 1;
   const delta = Math.max(-100, Math.min(100, event.deltaY * lines));
-  zoomTo(session, session.view.zoom * Math.exp(-delta * 0.0025), event.clientX);
+  zoomTo(session, session.view.zoom * Math.exp(-delta * 0.0025), { clientX: event.clientX, frame: frame() });
 }
 
 /**
  * Zoom with the plus and minus keys, and with control and the wheel around the pointer, on whatever `target` holds.
- * A part inside another that has the same gestures zooms once: the first to handle an event marks it handled.
+ * `frame` says whose geometry the pointer is in; without it, the first part on the axis is measured. A part inside
+ * another that has the same gestures zooms once: the first to handle an event marks it handled.
  */
 export function installZoomGestures(
   target: HTMLElement,
   session: EditingSession,
   signal: AbortSignal,
-  options: { wheel: boolean },
+  options: { wheel: boolean; frame?: () => AxisFrame | null },
 ): void {
-  target.addEventListener("keydown", (event) => onZoomKey(event, session), { signal });
+  const frame = options.frame ?? (() => null);
+  target.addEventListener("keydown", (event) => onZoomKey(event, session, frame), { signal });
   if (options.wheel) {
-    target.addEventListener("wheel", (event) => onZoomWheel(event, session), { signal, passive: false });
+    target.addEventListener("wheel", (event) => onZoomWheel(event, session, frame), { signal, passive: false });
   }
 }
