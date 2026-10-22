@@ -13,6 +13,7 @@ import {
   type Song2SourceBar,
   signatureOf,
 } from "./parser";
+import { serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
 import { keepsCutTail } from "./write-chords";
 
 const TICKS_PER_QUARTER = 256;
@@ -64,7 +65,7 @@ function sourceOf(score: Score): Song2Source {
   return source as Song2Source;
 }
 
-function sameContent(left: BarContent, right: BarContent): boolean {
+export function sameContent(left: BarContent, right: BarContent): boolean {
   if (
     left.start !== right.start ||
     left.length !== right.length ||
@@ -167,7 +168,7 @@ function noteText(
 }
 
 /** Writes one bar from the model, including its chords and inline key changes at their offsets. */
-function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominator: number): string {
+export function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominator: number): string {
   const bar = score.bars[sourceBar.bar];
   if (bar === undefined) throw new Error(`song2: bar ${sourceBar.bar} has no model record`);
   const events = score.notes
@@ -232,9 +233,74 @@ function lastNoteOf(score: Score, voice: string): Note | undefined {
   return notes[notes.length - 1];
 }
 
+function sourceContentByBar(source: Song2Source): Map<number, BarContent> {
+  const byBar = new Map<number, BarContent>();
+  for (const line of source.musicLines) {
+    for (const segment of line.segments) {
+      for (const bar of segment.bars) {
+        if (!byBar.has(bar.bar)) byBar.set(bar.bar, bar.content);
+      }
+    }
+  }
+  return byBar;
+}
+
+function gridMatchesSource(score: Score, source: Song2Source): boolean {
+  const content = sourceContentByBar(source);
+  return score.bars.every((bar, index) => {
+    const old = content.get(index);
+    return (
+      old !== undefined &&
+      old.start === bar.start &&
+      old.meter === `${bar.meter.numerator}/${bar.meter.denominator}` &&
+      old.key === bar.key
+    );
+  });
+}
+
+function cutWasRepaired(score: Score, source: Song2Source): boolean {
+  return source.truncation !== null && score.truncation === null;
+}
+
+function barsFill(score: Score): boolean {
+  return score.bars.every((bar, index) =>
+    score.voices.every((voice) => {
+      const total = score.notes
+        .filter((note) => note.voice === voice && note.bar === index)
+        .reduce((sum, note) => sum + note.duration, 0);
+      return total === bar.length;
+    }),
+  );
+}
+
+function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
+  const content = sourceContentByBar(source);
+  let oldCount = 0;
+  for (const index of content.keys()) oldCount = Math.max(oldCount, index + 1);
+  if (score.bars.length !== oldCount) return true;
+  if (gridMatchesSource(score, source)) return false;
+  const metersOnly = score.bars.every((bar, index) => {
+    const old = content.get(index);
+    return (
+      old !== undefined &&
+      old.start === bar.start &&
+      old.key === bar.key &&
+      old.meter !== `${bar.meter.numerator}/${bar.meter.denominator}`
+    );
+  });
+  if (!metersOnly) return true;
+  const lengthsFit = score.bars.every(
+    (bar) => bar.length === (4 * bar.meter.numerator * TICKS_PER_QUARTER) / bar.meter.denominator,
+  );
+  return lengthsFit && barsFill(score);
+}
+
 /** Writes a score: untouched bars keep their read bytes, changed bars are rewritten whole. */
 export function serializeSong2(score: Score): string {
   const source = sourceOf(score);
+  if (barGridNeedsWriting(score, source) || cutWasRepaired(score, source)) {
+    return score.truncation !== null ? serializeTruncatedBarsSong2(score, source) : serializeBarsSong2(score, source);
+  }
   const lines = source.text.split("\n");
   const dropped = new Set<number>();
   for (const musicLine of source.musicLines) {

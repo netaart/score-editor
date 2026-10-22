@@ -33,6 +33,16 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "tool-parameter",
   "chord-voice",
   "chord-vocabulary",
+  "bar-out-of-range",
+  "section-out-of-range",
+  "meter-not-allowed",
+  "no-truncation",
+  "no-incomplete-bar",
+  "tie-across-bar",
+  "truncated-tail",
+  "meter-does-not-fit",
+  "last-bar",
+  "cut-in-complete-bar",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -78,6 +88,16 @@ interface Catalog {
   readonly toolParameter: Text;
   readonly chordVoice: Text;
   readonly chordVocabulary: Text;
+  readonly barOutOfRange: Text;
+  readonly sectionOutOfRange: Text;
+  readonly meterNotAllowed: Text;
+  readonly noTruncation: Text;
+  readonly noIncompleteBar: Text;
+  readonly tieAcrossBar: Text;
+  readonly truncatedTail: Text;
+  readonly meterDoesNotFit: Text;
+  readonly lastBar: Text;
+  readonly cutInCompleteBar: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -422,6 +442,92 @@ function chineseChordVocabulary(params: DiagnosticParams): string {
   return name === "" ? "这个和弦不在乐谱方言的和弦词表里。" : `和弦${quoted(name)}不在乐谱方言的和弦词表里。`;
 }
 
+function englishBarOutOfRange(params: DiagnosticParams): string {
+  const from = value(params, "from");
+  if (from !== "") return `The bar range starting at ${from} is outside this score.`;
+  return `The bar${quoted(value(params, "bar"))} is outside this score.`;
+}
+
+function chineseBarOutOfRange(params: DiagnosticParams): string {
+  const from = value(params, "from");
+  if (from !== "") return `从第 ${from} 小节开始的范围超出了这份乐谱。`;
+  return `小节${quoted(value(params, "bar"))}超出了这份乐谱的范围。`;
+}
+
+function englishSectionOutOfRange(params: DiagnosticParams): string {
+  return `The section${quoted(value(params, "section"))} is outside this score.`;
+}
+
+function chineseSectionOutOfRange(params: DiagnosticParams): string {
+  return `段落${quoted(value(params, "section"))}超出了这份乐谱的范围。`;
+}
+
+function englishMeterNotAllowed(params: DiagnosticParams): string {
+  const meter = `${value(params, "numerator")}/${value(params, "denominator")}`;
+  return `The meter ${meter} is not allowed in this score format.`;
+}
+
+function chineseMeterNotAllowed(params: DiagnosticParams): string {
+  const meter = `${value(params, "numerator")}/${value(params, "denominator")}`;
+  return `这个乐谱格式不允许 ${meter} 拍。`;
+}
+
+function englishNoTruncation(): string {
+  return "This score has no cut.";
+}
+
+function chineseNoTruncation(): string {
+  return "这份乐谱没有截断处。";
+}
+
+function englishNoIncompleteBar(): string {
+  return "The cut has no incomplete bar to change.";
+}
+
+function chineseNoIncompleteBar(): string {
+  return "截断处没有不完整的小节可以改。";
+}
+
+function englishTieAcrossBar(params: DiagnosticParams): string {
+  return `A tie in ${value(params, "voice")} crosses this bar boundary, so a bar cannot be inserted there.`;
+}
+
+function chineseTieAcrossBar(params: DiagnosticParams): string {
+  return `${value(params, "voice")} 声部有连音线跨过这条小节线，所以不能在这里插入小节。`;
+}
+
+function englishTruncatedTail(): string {
+  return "That would touch the score's cut; use the truncation commands for it.";
+}
+
+function chineseTruncatedTail(): string {
+  return "这样会动到乐谱的截断处；请用截断专用的操作处理它。";
+}
+
+function englishMeterDoesNotFit(params: DiagnosticParams): string {
+  return `This section's length does not fill whole ${value(params, "numerator")}/${value(params, "denominator")} bars.`;
+}
+
+function chineseMeterDoesNotFit(params: DiagnosticParams): string {
+  return `这个段落的长度不是 ${value(params, "numerator")}/${value(params, "denominator")} 拍的整小节。`;
+}
+
+function englishCutInCompleteBar(): string {
+  return "The cut is inside a measure another voice still uses; fill it with rests instead.";
+}
+
+function chineseCutInCompleteBar(): string {
+  return "截断落在另一个声部还在用的小节里；请改用休止把它补齐。";
+}
+
+function englishLastBar(): string {
+  return "The score would have no bars left.";
+}
+
+function chineseLastBar(): string {
+  return "删掉以后乐谱就没有小节了。";
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -441,6 +547,16 @@ const en: Catalog = {
   toolParameter: englishToolParameter,
   chordVoice: englishChordVoice,
   chordVocabulary: englishChordVocabulary,
+  barOutOfRange: englishBarOutOfRange,
+  sectionOutOfRange: englishSectionOutOfRange,
+  meterNotAllowed: englishMeterNotAllowed,
+  noTruncation: englishNoTruncation,
+  noIncompleteBar: englishNoIncompleteBar,
+  tieAcrossBar: englishTieAcrossBar,
+  truncatedTail: englishTruncatedTail,
+  meterDoesNotFit: englishMeterDoesNotFit,
+  lastBar: englishLastBar,
+  cutInCompleteBar: englishCutInCompleteBar,
 };
 
 const zh: Catalog = {
@@ -462,6 +578,16 @@ const zh: Catalog = {
   toolParameter: chineseToolParameter,
   chordVoice: chineseChordVoice,
   chordVocabulary: chineseChordVocabulary,
+  barOutOfRange: chineseBarOutOfRange,
+  sectionOutOfRange: chineseSectionOutOfRange,
+  meterNotAllowed: chineseMeterNotAllowed,
+  noTruncation: chineseNoTruncation,
+  noIncompleteBar: chineseNoIncompleteBar,
+  tieAcrossBar: chineseTieAcrossBar,
+  truncatedTail: chineseTruncatedTail,
+  meterDoesNotFit: chineseMeterDoesNotFit,
+  lastBar: chineseLastBar,
+  cutInCompleteBar: chineseCutInCompleteBar,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -505,6 +631,26 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.chordVoice(diagnostic.params);
     case "chord-vocabulary":
       return catalog.chordVocabulary(diagnostic.params);
+    case "bar-out-of-range":
+      return catalog.barOutOfRange(diagnostic.params);
+    case "section-out-of-range":
+      return catalog.sectionOutOfRange(diagnostic.params);
+    case "meter-not-allowed":
+      return catalog.meterNotAllowed(diagnostic.params);
+    case "no-truncation":
+      return catalog.noTruncation(diagnostic.params);
+    case "no-incomplete-bar":
+      return catalog.noIncompleteBar(diagnostic.params);
+    case "tie-across-bar":
+      return catalog.tieAcrossBar(diagnostic.params);
+    case "truncated-tail":
+      return catalog.truncatedTail(diagnostic.params);
+    case "meter-does-not-fit":
+      return catalog.meterDoesNotFit(diagnostic.params);
+    case "last-bar":
+      return catalog.lastBar(diagnostic.params);
+    case "cut-in-complete-bar":
+      return catalog.cutInCompleteBar(diagnostic.params);
     default:
       return "";
   }

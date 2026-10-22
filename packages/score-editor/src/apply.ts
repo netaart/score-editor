@@ -33,7 +33,12 @@ export function applyScoreCommand(dialect: ScoreDialect, text: string, command: 
   const applied = runScoreCommand(parsed.score, command, dialect.constraints);
   if (!applied.ok) return applied;
 
-  const written = dialect.serialize(applied.score);
+  let written: string;
+  try {
+    written = dialect.serialize(applied.score);
+  } catch {
+    return { ok: false, diagnostic: { code: "write-mismatch", params: {}, at: {} } };
+  }
   const diagnostics = dialect.check(applied.score);
   const first = diagnostics[0];
   if (first !== undefined) return { ok: false, diagnostic: located(first, commandAt(parsed.score, command)) };

@@ -32,6 +32,16 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "tool-parameter",
   "chord-voice",
   "chord-vocabulary",
+  "bar-out-of-range",
+  "section-out-of-range",
+  "meter-not-allowed",
+  "no-truncation",
+  "no-incomplete-bar",
+  "tie-across-bar",
+  "truncated-tail",
+  "meter-does-not-fit",
+  "last-bar",
+  "cut-in-complete-bar",
 ];
 
 describe("diagnostics", () => {
