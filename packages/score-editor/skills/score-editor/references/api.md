@@ -50,7 +50,7 @@ change. The tests in the repository check that the list stays complete.
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
-| `LYRICS_MAX_CHARACTERS` | core | 2000; the generation gateway's limit on the joined `lyrics` text. |
+| `LYRICS_MAX_CHARACTERS` | core | 2000; the limit song2 generation accepts for the joined `lyrics` text. |
 | `NOTICE_CODES` | core | The closed host message codes; today `"command-refused"`. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |

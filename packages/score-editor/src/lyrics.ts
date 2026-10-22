@@ -4,10 +4,10 @@ import type { LyricLine, LyricPhrase, Note, Score, Section } from "./score";
 
 export type { LyricLine, LyricPhrase } from "./score";
 
-/** The 2,000-character limit the generation gateway applies to the joined lyrics text. */
+/** The joined lyrics may be at most this many characters; this is the limit song2 generation accepts. */
 export const LYRICS_MAX_CHARACTERS = 2000;
 
-/** One syllable and the score note it is sung on, when the counts match. */
+/** One syllable and the score note it is sung on, when the counts are equal. */
 export interface LyricSyllableNote {
   readonly syllable: string;
   readonly note: Note;

@@ -773,11 +773,11 @@ function chineseLyricsUnaligned(params: DiagnosticParams): string {
 }
 
 function englishLyricsTooLong(params: DiagnosticParams): string {
-  return `The joined lyrics are ${value(params, "count")} characters; the generation gateway accepts ${value(params, "max")}.`;
+  return `The joined lyrics are ${value(params, "count")} characters; song2 generation accepts ${value(params, "max")}.`;
 }
 
 function chineseLyricsTooLong(params: DiagnosticParams): string {
-  return `拼回的 lyrics 有 ${value(params, "count")} 字，超出生成长度上限 ${value(params, "max")} 字。`;
+  return `拼回的 lyrics 有 ${value(params, "count")} 字，超过 song2 生成接受的 ${value(params, "max")} 字上限。`;
 }
 
 const en: Catalog = {
