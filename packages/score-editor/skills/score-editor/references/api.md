@@ -9,6 +9,7 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- | --- |
 | `mount` | core | Mounts the default editor on an element; returns `MountedEditor`. |
 | `createEditingSession` | core | Builds an `EditingSession` from a project and a `DialectRegistry`. |
+| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo and Delete; takes `ToolbarOptions`. |
 | `mountZoomControl` | core | Mounts the zoom control view part on `(el, session)`. |
 | `mountCutNotice` | core | Mounts the cut-notice view part. |
 | `mountProblemView` | core | Mounts the problem view part. |
@@ -23,6 +24,7 @@ change. The tests in the repository check that the list stays complete.
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
+| `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete) to a session; returns `EditingInputResult`. |
 
 ## Constants and values
 
@@ -31,7 +33,7 @@ change. The tests in the repository check that the list stays complete.
 | `TICKS_PER_QUARTER` | core | 256; the tick unit of the shared model. |
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
-| `NOTICE_CODES` | core | The closed notice codes; empty in this version, so `notify` is never called. |
+| `NOTICE_CODES` | core | The closed notice codes; today `"command-refused"`. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |
 | `song2Dialect` | song2 | The `ScoreDialect` for `song2`: parse, serialize and check. |
@@ -44,9 +46,9 @@ change. The tests in the repository check that the list stays complete.
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
-| `SessionOptions` | `{ project, dialects, language? }` for `createEditingSession`. |
+| `SessionOptions` | `{ project, dialects, language?, editable? }` for `createEditingSession`. |
 | `EditingSession` | The headless editing session: project, reading, selection, insertion point, view, dispatch, tools, history, subscribe. |
-| `ViewState` | `{ zoom, scrollLeft, language }`, shared by parts and outside the history. |
+| `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus any diagnostics, or the untouched project and a refusal. |
@@ -94,8 +96,11 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
-| `AxisPartOptions` | `{ scroller? }` for the ruler, chord track and voice tracks. |
+| `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
+| `ToolbarOptions` | `{ hintId?, onRefused? }` for the toolbar. |
+| `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, or a delete. |
+| `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
 ## Tool types
 

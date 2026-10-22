@@ -21,14 +21,14 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 | `project: SongProject` | The song project. This version reads its `score` text and `modelId`. |
 | `dialects: DialectRegistry` | The dialects the editor can read, from `createDialectRegistry`. |
 | `language: Language` | Interface language, `"zh"` or `"en"`. |
-| `editable?: boolean` | Defaults to true. This version shows the score read-only either way; `false` adds a read-only badge. |
-| `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language; no message exists in this version. |
+| `editable?: boolean` | Defaults to true. While true the toolbar offers undo, redo and Delete, a click or tap selects a note or sets the insertion point, and the editing keys act; see [view-parts.md](view-parts.md#editing-in-the-parts). While false the score is only shown and the toolbar shows a read-only badge. |
+| `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language. Its one code today is `command-refused`: an edit the user asked for that the score would not take, with nothing changed; the message says why and where. |
 
 `MountedEditor`:
 
 | Member | Meaning |
 | --- | --- |
-| `update(options: Partial<MountOptions>)` | Applies only the given keys. A language change rewrites the interface without rebuilding the view. Does nothing after `destroy`. |
+| `update(options: Partial<MountOptions>)` | Applies only the given keys. A language change rewrites the interface without rebuilding the view, and `editable` switches editing on or off without remounting. Does nothing after `destroy`. |
 | `destroy()` | Removes every listener, node and style sheet it added. Safe to call twice. |
 
 An element holds at most one editor: destroy the first before mounting again.
