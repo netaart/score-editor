@@ -26,7 +26,8 @@ async function expectExampleWorks(page: import("@playwright/test").Page): Promis
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
   await expect(page.getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
 
-  const status = page.getByRole("status");
+  // The editor's own parts keep live regions of their own, so the page names the one it writes to.
+  const status = page.getByRole("status", { name: "Example status" });
   await expect(status).toHaveText("Ready: 1 custom tool registered.");
 
   const vocalNotes = page.getByRole("list", { name: "Vocal" }).getByRole("listitem");

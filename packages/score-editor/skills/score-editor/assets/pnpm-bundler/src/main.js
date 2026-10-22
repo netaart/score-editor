@@ -12,8 +12,8 @@ import {
   mountCutNotice,
   mountProblemView,
   mountTimeRuler,
+  mountToolbar,
   mountVoiceTrack,
-  mountZoomControl,
 } from "@neta-art/score-editor";
 
 // Hand-written: two voices, four bars, a verse and a chorus.
@@ -60,7 +60,7 @@ app.innerHTML = `
       <p>The two packages are bundled by esbuild. The parts and the tool are wired up by this page.</p>
     </header>
     <div class="skill-toolbar">
-      <div data-slot="zoom"></div>
+      <div data-slot="toolbar"></div>
       <div data-slot="notice"></div>
       <div class="skill-actions">
         <button type="button" data-action="select">Select notes</button>
@@ -69,7 +69,7 @@ app.innerHTML = `
         <button type="button" data-action="write">Write back</button>
       </div>
     </div>
-    <p class="skill-status" role="status" aria-live="polite"></p>
+    <p class="skill-status" role="status" aria-live="polite" aria-label="Example status"></p>
     <div class="skill-grid">
       <section class="skill-card">
         <div data-slot="ruler"></div>
@@ -87,7 +87,7 @@ const slot = (name) => {
   if (!(found instanceof HTMLElement)) throw new Error(`The example page has no ${name} slot.`);
   return found;
 };
-const status = app.querySelector('[role="status"]');
+const status = app.querySelector(".skill-status");
 const output = app.querySelector(".skill-output");
 
 const restEveryNth = {
@@ -106,7 +106,7 @@ const restEveryNth = {
 const tools = createToolRegistry([restEveryNth]);
 
 const parts = [
-  mountZoomControl(slot("zoom"), session),
+  mountToolbar(slot("toolbar"), session),
   mountCutNotice(slot("notice"), session),
   mountTimeRuler(slot("ruler"), session),
   mountChordTrack(slot("chords"), session),
