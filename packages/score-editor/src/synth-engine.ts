@@ -81,8 +81,16 @@ const LEAD_LEVEL = 0.5;
 const SECOND_VOICE_LEVEL = 0.16;
 const CHORD_LEVEL = 0.4;
 
-export function frequencyOf(midi: number): number {
+function frequencyOf(midi: number): number {
   return 440 * 2 ** ((midi - 69) / 12);
+}
+
+/** A gain node at the master level, wired to the speakers: what a sound is mixed into. */
+function masterOut(context: AudioContext): GainNode {
+  const out = context.createGain();
+  out.gain.value = MASTER_GAIN;
+  out.connect(context.destination);
+  return out;
 }
 
 /** One oscillator through its own envelope: a short attack, the level held, a short release to silence at `when + length`. */
@@ -114,9 +122,7 @@ function playTone(
 
 /** A single pitch for a short time, through the shared context: the sound of a note preview. `onEnd` is called once it has died away. */
 export function playPitch(context: AudioContext, midi: number, length: number, onEnd: () => void): void {
-  const out = context.createGain();
-  out.gain.value = MASTER_GAIN;
-  out.connect(context.destination);
+  const out = masterOut(context);
   const tone = playTone(context, out, "triangle", midi, context.currentTime + 0.01, length, LEAD_LEVEL);
   tone.addEventListener(
     "ended",
@@ -143,11 +149,9 @@ const TOP_UP_MS = 200;
  * ahead of the clock. `onEnd` is called once, after the last sound has ended, unless `stop` came first.
  */
 export function sound(context: AudioContext, schedule: PreviewSchedule, begin: number, onEnd: () => void): Sounding {
-  const master = context.createGain();
-  master.gain.value = MASTER_GAIN;
-  master.connect(context.destination);
+  const master = masterOut(context);
   const live = new Set<OscillatorNode>();
-  const leads = new Map<string, number>();
+  const voiceOrder = new Map<string, number>();
   const { events } = schedule;
   let next = 0;
   let finished = false;
@@ -170,17 +174,17 @@ export function sound(context: AudioContext, schedule: PreviewSchedule, begin: n
       for (const midi of event.midis) track(playTone(context, master, "sine", midi, when, event.length, level));
       return;
     }
-    if (!leads.has(event.voice)) leads.set(event.voice, leads.size);
-    const lead = leads.get(event.voice) === 0;
+    if (!voiceOrder.has(event.voice)) voiceOrder.set(event.voice, voiceOrder.size);
+    const isLead = voiceOrder.get(event.voice) === 0;
     track(
       playTone(
         context,
         master,
-        lead ? "triangle" : "square",
+        isLead ? "triangle" : "square",
         event.midi,
         when,
         event.length,
-        lead ? LEAD_LEVEL : SECOND_VOICE_LEVEL,
+        isLead ? LEAD_LEVEL : SECOND_VOICE_LEVEL,
       ),
     );
   }

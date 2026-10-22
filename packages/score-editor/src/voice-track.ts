@@ -142,11 +142,11 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         announceVoice(session, voice, live, signal, () => focus.stepping);
         const player = previewPlayer(session);
         const follower = createPlayheadFollower(session);
-        const moved = player.subscribe(() => {
+        const unsubscribePlayer = player.subscribe(() => {
           drawn?.playhead.show(player.tick);
           follower.follow(player.tick);
         });
-        signal.addEventListener("abort", moved, { once: true });
+        signal.addEventListener("abort", unsubscribePlayer, { once: true });
         own.setAttribute("data-editable", String(session.view.editable));
         let down: { id: number; x: number; y: number } | null = null;
         own.addEventListener(
