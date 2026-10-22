@@ -773,6 +773,10 @@ ${labelThinning()}
   word-break: keep-all;
   text-wrap: balance;
 }
+/* What the person needs to know now takes the caption's place, in the text colour so it is read as news. */
+.sce-root .sce-synth-told {
+  color: var(--sce-_text);
+}
 /*
  * The playhead: a hairline through every lane at the tick being played. Its edges are the ground colour, so it reads
  * over a note as well as over the lane. It is a thinner line than the insertion point and has no flag, so the two are

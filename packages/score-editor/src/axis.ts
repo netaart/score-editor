@@ -215,8 +215,16 @@ export function revealTick(session: EditingSession, tick: number, frame?: AxisFr
 /** Where a tick stands against what the axis shows: before its left edge, inside it, or after its right edge. */
 export type TickPlace = "before" | "inside" | "after";
 
-/** The place of `tick` on the axis `frame` measures (default: the first part on the axis), or null when nothing is drawn. */
-export function tickPlace(session: EditingSession, tick: number, frame?: AxisFrame | null): TickPlace | null {
+/**
+ * The place of `tick` on the axis `frame` measures (default: the first part on the axis), or null when nothing is drawn.
+ * A `margin` in pixels counts the strip that far in from the right edge as already past it.
+ */
+export function tickPlace(
+  session: EditingSession,
+  tick: number,
+  frame?: AxisFrame | null,
+  margin = 0,
+): TickPlace | null {
   const found = frame ?? controllers.get(session)?.frame();
   if (!found || !(found.ticks > 0)) return null;
   const { scroller, corner, timeline, ticks } = found;
@@ -225,7 +233,7 @@ export function tickPlace(session: EditingSession, tick: number, frame?: AxisFra
   const at = (tick / ticks) * width;
   const from = scroller.scrollLeft;
   if (at < from) return "before";
-  return at > from + scroller.clientWidth - corner.offsetWidth ? "after" : "inside";
+  return at > from + scroller.clientWidth - corner.offsetWidth - margin ? "after" : "inside";
 }
 
 /** Scrolls the time axis so that `tick` stands a little in from its left edge: a page turn, for a tick that moves on. */

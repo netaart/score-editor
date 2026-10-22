@@ -17,6 +17,9 @@ const PLAY = ["4.5,2.5 12.5,8 4.5,13.5 4.5,2.5"];
 /** A square: stop. */
 const STOP = ["3.5,3.5 12.5,3.5 12.5,12.5 3.5,12.5 3.5,3.5"];
 
+/** How long a sentence that says why a press did nothing stays in place of the caption. */
+const TOLD_MS = 4000;
+
 /**
  * The control itself, drawn into `parent`, which must sit in a `.sce-root`: the button, the caption, and what they say
  * through `live`. The toolbar builds it into its own row and lends it its own live region, so a toolbar speaks with one
@@ -38,15 +41,40 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
   let t = messagesFor(session.view.language);
   let drawn = "";
   let wasPlaying = false;
+  /** A sentence shown in place of the caption for a few seconds: why a press did nothing. */
+  let told: string | null = null;
+  let toldTimer: ReturnType<typeof setTimeout> | undefined;
 
   function applyLanguage(): void {
     language = session.view.language;
     t = messagesFor(language);
     group.lang = language;
-    caption.textContent = t.previewCaption;
+    told = null;
+    clearTimeout(toldTimer);
+    drawCaption();
     // Spoken with the button, so the warning reaches a person who never sees the caption, in a toolbar that scrolls.
     button.setAttribute("aria-description", t.previewCaption);
     drawn = "";
+  }
+
+  /**
+   * The caption is always on, except that what the person needs to know now takes its place: that this browser cannot play
+   * the preview, or why the last press did nothing. Those are sighted words as well as spoken ones.
+   */
+  function drawCaption(): void {
+    const text = audioAvailable() ? (told ?? t.previewCaption) : t.previewUnsupported;
+    if (caption.textContent !== text) caption.textContent = text;
+    caption.classList.toggle("sce-synth-told", text !== t.previewCaption);
+  }
+
+  function tell(text: string): void {
+    told = text;
+    clearTimeout(toldTimer);
+    toldTimer = setTimeout(() => {
+      told = null;
+      drawCaption();
+    }, TOLD_MS);
+    drawCaption();
   }
 
   function draw(): void {
@@ -67,10 +95,13 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
     label.textContent = playing ? t.previewStop : t.previewPlay;
     button.setAttribute("aria-disabled", String(!available));
     button.title = available ? "" : t.previewUnsupported;
+    drawCaption();
   }
 
   function say(result: PreviewStart): void {
     if (result === "started") {
+      told = null;
+      drawCaption();
       const from = player.from;
       const reading = session.reading;
       const position =
@@ -78,9 +109,14 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
       live.say(t.previewStarted(position));
       // In a toolbar that scrolls sideways the caption may be out of sight; while the sound plays it should not be.
       caption.scrollIntoView({ block: "nearest", inline: "nearest" });
-    } else if (result === "nothing-to-play") live.say(t.previewNothing);
-    else if (result === "unsupported") live.say(t.previewUnsupported);
-    else if (result === "blocked") live.say(t.previewBlocked);
+    } else if (result === "nothing-to-play") {
+      live.say(t.previewNothing);
+      tell(t.previewNothing);
+    } else if (result === "unsupported") live.say(t.previewUnsupported);
+    else if (result === "blocked") {
+      live.say(t.previewBlocked);
+      tell(t.previewBlocked);
+    }
   }
 
   const abort = new AbortController();
@@ -104,6 +140,7 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
       if (destroyed) return;
       destroyed = true;
       abort.abort();
+      clearTimeout(toldTimer);
       unsubscribeSession();
       unsubscribePlayer();
       hold.release();

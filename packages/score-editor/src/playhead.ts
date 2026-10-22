@@ -36,6 +36,9 @@ export interface PlayheadFollower {
   follow(tick: number | null): void;
 }
 
+/** How far in from the right edge, in pixels, the page is turned: a beat at the default zoom, so the next notes are in view when the line gets there. */
+const TURN_AHEAD = 48;
+
 /**
  * Keeps the playhead in view while it moves: it brings the start into view, and turns the page when the playhead passes
  * the right edge. When the user scrolls or zooms the playhead out of view, the view is theirs and is left alone, until
@@ -62,7 +65,7 @@ export function createPlayheadFollower(session: EditingSession): PlayheadFollowe
       const place = tickPlace(session, tick);
       // A change of scroll that this follower did not make is the user's, or another track's turn of the same page.
       if (session.view.scrollLeft !== seen) following = place === "inside";
-      if (following && place === "after") turnTo(session, tick);
+      if (following && tickPlace(session, tick, undefined, TURN_AHEAD) === "after") turnTo(session, tick);
       seen = session.view.scrollLeft;
     },
   };

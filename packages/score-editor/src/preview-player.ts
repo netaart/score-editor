@@ -114,7 +114,11 @@ class Player implements PreviewPlayer {
     const mediaStarted = (event: Event) => {
       if (typeof HTMLMediaElement !== "undefined" && event.target instanceof HTMLMediaElement) this.stop();
     };
+    const escapeKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") this.stop();
+    };
     context.addEventListener("statechange", interrupted);
+    document.addEventListener("keydown", escapeKey);
     document.addEventListener("play", mediaStarted, true);
     this.running = {
       schedule,
@@ -126,6 +130,7 @@ class Player implements PreviewPlayer {
         unsubscribe();
         context.removeEventListener("statechange", interrupted);
         document.removeEventListener("play", mediaStarted, true);
+        document.removeEventListener("keydown", escapeKey);
       },
     };
     this.advance();
