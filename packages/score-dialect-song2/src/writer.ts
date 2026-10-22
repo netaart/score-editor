@@ -239,6 +239,10 @@ function headerValue(line: string | undefined): string {
   return line === undefined ? "" : line.replace(/[ \t]+$/, "").slice(2);
 }
 
+function writeKeyLine(lines: string[], line: number, key: string): void {
+  if (headerValue(lines[line]) !== key) lines[line] = `K:${key}`;
+}
+
 /**
  * Changes only the header lines the model changed, so an untouched header keeps its exact bytes.
  * The header is fixed (RULES.md H1-H10): `Q:` is line 5 and the header `K:` follows the voice lines.
@@ -248,16 +252,12 @@ function writeHeader(score: Score, source: Song2Source, lines: string[]): void {
   const tempo = tempoLine === undefined ? null : /^Q:1\/4=([0-9]+)$/.exec(tempoLine.replace(/[ \t]+$/, ""));
   if (tempo === null || Number(tempo[1]) !== score.tempo.bpm) lines[4] = `Q:1/4=${score.tempo.bpm}`;
 
-  const headerKeyLine = score.voices.length > 1 ? 7 : 6;
   const headerKey = score.keys[0]?.key;
-  if (headerKey !== undefined && headerValue(lines[headerKeyLine]) !== headerKey) {
-    lines[headerKeyLine] = `K:${headerKey}`;
-  }
+  if (headerKey !== undefined) writeKeyLine(lines, score.voices.length > 1 ? 7 : 6, headerKey);
 
   for (const field of source.keyFields) {
     const entry = score.keys[field.timelineIndex];
-    if (entry === undefined) continue;
-    if (headerValue(lines[field.line]) !== entry.key) lines[field.line] = `K:${entry.key}`;
+    if (entry !== undefined) writeKeyLine(lines, field.line, entry.key);
   }
 }
 

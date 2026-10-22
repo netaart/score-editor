@@ -685,16 +685,18 @@ class Song2Parser {
   private readKeyField(line: string, voice: VoiceState, lineNumber: number): void {
     const key = line.slice(2);
     if (!isKey(key)) this.failHeader("K", lineNumber, line, key);
-    this.setKey(voice, key, voice.measureStart);
-    this.keyFields.push({ line: lineNumber - 1, timelineIndex: voice.timeline.length - 1 });
+    const timelineIndex = this.setKey(voice, key, voice.measureStart);
+    this.keyFields.push({ line: lineNumber - 1, timelineIndex });
   }
 
-  private setKey(voice: VoiceState, key: string, at: number): void {
+  /** Sets a voice's key and returns the index of the timeline entry it added. */
+  private setKey(voice: VoiceState, key: string, at: number): number {
     const signature = signatureOf(key);
     voice.key = signature.key;
     voice.signature = signature.values;
     voice.accidental = {};
     voice.timeline.push({ at, key });
+    return voice.timeline.length - 1;
   }
 
   // --- music lines -------------------------------------------------------------------------------
@@ -889,11 +891,11 @@ class Song2Parser {
         }
         this.requireRoom(voice, offset, length, bar, lineNumber);
         if (!isKey(key)) this.failHeader("K", lineNumber, key, key);
-        this.setKey(voice, key, measureStart + offset);
+        const timelineIndex = this.setKey(voice, key, measureStart + offset);
         voice.inlineKeys.push({
           at: measureStart + offset,
           key,
-          timelineIndex: voice.timeline.length - 1,
+          timelineIndex,
         });
         pos = end + 1;
         continue;
