@@ -62,19 +62,50 @@ const LAYOUT_PARTS = {
   problem: (el, session) => mountProblemView(el, session),
 };
 
-/** A layout of the host's own, nothing like the editor's: parts in cards of different widths, one slot for each. */
+/** The parts that draw on the time axis. */
+const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
+
+/**
+ * A layout of the host's own, nothing like the editor's: parts in cards of different widths, one slot for each. It is
+ * styled by classes of host.css, since a strict style policy refuses inline style attributes.
+ */
 function buildLayout(container) {
   container.innerHTML = `
-    <div style="display:grid;grid-template-columns:minmax(0,1fr);gap:12px;padding:12px;font:13px Georgia, serif">
-      <div data-slot="zoom"></div>
-      <div data-slot="notice"></div>
-      <div style="width:min(560px,100%)"><div data-slot="ruler"></div><div data-slot="chords"></div></div>
-      <div style="width:min(420px,100%)"><div data-slot="vocal"></div></div>
-      <div style="width:min(700px,100%)"><div data-slot="ins"></div></div>
-      <div data-slot="problem"></div>
+    <div class="layout-grid">
+      <div class="layout-slot" data-slot="zoom"></div>
+      <div class="layout-slot" data-slot="notice"></div>
+      <div class="layout-card layout-card-narrow">
+        <div class="layout-slot" data-slot="ruler"></div><div class="layout-slot" data-slot="chords"></div>
+      </div>
+      <div class="layout-card layout-card-medium"><div class="layout-slot" data-slot="vocal"></div></div>
+      <div class="layout-card layout-card-wide" data-card="ins"><div class="layout-slot" data-slot="ins"></div></div>
+      <div class="layout-slot" data-slot="problem"></div>
     </div>`;
   return Object.fromEntries([...container.querySelectorAll("[data-slot]")].map((el) => [el.dataset.slot, el]));
 }
+
+/**
+ * What a host page does around the parts, one named layout at a time: the zoom control in a clipped box under a toast
+ * ("covered-zoom"), a banner of the host's in front of the top of the Vocal track ("overlapping-banner"), and the Ins
+ * track further right than the others ("indented-track").
+ */
+const SCENES = {
+  "covered-zoom"(container, slots) {
+    slots.zoom.classList.add("layout-clipped");
+    const toast = document.createElement("div");
+    toast.className = "layout-toast";
+    container.append(toast);
+  },
+  "overlapping-banner"(_container, slots) {
+    const banner = document.createElement("div");
+    banner.className = "layout-banner";
+    banner.textContent = "Host banner";
+    slots.vocal.parentElement.append(banner);
+  },
+  "indented-track"(container) {
+    container.querySelector('[data-card="ins"]').classList.add("layout-indented");
+  },
+};
 
 function mountLayoutParts(slots, session, names) {
   return Object.fromEntries(names.map((name) => [name, LAYOUT_PARTS[name](slots[name], session)]));
@@ -86,11 +117,24 @@ const layout = {
   slots: {},
   shadowRoot: null,
   host: null,
+  partNames: { all: Object.keys(LAYOUT_PARTS), axis: AXIS_PART_NAMES },
+  /** The session of the open layout. */
+  live() {
+    if (!layout.session) throw new Error("no layout is open");
+    return layout.session;
+  },
   /**
    * Opens one editing session and mounts the named view parts (all of them by default) on it, each on its own slot of
    * a layout the page builds itself. `shadow` builds the layout inside an open shadow root.
    */
-  async open({ score = { sample: "compact-three-sections" }, language = "en", project: fields, parts, shadow } = {}) {
+  async open({
+    score = { sample: "compact-three-sections" },
+    language = "en",
+    project: fields,
+    parts,
+    shadow,
+    scene,
+  } = {}) {
     if (layout.session) throw new Error("a layout is already open");
     const base = await projectFrom(blank, score, fields);
     const host = document.createElement("div");
@@ -100,11 +144,17 @@ const layout = {
     let container = host;
     if (shadow) {
       layout.shadowRoot = host.attachShadow({ mode: "open" });
+      const styles = document.createElement("link");
+      styles.rel = "stylesheet";
+      styles.href = "/e2e/page/host.css";
       container = document.createElement("div");
-      layout.shadowRoot.append(container);
+      container.className = "layout-container";
+      layout.shadowRoot.append(styles, container);
+      await new Promise((resolve) => styles.addEventListener("load", resolve, { once: true }));
     }
     layout.host = host;
     layout.slots = buildLayout(container);
+    if (scene) SCENES[scene](container, layout.slots);
     layout.session = createEditingSession({ project: base, dialects, language });
     layout.parts = mountLayoutParts(layout.slots, layout.session, parts ?? Object.keys(LAYOUT_PARTS));
   },
@@ -129,7 +179,7 @@ const layout = {
   /** The markup the same parts draw when they are mounted fresh on a new session that holds the same state. */
   freshRoots() {
     const host = document.createElement("div");
-    host.style.cssText = "position:absolute;left:-10000px;top:0;width:900px";
+    host.className = "layout-offscreen";
     document.body.append(host);
     const slots = buildLayout(host);
     const { project, view } = layout.session;
@@ -141,17 +191,66 @@ const layout = {
     host.remove();
     return html;
   },
+  /** Sets theme variables on the element the layout sits in, the way a host themes the parts. */
+  setTheme(variables) {
+    for (const [name, value] of Object.entries(variables)) layout.host.style.setProperty(name, value);
+  },
+  /** Holds on to the nodes one part drew, to see later whether anything still reaches them. */
+  retained: null,
+  retain(name) {
+    const root = layout.slots[name].firstElementChild;
+    if (!root) throw new Error(`${name} drew no root`);
+    layout.retained = { root, nodes: [root, ...root.querySelectorAll("*")] };
+  },
+  /** The markup the retained part root holds now. */
+  retainedHtml() {
+    return layout.retained.root.outerHTML;
+  },
+  /** What is left in the shadow root of a closed layout beyond the page's own layout boxes. */
+  leftInShadowRoot() {
+    const own = "link, .layout-container, .layout-grid, .layout-card, .layout-slot";
+    return [...layout.shadowRoot.querySelectorAll("*")].filter((el) => !el.matches(own)).length;
+  },
   /** Destroys every part and removes the layout. The shadow root stays reachable, so a test can see what it holds. */
   close() {
     for (const part of Object.values(layout.parts)) part.destroy();
     layout.host?.remove();
-    Object.assign(layout, { session: null, parts: {}, slots: {}, host: null });
+    Object.assign(layout, { session: null, parts: {}, slots: {}, host: null, retained: null });
+  },
+};
+
+const HOST_RULES = {
+  // A page with an !important rule on every element in the layout.
+  important: "#layout-host span, #layout-host div { padding: 9px !important; color: red !important; }",
+  // A page whose rules on plain elements are careless: they touch everything on the page that has no rule of its own.
+  hostile: `
+    body div, body span, body button { margin: 7px; padding: 9px; border: 3px solid red; border-radius: 0;
+      background: yellow; color: red; font: italic 28px/3 cursive; letter-spacing: 4px; text-transform: uppercase;
+      box-shadow: 0 0 0 5px green; position: static; opacity: 0.9; text-decoration: underline; }`,
+};
+
+/** Things a host page does to the document around the editor and its parts. */
+const hostPage = {
+  addRules(kind) {
+    const rules = document.createElement("style");
+    rules.textContent = HOST_RULES[kind];
+    document.head.append(rules);
+  },
+  setColorScheme(scheme) {
+    document.documentElement.style.colorScheme = scheme;
+  },
+  addProbe() {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<div id="probe"><button id="probe-button">Host button</button><span>Host text</span></div>',
+    );
   },
 };
 
 window.harness = {
   stage,
   layout,
+  host: hostPage,
   shadowRoot: null,
   /**
    * Mounts on the stage. `score` says which score text (default: a small two-voice sample), `project` overrides

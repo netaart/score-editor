@@ -1,14 +1,26 @@
 // ABOUTME: Seam 5 for the view parts: several parts mounted on one editing session, each on its own element of a layout the page builds.
 // ABOUTME: Covers drawing, dispatch, replacement, zoom and scroll shared through the session, style isolation, and what destroy leaves.
 import type { CDPSession, Locator, Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
-
-const ALL_PARTS = ["zoom", "notice", "ruler", "chords", "vocal", "ins", "problem"];
-const AXIS_PARTS = ["ruler", "chords", "vocal", "ins"];
+import { expect, type Harness, test } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
-/** The element of a part that holds its drawing, and that scrolls it in time when the part is an axis part. */
-const surface = (page: Page, name: string) => slot(page, name).locator(".sce-part");
+/** The one element a part drew into its slot. */
+const partRoot = (page: Page, name: string) => slot(page, name).locator(":scope > *");
+
+/** What a part on the time axis calls itself when it is a scroll surface of its own. */
+const REGION_NAMES: Record<string, string> = { ruler: "Time ruler", chords: "Chords", vocal: "Vocal", ins: "Ins" };
+function scrollSurface(page: Page, name: string): Locator {
+  const label = REGION_NAMES[name];
+  if (!label) throw new Error(`${name} is not a part on the time axis`);
+  return slot(page, name).getByRole("region", { name: label, exact: true });
+}
+
+const readout = (page: Page, value: string) =>
+  slot(page, "zoom").getByRole("button", { name: `Zoom ${value}`, exact: true });
+const zoomButton = (page: Page, name: "Zoom in" | "Zoom out") =>
+  slot(page, "zoom").getByRole("button", { name, exact: true });
+const bars = (page: Page) => slot(page, "ruler").getByRole("list", { name: "Bars" });
+const chordItems = (page: Page) => slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem");
 
 async function box(target: Locator) {
   const found = await target.boundingBox();
@@ -28,63 +40,92 @@ const INS_BAR_2 = "F4, bar 2 beat 1, length 0.5 beats";
 const VOCAL_BAR_5 = "C5, bar 5 beat 1, length 1 beat";
 const VOCAL_BAR_6 = "G5, bar 6 beat 1, length 1 beat";
 
-/** How far apart two bars are on each part that draws bars, in pixels: the same on every part at one zoom. */
-async function barPitches(page: Page): Promise<Record<string, number>> {
+/** How many pixels one bar takes on each part that draws bars: the same on every part at one zoom. */
+async function pixelsPerBar(page: Page): Promise<Record<string, number>> {
   const distance = async (first: Locator, second: Locator) => (await box(second)).x - (await box(first)).x;
-  const bar = (number: string) =>
-    slot(page, "ruler").getByRole("list", { name: "Bars" }).getByText(number, { exact: true });
-  const chords = slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem");
   const note = (name: string, part: string) => slot(page, part).getByRole("listitem", { name, exact: true });
   return {
-    ruler: await distance(bar("1"), bar("2")),
-    chords: await distance(chords.nth(0), chords.nth(1)),
+    ruler: await distance(bars(page).getByText("1", { exact: true }), bars(page).getByText("2", { exact: true })),
+    chords: await distance(chordItems(page).nth(0), chordItems(page).nth(1)),
     vocal: await distance(note(VOCAL_BAR_5, "vocal"), note(VOCAL_BAR_6, "vocal")),
     ins: await distance(note(INS_BAR_1, "ins"), note(INS_BAR_2, "ins")),
   };
 }
+const evenly = (pixels: number) => ({ ruler: pixels, chords: pixels, vocal: pixels, ins: pixels });
 
-const scrollLeftOf = (page: Page, name: string) => surface(page, name).evaluate((el) => el.scrollLeft);
-const maxScrollOf = (page: Page, name: string) => surface(page, name).evaluate((el) => el.scrollWidth - el.clientWidth);
-const sessionView = (page: Page) => page.evaluate(() => ({ ...window.harness.layout.session.view }));
+const scrollLeftOf = (page: Page, name: string) => scrollSurface(page, name).evaluate((el) => el.scrollLeft);
+const maxScrollOf = (page: Page, name: string) =>
+  scrollSurface(page, name).evaluate((el) => el.scrollWidth - el.clientWidth);
 
-/** The first Vocal note that is a pitch and not part of a tie, as the session reads it. */
-const loneVocalNote = (page: Page) =>
-  page.evaluate(() => {
-    const { reading } = window.harness.layout.session;
-    if (reading.kind !== "score" || !reading.score) throw new Error("no score");
-    const note = reading.score.notes.find((found) => found.voice === "Vocal" && found.midi !== null);
-    if (!note) throw new Error("no note");
-    return note.id;
-  });
+/** Every part draws what a part mounted fresh on the same state would draw. Returns what they drew. */
+async function expectDrawnLikeFresh(harness: Harness) {
+  const drawn = await harness.layout.roots();
+  expect(drawn).toEqual(await harness.layout.freshRoots());
+  return drawn;
+}
+
+/** Scrolls a part sideways as a user does: a turn of the horizontal wheel with a mouse, a swipe on a touch screen. */
+async function scrollSideways(harness: Harness, target: Locator, pixels: number, touch: boolean) {
+  await target.scrollIntoViewIfNeeded();
+  const area = await box(target);
+  const at = { x: area.x + area.width / 2, y: area.y + Math.min(area.height / 2, 30) };
+  if (touch) {
+    await harness.swipe({ x: at.x + pixels / 2, y: at.y }, { x: at.x - pixels / 2, y: at.y });
+  } else {
+    await harness.page.mouse.move(at.x, at.y);
+    await harness.page.mouse.wheel(pixels, 0);
+  }
+}
+
+/** Waits until every named part has the offset the session holds, and returns it. */
+async function expectInStep(page: Page, harness: Harness, names: string[]) {
+  await expect
+    .poll(async () => {
+      const { scrollLeft } = await harness.layout.view();
+      const offsets = await Promise.all(names.map((name) => scrollLeftOf(page, name)));
+      return Math.max(...offsets.map((offset) => Math.abs(offset - scrollLeft)));
+    })
+    .toBeLessThan(1.5);
+  return (await harness.layout.view()).scrollLeft;
+}
+
+/** Presses Tab until `target` has the focus, as a keyboard user gets to a part. */
+async function tabTo(page: Page, target: Locator, limit = 12) {
+  for (let presses = 0; presses < limit; presses++) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((el) => el === el.ownerDocument.activeElement)) return;
+  }
+  throw new Error(`Tab did not reach the part in ${limit} presses`);
+}
 
 test.describe("a layout of view parts on one session", () => {
   test("each part draws what the session holds, on its own element of a layout the page built", async ({
     page,
     harness,
+    partNames,
   }) => {
-    await harness.openLayout();
-    const bars = slot(page, "ruler").getByRole("list", { name: "Bars" }).getByRole("listitem");
-    await expect(bars).toHaveCount(28);
-    await expect(bars.first()).toHaveText("1");
-    await expect(bars.last()).toHaveText("28");
+    await harness.layout.open();
+    await expect(bars(page).getByRole("listitem")).toHaveCount(28);
+    await expect(bars(page).getByRole("listitem").first()).toHaveText("1");
+    await expect(bars(page).getByRole("listitem").last()).toHaveText("28");
     await expect(slot(page, "ruler").getByRole("list", { name: "Sections" }).getByRole("listitem")).toHaveText([
       "intro",
       "verse",
       "chorus",
     ]);
-    await expect(slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem")).toHaveCount(28);
+    await expect(chordItems(page)).toHaveCount(28);
     await expect(slot(page, "vocal").getByRole("list", { name: "Vocal" })).toBeVisible();
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toBeVisible();
     await expect(slot(page, "vocal").getByRole("listitem", { name: INS_BAR_1, exact: true })).toHaveCount(0);
     await expect(slot(page, "ins").getByRole("listitem", { name: INS_BAR_1, exact: true })).toBeVisible();
     await expect(slot(page, "ins").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toHaveCount(0);
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 100%", exact: true })).toBeVisible();
+    await expect(readout(page, "100%")).toBeVisible();
     await expect(slot(page, "notice").getByRole("note")).toBeHidden();
     await expect(slot(page, "problem").getByRole("alert")).toHaveCount(0);
 
     // The layout is the page's: each part is as wide as the card the page put it in, and the song runs on past it.
-    for (const name of AXIS_PARTS) {
-      const frame = await surface(page, name).evaluate((el) => ({
+    for (const name of partNames.axis) {
+      const frame = await scrollSurface(page, name).evaluate((el) => ({
         shown: el.clientWidth,
         content: el.scrollWidth,
         card: (el.parentElement?.parentElement as HTMLElement).clientWidth,
@@ -92,123 +133,109 @@ test.describe("a layout of view parts on one session", () => {
       expect(frame.shown, `${name} fills its card`).toBe(frame.card);
       expect(frame.content, `${name} is wider than its card`).toBeGreaterThan(frame.card);
     }
-    expect(await barPitches(page)).toEqual({ ruler: 80, chords: 80, vocal: 80, ins: 80 });
+    expect(await pixelsPerBar(page)).toEqual(evenly(80));
   });
 
-  test("a part mounts on any element: each part's root is one block that holds its own content", async ({
+  test("a part mounts on any element: each part's root is one block and a stacking context of its own", async ({
     page,
     harness,
+    partNames,
   }) => {
-    await harness.openLayout();
-    for (const name of ALL_PARTS) {
-      const root = surface(page, name);
+    await harness.layout.open();
+    for (const name of partNames.all) {
+      const root = partRoot(page, name);
       await expect(root, `${name} has one root`).toHaveCount(1);
-      expect(await root.evaluate((el) => [el.classList.contains("sce-root"), getComputedStyle(el).display])).toEqual([
-        true,
-        "block",
-      ]);
+      await expect(root, `${name} is a block`).toHaveCSS("display", "block");
+      await expect(root, `${name} is isolated`).toHaveCSS("isolation", "isolate");
     }
   });
 
-  test("a command dispatched through the session updates the right track, and every part still draws what a fresh one would", async ({
+  test("a command dispatched through the session changes the track it is for, and every part still draws what a fresh one would", async ({
     page,
     harness,
   }) => {
-    await harness.openLayout();
+    await harness.layout.open();
     const vocalNotes = slot(page, "vocal").getByRole("listitem");
     const insNotes = slot(page, "ins").getByRole("listitem");
     const before = { vocal: await vocalNotes.count(), ins: await insNotes.count() };
-    const roots = await page.evaluate(() => window.harness.layout.roots());
-    expect(roots).toEqual(await page.evaluate(() => window.harness.layout.freshRoots()));
+    const drawnBefore = await expectDrawnLikeFresh(harness);
 
-    const noteId = await loneVocalNote(page);
-    const done = await page.evaluate(
-      (id) => window.harness.layout.session.dispatch({ type: "toRest", noteId: id }),
-      noteId,
-    );
+    // toRest is the one command the edit layer has, and it changes one voice.
+    const done = await harness.layout.dispatch({ type: "toRest", noteId: await harness.layout.firstVocalNoteId() });
     expect(done.ok).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toHaveCount(0);
     expect(await insNotes.count()).toBe(before.ins);
-    const changed = await page.evaluate(() => window.harness.layout.roots());
+    const drawnAfter = await expectDrawnLikeFresh(harness);
+    expect(drawnAfter.vocal, "Vocal changed").not.toBe(drawnBefore.vocal);
     for (const name of ["zoom", "notice", "ruler", "chords", "ins", "problem"]) {
-      expect(changed[name], `${name} is not touched by a change to Vocal`).toBe(roots[name]);
+      expect(drawnAfter[name], `${name} is not touched by a change to Vocal`).toBe(drawnBefore[name]);
     }
-    expect(changed.vocal).not.toBe(roots.vocal);
-    expect(changed).toEqual(await page.evaluate(() => window.harness.layout.freshRoots()));
 
-    expect(await page.evaluate(() => window.harness.layout.session.undo())).toBe(true);
+    expect(await harness.layout.undo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal);
     await expect(slot(page, "vocal").getByRole("listitem", { name: VOCAL_BAR_5, exact: true })).toBeVisible();
-    expect(await page.evaluate(() => window.harness.layout.roots())).toEqual(roots);
-    expect(await page.evaluate(() => window.harness.layout.session.redo())).toBe(true);
+    expect(await harness.layout.roots()).toEqual(drawnBefore);
+    expect(await harness.layout.redo()).toBe(true);
     await expect(vocalNotes).toHaveCount(before.vocal - 1);
   });
 
-  test("a refused command changes no part and returns its diagnostic", async ({ page, harness }) => {
-    await harness.openLayout();
-    const roots = await page.evaluate(() => window.harness.layout.roots());
-    const done = await page.evaluate(() =>
-      window.harness.layout.session.dispatch({ type: "toRest", noteId: "no-such-note" }),
-    );
+  test("a refused command changes no part and returns its diagnostic", async ({ harness }) => {
+    await harness.layout.open();
+    const drawn = await harness.layout.roots();
+    const done = await harness.layout.dispatch({ type: "toRest", noteId: "no-such-note" });
     expect(done.ok).toBe(false);
     expect(done.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["note-not-found"]);
-    expect(await page.evaluate(() => window.harness.layout.session.canUndo)).toBe(false);
-    expect(await page.evaluate(() => window.harness.layout.roots())).toEqual(roots);
+    expect(await harness.layout.canUndo()).toBe(false);
+    expect(await harness.layout.roots()).toEqual(drawn);
   });
 
   test("replacing the project from outside redraws every part, and the zoom the user chose stays", async ({
     page,
     harness,
-    isMobile,
+    partNames,
+    press,
   }) => {
-    await harness.openLayout();
-    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
-    await press(slot(page, "zoom").getByRole("button", { name: "Zoom in", exact: true }));
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
+    await harness.layout.open();
+    await press(zoomButton(page, "Zoom in"));
+    await expect(readout(page, "150%")).toBeVisible();
 
-    await page.evaluate(() => window.harness.layout.replace({ score: { vector: "truncate-partial-measure" } }));
+    await harness.layout.replace({ score: { vector: "truncate-partial-measure" } });
     await expect(slot(page, "notice").getByRole("note")).toHaveText(
       "This score is cut off: bar 1 of Vocal is incomplete.",
     );
     await expect(slot(page, "vocal").getByRole("list", { name: "Vocal" })).toBeVisible();
     await expect(slot(page, "ins").getByRole("list")).toHaveCount(0);
     await expect(slot(page, "chords").getByRole("list", { name: "Chords" })).toHaveCount(0);
-    expect(await page.evaluate(() => window.harness.layout.roots())).toEqual(
-      await page.evaluate(() => window.harness.layout.freshRoots()),
-    );
-    expect((await sessionView(page)).zoom).toBe(1.5);
+    await expectDrawnLikeFresh(harness);
+    expect((await harness.layout.view()).zoom).toBe(1.5);
 
-    await page.evaluate(() => window.harness.layout.replace({ score: { vector: "reject-duration-five" } }));
+    await harness.layout.replace({ score: { vector: "reject-duration-five" } });
     await expect(slot(page, "problem").getByRole("alert")).toContainText(
       "This score can't be shown because it can't be read.",
     );
     await expect(slot(page, "zoom").getByRole("group", { name: "Zoom" })).toBeHidden();
     await expect(slot(page, "notice").getByRole("note")).toBeHidden();
-    for (const name of AXIS_PARTS) await expect(surface(page, name).locator("*")).toHaveCount(0);
+    for (const name of partNames.axis) await expect(partRoot(page, name).locator("*")).toHaveCount(0);
 
-    await page.evaluate(() => window.harness.layout.replace({ score: { sample: "compact-three-sections" } }));
+    await harness.layout.replace({ score: { sample: "compact-three-sections" } });
     await expect(slot(page, "problem").getByRole("alert")).toHaveCount(0);
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
-    expect(await page.evaluate(() => window.harness.layout.roots())).toEqual(
-      await page.evaluate(() => window.harness.layout.freshRoots()),
-    );
-    const pitches = await barPitches(page);
-    expect(Object.values(pitches)).toEqual([120, 120, 120, 120]);
+    await expect(readout(page, "150%")).toBeVisible();
+    await expectDrawnLikeFresh(harness);
+    expect(await pixelsPerBar(page)).toEqual(evenly(120));
   });
 
   test("a model with no dialect gets the one sentence from the problem part and nothing else draws", async ({
     page,
     harness,
+    partNames,
   }) => {
-    await harness.openLayout({ project: { modelId: "song-x" } });
+    await harness.layout.open({ project: { modelId: "other-model" } });
     await expect(slot(page, "problem").getByRole("alert")).toHaveText(
-      "The score format of “song-x” isn't supported by this editor, so the score can't be shown.",
+      "The score format of “other-model” isn't supported by this editor, so the score can't be shown.",
     );
-    for (const name of AXIS_PARTS) await expect(surface(page, name).locator("*")).toHaveCount(0);
-    expect(
-      await page.evaluate(() => window.harness.layout.session.dispatch({ type: "toRest", noteId: "x" })),
-    ).toMatchObject({
+    for (const name of partNames.axis) await expect(partRoot(page, name).locator("*")).toHaveCount(0);
+    expect(await harness.layout.dispatch({ type: "toRest", noteId: "x" })).toMatchObject({
       ok: false,
       diagnostics: [{ code: "no-dialect" }],
     });
@@ -218,12 +245,36 @@ test.describe("a layout of view parts on one session", () => {
     page,
     harness,
   }) => {
-    await harness.openLayout({ score: { sample: "vocal-only-melody" }, parts: ["ruler", "vocal"] });
+    await harness.layout.open({ score: { sample: "vocal-only-melody" }, parts: ["ruler", "vocal"] });
     await expect(slot(page, "vocal").getByRole("list", { name: "Vocal" })).toBeVisible();
-    await page.evaluate(() => window.harness.layout.mountPart("ins"));
+    await harness.layout.mountPart("ins");
     await expect(slot(page, "ins").getByRole("list")).toHaveCount(0);
-    await page.evaluate(() => window.harness.layout.replace({ score: { sample: "compact-three-sections" } }));
+    await harness.layout.replace({ score: { sample: "compact-three-sections" } });
     await expect(slot(page, "ins").getByRole("list", { name: "Ins" })).toBeVisible();
+  });
+});
+
+test.describe("the time axis parts as scroll surfaces", () => {
+  test("a part drawn alone is a named region that a keyboard reaches, and it is not one when it draws nothing", async ({
+    page,
+    harness,
+    partNames,
+  }) => {
+    await harness.layout.open();
+    for (const name of partNames.axis) await expect(scrollSurface(page, name), name).toHaveAttribute("tabindex", "0");
+    await harness.layout.replace({ score: { vector: "reject-duration-five" } });
+    for (const name of partNames.axis) {
+      await expect(slot(page, name).getByRole("region")).toHaveCount(0);
+      await expect(partRoot(page, name)).not.toHaveAttribute("tabindex", /.*/);
+    }
+  });
+
+  test("the ruler and the chord track hide their own scrollbar and a track keeps it", async ({ page, harness }) => {
+    await harness.layout.open();
+    await expect(scrollSurface(page, "ruler")).toHaveCSS("scrollbar-width", "none");
+    await expect(scrollSurface(page, "chords")).toHaveCSS("scrollbar-width", "none");
+    await expect(scrollSurface(page, "vocal")).toHaveCSS("scrollbar-width", "auto");
+    await expect(scrollSurface(page, "ins")).toHaveCSS("scrollbar-width", "auto");
   });
 });
 
@@ -231,36 +282,37 @@ test.describe("zoom shared through the session", () => {
   test("the zoom part moves every track, the ruler and the chords: by button, by menu, and by fitting the song", async ({
     page,
     harness,
-    isMobile,
+    partNames,
+    press,
   }) => {
-    await harness.openLayout();
-    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
-    const zoom = slot(page, "zoom");
-    const readout = (value: string) => zoom.getByRole("button", { name: `Zoom ${value}`, exact: true });
-    await expect(readout("100%")).toBeVisible();
+    await harness.layout.open();
+    await expect(readout(page, "100%")).toBeVisible();
 
-    await press(zoom.getByRole("button", { name: "Zoom in", exact: true }));
-    await expect(readout("150%")).toBeVisible();
-    expect(await barPitches(page)).toEqual({ ruler: 120, chords: 120, vocal: 120, ins: 120 });
+    await press(zoomButton(page, "Zoom in"));
+    await expect(readout(page, "150%")).toBeVisible();
+    expect(await pixelsPerBar(page)).toEqual(evenly(120));
 
-    await press(zoom.getByRole("button", { name: "Zoom out", exact: true }));
-    await press(zoom.getByRole("button", { name: "Zoom out", exact: true }));
-    await expect(readout("50%")).toBeVisible();
-    expect(await barPitches(page)).toEqual({ ruler: 40, chords: 40, vocal: 40, ins: 40 });
+    await press(zoomButton(page, "Zoom out"));
+    await press(zoomButton(page, "Zoom out"));
+    await expect(readout(page, "50%")).toBeVisible();
+    expect(await pixelsPerBar(page)).toEqual(evenly(40));
 
-    await press(readout("50%"));
+    await press(readout(page, "50%"));
     await press(page.getByRole("menuitemradio", { name: "200%" }));
-    await expect(readout("200%")).toBeVisible();
-    expect(await barPitches(page)).toEqual({ ruler: 160, chords: 160, vocal: 160, ins: 160 });
+    await expect(readout(page, "200%")).toBeVisible();
+    expect(await pixelsPerBar(page)).toEqual(evenly(160));
 
-    await press(readout("200%"));
+    await press(readout(page, "200%"));
     await press(page.getByRole("menuitem", { name: "Fit whole song" }));
-    const fitted = await sessionView(page);
+    const fitted = await harness.layout.view();
     expect(fitted.zoom).toBeLessThan(1);
     expect(fitted.scrollLeft).toBe(0);
     // The song is fitted to the first part on the axis, the ruler: it and the parts as wide as it show the whole song.
-    for (const name of ["ruler", "chords", "ins"]) {
-      const widths = await surface(page, name).evaluate((el) => ({ shown: el.clientWidth, content: el.scrollWidth }));
+    for (const name of partNames.axis.filter((part) => part !== "vocal")) {
+      const widths = await scrollSurface(page, name).evaluate((el) => ({
+        shown: el.clientWidth,
+        content: el.scrollWidth,
+      }));
       expect(widths.content, `${name} shows the whole song`).toBeLessThanOrEqual(widths.shown);
     }
   });
@@ -269,186 +321,194 @@ test.describe("zoom shared through the session", () => {
     page,
     harness,
   }) => {
-    await harness.openLayout({ parts: ["zoom", "ruler"] });
-    await page.evaluate(() => window.harness.layout.session.setView({ zoom: 2 }));
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 200%", exact: true })).toBeVisible();
-    await page.evaluate(() => {
-      window.harness.layout.mountPart("chords");
-      window.harness.layout.mountPart("ins");
-    });
-    expect(await page.evaluate(() => window.harness.layout.roots())).toEqual(
-      await page.evaluate(() => window.harness.layout.freshRoots()),
-    );
-    const bar = (number: string) =>
-      slot(page, "ruler").getByRole("list", { name: "Bars" }).getByText(number, { exact: true });
-    expect((await box(bar("2"))).x - (await box(bar("1"))).x).toBe(160);
-    const chords = slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem");
-    expect((await box(chords.nth(1))).x - (await box(chords.nth(0))).x).toBe(160);
+    await harness.layout.open({ parts: ["zoom", "ruler"] });
+    await harness.layout.setView({ zoom: 2 });
+    await expect(readout(page, "200%")).toBeVisible();
+    await harness.layout.mountPart("chords", "ins");
+    await expectDrawnLikeFresh(harness);
+    const first = await box(bars(page).getByText("1", { exact: true }));
+    expect((await box(bars(page).getByText("2", { exact: true }))).x - first.x).toBe(160);
+    expect((await box(chordItems(page).nth(1))).x - (await box(chordItems(page).nth(0))).x).toBe(160);
   });
 
-  test("control and the wheel on a track zoom every part around the pointer", async ({ page, harness, isMobile }) => {
-    test.skip(isMobile, "the wheel is a mouse gesture, checked on the desktop project");
-    await harness.openLayout();
-    const bar3 = slot(page, "ruler").getByRole("list", { name: "Bars" }).getByText("3", { exact: true });
-    const insNote = slot(page, "ins").getByRole("listitem", {
-      name: "F4, bar 3 beat 1, length 0.5 beats",
-      exact: true,
+  for (const scene of [undefined, "indented-track"] as const) {
+    test(`control and the wheel on a track zoom every part around the pointer${scene ? `, in a layout with ${scene}` : ""}`, async ({
+      page,
+      harness,
+      isMobile,
+    }) => {
+      test.skip(isMobile, "the wheel is a mouse gesture, checked on the desktop project");
+      await harness.layout.open({ scene });
+      const bar3 = bars(page).getByText("3", { exact: true });
+      const insNote = slot(page, "ins").getByRole("listitem", {
+        name: "F4, bar 3 beat 1, length 0.5 beats",
+        exact: true,
+      });
+      await scrollSurface(page, "ins").scrollIntoViewIfNeeded();
+      const [barBefore, noteBefore] = [await box(bar3), await box(insNote)];
+      await page.mouse.move(noteBefore.x + 2, noteBefore.y + noteBefore.height / 2);
+      await page.keyboard.down("Control");
+      await page.mouse.wheel(0, -100);
+      await page.keyboard.up("Control");
+      await expect(slot(page, "zoom").getByRole("button", { name: /^Zoom (?!100%)\d+%$/ })).toBeVisible();
+      const pitches = await pixelsPerBar(page);
+      expect(pitches.ruler).toBeGreaterThan(90);
+      expect(new Set(Object.values(pitches).map((pitch) => Math.round(pitch))).size).toBe(1);
+      // The instant under the pointer stays where it was on the track that took the wheel, and on the ruler with it,
+      // wherever the track sits in the page.
+      expect(Math.abs((await box(insNote)).x - noteBefore.x)).toBeLessThan(2);
+      expect(Math.abs((await box(bar3)).x - barBefore.x)).toBeLessThan(2);
     });
-    await surface(page, "ins").scrollIntoViewIfNeeded();
-    const [barBefore, noteBefore] = [await box(bar3), await box(insNote)];
-    await page.mouse.move(noteBefore.x + 2, noteBefore.y + noteBefore.height / 2);
-    await page.keyboard.down("Control");
-    await page.mouse.wheel(0, -100);
-    await page.keyboard.up("Control");
-    await expect(slot(page, "zoom").getByRole("button", { name: /^Zoom (?!100%)\d+%$/ })).toBeVisible();
-    const pitches = await barPitches(page);
-    expect(pitches.ruler).toBeGreaterThan(90);
-    expect(new Set(Object.values(pitches).map((pitch) => Math.round(pitch))).size).toBe(1);
-    // The instant under the pointer stays where it was, in the ruler and in the track that took the wheel.
-    expect((await box(bar3)).x).toBeCloseTo(barBefore.x, -1);
-    expect((await box(insNote)).x).toBeCloseTo(noteBefore.x, -1);
-  });
+  }
 
-  test("the plus and minus keys zoom once from a focused track, even though the part sits in a page that also takes keys", async ({
+  test("the plus and minus keys zoom once from a track that Tab reached, even though the page also takes keys", async ({
     page,
     harness,
     isMobile,
   }) => {
     test.skip(isMobile, "the keyboard is checked on the desktop project");
-    await harness.openLayout();
-    await surface(page, "vocal").focus();
+    await harness.layout.open();
+    const vocal = scrollSurface(page, "vocal");
+    await tabTo(page, vocal);
+    await expect(vocal).toBeFocused();
     await page.keyboard.press("+");
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
+    await expect(readout(page, "150%")).toBeVisible();
     await page.keyboard.press("-");
     await page.keyboard.press("-");
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 50%", exact: true })).toBeVisible();
-    expect(await barPitches(page)).toEqual({ ruler: 40, chords: 40, vocal: 40, ins: 40 });
+    await expect(readout(page, "50%")).toBeVisible();
+    expect(await pixelsPerBar(page)).toEqual(evenly(40));
+  });
+
+  test("the plus key zooms around the middle of the track that has the focus, not of the first part", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the keyboard is checked on the desktop project");
+    // The x on the page that a step left where it was: the point of the ruler where a bar was and still is.
+    const pivotAfterPlus = async (name: string) => {
+      await harness.layout.open();
+      await tabTo(page, scrollSurface(page, name));
+      const label = (bar: string) => box(bars(page).getByText(bar, { exact: true }));
+      const [first, second] = [await label("1"), await label("2")];
+      await page.keyboard.press("+");
+      await expect(readout(page, "150%")).toBeVisible();
+      const [movedFirst, movedSecond] = [await label("1"), await label("2")];
+      const bar = (movedFirst.x - first.x) / (second.x - first.x - (movedSecond.x - movedFirst.x));
+      await harness.layout.close();
+      return first.x + bar * (second.x - first.x);
+    };
+    const onRuler = await pivotAfterPlus("ruler");
+    const onVocal = await pivotAfterPlus("vocal");
+    // The ruler's card is 140 pixels wider than the Vocal track's, so the middle of the one is 70 pixels right of the other.
+    expect(Math.abs(onRuler - onVocal - 70)).toBeLessThan(3);
   });
 
   test("a part destroyed on its own leaves the others on the same time axis, and the zoom still anchors on what remains", async ({
     page,
     harness,
     isMobile,
+    press,
   }) => {
-    await harness.openLayout();
-    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
-    await page.evaluate(() => window.harness.layout.destroyPart("ruler"));
+    await harness.layout.open();
+    await harness.layout.destroyPart("ruler");
     await expect(slot(page, "ruler").locator("*")).toHaveCount(0);
-    await press(slot(page, "zoom").getByRole("button", { name: "Zoom in", exact: true }));
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
-    const chords = slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem");
-    expect((await box(chords.nth(1))).x - (await box(chords.nth(0))).x).toBe(120);
+    await press(zoomButton(page, "Zoom in"));
+    await expect(readout(page, "150%")).toBeVisible();
+    expect((await box(chordItems(page).nth(1))).x - (await box(chordItems(page).nth(0))).x).toBe(120);
     expect(await maxScrollOf(page, "ins")).toBeGreaterThan(0);
-    await surface(page, "chords").evaluate((el) => {
-      el.scrollLeft = 200;
-    });
-    await expect.poll(() => scrollLeftOf(page, "ins")).toBe(200);
-    await press(slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true }));
+
+    await scrollSideways(harness, scrollSurface(page, "chords"), 200, isMobile);
+    await expect.poll(() => scrollLeftOf(page, "chords")).toBeGreaterThan(80);
+    await expectInStep(page, harness, ["chords", "vocal", "ins"]);
+    await press(readout(page, "150%"));
     await press(page.getByRole("menuitem", { name: "Fit whole song" }));
     await expect.poll(() => scrollLeftOf(page, "ins")).toBe(0);
   });
 });
 
 test.describe("scroll shared through the session", () => {
-  test("scrolling one part scrolls every other part, whichever it is", async ({ page, harness }) => {
-    await harness.openLayout();
-    await surface(page, "ruler").evaluate((el) => {
-      el.scrollLeft = 300;
-    });
-    for (const name of AXIS_PARTS) await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBe(300);
-    expect((await sessionView(page)).scrollLeft).toBe(300);
-
-    await surface(page, "ins").evaluate((el) => {
-      el.scrollLeft = 120;
-    });
-    for (const name of AXIS_PARTS) await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBe(120);
-    expect((await sessionView(page)).scrollLeft).toBe(120);
-  });
-
-  test("a user's own gesture on a track scrolls the other parts with it", async ({ page, harness, isMobile }) => {
-    await harness.openLayout();
-    await surface(page, "vocal").scrollIntoViewIfNeeded();
-    const track = await box(surface(page, "vocal"));
-    const middle = { x: track.x + track.width / 2, y: track.y + track.height / 2 };
-    if (isMobile) {
-      await harness.swipe({ x: middle.x + 100, y: middle.y }, { x: middle.x - 100, y: middle.y });
-    } else {
-      await page.mouse.move(middle.x, middle.y);
-      await page.mouse.wheel(300, 0);
+  test("a user's scroll on any one part scrolls every other part with it", async ({
+    page,
+    harness,
+    partNames,
+    isMobile,
+  }) => {
+    await harness.layout.open();
+    let offset = 0;
+    for (const name of ["ruler", "ins"]) {
+      await scrollSideways(harness, scrollSurface(page, name), 200, isMobile);
+      await expect
+        .poll(() => scrollLeftOf(page, name), { message: `${name} was scrolled` })
+        .toBeGreaterThan(offset + 80);
+      const reached = await expectInStep(page, harness, partNames.axis);
+      expect(reached).toBeGreaterThan(offset + 80);
+      offset = reached;
     }
-    await expect.poll(() => scrollLeftOf(page, "vocal")).toBeGreaterThan(80);
-    const target = await scrollLeftOf(page, "vocal");
-    for (const name of AXIS_PARTS)
-      await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBeCloseTo(target, 0);
-    expect((await sessionView(page)).scrollLeft).toBeCloseTo(target, 0);
   });
 
   test("the session's scroll offset moves every part, and parts of different widths each stop at their own end", async ({
     page,
     harness,
+    partNames,
   }) => {
-    await harness.openLayout();
-    await page.evaluate(() => window.harness.layout.session.setView({ scrollLeft: 150 }));
-    for (const name of AXIS_PARTS) await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBe(150);
+    await harness.layout.open();
+    await harness.layout.setView({ scrollLeft: 150 });
+    for (const name of partNames.axis) await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBe(150);
 
-    await page.evaluate(() => window.harness.layout.session.setView({ scrollLeft: 100000 }));
-    for (const name of AXIS_PARTS) {
+    await harness.layout.setView({ scrollLeft: 100000 });
+    for (const name of partNames.axis) {
       const end = await maxScrollOf(page, name);
       expect(end, `${name} can scroll`).toBeGreaterThan(150);
       await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBeCloseTo(end, 0);
     }
     // A part that stopped short did not pull the offset the others were sent to back with it.
-    await page.waitForTimeout(100);
-    expect((await sessionView(page)).scrollLeft).toBe(100000);
+    await harness.frames();
+    expect((await harness.layout.view()).scrollLeft).toBe(100000);
 
-    await page.evaluate(() => window.harness.layout.session.setView({ scrollLeft: 0 }));
-    for (const name of AXIS_PARTS) await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBe(0);
+    await harness.layout.setView({ scrollLeft: 0 });
+    for (const name of partNames.axis) await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBe(0);
   });
 
   test("a part mounted after the user scrolled and zoomed starts where the others are", async ({ page, harness }) => {
-    await harness.openLayout({ parts: ["ruler"] });
-    await page.evaluate(() => window.harness.layout.session.setView({ zoom: 1.5, scrollLeft: 300 }));
+    await harness.layout.open({ parts: ["ruler"] });
+    await harness.layout.setView({ zoom: 1.5, scrollLeft: 300 });
     await expect.poll(() => scrollLeftOf(page, "ruler")).toBe(300);
-    await page.evaluate(() => {
-      window.harness.layout.mountPart("ins");
-      window.harness.layout.mountPart("chords");
-    });
+    await harness.layout.mountPart("ins", "chords");
     for (const name of ["ins", "chords"])
       await expect.poll(() => scrollLeftOf(page, name), { message: name }).toBe(300);
-    const chords = slot(page, "chords").getByRole("list", { name: "Chords" }).getByRole("listitem");
-    expect((await box(chords.nth(1))).x - (await box(chords.nth(0))).x).toBe(120);
+    expect((await box(chordItems(page).nth(1))).x - (await box(chordItems(page).nth(0))).x).toBe(120);
   });
 });
 
 test.describe("interface language", () => {
-  test("switching the session's language changes every part, and back", async ({ page, harness }) => {
-    await harness.openLayout({ score: { vector: "truncate-partial-measure" } });
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 100%", exact: true })).toBeVisible();
-    await page.evaluate(() => window.harness.layout.session.setView({ language: "zh" }));
+  test("switching the session's language changes every part, and back", async ({ page, harness, partNames }) => {
+    await harness.layout.open({ score: { vector: "truncate-partial-measure" } });
+    await expect(readout(page, "100%")).toBeVisible();
+    await harness.layout.setView({ language: "zh" });
     await expect(slot(page, "zoom").getByRole("button", { name: "缩放 100%", exact: true })).toBeVisible();
     await expect(slot(page, "zoom").getByRole("button", { name: "放大", exact: true })).toBeVisible();
     await expect(slot(page, "notice").getByRole("note")).toHaveText("这份乐谱在末尾被截断：Vocal 的第 1 小节不完整。");
     await expect(slot(page, "ruler").getByRole("list", { name: "小节" })).toBeVisible();
     await expect(slot(page, "ruler").getByRole("list", { name: "标记" })).toBeVisible();
+    await expect(slot(page, "ruler").getByRole("region", { name: "时间尺" })).toBeVisible();
     await expect(slot(page, "vocal").getByRole("listitem").first()).toHaveAccessibleName(/第 1 小节第 1 拍/);
-    for (const name of ALL_PARTS) expect(await surface(page, name).getAttribute("lang")).toBe("zh");
-    expect(await page.evaluate(() => window.harness.layout.roots())).toEqual(
-      await page.evaluate(() => window.harness.layout.freshRoots()),
-    );
+    for (const name of partNames.all) await expect(partRoot(page, name), name).toHaveAttribute("lang", "zh");
+    await expectDrawnLikeFresh(harness);
 
-    await page.evaluate(() => window.harness.layout.session.setView({ language: "en" }));
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 100%", exact: true })).toBeVisible();
+    await harness.layout.setView({ language: "en" });
+    await expect(readout(page, "100%")).toBeVisible();
     await expect(slot(page, "notice").getByRole("note")).toHaveText(
       "This score is cut off: bar 1 of Vocal is incomplete.",
     );
-    await expect(slot(page, "ruler").getByRole("list", { name: "Bars" })).toBeVisible();
-    for (const name of ALL_PARTS) expect(await surface(page, name).getAttribute("lang")).toBe("en");
+    await expect(bars(page)).toBeVisible();
+    for (const name of partNames.all) await expect(partRoot(page, name), name).toHaveAttribute("lang", "en");
   });
 
   test("the problem part speaks the session's language", async ({ page, harness }) => {
-    await harness.openLayout({ score: { vector: "reject-duration-five" }, language: "zh" });
+    await harness.layout.open({ score: { vector: "reject-duration-five" }, language: "zh" });
     await expect(slot(page, "problem").getByRole("alert")).toContainText("这份乐谱读不通，所以无法显示。");
-    await page.evaluate(() => window.harness.layout.session.setView({ language: "en" }));
+    await harness.layout.setView({ language: "en" });
     await expect(slot(page, "problem").getByRole("alert")).toContainText(
       "This score can't be shown because it can't be read.",
     );
@@ -466,13 +526,33 @@ function listenerCounter(cdp: CDPSession) {
   return {
     onGlobals: () =>
       Promise.all(["window", "document", "document.documentElement", "document.body", "document.head"].map(onObject)),
-    /** The listeners on every node `window.kept` holds. */
-    onKept: async () => {
-      const { result: length } = await cdp.send("Runtime.evaluate", { expression: "window.kept.length" });
+    /** The listeners on every node the layout retained. */
+    onRetained: async () => {
+      const nodes = "window.harness.layout.retained.nodes";
+      const { result: length } = await cdp.send("Runtime.evaluate", { expression: `${nodes}.length` });
       let total = 0;
-      for (let index = 0; index < Number(length.value); index++) total += await onObject(`window.kept[${index}]`);
+      for (let index = 0; index < Number(length.value); index++) total += await onObject(`${nodes}[${index}]`);
       return total;
     },
+  };
+}
+
+/** What the page holds before any part is mounted on it, and a check that the same is left after they are gone. */
+async function leakBaseline(page: Page, harness: Harness) {
+  const cdp = await page.context().newCDPSession(page);
+  const listeners = listenerCounter(cdp);
+  const globals = await listeners.onGlobals();
+  const html = await page.evaluate(() => document.documentElement.outerHTML);
+  const sheets = (await harness.layout.sheets()).document;
+  return {
+    listeners,
+    sheets,
+    async expectRestored() {
+      expect(await listeners.onGlobals(), "listeners on the page").toEqual(globals);
+      expect(await page.evaluate(() => document.documentElement.outerHTML), "nodes in the page").toBe(html);
+      expect((await harness.layout.sheets()).document, "style sheets in the page").toBe(sheets);
+    },
+    detach: () => cdp.detach(),
   };
 }
 
@@ -480,107 +560,75 @@ test.describe("destroying parts", () => {
   test("each part, destroyed on its own, leaves no node and no listener and does not answer the session any more", async ({
     page,
     harness,
+    partNames,
   }) => {
-    const cdp = await page.context().newCDPSession(page);
-    const listeners = listenerCounter(cdp);
-    const globalsBefore = await listeners.onGlobals();
-    const htmlBefore = await page.evaluate(() => document.documentElement.outerHTML);
-    const sheets = () => page.evaluate(() => document.adoptedStyleSheets.length);
-    const sheetsBefore = await sheets();
+    const baseline = await leakBaseline(page, harness);
 
-    for (const name of ALL_PARTS) {
-      await harness.openLayout();
-      expect(await sheets(), "the parts share one style sheet").toBe(sheetsBefore + 1);
-      await page.evaluate((target) => {
-        const root = window.harness.layout.slots[target]?.firstElementChild;
-        if (!root) throw new Error(`${target} drew no root`);
-        Object.assign(window, { kept: [root, ...root.querySelectorAll("*")], keptRoot: root });
-      }, name);
+    for (const name of partNames.all) {
+      await harness.layout.open();
+      expect((await harness.layout.sheets()).document, "the parts share one style sheet").toBe(baseline.sheets + 1);
+      await harness.layout.retain(name);
       // Parts with something to press, scroll or zoom with have listeners; the two that only draw have none to leave.
       if (!["notice", "problem"].includes(name))
-        expect(await listeners.onKept(), `${name} has listeners`).toBeGreaterThan(0);
+        expect(await baseline.listeners.onRetained(), `${name} has listeners`).toBeGreaterThan(0);
 
-      await page.evaluate((target) => window.harness.layout.destroyPart(target, 2), name);
-      expect(await listeners.onKept(), `${name} leaves listeners`).toBe(0);
+      await harness.layout.destroyPart(name, 2);
+      expect(await baseline.listeners.onRetained(), `${name} leaves listeners`).toBe(0);
       await expect(slot(page, name).locator("*")).toHaveCount(0);
-      const retained = await page.evaluate(() => (window as unknown as { keptRoot: Element }).keptRoot.outerHTML);
+      const retained = await harness.layout.retainedHtml();
 
       // Everything that would redraw the part, and the part must not hear of it.
-      await page.evaluate(() => {
-        const { session } = window.harness.layout;
-        session.setView({ zoom: 2, scrollLeft: 50, language: "zh" });
-      });
-      await page.evaluate(() => window.harness.layout.replace({ score: { vector: "reject-duration-five" } }));
-      expect(await page.evaluate(() => (window as unknown as { keptRoot: Element }).keptRoot.outerHTML), name).toBe(
-        retained,
-      );
-      const drawn = await page.evaluate(() => window.harness.layout.roots());
+      await harness.layout.setView({ zoom: 2, scrollLeft: 50, language: "zh" });
+      await harness.layout.replace({ score: { vector: "reject-duration-five" } });
+      expect(await harness.layout.retainedHtml(), name).toBe(retained);
+      const drawn = await expectDrawnLikeFresh(harness);
       expect(Object.keys(drawn).sort(), "the others stayed mounted").toEqual(
-        ALL_PARTS.filter((other) => other !== name).sort(),
+        partNames.all.filter((other) => other !== name).sort(),
       );
-      expect(drawn, "the others went on drawing").toEqual(
-        await page.evaluate(() => window.harness.layout.freshRoots()),
+      expect((await harness.layout.sheets()).document, "the style sheet stays while another part needs it").toBe(
+        baseline.sheets + 1,
       );
-      expect(await sheets(), "the style sheet stays while another part needs it").toBe(sheetsBefore + 1);
-      await harness.closeLayout();
-      expect(await sheets()).toBe(sheetsBefore);
+      await harness.layout.close();
+      expect((await harness.layout.sheets()).document).toBe(baseline.sheets);
     }
-    expect(await listeners.onGlobals()).toEqual(globalsBefore);
-    expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
-    await cdp.detach();
+    await baseline.expectRestored();
+    await baseline.detach();
   });
 
   test("repeated open, use and close of a whole layout leave no listeners, no nodes and no style sheets behind", async ({
     page,
     harness,
   }) => {
-    const cdp = await page.context().newCDPSession(page);
-    const listeners = listenerCounter(cdp);
-    const globalsBefore = await listeners.onGlobals();
-    const htmlBefore = await page.evaluate(() => document.documentElement.outerHTML);
-    const sheets = () => page.evaluate(() => document.adoptedStyleSheets.length);
-    const sheetsBefore = await sheets();
+    const baseline = await leakBaseline(page, harness);
 
     for (let cycle = 0; cycle < 4; cycle++) {
-      await harness.openLayout();
-      await page.evaluate(() => {
-        const { session } = window.harness.layout;
-        session.setView({ zoom: 1.5, scrollLeft: 100, language: "zh" });
-      });
-      await page.evaluate(() => window.harness.layout.replace({ score: { vector: "reject-duration-five" } }));
-      await page.evaluate(() => window.harness.layout.replace({ score: { sample: "short-two-sections" } }));
-      await page.evaluate(() => {
-        const { session } = window.harness.layout;
-        const note =
-          session.reading.kind === "score" ? session.reading.score?.notes.find((n) => n.midi !== null) : null;
-        if (note) session.dispatch({ type: "toRest", noteId: note.id });
-        session.undo();
-      });
-      await harness.closeLayout();
+      await harness.layout.open();
+      await harness.layout.setView({ zoom: 1.5, scrollLeft: 100, language: "zh" });
+      await harness.layout.replace({ score: { vector: "reject-duration-five" } });
+      await harness.layout.replace({ score: { sample: "compact-three-sections" } });
+      await harness.layout.dispatch({ type: "toRest", noteId: await harness.layout.firstVocalNoteId() });
+      await harness.layout.undo();
+      await harness.layout.close();
     }
-    expect(await listeners.onGlobals()).toEqual(globalsBefore);
-    expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(htmlBefore);
-    expect(await sheets()).toBe(sheetsBefore);
+    await baseline.expectRestored();
 
-    await harness.openLayout();
-    expect(await sheets()).toBe(sheetsBefore + 1);
-    await harness.closeLayout();
-    await cdp.detach();
+    await harness.layout.open();
+    expect((await harness.layout.sheets()).document).toBe(baseline.sheets + 1);
+    await harness.layout.close();
+    await baseline.detach();
   });
 
   test("the zoom menu of a destroyed zoom part is gone with it, even when it was open", async ({
     page,
     harness,
-    isMobile,
+    press,
   }) => {
-    await harness.openLayout();
-    const button = slot(page, "zoom").getByRole("button", { name: /^Zoom \d+%$/ });
-    if (isMobile) await button.tap();
-    else await button.click();
+    await harness.layout.open();
+    await press(slot(page, "zoom").getByRole("button", { name: /^Zoom \d+%$/ }));
     await expect(page.getByRole("menuitemradio", { name: "200%" })).toBeVisible();
-    await page.evaluate(() => window.harness.layout.destroyPart("zoom"));
+    await harness.layout.destroyPart("zoom");
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(page.getByRole("menuitemradio")).toHaveCount(0);
-    expect(await page.evaluate(() => document.querySelectorAll(":popover-open").length)).toBe(0);
   });
 });
 
@@ -589,7 +637,7 @@ test.describe("style isolation of parts", () => {
   const score = { text: vocalOnly("C4z4D8|C16|C16|") };
   const c4 = "C4, bar 1 beat 1, length 1 beat";
 
-  test("the parts are styled under a strict style policy, where an injected style element would be blocked", async ({
+  test("the parts are styled under a strict style policy, where an injected style element is blocked", async ({
     page,
     harness,
   }) => {
@@ -601,100 +649,99 @@ test.describe("style isolation of parts", () => {
       });
     });
     await page.goto("/");
-    await harness.openLayout({ score });
+    // The policy is in force: a style element that rules a plain button has no effect.
+    await harness.addHostProbe();
+    await harness.addHostRules("hostile");
+    await expect(page.locator("#probe-button")).not.toHaveCSS("background-color", "rgb(255, 255, 0)");
+
+    // The page's own layout is styled by its style sheet, which the policy allows, so it is not what is being tested...
+    await harness.layout.open({ score });
+    expect((await box(scrollSurface(page, "ruler"))).width).toBe(560);
+    expect((await box(scrollSurface(page, "vocal"))).width).toBe(420);
+    // ... and the parts are styled by theirs.
     expect((await box(slot(page, "vocal").getByRole("listitem", { name: c4 }))).height).toBe(14);
-    expect(await surface(page, "zoom").evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
-      "rgb(255, 255, 255)",
-    );
-    await slot(page, "zoom").getByRole("button", { name: "Zoom in", exact: true }).click();
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
-    const note = slot(page, "vocal").getByRole("listitem", { name: c4 });
-    expect((await box(note)).width).toBeCloseTo(59, 0);
-    await harness.closeLayout();
+    await expect(partRoot(page, "zoom")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    await zoomButton(page, "Zoom in").click();
+    await expect(readout(page, "150%")).toBeVisible();
+    expect((await box(slot(page, "vocal").getByRole("listitem", { name: c4 }))).width).toBeCloseTo(59, 0);
+    await harness.layout.close();
   });
 
   test("inside a host's shadow root the parts are styled there, work, and are out of reach of rules even !important ones", async ({
     page,
     harness,
   }) => {
-    await page.addStyleTag({
-      content: "#layout-host span, #layout-host div { padding: 9px !important; color: red !important; }",
-    });
-    await harness.openLayout({ shadow: true, score });
-    expect(
-      await page.evaluate(() => ({
-        sheets: window.harness.layout.shadowRoot?.adoptedStyleSheets.length,
-        documentSheets: document.adoptedStyleSheets.length,
-      })),
-    ).toEqual({ sheets: 1, documentSheets: 0 });
+    await harness.addHostRules("important");
+    await harness.layout.open({ shadow: true, score });
+    expect(await harness.layout.sheets()).toEqual({ document: 0, shadowRoot: 1 });
 
     const name = slot(page, "vocal").getByText("Vocal", { exact: true });
-    expect(await name.evaluate((el) => [getComputedStyle(el).paddingTop, getComputedStyle(el).color])).toEqual([
-      "0px",
-      "rgb(24, 24, 27)",
-    ]);
+    await expect(name).toHaveCSS("padding-top", "0px");
+    await expect(name).toHaveCSS("color", "rgb(24, 24, 27)");
     const note = slot(page, "vocal").getByRole("listitem", { name: c4 });
     expect((await box(note)).height).toBe(14);
 
-    await slot(page, "zoom").getByRole("button", { name: "Zoom in", exact: true }).click();
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true })).toBeVisible();
+    await zoomButton(page, "Zoom in").click();
+    await expect(readout(page, "150%")).toBeVisible();
     expect((await box(note)).width).toBeCloseTo(59, 0);
-    await slot(page, "zoom").getByRole("button", { name: "Zoom 150%", exact: true }).click();
+    await readout(page, "150%").click();
     await expect(page.getByRole("menuitemradio", { name: "200%" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menuitemradio", { name: "200%" })).toBeHidden();
 
-    await harness.closeLayout();
-    expect(
-      await page.evaluate(() => ({
-        sheets: window.harness.layout.shadowRoot?.adoptedStyleSheets.length,
-        parts: window.harness.layout.shadowRoot?.querySelectorAll(".sce-root, .sce-popover").length,
-      })),
-    ).toEqual({ sheets: 0, parts: 0 });
+    await harness.layout.close();
+    expect(await harness.layout.sheets()).toEqual({ document: 0, shadowRoot: 0 });
+    expect(await harness.layout.leftInShadowRoot()).toBe(0);
   });
 
-  test("the host's theme variables and colour scheme restyle every part", async ({ page, harness }) => {
-    await harness.openLayout({ score });
-    const style = (name: string, property: "backgroundColor" | "fontFamily" | "color") =>
-      surface(page, name).evaluate((el, key) => getComputedStyle(el)[key], property);
+  test("a part's pinned heads do not paint over an element of the host that sits in front of the part", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score, scene: "overlapping-banner" });
+    const banner = page.getByText("Host banner", { exact: true });
+    // A click that lands on the banner, wherever along it, shows that nothing of the part is painted over it.
+    for (const position of [
+      { x: 10, y: 10 },
+      { x: 150, y: 10 },
+    ]) {
+      await banner.click({ trial: true, timeout: 3000, position });
+    }
+  });
+
+  test("the host's theme variables and colour scheme restyle every part", async ({ page, harness, partNames }) => {
+    await harness.layout.open({ score });
+    const style = (name: string, property: "background-color" | "font-family") =>
+      partRoot(page, name).evaluate((el, key) => getComputedStyle(el).getPropertyValue(key), property);
     const lightness = async (name: string) => {
-      const [r = 0, g = 0, b = 0] = (await style(name, "backgroundColor")).match(/\d+/g)?.map(Number) ?? [];
+      const [r = 0, g = 0, b = 0] = (await style(name, "background-color")).match(/\d+/g)?.map(Number) ?? [];
       return (r + g + b) / 3;
     };
-    for (const name of ALL_PARTS) expect(await lightness(name), `${name} is light`).toBeGreaterThan(200);
-    await page.evaluate(() => {
-      document.documentElement.style.colorScheme = "dark";
-    });
-    for (const name of ALL_PARTS) expect(await lightness(name), `${name} is dark`).toBeLessThan(60);
-    await page.evaluate(() => {
-      document.documentElement.style.colorScheme = "";
-    });
+    for (const name of partNames.all) expect(await lightness(name), `${name} is light`).toBeGreaterThan(200);
+    await harness.setColorScheme("dark");
+    for (const name of partNames.all) expect(await lightness(name), `${name} is dark`).toBeLessThan(60);
+    await harness.setColorScheme("light");
 
-    await page.evaluate(() => {
-      const style = window.harness.layout.host?.style;
-      style?.setProperty("--sce-color-note", "rgb(255, 0, 128)");
-      style?.setProperty("--sce-color-bg", "rgb(10, 20, 30)");
-      style?.setProperty("--sce-font-family", "'Courier New', monospace");
+    await harness.layout.setTheme({
+      "--sce-color-note": "rgb(255, 0, 128)",
+      "--sce-color-bg": "rgb(10, 20, 30)",
+      "--sce-font-family": "'Courier New', monospace",
     });
-    expect(
-      await slot(page, "vocal")
-        .getByRole("listitem", { name: c4 })
-        .evaluate((el) => getComputedStyle(el).backgroundColor),
-    ).toBe("rgb(255, 0, 128)");
-    for (const name of ALL_PARTS) expect(await style(name, "backgroundColor"), name).toBe("rgb(10, 20, 30)");
-    for (const name of ALL_PARTS) expect(await style(name, "fontFamily"), name).toContain("Courier New");
+    await expect(slot(page, "vocal").getByRole("listitem", { name: c4 })).toHaveCSS(
+      "background-color",
+      "rgb(255, 0, 128)",
+    );
+    for (const name of partNames.all) {
+      expect(await style(name, "background-color"), name).toBe("rgb(10, 20, 30)");
+      expect(await style(name, "font-family"), name).toContain("Courier New");
+    }
   });
 
   test("the host's global styles do not change the parts, and the parts do not change the host", async ({
     page,
     harness,
   }) => {
-    await page.evaluate(() => {
-      document.body.insertAdjacentHTML(
-        "beforeend",
-        '<div id="probe"><button id="probe-button">Host button</button><span>Host text</span></div>',
-      );
-    });
+    await harness.addHostProbe();
     const probe = () =>
       page.evaluate(() =>
         ["#probe", "#probe-button", "#probe span", "body", "h1"].map((selector) => {
@@ -740,14 +787,15 @@ test.describe("style isolation of parts", () => {
       "position",
     ];
     const targets = (): Record<string, Locator> => ({
-      "part root": surface(page, "vocal"),
+      "part root": partRoot(page, "vocal"),
       note: slot(page, "vocal").getByRole("listitem", { name: c4 }),
-      "zoom button": slot(page, "zoom").getByRole("button", { name: "Zoom 100%", exact: true }),
-      "zoom in": slot(page, "zoom").getByRole("button", { name: "Zoom in", exact: true }),
-      "bar number": slot(page, "ruler").getByRole("list", { name: "Bars" }).getByRole("listitem").first(),
+      "zoom button": readout(page, "100%"),
+      "zoom in": zoomButton(page, "Zoom in"),
+      "bar number": bars(page).getByRole("listitem").first(),
       "section band": slot(page, "ruler").getByRole("list", { name: "Sections" }).getByRole("listitem").first(),
       "mark flag": slot(page, "ruler").getByRole("list", { name: "Marks" }).getByRole("listitem").first(),
       "track name": slot(page, "vocal").getByText("Vocal", { exact: true }),
+      // The head is a layout box with no role, so it is found by its class.
       "track head": slot(page, "vocal").locator(".sce-track-head"),
       "octave label": slot(page, "vocal").getByText(/^C\d$/).first(),
       "no-chords message": slot(page, "chords").getByText("No chords in this score"),
@@ -768,25 +816,20 @@ test.describe("style isolation of parts", () => {
       return found;
     };
 
-    await harness.openLayout({ score });
+    await harness.layout.open({ score });
     const clean = await styles();
     expect(Object.keys(clean)).toHaveLength(11);
-    await harness.closeLayout();
+    await harness.layout.close();
 
-    await page.addStyleTag({
-      content: `
-        #layout-host > div, #layout-host > div > div, #layout-host [data-slot] { font: 13px Georgia, serif; }
-        body div, body span, body button { margin: 7px; padding: 9px; border: 3px solid red; border-radius: 0;
-          background: yellow; color: red; font: italic 28px/3 cursive; letter-spacing: 4px; text-transform: uppercase;
-          box-shadow: 0 0 0 5px green; position: static; opacity: 0.9; text-decoration: underline; }
-      `,
-    });
+    await harness.addHostRules("hostile");
+    // The rules are in force: they colour a plain button of the host's.
+    await expect(page.locator("#probe-button")).toHaveCSS("background-color", "rgb(255, 255, 0)");
     const hostBefore = await probe();
-    await harness.openLayout({ score });
+    await harness.layout.open({ score });
     expect(await styles()).toEqual(clean);
     // The font family is the one thing a part takes from where it sits, so a host can set the font of a whole page once.
     expect(
-      await surface(page, "vocal").evaluate(
+      await partRoot(page, "vocal").evaluate(
         (el) => getComputedStyle(el).fontFamily === getComputedStyle(el.parentElement as Element).fontFamily,
       ),
     ).toBe(true);
@@ -797,14 +840,13 @@ test.describe("style isolation of parts", () => {
       "box-shadow": "none",
       opacity: "1",
     });
-    expect(await styleOf(targets()["track head"] as Locator, names)).toMatchObject({ position: "sticky" });
     expect(await styleOf(targets()["zoom button"] as Locator, names)).toMatchObject({
       "font-size": "13px",
       "border-top-width": "1px",
       "padding-top": "0px",
     });
     expect(await probe()).toEqual(hostBefore);
-    await harness.closeLayout();
+    await harness.layout.close();
     expect(await probe()).toEqual(hostBefore);
   });
 });
@@ -813,29 +855,18 @@ test.describe("the zoom menu as a part", () => {
   test("it opens above a host's layers and past the clip of the container the page put the zoom part in", async ({
     page,
     harness,
-    isMobile,
+    press,
   }) => {
-    const press = (target: Locator) => (isMobile ? target.tap() : target.click());
-    await harness.openLayout();
-    await page.evaluate(() => {
-      const card = window.harness.layout.slots.zoom;
-      if (!card) throw new Error("no zoom slot");
-      card.style.cssText =
-        "position:fixed;left:0;top:0;width:100vw;height:50px;z-index:1000;overflow:hidden;transform:translateZ(0);background:#ddd";
-      const toast = document.createElement("div");
-      toast.style.cssText =
-        "position:fixed;left:0;top:30px;width:100vw;height:300px;z-index:2147483647;background:rgba(255,0,0,.4)";
-      document.body.append(toast);
-    });
-    await press(slot(page, "zoom").getByRole("button", { name: "Zoom 100%", exact: true }));
+    await harness.layout.open({ scene: "covered-zoom" });
+    await press(readout(page, "100%"));
     const half = page.getByRole("menuitemradio", { name: "50%", exact: true });
     await expect(half).toBeVisible();
     const cardBottom = await slot(page, "zoom").evaluate((el) => el.getBoundingClientRect().bottom);
     const menuBox = await page.getByRole("menu", { name: "Zoom" }).boundingBox();
     expect(menuBox ? menuBox.y + menuBox.height : 0).toBeGreaterThan(cardBottom);
     await press(half);
-    await expect(slot(page, "zoom").getByRole("button", { name: "Zoom 50%", exact: true })).toBeVisible();
+    await expect(readout(page, "50%")).toBeVisible();
     await expect(page.getByRole("menu", { name: "Zoom" })).toBeHidden();
-    expect(await barPitches(page)).toEqual({ ruler: 40, chords: 40, vocal: 40, ins: 40 });
+    expect(await pixelsPerBar(page)).toEqual(evenly(40));
   });
 });
