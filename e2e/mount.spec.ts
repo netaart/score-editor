@@ -1370,3 +1370,24 @@ test.describe("keyboard focus in a short editor", () => {
     await expect.poll(async () => (await box(next)).y).toBeGreaterThanOrEqual(head.y + head.height);
   });
 });
+
+test("destroying the editor after all three views were shown leaves the page as it found it", async ({
+  page,
+  harness,
+}) => {
+  const views = page.getByRole("group", { name: "View" });
+  const html = await page.evaluate(() => document.documentElement.outerHTML);
+  const sheets = await page.evaluate(() => document.adoptedStyleSheets.length);
+  await harness.mount({ score: { text: vocalOnly("C4D4E4F4|G16|") } });
+
+  await views.getByRole("button", { name: "Staff", exact: true }).click();
+  await expect(page.locator("svg .abcjs-note")).toHaveCount(5);
+  await views.getByRole("button", { name: "Score text", exact: true }).click();
+  await page.getByRole("textbox", { name: "Score text" }).fill("not a score");
+  await views.getByRole("button", { name: "Arrangement", exact: true }).click();
+
+  await harness.destroy();
+
+  expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(html);
+  expect(await page.evaluate(() => document.adoptedStyleSheets.length)).toBe(sheets);
+});

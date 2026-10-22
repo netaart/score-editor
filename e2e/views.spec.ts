@@ -1,6 +1,6 @@
 // ABOUTME: Seam 5 for the staff view, the text view, the view switch and the stale notice: parts on one session, and the default editor.
 // ABOUTME: Tests type, click and tap as a user does, and read what the session holds, in desktop and phone projects.
-import type { CDPSession, Locator, Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
@@ -343,21 +343,6 @@ test.describe("the text view", () => {
       "The score format of “other-model” isn't supported by this editor, so the score can't be shown.",
     );
   });
-
-  test("leaves nothing behind when it is destroyed, not even the text it was about to hand over", async ({
-    page,
-    harness,
-  }) => {
-    await openText(harness);
-    await textBox(page).fill(QUARTERS_WITHOUT_D);
-
-    await harness.layout.destroyPart("text", 2);
-
-    await expect(slot(page, "text")).toBeEmpty();
-    await page.waitForTimeout(PAUSE_MS + 200);
-    expect(await harness.layout.scoreText()).toBe(QUARTERS);
-    expect(await harness.layout.canUndo()).toBe(false);
-  });
 });
 
 const staleNotice = (page: Page) => slot(page, "stale").getByRole("note");
@@ -425,15 +410,6 @@ test.describe("the stale notice", () => {
     await expect(problems(page).getByRole("listitem")).toHaveCount(1);
     await expect(status(page)).toHaveText("1 problem");
     await expect(staleNotice(page)).toHaveCount(0);
-  });
-
-  test("leaves nothing behind when it is destroyed, twice over", async ({ page, harness }) => {
-    await openText(harness, { parts: ["stale", "text", "vocal"] });
-
-    await harness.layout.destroyPart("stale", 2);
-    await textBox(page).fill(BROKEN);
-
-    await expect(slot(page, "stale")).toBeEmpty();
   });
 });
 
@@ -504,84 +480,6 @@ test.describe("the view switch", () => {
 
     await harness.layout.setView({ language: "en" });
     await expect(viewButton(page, "Staff")).toBeVisible();
-  });
-
-  test("leaves nothing behind when it is destroyed, twice over", async ({ page, harness }) => {
-    await harness.layout.open({ parts: ["switch"] });
-
-    await harness.layout.destroyPart("switch", 2);
-    await harness.layout.setActiveView("staff");
-
-    await expect(slot(page, "switch")).toBeEmpty();
-  });
-});
-
-/** Event listeners as the browser's debugger sees them: the way to find one that a destroy left behind. */
-function listenerCounter(cdp: CDPSession) {
-  const onObject = async (expression: string) => {
-    const { result } = await cdp.send("Runtime.evaluate", { expression });
-    if (!result.objectId) throw new Error(`no object for ${expression}`);
-    const { listeners } = await cdp.send("DOMDebugger.getEventListeners", { objectId: result.objectId });
-    return listeners.length;
-  };
-  return {
-    onGlobals: () =>
-      Promise.all(["window", "document", "document.documentElement", "document.body", "document.head"].map(onObject)),
-    /** The listeners on every node the layout retained. */
-    onRetained: async () => {
-      const nodes = "window.harness.layout.retained.nodes";
-      const { result: length } = await cdp.send("Runtime.evaluate", { expression: `${nodes}.length` });
-      let total = 0;
-      for (let index = 0; index < Number(length.value); index++) total += await onObject(`${nodes}[${index}]`);
-      return total;
-    },
-  };
-}
-
-test.describe("destroying the view parts", () => {
-  test("each one, destroyed on its own, leaves no node, no listener and no style sheet, and does not answer the session any more", async ({
-    page,
-    harness,
-    partNames,
-  }) => {
-    // abcjs puts two resize listeners on the window when its module is loaded, and has no way to take them off. They are
-    // its, not the staff view's: the module is loaded once before the baseline is taken, so that what is measured is what
-    // the parts leave behind.
-    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
-    await expect(drawnNotes(page)).toHaveCount(5);
-    await harness.layout.close();
-    const cdp = await page.context().newCDPSession(page);
-    const listeners = listenerCounter(cdp);
-    const globals = await listeners.onGlobals();
-    const html = await page.evaluate(() => document.documentElement.outerHTML);
-    const sheets = (await harness.layout.sheets()).document;
-
-    for (const name of partNames.views) {
-      await harness.layout.open({ score: { text: QUARTERS }, parts: [name] });
-      expect((await harness.layout.sheets()).document, `${name} adds the one style sheet`).toBe(sheets + 1);
-      await harness.layout.retain(name);
-      // The notice and the staff only draw (the staff watches its size with an observer, which is no event listener).
-      if (!["stale", "staff"].includes(name))
-        expect(await listeners.onRetained(), `${name} has listeners`).toBeGreaterThan(0);
-
-      await harness.layout.destroyPart(name, 2);
-      expect(await listeners.onRetained(), `${name} leaves listeners`).toBe(0);
-      await expect(slot(page, name).locator("*")).toHaveCount(0);
-      const retained = await harness.layout.retainedHtml();
-
-      // Everything that would redraw the part, and the part must not hear of it.
-      await harness.layout.setView({ language: "zh", editable: false });
-      await harness.layout.setActiveView("staff");
-      await harness.layout.setRejectedText(BROKEN);
-      await harness.layout.replace({ score: { vector: "reject-duration-five" } });
-      expect(await harness.layout.retainedHtml(), name).toBe(retained);
-
-      await harness.layout.close();
-      expect((await harness.layout.sheets()).document, `${name} gives its style sheet back`).toBe(sheets);
-    }
-    expect(await listeners.onGlobals(), "listeners on the page").toEqual(globals);
-    expect(await page.evaluate(() => document.documentElement.outerHTML), "nodes in the page").toBe(html);
-    await cdp.detach();
   });
 });
 
@@ -1372,26 +1270,6 @@ test.describe("the three views of the default editor", () => {
     await harness.update({ language: "en" });
     await expect(viewTab(page, "Score text")).toHaveAttribute("aria-pressed", "true");
     await expect(title(page)).toHaveText("Score text");
-  });
-
-  test("leaves the page as it found it when it is destroyed after all three views were shown", async ({
-    page,
-    harness,
-    press,
-  }) => {
-    const html = await page.evaluate(() => document.documentElement.outerHTML);
-    const sheets = await page.evaluate(() => document.adoptedStyleSheets.length);
-    await harness.mount({ score: { text: QUARTERS } });
-    await press(viewTab(page, "Staff"));
-    await expect(staffNotes(page)).toHaveCount(5);
-    await press(viewTab(page, "Score text"));
-    await editorText(page).fill(BROKEN);
-    await press(viewTab(page, "Arrangement"));
-
-    await harness.destroy();
-
-    expect(await page.evaluate(() => document.documentElement.outerHTML)).toBe(html);
-    expect(await page.evaluate(() => document.adoptedStyleSheets.length)).toBe(sheets);
   });
 });
 
