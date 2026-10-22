@@ -44,11 +44,11 @@ const session = createEditingSession({
 
 | Method | Effect |
 | --- | --- |
-| `dispatch(command: ScoreCommand \| ProjectCommand)` | Applies one command as one history step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. |
-| `checkScoreText(text)` | What `dispatch` of `replaceScoreText` with `text` would say: the diagnostics it would be refused with, the song-project rules included, and none when it would take the text. Changes and announces nothing. |
+| `dispatch(command: ScoreCommand \| ProjectCommand)` | Applies one command as one history step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. A command that comes back with notices only (`isNoticeDiagnostic`) is taken: the result is `ok` with the notices in `diagnostics`. |
+| `checkScoreText(text)` | What `dispatch` of `replaceScoreText` with `text` would say: the diagnostics it would be refused with, or the notices it would be taken with, the song-project rules included; a result with no diagnostic that `isNoticeDiagnostic` rejects is a text the session takes. Changes and announces nothing. |
 | `setActiveView(name)` | Shows another view. Throws `RangeError` for a name outside `VIEW_NAMES`. |
 | `setRejectedText(next \| null)` | Says which unreadable text the text view holds, or that it holds none. No-op for the same text. |
-| `runTool(tool, values?)` | Validates a tool's parameters, builds its commands once and applies them as one history step. Returns `ToolResult`. One failing step refuses the whole run. |
+| `runTool(tool, values?)` | Validates a tool's parameters, builds its commands once and applies them as one history step. Returns `ToolResult`. One failing step refuses the whole run; a step that comes back with a notice does not, and the notices are in the result. |
 | `previewTool(tool, values?)` | Returns what the tool would produce without dispatching, changing the history or notifying anyone. |
 | `undo()` / `redo()` | Move one whole project step. Return false when there is none. |
 | `select(noteIds)` | Selects exactly these notes; ids that name no note are left out. It works while the session is read-only, so a host's own control can select when the parts refuse to. |
@@ -63,8 +63,11 @@ touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so t
 `"replace"`, `"active-view"` or `"rejected-text"`; the last two touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
 of the change; its error goes to `reportError`.
 
-`DispatchResult` is either `{ ok: true, project, diagnostics: [] }` or `{ ok: false, project, diagnostics }`. The
-project is the one the session is left with: the untouched project for a refusal.
+`DispatchResult` is either `{ ok: true, project, diagnostics }` or `{ ok: false, project, diagnostics }`. The
+project is the one the session is left with: the untouched project for a refusal. A successful dispatch may carry
+notices in `diagnostics` (`isNoticeDiagnostic`; for example `style-no-bpm` after a tempo change, or
+`melody-with-chords` in a melody project that has chords): the project is changed and usable, so show a notice as a
+notice, and do not undo the change or treat it as an error. Test `ok`, not `diagnostics.length`, to tell a refusal.
 
 ## Usage
 

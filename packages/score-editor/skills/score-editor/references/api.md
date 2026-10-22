@@ -63,7 +63,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
-| `DispatchResult` | The project after a command plus any diagnostics, or the untouched project and a refusal. |
+| `DispatchResult` | The project after a command plus its notices when `ok`, or the untouched project and a refusal. |
 | `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, and the `ProjectCommand` a dispatch made, if any), its causes, and the listener type. |
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |

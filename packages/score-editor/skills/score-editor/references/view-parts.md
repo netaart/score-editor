@@ -43,7 +43,7 @@ what is shown and not the score. A host with its own layout shows and hides its 
 mounts the parts it wants on them.
 
 The text view is the one place where a person writes the score as text. A pause of 600 ms in typing, or leaving the
-box, checks the text with `session.checkScoreText`. Text that reads is dispatched as one `replaceScoreText` step, so
+box, checks the text with `session.checkScoreText`. Text that reads is dispatched as one `replaceScoreText` step (a notice such as `melody-with-chords` does not stop it; the notice is shown under the status sentence, apart from the problems), so
 one burst of typing is one undo step, and the toolbar's undo and redo move over those steps; inside the box the
 browser's own Ctrl or Cmd plus Z undoes typing. Text that does not read stays in the box, its problems are listed
 with the line each is on (a press on one selects that line in the box), the session is told with `setRejectedText`, and the
