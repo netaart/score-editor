@@ -1,5 +1,5 @@
 // ABOUTME: Main entry of @neta-art/score-editor. Importing it has no side effects and touches no DOM.
-// ABOUTME: Only a call to mount() creates nodes or listeners.
+// ABOUTME: Only a call to mount() or to a view part's mount function creates nodes or listeners; the editing session touches no DOM.
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
