@@ -6,9 +6,10 @@ import type { LiveRegion } from "./live-region";
 import type { Score } from "./score";
 import type { EditingSession } from "./session";
 
-/** The score as of one announcement, and the selected ids that named a pitched note of the voice then. */
+/** The score as of one announcement, the ids of the voice's pitched notes then, and which of them were selected. */
 interface Seen {
   readonly score: Score | null;
+  readonly pitched: ReadonlySet<string>;
   readonly selected: ReadonlyArray<string>;
 }
 
@@ -18,8 +19,8 @@ function sameIds(a: ReadonlyArray<string>, b: ReadonlyArray<string>): boolean {
 
 /**
  * Makes `live` speak for `voice` for as long as `signal` lives: a selection of the voice's own notes, a delete that
- * took some of them, and, for the first voice of the score, which speaks for the time axis they share, a move of the
- * insertion point. While the session is read-only nothing is said, and nothing is said about a selection that `quiet`
+ * took some of them, an undo or redo that took notes away or brought them back, and, for the first voice of the
+ * score, which speaks for the time axis they share, a move of the insertion point. While the session is read-only nothing is said, and nothing is said about a selection that `quiet`
  * covers, as when the keys step from note to note and the focus already speaks the note it lands on.
  */
 export function announceVoice(
@@ -31,11 +32,11 @@ export function announceVoice(
 ): void {
   function look(): Seen {
     const { reading, selection } = session;
-    if (reading.kind !== "score") return { score: null, selected: [] };
+    if (reading.kind !== "score") return { score: null, pitched: new Set(), selected: [] };
     const pitched = new Set(
       (notesByVoice(reading.score).get(voice) ?? []).filter((note) => note.midi !== null).map((note) => note.id),
     );
-    return { score: reading.score, selected: selection.filter((id) => pitched.has(id)) };
+    return { score: reading.score, pitched, selected: selection.filter((id) => pitched.has(id)) };
   }
 
   /** The pitch and place of a pitched note, or undefined for an id that is a rest or names nothing. */
@@ -53,6 +54,24 @@ export function announceVoice(
     if (!session.view.editable || score === null) return;
     const t = messagesFor(session.view.language);
 
+    // A history step says what it did to the voice's notes, since the selection does not change with it: the id of a
+    // deleted note stays selected as a rest, and an undo that restores the note finds it selected again.
+    if ((change.cause === "undo" || change.cause === "redo") && before.score !== null) {
+      const gone = [...before.pitched].filter((id) => !seen.pitched.has(id));
+      const back = [...seen.pitched].filter((id) => !before.pitched.has(id));
+      const goneFirst = gone[0] === undefined ? undefined : describe(before.score, gone[0]);
+      const backFirst = back[0] === undefined ? undefined : describe(score, back[0]);
+      if (goneFirst !== undefined) {
+        live.say(gone.length === 1 ? t.deletedNote(goneFirst.pitch, goneFirst.position) : t.deletedNotes(gone.length));
+        return;
+      }
+      if (backFirst !== undefined) {
+        live.say(
+          back.length === 1 ? t.restoredNote(backFirst.pitch, backFirst.position) : t.restoredNotes(back.length),
+        );
+        return;
+      }
+    }
     if (change.cause === "dispatch" && before.score !== null) {
       const gone = before.selected.filter((id) => describe(score, id) === undefined);
       const first = gone[0] === undefined ? undefined : describe(before.score, gone[0]);

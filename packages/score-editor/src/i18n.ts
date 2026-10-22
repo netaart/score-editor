@@ -42,6 +42,9 @@ export interface Messages {
   /** What a live region says when a delete took one note, and when it took several. */
   deletedNote(pitch: string, position: BarPosition): string;
   deletedNotes(count: number): string;
+  /** What a live region says when an undo brought back one deleted note, and when it brought back several. */
+  restoredNote(pitch: string, position: BarPosition): string;
+  restoredNotes(count: number): string;
 }
 
 const en: Messages = {
@@ -91,6 +94,8 @@ const en: Messages = {
   selectedNotes: (count) => `Selected ${count} notes`,
   deletedNote: (pitch, { bar, beat }) => `Deleted ${pitch}, bar ${bar} beat ${beat}`,
   deletedNotes: (count) => `Deleted ${count} notes`,
+  restoredNote: (pitch, { bar, beat }) => `Restored ${pitch}, bar ${bar} beat ${beat}`,
+  restoredNotes: (count) => `Restored ${count} notes`,
 };
 
 const zh: Messages = {
@@ -138,6 +143,8 @@ const zh: Messages = {
   selectedNotes: (count) => `已选中 ${count} 个音符`,
   deletedNote: (pitch, { bar, beat }) => `已删除 ${pitch}，第 ${bar} 小节第 ${beat} 拍`,
   deletedNotes: (count) => `已删除 ${count} 个音符`,
+  restoredNote: (pitch, { bar, beat }) => `已恢复 ${pitch}，第 ${bar} 小节第 ${beat} 拍`,
+  restoredNotes: (count) => `已恢复 ${count} 个音符`,
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

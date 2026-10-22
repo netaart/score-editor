@@ -686,6 +686,36 @@ test.describe("announcements for screen readers", () => {
     await expect(said(page, "vocal")).toHaveText("Deleted 2 notes");
   });
 
+  test("says what an undo brought back and what a redo took away, though the selection does not change", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(note(page, D4));
+    await page.keyboard.press("Delete");
+    await expect(said(page, "vocal")).toHaveText("Deleted D4, bar 1 beat 2");
+
+    await page.keyboard.press("Control+z");
+    await expect(said(page, "vocal")).toHaveText("Restored D4, bar 1 beat 2");
+    await press(redoButton(page));
+    await expect(said(page, "vocal")).toHaveText("Deleted D4, bar 1 beat 2");
+
+    await harness.layout.setView({ language: "zh" });
+    await press(toolbar(page).getByRole("button", { name: "撤销", exact: true }));
+    await expect(said(page, "vocal")).toHaveText("已恢复 D4，第 1 小节第 2 拍");
+  });
+
+  test("says how many notes an undo brought back", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await harness.layout.select(["Vocal:256", "Vocal:768"]);
+    await press(deleteButton(page));
+    await expect(said(page, "vocal")).toHaveText("Deleted 2 notes");
+
+    await press(undoButton(page));
+    await expect(said(page, "vocal")).toHaveText("Restored 2 notes");
+  });
+
   test("speaks the session's language", async ({ page, harness, press }) => {
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["toolbar", "vocal"], language: "zh" });
     await press(note(page, "D4，第 1 小节第 2 拍，长 1 拍"));
