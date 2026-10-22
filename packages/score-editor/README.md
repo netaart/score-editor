@@ -27,6 +27,26 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 - A host whose own CSS uses ID selectors or `!important` on plain elements should mount the editor inside a shadow root. See [docs/spike.md](../../docs/spike.md).
 - The package assumes a browser with native popovers, `:has()` and `light-dark()`. Only Chromium has been run so far.
 
+## Commands
+
+`applyScoreCommand` takes one `ScoreCommand` and changes the score text. `applyProjectCommand` takes a `ScoreCommand` or a `ProjectCommand`, the one-word name of the second union: project edits that cannot be score commands because they never touch the score text. A refused command returns the input unchanged and a diagnostic. A notice is a diagnostic too, but it comes with the changed project; `isNoticeDiagnostic` tells the two apart.
+
+Score commands, in the order `ScoreCommand` lists them:
+
+- `toRest`: turns a note and its whole tie chain into rests.
+- `transpose`: moves every note, every chord root and bass, the header `K:`, every body `K:` line and every inline `[K:…]` by the same number of semitones. The new keys are the declared spellings with the fewest accidentals. A note that would leave MIDI 0-127 refuses the whole command.
+- `setKey`: moves the notes and chords to the chosen key, like `transpose` by the shortest interval between the two tonics, and forces the chosen key's spelling. With `from`, only the score from that key-change position on moves; the header and earlier key changes stay.
+- `setTempo`: writes `Q:1/4=<bpm>` from the dialect's tempo range and changes no pitch.
+- `removeChords`: removes every chord from the score. It is the one-step fix for a `melody` project that carries chords.
+
+Project commands, the `ProjectCommand` union:
+
+- `setStyle`: sets the style text.
+- `setScoreMode`: sets `full` or `melody`.
+- `setSeed`: sets a whole-number seed, or `null` to clear it.
+
+`applyProjectCommand` also runs the song-project rules. A `setTempo` through it rewrites every BPM written in the style text (`120 BPM`, `120bpm`, `BPM: 120`, `bpm=120`, `BPM 120`) and reports the notice `style-no-bpm` when the style has none. A project in `melody` mode whose score has chords reports the notice `melody-with-chords`; delete the chords or switch back to `full`. `checkProject(dialect, project)` reports that notice for a project as it stands, without changing anything.
+
 ## The editing session and view parts
 
 `mount` is one arrangement of smaller public pieces. An **editing session** holds the song project with its undo history, the selection, the insertion point, and the UI state that parts share (zoom, horizontal scroll, language). A **view part** mounts on an element of the host's own layout, binds to one session, and draws from it. Parts of one session zoom and scroll together; each is free to be as wide as the element the host gave it.
