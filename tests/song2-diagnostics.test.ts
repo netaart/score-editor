@@ -42,6 +42,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "seed-not-integer",
   "style-invalid",
   "score-mode-invalid",
+  "not-a-score-command",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = ["style-no-bpm", "melody-with-chords"];

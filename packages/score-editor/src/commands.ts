@@ -1,6 +1,7 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
 import { positionOf } from "./arrangement";
+import { commandRefusal } from "./command-refusal";
 import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./commands-key-tempo";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Score, Note as ScoreNote } from "./score";
@@ -28,10 +29,7 @@ export function commandAt(score: Score, command: ScoreCommand): DiagnosticAt {
 }
 
 function commandFailure(code: "note-not-found" | "not-a-note", score: Score, noteId: string): ScoreCommandResult {
-  return {
-    ok: false,
-    diagnostic: { code, params: { noteId }, at: commandAt(score, { type: "toRest", noteId }) },
-  };
+  return commandRefusal(code, { noteId }, commandAt(score, { type: "toRest", noteId }));
 }
 
 /** The whole tie chain around a note: every note tied into it and every note it ties into. */
@@ -45,10 +43,7 @@ export function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): Sc
   return voiceNotes.slice(first, last + 1);
 }
 
-function toRest(
-  score: Score,
-  command: Extract<ScoreCommand, { readonly type: "toRest" }>,
-): ScoreCommandResult {
+function toRest(score: Score, command: Extract<ScoreCommand, { readonly type: "toRest" }>): ScoreCommandResult {
   const target = score.notes.find((note) => note.id === command.noteId);
   if (target === undefined) return commandFailure("note-not-found", score, command.noteId);
   if (target.midi === null) return commandFailure("not-a-note", score, command.noteId);

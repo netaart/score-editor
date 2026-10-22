@@ -40,6 +40,7 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "seed-not-integer",
   "style-invalid",
   "score-mode-invalid",
+  "not-a-score-command",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -98,6 +99,7 @@ interface Catalog {
   readonly seedNotInteger: Text;
   readonly styleInvalid: Text;
   readonly scoreModeInvalid: Text;
+  readonly notAScoreCommand: Text;
   readonly styleNoBpm: Text;
   readonly melodyWithChords: Text;
 }
@@ -514,6 +516,14 @@ function chineseScoreModeInvalid(): string {
   return "乐谱模式必须是 full 或 melody。";
 }
 
+function englishNotAScoreCommand(): string {
+  return "This is a song-project command, not a score command; apply it to the project instead.";
+}
+
+function chineseNotAScoreCommand(): string {
+  return "这是歌曲工程级命令，不是乐谱命令；请把它应用到歌曲工程上。";
+}
+
 function englishStyleNoBpm(): string {
   return "The style text has no BPM, so it was left as it is.";
 }
@@ -557,6 +567,7 @@ const en: Catalog = {
   seedNotInteger: englishSeedNotInteger,
   styleInvalid: englishStyleInvalid,
   scoreModeInvalid: englishScoreModeInvalid,
+  notAScoreCommand: englishNotAScoreCommand,
   styleNoBpm: englishStyleNoBpm,
   melodyWithChords: englishMelodyWithChords,
 };
@@ -588,6 +599,7 @@ const zh: Catalog = {
   seedNotInteger: chineseSeedNotInteger,
   styleInvalid: chineseStyleInvalid,
   scoreModeInvalid: chineseScoreModeInvalid,
+  notAScoreCommand: chineseNotAScoreCommand,
   styleNoBpm: chineseStyleNoBpm,
   melodyWithChords: chineseMelodyWithChords,
 };
@@ -649,6 +661,8 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.styleInvalid(diagnostic.params);
     case "score-mode-invalid":
       return catalog.scoreModeInvalid(diagnostic.params);
+    case "not-a-score-command":
+      return catalog.notAScoreCommand(diagnostic.params);
     case "style-no-bpm":
       return catalog.styleNoBpm(diagnostic.params);
     case "melody-with-chords":
