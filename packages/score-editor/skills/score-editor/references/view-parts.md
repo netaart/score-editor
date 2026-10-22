@@ -12,7 +12,7 @@ added; calling it twice is harmless.
 
 | Function | Draws | Options |
 | --- | --- | --- |
-| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons; the read-only badge while it is not. | `ToolbarOptions` |
+| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons and the Select menu; the read-only badge while it is not. | `ToolbarOptions` |
 | `mountZoomControl(el, session)` | The zoom-out, readout/menu and zoom-in buttons. Hidden while the session has no readable score. | — |
 | `mountCutNotice(el, session)` | The one sentence saying the score text stops before the song does, or nothing. | — |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
@@ -55,8 +55,8 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 | Holds Shift while clicking or tapping a note | A voice track | Adds the note to the selection, or takes it and its tied chain out; on empty space nothing happens. |
 | Presses on empty lane space with a mouse and drags | A voice track | Draws a box. The notes it touches are framed while it is open and selected when it is let go; Shift at the press adds; Escape gives it up. |
 | Rests a finger on empty lane space for about 0.4 s, then slides | A voice track | Draws the same box (a swipe that starts at once still scrolls). Resting a finger on a note toggles it, as Shift does. |
-| Presses Ctrl or Cmd plus A, plus Shift, or Escape | A part that hears the key | Selects every pitched note; inverts the selection; clears it. |
-| Presses Tab, then Left and Right, Home and End, Enter or Space | The notes of a voice track | The notes are one tab stop. With a note in focus, Left and Right step to the neighbour and select it, Home and End go to the first and last, Enter or Space selects the one in focus. |
+| Presses Ctrl or Cmd plus A, plus Shift, or Escape; or chooses an item of the Select menu | A part that hears the key; the toolbar | Selects every pitched note; inverts the selection; clears it (Escape clears whatever ids are selected, and is left to the host when none is). |
+| Presses Tab, then Left and Right, Home and End, Enter or Space | The notes of a voice track | The notes are one tab stop. With a note in focus, Left and Right step to the neighbour and select it, Home and End go to the first and last, Enter or Space selects the one in focus. With Ctrl or Cmd the four navigation keys move the focus without selecting, and Shift plus Space or Enter adds the note in focus or takes it out with its tie chain. |
 | Presses Left, Right, Home or End with the focus elsewhere in a part | Any time-axis part | Moves the insertion point; Left and Right keep scrolling while there is none. |
 | Presses Delete or Backspace, or the Delete button | A part that hears the key; the toolbar | Turns every selected pitched note into a rest as one history step. The button is muted until a pitched note is selected. |
 | Presses Ctrl or Cmd plus Z, plus Shift for redo, Ctrl plus Y, or the undo and redo buttons | A part that hears the key; the toolbar | Moves one history step. |

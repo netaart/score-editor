@@ -9,7 +9,7 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- | --- |
 | `mount` | core | Mounts the default editor on an element; returns `MountedEditor`. |
 | `createEditingSession` | core | Builds an `EditingSession` from a project and a `DialectRegistry`. |
-| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo and Delete; takes `ToolbarOptions`. |
+| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete and the Select menu; takes `ToolbarOptions`. |
 | `mountZoomControl` | core | Mounts the zoom control view part on `(el, session)`. |
 | `mountCutNotice` | core | Mounts the cut-notice view part. |
 | `mountProblemView` | core | Mounts the problem view part. |
