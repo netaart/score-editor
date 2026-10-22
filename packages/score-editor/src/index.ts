@@ -57,6 +57,7 @@ export type {
   ViewState,
 } from "./session";
 export { createEditingSession } from "./session";
+export { mountSynthPreview } from "./synth-preview";
 export { mountTimeRuler } from "./time-ruler";
 export type {
   BooleanToolParameter,

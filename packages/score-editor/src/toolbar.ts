@@ -1,12 +1,14 @@
-// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge and the screen-reader hint.
+// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the synth preview control, the read-only badge and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor } from "./i18n";
+import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
+import { mountSynthPreview } from "./synth-preview";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { mountZoomControl } from "./zoom-control";
 
@@ -16,26 +18,6 @@ export interface ToolbarOptions extends EditingPartOptions {
    * this option the toolbar draws no hint, since a hint nothing refers to would only be noise.
    */
   hintId?: string;
-}
-
-const SVG = "http://www.w3.org/2000/svg";
-
-/**
- * A 16 by 16 line drawing. It is built of polylines, since the reset that isolates the parts reverts every CSS
- * property, and a path's `d` is one, where `points` is not; the stylesheet gives the lines their stroke.
- */
-function lineIcon(doc: Document, polylines: ReadonlyArray<string>): SVGSVGElement {
-  const icon = doc.createElementNS(SVG, "svg");
-  icon.setAttribute("class", "sce-icon");
-  icon.setAttribute("viewBox", "0 0 16 16");
-  icon.setAttribute("aria-hidden", "true");
-  icon.setAttribute("focusable", "false");
-  for (const points of polylines) {
-    const line = doc.createElementNS(SVG, "polyline");
-    line.setAttribute("points", points);
-    icon.appendChild(line);
-  }
-  return icon;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -72,6 +54,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.type = "button";
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
+  const synth = mountSynthPreview(row, session);
   create(doc, "span", "sce-spacer", row);
   const badge = create(doc, "span", "sce-badge", row);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
@@ -142,6 +125,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       abort.abort();
       unsubscribe();
       zoom.destroy();
+      synth.destroy();
       root.remove();
       releaseStyles();
     },
