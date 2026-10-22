@@ -501,6 +501,26 @@ test.describe("the single-note preview", () => {
     ).toEqual(["running"]);
     await expect(playhead(page)).toHaveCount(1);
   });
+
+  test("a stop silences the preview for good, even while another sound keeps the audio context running", async ({
+    page,
+    press,
+  }) => {
+    const harness = await visit(page);
+    await openLayout(harness);
+    const button = slot(page, "synth").getByRole("button");
+    await press(button);
+    await expect(playhead(page)).toHaveCount(1);
+    await harness.previewNote(60, { duration: 4 });
+
+    await press(button);
+    await expect(playhead(page)).toHaveCount(0);
+    const placed = (await audio(page)).tones.length;
+    // The preview keeps handing out its next notes a few seconds ahead of the clock for as long as it is not stopped.
+    await page.waitForTimeout(1400);
+    expect((await audio(page)).tones.length, "no tone is placed after the stop").toBe(placed);
+    expect((await audio(page)).contexts.map((context) => context.state)).toEqual(["running"]);
+  });
 });
 
 test.describe("the preview player of a session", () => {
