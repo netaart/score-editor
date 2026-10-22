@@ -1327,7 +1327,7 @@ test.describe("editing in the default editor", () => {
       {
         code: "command-refused",
         level: "warning",
-        message: "This change can't be written into the score safely, so the score was left as it was.",
+        message: "This change can't be written into the score safely, so the score was left as it was. (bar 1, beat 1)",
       },
     ]);
     await expect(undoButton(page)).toHaveAttribute("aria-disabled", "true");
@@ -1335,7 +1335,9 @@ test.describe("editing in the default editor", () => {
     await harness.update({ language: "zh" });
     await page.keyboard.press("Delete");
     await expect.poll(async () => (await harness.notices()).length).toBe(2);
-    expect((await harness.notices())[1]?.message).toBe("这个改动没法安全地写进乐谱，乐谱保持原样。");
+    expect((await harness.notices())[1]?.message).toBe(
+      "这个改动没法安全地写进乐谱，乐谱保持原样。（第 1 小节，第 1 拍）",
+    );
   });
 });
 

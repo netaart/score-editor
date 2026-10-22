@@ -111,6 +111,8 @@ describe("a refused command", () => {
     const rest = session.dispatch({ type: "toRest", noteId: "Vocal:256" });
     expect(rest.ok).toBe(false);
     expect(rest.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["not-a-note"]);
+    // The D is the second quarter of bar 1: a person counts it as beat 2.
+    expect(rest.diagnostics[0]?.at).toEqual({ voice: "Vocal", bar: 1, beat: 2, noteId: "Vocal:256" });
     expect(session.project.score).toBe(SCORE_WITHOUT_D);
   });
 

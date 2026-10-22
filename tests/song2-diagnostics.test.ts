@@ -105,6 +105,19 @@ describe("diagnostics", () => {
     expect(zh).toContain("4/4");
   });
 
+  it("puts the 1-based beat after the bar in both languages, and the line after both", () => {
+    const at = { voice: "Vocal", bar: 3, beat: 2.5, noteId: "Vocal:2560" };
+    const refused = { code: "write-mismatch", params: {}, at } as const;
+    expect(formatDiagnostic(refused, "en")).toBe(
+      "This change can't be written into the score safely, so the score was left as it was. (bar 3, beat 2.5)",
+    );
+    expect(formatDiagnostic(refused, "zh")).toBe("这个改动没法安全地写进乐谱，乐谱保持原样。（第 3 小节，第 2.5 拍）");
+    expect(formatDiagnostic({ ...refused, at: { bar: 3, beat: 1, line: 9 } }, "en")).toContain(
+      "(bar 3, beat 1, line 9)",
+    );
+    expect(formatDiagnostic({ ...refused, at: { bar: 3 } }, "en")).toContain("(bar 3)");
+  });
+
   it("uses a diagnostic's field and expected line parameters", () => {
     expect(formatDiagnostic({ code: "header", params: { field: "K" }, at: { line: 8 } }, "en")).toContain("K");
     expect(formatDiagnostic({ code: "voice-order", params: { expected: "V: Ins" }, at: { line: 9 } }, "zh")).toContain(

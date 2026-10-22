@@ -38,10 +38,12 @@ export type DiagnosticCode = ReadingDiagnosticCode | CommandDiagnosticCode;
 
 export type DiagnosticParams = Readonly<Record<string, string | number | boolean>>;
 
-/** Where a diagnostic points. `bar` is 1-based for people; `line` is 1-based. */
+/** Where a diagnostic points. `bar`, `beat` and `line` are 1-based, the numbers people count with. */
 export interface DiagnosticAt {
   readonly voice?: string;
   readonly bar?: number;
+  /** The beat in the bar's own meter; it may carry a fraction. */
+  readonly beat?: number;
   readonly noteId?: string;
   readonly line?: number;
 }
@@ -475,6 +477,9 @@ function position(diagnostic: Diagnostic, language: Language): string {
   const parts: string[] = [];
   if (diagnostic.at.bar !== undefined) {
     parts.push(language === "zh" ? `第 ${diagnostic.at.bar} 小节` : `bar ${diagnostic.at.bar}`);
+  }
+  if (diagnostic.at.beat !== undefined) {
+    parts.push(language === "zh" ? `第 ${diagnostic.at.beat} 拍` : `beat ${diagnostic.at.beat}`);
   }
   if (diagnostic.at.line !== undefined) {
     parts.push(language === "zh" ? `第 ${diagnostic.at.line} 行` : `line ${diagnostic.at.line}`);
