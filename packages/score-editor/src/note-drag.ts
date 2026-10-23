@@ -16,7 +16,7 @@ export const EDGE_ZONE = { fine: 6, coarse: 12 } as const;
 /** On a coarse pointer a zone takes this share of a narrow note's width, so a quarter note keeps a body for a finger. */
 export const EDGE_ZONE_SHARE = 0.3;
 
-/** The narrowest a coarse pointer's zone is, the floor that keeps a grip a usable target on a small note. */
+/** The narrowest a coarse pointer's zone is; a note under three of these has no grip and is all body. */
 export const EDGE_ZONE_FLOOR = 8;
 
 /** A zone is only there while the note is at least this many zones wide; a narrower note is all body, and moves. */
