@@ -13,6 +13,8 @@ export interface ChordMessages {
   pickerPlace(position: BarPosition): string;
   /** The line that says what is on the start now. */
   pickerNow(chord: string | null): string;
+  /** The sentence of an empty chord row while a press places a chord: the row's own sentence and then how. */
+  emptyEditable(empty: string): string;
   /** The names of the picker's groups. */
   root: string;
   /** The name of the row of spellings (sharp or flat) under the letters. */
@@ -36,6 +38,7 @@ export interface ChordMessages {
 const en: ChordMessages = {
   cursorLabel: ({ bar, beat }, chord) => `Chord place, bar ${bar} beat ${beat}, ${chord ?? "no chord"}`,
   cursorHint: "Left and Right move between places. Enter opens the choice of chord. Delete removes the chord.",
+  emptyEditable: (empty) => `${empty}. Click or tap a beat to add one.`,
   pickerLabel: ({ bar, beat }) => `Chord at bar ${bar} beat ${beat}`,
   pickerPlace: ({ bar, beat }) => `Bar ${bar}, beat ${beat}`,
   pickerNow: (chord) => (chord === null ? "No chord yet" : `Now ${chord}`),
@@ -58,6 +61,7 @@ const en: ChordMessages = {
 const zh: ChordMessages = {
   cursorLabel: ({ bar, beat }, chord) => `和弦位置，第 ${bar} 小节第 ${beat} 拍，${chord ?? "没有和弦"}`,
   cursorHint: "左、右键在位置之间移动，Enter 打开和弦选择，Delete 删除和弦。",
+  emptyEditable: (empty) => `${empty}，点按某一拍可以添加。`,
   pickerLabel: ({ bar, beat }) => `第 ${bar} 小节第 ${beat} 拍的和弦`,
   pickerPlace: ({ bar, beat }) => `第 ${bar} 小节，第 ${beat} 拍`,
   pickerNow: (chord) => (chord === null ? "还没有和弦" : `现在是 ${chord}`),

@@ -283,7 +283,7 @@ export function mountChordPicker(
     function update(): void {
       readout.textContent = compose(draft);
       if (!letters || !accidentals || !types) return;
-      // Opening the bass note or choosing a spelling changes the height, so the picker is placed again.
+      // Opening the bass note or choosing a spelling changes the height, so the picker is fitted to the window again.
       const grows = panel.matches(":popover-open");
       letters.set(letterItems, letterOf(draft.root));
       accidentals.set(spellings(draft.root), draft.root);
@@ -302,7 +302,7 @@ export function mountChordPicker(
         bassAccidentals.set(draft.bass === null ? [] : spellings(draft.bass), draft.bass);
         bassAccidentals.element.hidden = draft.bass === null;
       }
-      if (grows) place(panel, request.anchor);
+      if (grows) refit(panel);
     }
 
     const actions = create(doc, "div", "sce-picker-actions", panel);
@@ -352,8 +352,23 @@ export function mountChordPicker(
     } else {
       panel.style.maxHeight = `${below}px`;
     }
-    const overflow = rect.right - (view.innerWidth - 8);
+    // The width the page lays out in, which a scroll bar or a page wider than the screen makes smaller than the window's.
+    const width = Math.min(view.innerWidth, doc.documentElement.clientWidth || view.innerWidth);
+    const overflow = rect.right - (width - 8);
     if (overflow > 0) panel.style.left = `${Math.max(8, anchor.left - overflow)}px`;
+  }
+
+  /**
+   * Called when a choice makes the open picker taller or shorter: it stays where it is, so that what a finger is on does not
+   * move, and moves up only as far as the edge of the window makes it.
+   */
+  function refit(panel: HTMLElement): void {
+    const view = doc.defaultView;
+    if (!view) return;
+    panel.style.maxHeight = "";
+    const rect = panel.getBoundingClientRect();
+    const height = Math.min(rect.height, view.innerHeight - 16);
+    panel.style.top = `${Math.max(8, Math.min(rect.top, view.innerHeight - 8 - height))}px`;
   }
 
   return {

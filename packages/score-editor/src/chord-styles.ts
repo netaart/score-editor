@@ -37,35 +37,36 @@ export const chordCss = `
 }
 /*
  * Solid says "chosen": the place the picker is for, and where the keyboard cursor stands. The cursor is a button that is
- * always there and always the row's tab stop; at rest its frame is clear. The accent ring of keyboard focus is drawn inside
- * the frame, since the row clips what is drawn outside it, and the frame stays as the text colour.
+ * always there and always the row's tab stop; at rest it has no frame, so nothing is drawn where the system forces its
+ * colours either. The accent ring of keyboard focus is drawn inside the frame, since the row clips what is drawn outside it.
  */
 .sce-root .sce-chord-cursor {
   appearance: none;
-  border: 2px solid transparent;
+  border: 0 solid var(--sce-_text);
   outline: none;
 }
 .sce-root .sce-chord-cursor[data-open] {
-  border-color: var(--sce-_text);
+  border-width: 2px;
 }
 .sce-root .sce-chord-cursor:focus-visible {
-  border-color: var(--sce-_text);
+  border-width: 2px;
   outline: 2px solid var(--sce-_accent);
   outline-offset: -4px;
 }
 .sce-root.sce-part-chord-track[data-editable="true"] .sce-timeline {
   cursor: pointer;
 }
+/*
+ * Where the system forces its colours the fill of a checked choice is lost, so its border thickens to 2px, as a selected
+ * note's does; the padding gives the pixel back, so nothing moves.
+ */
 @media (forced-colors: active) {
-  .sce-root .sce-chord-hover {
-    border-color: CanvasText;
-  }
-  .sce-root :is(.sce-chord-cursor[data-open], .sce-chord-cursor:focus-visible) {
-    border-color: CanvasText;
-  }
   .sce-root .sce-chip[aria-checked="true"] {
-    background: Highlight;
-    color: HighlightText;
+    border-width: 2px;
+    padding-inline: 3px;
+  }
+  .sce-root .sce-chip-types .sce-chip[aria-checked="true"] {
+    padding-inline: 7px;
   }
 }
 
@@ -186,7 +187,11 @@ export const chordCss = `
 .sce-root .sce-picker-gap {
   flex: 1 1 auto;
 }
+/* A finger gets the width of the window, so the choices are as wide as they are tall and the picker does not stand under the hand that opened it. */
 @media (pointer: coarse) {
+  .sce-root .sce-chord-picker {
+    width: calc(100vw - 16px);
+  }
   .sce-root .sce-chip-row {
     gap: 6px;
   }

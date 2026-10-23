@@ -8,6 +8,7 @@ import { chordMessagesFor } from "./chord-text";
 import { chordChoices } from "./chord-vocabulary";
 import type { Diagnostic } from "./diagnostics";
 import { create } from "./dom";
+import { messagesFor } from "./i18n";
 import type { LiveRegion } from "./live-region";
 import type { Chord, Score } from "./score";
 import type { EditingSession } from "./session";
@@ -350,6 +351,11 @@ export function mountChordEditing(
         }
       }
       root.setAttribute("data-editable", String(on));
+      const empty = d?.timeline.querySelector(".sce-empty");
+      if (empty) {
+        const sentence = messagesFor(session.view.language).noChords;
+        empty.textContent = on ? messages().emptyEditable(sentence) : sentence;
+      }
       if (d && on && refocus && doc.activeElement !== d.cursor) d.cursor.focus({ preventScroll: true });
       refocus = false;
     },
