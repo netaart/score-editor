@@ -24,6 +24,7 @@ interface ChordPage {
   insertionPoint(): { tick: number } | null;
   setEditable(editable: boolean): void;
   setLanguage(language: string): void;
+  coverHost(): void;
 }
 
 declare global {
@@ -63,6 +64,10 @@ class Chords {
   canUndo() {
     return this.page.evaluate(() => window.chordPage.canUndo());
   }
+
+  coverHost() {
+    return this.page.evaluate(() => window.chordPage.coverHost());
+  }
 }
 
 const test = base.extend<{ chords: Chords }>({
@@ -95,7 +100,7 @@ const QUARTERS = twoVoices("C4D4E4F4|G16|", "C16|C16|");
 
 const chordTrack = (page: Page) => page.getByRole("region", { name: "Chords" });
 /** The list a track keeps for its chords; empty of chords it is a sentence instead. */
-const timeline = (page: Page) => chordTrack(page).locator(".sce-timeline");
+const timeline = (page: Page) => page.locator(".sce-chords .sce-timeline");
 const picker = (page: Page, name: string | RegExp) => page.getByRole("dialog", { name });
 const undoButton = (page: Page) => page.getByRole("button", { name: "Undo", exact: true });
 const redoButton = (page: Page) => page.getByRole("button", { name: "Redo", exact: true });
@@ -289,5 +294,193 @@ test.describe("changing and removing a chord", () => {
     const open = picker(page, "Chord at bar 1 beat 1");
     await expect(open.getByText("Now Cmaj7")).toBeVisible();
     await expect(open.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
+  });
+});
+
+const cursor = (page: Page) => page.getByRole("button", { name: /^Chord place, / });
+const live = (page: Page) => chordTrack(page).getByRole("status");
+
+test.describe("Ins has no way in", () => {
+  test("a press where only Ins has a start takes the nearest Vocal start, and the chord is written on Vocal", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    // Ins starts on every beat of bar 1; Vocal starts only at the bars.
+    const score = twoVoices("C16|G16|", "C4D4E4F4|G16|");
+    await chords.openParts({ score: { text: score } });
+
+    await pressAtTick(page, press, 500);
+    const open = picker(page, "Chord at bar 1 beat 1");
+    await expect(open).toBeVisible();
+    await choose(open, "A", "Am");
+    await press(open.getByRole("button", { name: "Place", exact: true }));
+
+    expect(await chords.scoreText()).toBe(twoVoices('"Am"C16|G16|', "C4D4E4F4|G16|"));
+  });
+
+  test("a press in the Ins lane sets the insertion point and opens no picker", async ({ page, chords, press }) => {
+    await chords.openParts({ score: { text: twoVoices("C16|G16|", "C4D4E4F4|G16|") } });
+
+    await press(page.locator('[data-slot="ins"]').getByRole("list", { name: "Ins" }), { x: 70, y: 120 });
+
+    expect(await chords.insertionPoint()).toEqual({ tick: 512 });
+    await expect(picker(page, /^Chord at/)).toHaveCount(0);
+  });
+
+  test("the keyboard cursor stands only on Vocal starts", async ({ page, chords }) => {
+    await chords.openParts({ score: { text: twoVoices("C16|G16|", "C4D4E4F4|G16|") } });
+
+    await cursor(page).focus();
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 1, no chord");
+    await page.keyboard.press("ArrowRight");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 2 beat 1, no chord");
+    await page.keyboard.press("ArrowRight");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 2 beat 1, no chord");
+  });
+});
+
+test.describe("the picker offers what the dialect allows", () => {
+  test("song2: seven letters, five spellings of a root, fifteen types and a bass note", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    await pressAtTick(page, press, 0);
+    const open = picker(page, "Chord at bar 1 beat 1");
+
+    await expect(open.getByRole("radiogroup", { name: "Root" }).getByRole("radio")).toHaveCount(7);
+    await expect(open.getByRole("radiogroup", { name: "Sharp or flat" }).getByRole("radio")).toHaveText([
+      "Cbb",
+      "Cb",
+      "C",
+      "C#",
+      "C##",
+    ]);
+    await expect(open.getByRole("radiogroup", { name: "Type" }).getByRole("radio")).toHaveCount(15);
+    await expect(open.getByRole("button", { name: /^Bass note/ })).toBeVisible();
+  });
+
+  test("a narrower dialect: only its roots and types, and no bass note", async ({ page, chords, press }) => {
+    await chords.openParts({ score: { text: QUARTERS }, dialect: "narrow" });
+    await pressAtTick(page, press, 0);
+    const open = picker(page, "Chord at bar 1 beat 1");
+
+    await expect(open.getByRole("radiogroup", { name: "Root" }).getByRole("radio")).toHaveCount(7);
+    await expect(open.getByRole("radiogroup", { name: "Sharp or flat" }).getByRole("radio")).toHaveText(["C"]);
+    await expect(open.getByRole("radiogroup", { name: "Type" }).getByRole("radio")).toHaveText(["C", "Cm", "C7"]);
+    await expect(open.getByRole("button", { name: /^Bass note/ })).toHaveCount(0);
+
+    await open.getByRole("radiogroup", { name: "Root" }).getByRole("radio", { name: "F", exact: true }).click();
+    await expect(open.getByRole("radiogroup", { name: "Sharp or flat" }).getByRole("radio")).toHaveText(["F", "F#"]);
+    await choose(open, "F#", "F#7");
+    await press(open.getByRole("button", { name: "Place", exact: true }));
+
+    expect(await chords.scoreText()).toBe(twoVoices('"F#7"C4D4E4F4|G16|', "C16|C16|"));
+  });
+
+  test("a bass note is chosen under its own disclosure and written after a slash", async ({ page, chords, press }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    await pressAtTick(page, press, 0);
+    const open = picker(page, "Chord at bar 1 beat 1");
+
+    await choose(open, "A", "Am");
+    const toggle = open.getByRole("button", { name: /^Bass note/ });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await press(toggle);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const bass = open.getByRole("radiogroup", { name: "Bass note", exact: true });
+    await bass.getByRole("radio", { name: "G", exact: true }).click();
+    const bassSpelling = open.getByRole("radiogroup", { name: "Bass note: Sharp or flat" });
+    await bassSpelling.getByRole("radio", { name: "G#", exact: true }).click();
+    await expect(open.locator(".sce-picker-name")).toHaveText("Am/G#");
+    await press(open.getByRole("button", { name: "Place", exact: true }));
+
+    expect(await chords.scoreText()).toBe(twoVoices('"Am/G#"C4D4E4F4|G16|', "C16|C16|"));
+  });
+});
+
+test.describe("the picker above a host's layer", () => {
+  test("in the whole editor, inside a full-screen host layer under a covering layer of the host, the picker is on top and works", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.mountEditor({ score: { text: QUARTERS }, hostLayer: true });
+    await pressAtTick(page, press, 256);
+    const open = picker(page, "Chord at bar 1 beat 2");
+    await expect(open).toBeVisible();
+    await expect(open).toHaveCSS("position", "fixed");
+
+    // The host's own covering layer starts taking the pointer. The track is under it now; the picker is not.
+    await chords.coverHost();
+    const place = open.getByRole("button", { name: "Place", exact: true });
+    const at = await box(place);
+    const track = await box(timeline(page));
+    const idAt = (x: number, y: number) =>
+      page.evaluate(([px, py]) => document.elementFromPoint(px as number, py as number)?.id ?? "", [x, y]);
+    expect(await idAt(track.x + 10, track.y + 10)).toBe("chord-cover");
+    const topIsPlace = await place.evaluate((el, point) => el.contains(document.elementFromPoint(point.x, point.y)), {
+      x: at.x + at.width / 2,
+      y: at.y + at.height / 2,
+    });
+    expect(topIsPlace).toBe(true);
+
+    await press(place);
+    await expect(open).toBeHidden();
+    await expect(page.locator(".sce-chords .sce-chord")).toHaveText(["C"]);
+  });
+});
+
+test.describe("read-only", () => {
+  test("shows the chords, has no keyboard cursor, and a press opens nothing", async ({ page, chords, press }) => {
+    await chords.openParts({ score: { text: CHORDED }, editable: false });
+
+    await expect(chordTrack(page).getByRole("listitem")).toHaveText(["Am"]);
+    await expect(cursor(page)).toBeHidden();
+    await pressAtTick(page, press, 250);
+    await expect(picker(page, /^Chord at/)).toHaveCount(0);
+    await expect(timeline(page)).toHaveCSS("cursor", "auto");
+    expect(await chords.scoreText()).toBe(CHORDED);
+  });
+
+  test("an open picker closes when the host turns editing off, and editing comes back when it turns it on", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    await pressAtTick(page, press, 250);
+    await expect(picker(page, "Chord at bar 1 beat 2")).toBeVisible();
+
+    await chords.setEditable(false);
+    await expect(picker(page, /^Chord at/)).toBeHidden();
+    await expect(cursor(page)).toBeHidden();
+    await pressAtTick(page, press, 250);
+    await expect(picker(page, /^Chord at/)).toBeHidden();
+
+    await chords.setEditable(true);
+    await expect(cursor(page)).toBeVisible();
+    await pressAtTick(page, press, 250);
+    await expect(picker(page, "Chord at bar 1 beat 2")).toBeVisible();
+  });
+});
+
+test.describe("a refusal", () => {
+  test("changes nothing, and is said and told to the host as other refusals are", async ({ page, chords, press }) => {
+    await chords.mountEditor({ score: { text: QUARTERS }, dialect: "refusing" });
+
+    await pressAtTick(page, press, 256);
+    const open = picker(page, "Chord at bar 1 beat 2");
+    await choose(open, "A", "Am");
+    await press(open.getByRole("button", { name: "Place", exact: true }));
+
+    await expect(open).toBeHidden();
+    await expect(page.locator(".sce-chords .sce-chord")).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: "can't be written into the score" })).toHaveCount(1);
+    expect((await chords.notices()).map((notice) => (typeof notice === "string" ? notice : notice.code))).toEqual([
+      "command-refused",
+    ]);
   });
 });

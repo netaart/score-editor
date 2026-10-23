@@ -131,6 +131,12 @@ window.chordPage = {
       });
     });
   },
+  /** The host's covering layer starts taking the pointer, as a toast or a dialog of the host does once it is shown. */
+  coverHost() {
+    const cover = document.getElementById("chord-cover");
+    if (!cover) throw new Error("the page was opened without a host layer");
+    cover.style.pointerEvents = "auto";
+  },
   close() {
     for (const part of parts) part.destroy();
     editor?.destroy();
