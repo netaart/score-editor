@@ -32,7 +32,7 @@ const session = createEditingSession({
 | `reading` | A `ScoreReading`, cached until the score text, model or dialects change. |
 | `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
 | `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |
-| `grid` | `Grid` (`{ value, dotted? }`): the step that notes move and resize by, that a drag lands on and that the insertion point snaps to and steps by. UI state like the selection: outside the history, and not a field of `view` or of the project. It starts at `{ value: 4 }` (1/4) unless `SessionOptions.grid` says otherwise. |
+| `grid` | `Grid` (`{ value, dotted? }`): the step that notes move and resize by, that a drag lands on and that the insertion point snaps to and steps by. UI state like the selection: outside the history, and not a field of `view` or of the project. It starts at `{ value: 4 }` (1/4) unless `SessionOptions.grid` says otherwise. A project or registry change that cannot write the grid in force puts 1/4 back, and the change carries `gridDropped` with the old grid. |
 | `view` | `ViewState`: `{ zoom, scrollLeft, language, editable }`, shared by all parts. `editable` says whether the user may change the score: parts offer editing controls and take selection and editing keys only while it is true. It does not stop `dispatch`; whoever drives the session directly decides what it sends. |
 | `activeView` | `ViewName` (`"arrangement"`, `"staff"` or `"text"`, listed in `VIEW_NAMES`): which view is shown. UI state like the selection, outside the history and not a field of `view`. The default editor shows this view; a host with its own layout reads it, or sets it from its own switch. |
 | `rejectedText` | `RejectedText \| null` (`{ text, diagnostics }`): text the text view holds that cannot be read, so the project kept the last score that could. Any change of the project, and `replaceProject`, drops it. |
@@ -57,12 +57,12 @@ const session = createEditingSession({
 | `setGrid(grid)` | Sets the grid. Throws `RangeError` for a value outside `GridValue` or an unknown step. It asks nothing of the score: a grid the score cannot write is refused by `moveNotes` and `resizeNotes` with `grid-not-allowed`. No-op for the grid already in force. |
 | `allowsGrid(grid)` | Whether the score the session reads can be edited on this grid, by the check the note commands make (`false` for a score that does not read). The Grid menu uses it to mute a step and to leave out 1/32. |
 | `setView(patch)` | Changes zoom, scroll, language or editable by the given keys. Zoom is clamped to 0.01-4, scroll to zero or more. |
-| `replaceProject(next)` | Starts a new document from outside: history, selection and insertion point go; view state stays. No-op when every field is the same. |
-| `replaceDialects(next)` | Reads the project with another registry. The history stays. No-op for the same registry. |
+| `replaceProject(next)` | Starts a new document from outside: history, selection and insertion point go; view state stays, and so does the grid unless the new score cannot write it (then 1/4 is in force and the change carries `gridDropped`). No-op when every field is the same. |
+| `replaceDialects(next)` | Reads the project with another registry. The history stays. A grid the re-read score cannot write is put back to 1/4 in the change, which carries `gridDropped`. No-op for the same registry. |
 | `subscribe(listener)` | Calls `listener(change)` after every change and returns the unsubscribe function. |
 
-`SessionChange` is `{ cause, project, selection, insertionPoint, view, command? }`. The four booleans say which state the change
-touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,
+`SessionChange` is `{ cause, project, selection, insertionPoint, view, command?, gridDropped? }`. The four booleans say which state the
+change touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `gridDropped` is the grid put back to 1/4 because the project or the dialects could not write it, present on that one change only; `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,
 `"replace"`, `"active-view"`, `"rejected-text"` or `"grid"`; the last three touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
 of the change; its error goes to `reportError`.
 
