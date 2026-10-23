@@ -42,6 +42,12 @@ export const lyricCss = `
   padding: 0 8px;
   font-size: 0.92em;
 }
+.sce-root .sce-lyric-legend {
+  padding: 0 8px 0 4px;
+  color: var(--sce-_muted);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
 .sce-root .sce-lyric-lane {
   position: relative;
   flex: none;
@@ -95,9 +101,9 @@ export const lyricCss = `
   --sce-_edge: color-mix(in srgb, var(--sce-_hue) 70%, var(--sce-_text));
   border-style: dashed;
 }
+/* The frame is a solid 2px line inside the block's own line, so a chosen block whose counts differ keeps its broken line. */
 .sce-root .sce-lyric-phrase[data-selected] {
-  border-width: 2px;
-  border-color: var(--sce-_text);
+  box-shadow: inset 0 0 0 2px var(--sce-_text);
 }
 .sce-root .sce-lyric-phrase:focus-visible {
   outline: 2px solid var(--sce-_accent);
@@ -111,10 +117,14 @@ export const lyricCss = `
  * the count is never shown cut ("1" for "12 / 12"); the text, a sentence, is cut with an ellipsis instead.
  */
 .sce-root .sce-lyric-body {
+  position: sticky;
+  left: var(--sce-_keys);
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
   gap: 0 0.6em;
+  width: fit-content;
+  max-width: 100%;
   height: 100%;
   overflow: hidden;
   line-height: var(--sce-_phrase);
@@ -152,6 +162,10 @@ export const lyricCss = `
   overflow: hidden;
   border-left: 1px solid var(--sce-_line-strong);
   white-space: nowrap;
+}
+/* A note start of a line whose counts differ has no syllable: a broken tick, like the block's broken line. */
+.sce-root .sce-lyric-syl[data-empty] {
+  border-left-style: dashed;
 }
 /* The strut fills the first line of the cell, so a syllable that does not fit beside it wraps to a line that is clipped away: left out whole. */
 .sce-root .sce-lyric-syl::before {
@@ -200,6 +214,9 @@ export const lyricCss = `
 @media (pointer: coarse) {
   .sce-root {
     --sce-_phrase: round(3em, 1px);
+  }
+  .sce-root .sce-lyric-head {
+    padding: 2px 0;
   }
   .sce-root .sce-lyric-new {
     height: auto;
@@ -284,6 +301,7 @@ export const lyricCss = `
 }
 .sce-root .sce-lyric-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-height: 28px;
@@ -318,9 +336,11 @@ export const lyricCss = `
 .sce-root .sce-lyric-grip {
   display: block;
   flex: none;
+  box-sizing: border-box;
   width: 28px;
   height: 28px;
-  padding: 0;
+  /* The dots are a tile of 8px: with 2px round them, whole dots fill the box (24px, and 40px by 32px on a touch screen). */
+  padding: 2px;
   border: 0;
   background:
     radial-gradient(circle, var(--sce-_muted) 1.5px, transparent 2px) 0 0 / 8px 8px,
@@ -340,6 +360,37 @@ export const lyricCss = `
   margin-top: 6px;
 }
 .sce-root .sce-lyric-editor[hidden] {
+  display: none;
+}
+.sce-root .sce-lyric-item .sce-lyric-editor {
+  flex: 1 0 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+  padding: 0 6px 8px;
+}
+.sce-root .sce-lyric-caption {
+  flex: 0 0 100%;
+  font-size: 0.92em;
+  font-weight: 600;
+}
+.sce-root .sce-lyric-problem {
+  flex: 0 0 100%;
+  margin: 0;
+  font-size: 0.92em;
+}
+.sce-root .sce-lyric-problem[hidden] {
+  display: none;
+}
+.sce-root .sce-lyric-input[aria-invalid="true"] {
+  border-width: 2px;
+  border-color: var(--sce-_text);
+}
+.sce-root .sce-lyric-note {
+  margin: 0;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-lyric-note[hidden] {
   display: none;
 }
 .sce-root .sce-lyric-input {
@@ -401,7 +452,9 @@ export const lyricCss = `
     color: CanvasText;
   }
   .sce-root .sce-lyric-phrase[data-selected] {
+    border-width: 2px;
     border-color: Highlight;
+    box-shadow: none;
   }
   .sce-root .sce-lyric-handle::after {
     background: CanvasText;

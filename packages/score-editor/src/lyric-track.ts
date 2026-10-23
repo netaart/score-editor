@@ -3,6 +3,7 @@
 import { gridRunsOf, gridTicks } from "./arrangement";
 import { type BuiltAxis, type Grid, mountAxisPart } from "./axis-part";
 import type { ProjectCommand } from "./commands-project";
+import { formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
 import type { Messages } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
@@ -23,6 +24,9 @@ import { lyricLinesOf } from "./lyrics";
 import type { LyricPhrase, Score } from "./score";
 import type { EditingSession } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
+
+/** Gives each track's hint an id of its own, since several tracks can share one page. */
+let hints = 0;
 
 /** The start of a phrase's first bar and the end of its last, in ticks. The phrase is one the score holds. */
 function phraseTicks(score: Score, phrase: LyricPhrase): { start: number; end: number } {
@@ -74,6 +78,10 @@ interface Drawn {
   readonly syllables: HTMLElement;
   readonly panel: HTMLElement;
   readonly title: HTMLElement;
+  /** One muted sentence under the title that says how a loose line gets onto bars. */
+  readonly note: HTMLElement;
+  /** What the keys do, for a screen reader: the description of the list of phrases while the track can edit. */
+  readonly hint: HTMLElement;
   readonly badge: HTMLElement;
   readonly newLine: HTMLElement;
   readonly unaligned: HTMLElement;
@@ -131,12 +139,20 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
 
   const linesNow = (score: Score) => lyricLinesOf(session.project, score);
 
+  /** The sentence of the last refusal, for the editor to show beside the text it refused; null when the last send was taken. */
+  let refusal: string | null = null;
+
   /** Sends commands as one step. A refusal is said and changes nothing. */
   function run(commands: ReadonlyArray<ProjectCommand>): boolean {
+    refusal = null;
     if (!session.view.editable || commands.length === 0) return false;
     const [only] = commands;
     const result = commands.length === 1 && only ? session.dispatch(only) : session.dispatchAll(commands);
-    if (!result.ok) refuse?.(result.diagnostics);
+    if (!result.ok) {
+      const first = result.diagnostics[0];
+      refusal = first ? formatDiagnostic(first, session.view.language) : null;
+      refuse?.(result.diagnostics);
+    }
     return result.ok;
   }
 
@@ -215,6 +231,10 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     // The panel is there while it has something to show, so a song with every line on bars costs the track no room under its lane.
     drawn.panel.hidden = loose.length === 0 && chosen === null && !adding;
     drawn.newLine.hidden = !editable;
+    drawn.note.hidden = !editable || loose.length === 0;
+    drawn.hint.hidden = !editable;
+    if (editable) drawn.phrases.setAttribute("aria-describedby", drawn.hint.id);
+    else drawn.phrases.removeAttribute("aria-describedby");
     drawn.editor.element.hidden = chosen === null && !adding;
     const row = chosen === null ? undefined : rows[chosen];
     if (row && first) {
@@ -225,6 +245,20 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
       });
     } else if (row) {
       drawn.editor.sync(row.line.text, row.index + 1 < rows.length);
+    }
+    placeEditor(drawn);
+  }
+
+  /**
+   * The editor of a loose line sits under that line's own row, so the row does not move when it opens and the buttons are
+   * next to what they act on; any other editor sits above the list, which is then not the heading of what is edited.
+   */
+  function placeEditor(d: Drawn): void {
+    const row = chosen === null ? undefined : d.items.get(chosen)?.element;
+    if (row) {
+      if (d.editor.element.parentElement !== row) row.appendChild(d.editor.element);
+    } else if (d.editor.element.parentElement !== d.panel || d.editor.element.nextElementSibling !== d.title) {
+      d.panel.insertBefore(d.editor.element, d.title);
     }
   }
 
@@ -331,13 +365,19 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const doc = d.lane.ownerDocument;
     const fragment = doc.createDocumentFragment();
     for (const row of placed) {
-      const notes = row.alignment?.notes;
-      if (!row.phrase || !notes) continue;
+      const alignment = row.alignment;
+      if (!row.phrase || !alignment) continue;
       const { end } = phraseTicks(d.score, row.phrase);
-      for (const [at, { syllable, note }] of notes.entries()) {
-        const next = notes[at + 1]?.note.start ?? end;
+      // The syllable of each note when the counts are equal; when they differ, only where the notes start, so the person sees
+      // against the text which notes have no syllable or which syllables have no note.
+      const cells = alignment.notes
+        ? alignment.notes.map(({ syllable, note }) => ({ start: note.start, syllable }))
+        : alignment.onsets.map((note) => ({ start: note.start, syllable: "" }));
+      for (const [at, { start, syllable }] of cells.entries()) {
+        const next = cells[at + 1]?.start ?? end;
         const cell = create(doc, "div", "sce-lyric-syl");
-        cell.setAttribute("style", `--t:${note.start};--w:${next - note.start}`);
+        cell.setAttribute("style", `--t:${start};--w:${next - start}`);
+        if (!alignment.equal) cell.dataset.empty = "";
         cell.textContent = syllable;
         fragment.appendChild(cell);
       }
@@ -349,6 +389,8 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const wanted = new Set(loose.map((row) => row.index));
     for (const [line, item] of d.items) {
       if (wanted.has(line)) continue;
+      // The editor may be inside the row of a line that has just gone onto bars; it goes back to the panel before the row goes.
+      if (item.element.contains(d.editor.element)) d.panel.insertBefore(d.editor.element, d.title);
       item.element.remove();
       d.items.delete(line);
     }
@@ -376,6 +418,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         if (item.text instanceof HTMLButtonElement) item.text.type = "button";
       }
       setText(item.text, row.line.text);
+      item.grip?.setAttribute("title", d.t.lyricGrip(row.index + 1));
       const selected = editable && chosen === row.index;
       setChosen(item.element, selected);
       if (editable)
@@ -439,15 +482,18 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
   }
 
   /** Gives a line a phrase and says where it stands now: the project keeps lines on bars in the order of their bars. */
-  function placeLine(line: number, phrase: LyricPhrase): void {
+  function placeLine(line: number, phrase: LyricPhrase): number | null {
     const d = drawn;
-    if (!d) return;
+    if (!d) return null;
     const text = linesNow(d.score)[line]?.text;
-    if (!run([{ type: "setLyricLinePhrase", line, phrase }])) return;
-    const now = linesNow(d.score).findIndex(
-      (found) => found.text === text && found.phrase?.firstBar === phrase.firstBar,
-    );
-    live?.say(d.t.lyricPlaced((now < 0 ? line : now) + 1, phrase.firstBar + 1));
+    if (!run([{ type: "setLyricLinePhrase", line, phrase }])) return null;
+    const found = linesNow(d.score).findIndex((one) => one.text === text && one.phrase?.firstBar === phrase.firstBar);
+    const now = found < 0 ? line : found;
+    live?.say(d.t.lyricPlaced(now + 1, phrase.firstBar + 1));
+    // The lines on bars are kept in the order of their bars, so a placed line takes a new place in the list and the lines
+    // after it move; the choice, which is a place in the list, would name another line.
+    if (chosen !== null) choose(null);
+    return now;
   }
 
   function sendDrop(line: number, plan: LyricDropPlan): void {
@@ -490,7 +536,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     }
   }
 
-  /** The keys of a handle: Left and Right move its edge one bar line. */
+  /** The keys of a handle: Left and Right move its edge one bar line, Home and End as far as the other lines and the section allow. */
   function onKeyDown(event: KeyboardEvent): void {
     const d = drawn;
     if (!d || !session.view.editable || event.defaultPrevented || event.isComposing) return;
@@ -505,13 +551,15 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const edge = handle?.dataset.edge;
     if (!handle || !owner || (edge !== "start" && edge !== "end")) return;
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-    if (step === 0) return;
+    if (step === 0 && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
     const line = Number(owner.dataset.line);
     const row = lyricRows(d.score, linesNow(d.score))[line];
     if (!row?.phrase) return;
     const now = edge === "start" ? row.phrase.firstBar : row.phrase.firstBar + row.phrase.barCount;
-    const plan = lyricBoundaryPlan(d.score, linesNow(d.score), { line, edge, tick: barLineTick(d.score, now + step) });
+    // The plan clamps a tick to what is allowed, so the ends of the score reach the ends of the handle's range.
+    const tick = event.key === "Home" ? 0 : event.key === "End" ? d.ticks : barLineTick(d.score, now + step);
+    const plan = lyricBoundaryPlan(d.score, linesNow(d.score), { line, edge, tick });
     if (plan && plan.moves.length > 0) sendBoundary(line, plan);
   }
 
@@ -576,6 +624,10 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         newLine.type = "button";
         newLine.textContent = t.lyricNewLine;
         newLine.addEventListener("click", startAdding, { signal: lifetime });
+        // What the two numbers in a block are: the block's name says it in words for a screen reader, and a screen has no tooltip.
+        const legend = create(doc, "span", "sce-lyric-legend", items);
+        legend.setAttribute("aria-hidden", "true");
+        legend.textContent = t.lyricLegend;
         const track = create(doc, "div", "sce-track", group);
         const keys = create(doc, "div", "sce-keys", track);
         const lane = create(doc, "div", "sce-lyric-lane", track);
@@ -597,15 +649,21 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         const title = create(doc, "span", "sce-lyric-title", panel);
         title.append(t.lyricUnaligned);
         const badge = create(doc, "span", "sce-badge", title);
+        const note = create(doc, "p", "sce-lyric-note", panel);
+        note.textContent = t.lyricUnalignedHint;
+        const hint = create(doc, "div", "sce-sr-only", group);
+        hint.id = `sce-lyric-hint-${++hints}`;
+        hint.textContent = t.lyricHint;
         const editor = createLyricEditor(
           doc,
           t,
           {
             commit(text) {
               const line = chosen;
-              if (line === null || !run([{ type: "setLyricLineText", line, text }])) return false;
+              if (line === null) return "";
+              if (!run([{ type: "setLyricLineText", line, text }])) return refusal ?? "";
               live?.say(t.lyricTextSet(line + 1));
-              return true;
+              return null;
             },
             cancel() {
               const line = chosen;
@@ -625,20 +683,22 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
               if (chosen !== null) removeLine(chosen);
             },
             place(bar) {
-              if (chosen !== null) placeLine(chosen, { firstBar: bar - 1, barCount: 1 });
+              const now = chosen === null ? null : placeLine(chosen, { firstBar: bar - 1, barCount: 1 });
+              if (now !== null) focusLine(now);
             },
             add(text) {
               const at = linesNow(score).length;
-              if (!run([{ type: "insertLyricLine", line: at, text, phrase: null }])) return;
+              if (!run([{ type: "insertLyricLine", line: at, text, phrase: null }])) return refusal ?? "";
               live?.say(t.lyricAdded(at + 1));
               choose(null);
               focusLine(at);
+              return null;
             },
           },
           lifetime,
         );
         editor.element.hidden = true;
-        panel.appendChild(editor.element);
+        panel.insertBefore(editor.element, title);
         const unaligned = create(doc, "ul", "sce-lyric-unaligned", panel);
         unaligned.setAttribute("role", "list");
         unaligned.setAttribute("aria-label", t.lyricUnaligned);
@@ -654,6 +714,8 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
           syllables,
           panel,
           title,
+          note,
+          hint,
           badge,
           newLine,
           unaligned,

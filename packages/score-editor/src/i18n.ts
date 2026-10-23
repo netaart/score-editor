@@ -106,6 +106,8 @@ export interface Messages {
   lyricPlace: string;
   /** What the track tells a person who selects a line, in a sentence its lists are described by. */
   lyricHint: string;
+  lyricUnalignedHint: string;
+  lyricLegend: string;
   /** What a live region says after an edit of a line. */
   lyricMoved(line: number, first: number, last: number): string;
   lyricPlaced(line: number, bar: number): string;
@@ -225,13 +227,15 @@ const en: Messages = {
   lyricEditorLabel: (line) => `Line ${line}`,
   lyricNewLine: "New line",
   lyricAdd: "Add",
-  lyricSplit: "Split at caret",
+  lyricSplit: "Split at cursor",
   lyricMerge: "Merge with next",
   lyricDelete: "Delete line",
   lyricBarField: "Bar number",
   lyricPlace: "Place on bar",
   lyricHint:
-    "Select a line to edit its text. The start and end handles of a selected line move it one bar with the Left and Right keys. Delete removes the line.",
+    "Select a line to edit its text. The start and end handles of a selected line move it one bar with the Left and Right keys, and as far as they can go with Home and End. Delete removes the line.",
+  lyricUnalignedHint: "Drag a line onto bars, or choose it and type a bar number.",
+  lyricLegend: "syllables / note starts",
   lyricMoved: (line, first, last) =>
     `Line ${line} now covers ${first === last ? `bar ${first}` : `bars ${first} to ${last}`}`,
   lyricPlaced: (line, bar) => `Line ${line} placed on bar ${bar}`,
@@ -335,7 +339,10 @@ const zh: Messages = {
   lyricDelete: "删除这一行",
   lyricBarField: "小节号",
   lyricPlace: "放到这一小节",
-  lyricHint: "选中一行即可改它的文字。选中行的起点和终点手柄可以用左、右键按小节移动。按 Delete 删除这一行。",
+  lyricHint:
+    "选中一行即可改它的文字。选中行的起点和终点手柄可以用左、右键按小节移动，用 Home、End 移到能到的最远处。按 Delete 删除这一行。",
+  lyricUnalignedHint: "把一行拖到小节上，或选中它再输入小节号。",
+  lyricLegend: "音节 / 音符起点",
   lyricMoved: (line, first, last) =>
     `第 ${line} 行现在占 ${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}`,
   lyricPlaced: (line, bar) => `第 ${line} 行已放到第 ${bar} 小节`,

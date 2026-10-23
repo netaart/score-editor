@@ -5,8 +5,8 @@ import type { Messages } from "./i18n";
 
 /** What the person asked for in the editor. Each hook is one user action. */
 export interface LyricEditorHooks {
-  /** Enter, or leaving the box, with text that differs from the line's. True when the project took the text. */
-  commit(text: string): boolean;
+  /** Enter, or leaving the box, with text that differs from the line's. Null when the project took the text, else why it did not. */
+  commit(text: string): string | null;
   /** Escape, or Enter with the text unchanged: the person is done with the line. */
   cancel(): void;
   /** The split button; `offset` is the caret, in code points. */
@@ -15,8 +15,8 @@ export interface LyricEditorHooks {
   remove(): void;
   /** The place button, for a line that is not on bars; `bar` is the number typed, 1-based. */
   place(bar: number): void;
-  /** Enter, or the add button, in a box for a new line. */
-  add(text: string): void;
+  /** Enter, or the add button, in a box for a new line. Null when the line was added, else why it was not. */
+  add(text: string): string | null;
 }
 
 /** Which job the editor is doing now. */
@@ -36,6 +36,8 @@ export function codePointsBefore(text: string, index: number): number {
   return Array.from(text.slice(0, index)).length;
 }
 
+let problems = 0;
+
 export function createLyricEditor(
   doc: Document,
   t: Messages,
@@ -44,10 +46,16 @@ export function createLyricEditor(
 ): LyricEditor {
   const element = create(doc, "div", "sce-lyric-editor");
   element.setAttribute("role", "group");
+  // The line the editor is on, in words: the buttons below it say "next" and "delete" of something.
+  const caption = create(doc, "span", "sce-lyric-caption", element);
+  caption.setAttribute("aria-hidden", "true");
   const input = create(doc, "input", "sce-lyric-input", element);
   input.type = "text";
   input.autocomplete = "off";
   input.spellcheck = false;
+  const problem = create(doc, "p", "sce-lyric-problem", element);
+  problem.id = `sce-lyric-problem-${++problems}`;
+  problem.hidden = true;
   const actions = create(doc, "div", "sce-lyric-actions", element);
   const button = (label: string, run: () => void): HTMLButtonElement => {
     const made = create(doc, "button", "sce-button sce-lyric-button", actions);
@@ -65,10 +73,29 @@ export function createLyricEditor(
   /** A text the project refused, so leaving the box with it does not send it, and say why, a second time. */
   let refusedText: string | null = null;
 
+  /** Marks the box and says under it why the project did not take the text; null takes the mark and the sentence away. */
+  function mark(sentence: string | null): void {
+    problem.hidden = !sentence;
+    problem.textContent = sentence ?? "";
+    if (sentence === null) {
+      input.removeAttribute("aria-invalid");
+      input.removeAttribute("aria-describedby");
+    } else {
+      input.setAttribute("aria-invalid", "true");
+      input.setAttribute("aria-describedby", problem.id);
+    }
+  }
+
   function send(): void {
     if (input.value === stored || input.value === refusedText) return;
-    if (hooks.commit(input.value)) stored = input.value;
-    else refusedText = input.value;
+    const refused = hooks.commit(input.value);
+    if (refused === null) {
+      stored = input.value;
+      mark(null);
+    } else {
+      refusedText = input.value;
+      mark(refused);
+    }
   }
 
   // A box whose text the project has not taken has no caret in the line's text: the split waits until it has.
@@ -77,7 +104,8 @@ export function createLyricEditor(
   });
   const merge = button(t.lyricMerge, () => hooks.merge());
   const remove = button(t.lyricDelete, () => hooks.remove());
-  const add = button(t.lyricAdd, () => hooks.add(input.value));
+  const addNew = (): void => mark(hooks.add(input.value));
+  const add = button(t.lyricAdd, addNew);
 
   // A line that is not on bars can be put on a bar without a drag: type the bar's number and press the button.
   const place = create(doc, "div", "sce-lyric-place", element);
@@ -100,7 +128,7 @@ export function createLyricEditor(
       if (event.key === "Enter") {
         event.preventDefault();
         if (mode === "new") {
-          hooks.add(input.value);
+          addNew();
           return;
         }
         send();
@@ -112,6 +140,17 @@ export function createLyricEditor(
         cancelled = true;
         input.value = stored;
         hooks.cancel();
+      }
+    },
+    { signal },
+  );
+  // A text that is not the refused one is a new try: the mark and the sentence go.
+  input.addEventListener(
+    "input",
+    () => {
+      if (refusedText !== null && input.value !== refusedText) {
+        refusedText = null;
+        mark(null);
       }
     },
     { signal },
@@ -135,6 +174,8 @@ export function createLyricEditor(
       stored = next === "line" ? text : "";
       cancelled = false;
       refusedText = null;
+      mark(null);
+      caption.textContent = next === "line" ? t.lyricEditorLabel(options.line) : t.lyricNewLine;
       input.value = next === "line" ? text : "";
       const name = next === "line" ? t.lyricTextLabel : t.lyricNewTextLabel;
       element.setAttribute("aria-label", next === "line" ? t.lyricEditorLabel(options.line) : name);
@@ -150,6 +191,8 @@ export function createLyricEditor(
       if (mode !== "line" || doc.activeElement === input) return;
       stored = text;
       input.value = text;
+      refusedText = null;
+      mark(null);
     },
     focus() {
       input.focus();

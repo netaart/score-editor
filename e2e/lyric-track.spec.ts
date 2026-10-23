@@ -273,7 +273,7 @@ test.describe("splitting, merging, deleting and adding a line", () => {
   }) => {
     await openTrack(harness);
     await chooseWithCaret(page, press, phrase(page, 1), 4);
-    await press(button(page, "Split at caret"));
+    await press(button(page, "Split at cursor"));
 
     expect(await storedLines(page)).toEqual([
       { text: "一二三四", phrase: { firstBar: 0, barCount: 1 } },
@@ -295,7 +295,7 @@ test.describe("splitting, merging, deleting and adding a line", () => {
   }) => {
     await openTrack(harness);
     await chooseWithCaret(page, press, unaligned(page).getByRole("button", { name: /^Line 5/ }), 2);
-    await press(button(page, "Split at caret"));
+    await press(button(page, "Split at cursor"));
     expect((await storedLines(page))?.slice(4)).toEqual([
       { text: "尚未", phrase: null },
       { text: "对齐的一行", phrase: null },
@@ -305,7 +305,7 @@ test.describe("splitting, merging, deleting and adding a line", () => {
   test("a caret at the end of the text splits nothing and says why", async ({ page, harness, press }) => {
     await openTrack(harness);
     await chooseWithCaret(page, press, phrase(page, 1), 8);
-    await press(button(page, "Split at caret"));
+    await press(button(page, "Split at cursor"));
     expect(await storedLines(page)).toEqual(LINES);
     expect(await harness.layout.canUndo()).toBe(false);
     await expect(lyrics(page).getByRole("status")).toContainText("Split a lyric line at a character inside it");
@@ -1077,4 +1077,151 @@ test.describe("the room the track has", () => {
       "New lyric line text",
     );
   });
+});
+
+test.describe("the track as a person reads it", () => {
+  test("a chosen phrase is framed by a solid line inside its own line, so a chosen yellow block still has its broken line", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(phrase(page, 2));
+    const looks = async (line: number) =>
+      phrase(page, line).evaluate((el) => {
+        const style = getComputedStyle(el);
+        return {
+          border: style.borderTopStyle,
+          width: style.borderTopWidth,
+          shadow: style.boxShadow,
+          text: style.color,
+        };
+      });
+    const differ = await looks(2);
+    expect(differ.border).toBe("dashed");
+    expect(differ.width).toBe("1px");
+    expect(differ.shadow).toContain("inset");
+    expect(differ.shadow).toContain("2px");
+    expect(differ.shadow.startsWith(differ.text)).toBe(true);
+    // A block that is not chosen has no frame.
+    expect((await looks(1)).shadow).toBe("none");
+  });
+
+  test("the count stays at the pitch column's edge while the block is scrolled past it", async ({ page, harness }) => {
+    await openTrack(harness);
+    await harness.layout.setView({ scrollLeft: 400 });
+    await expect.poll(async () => (await harness.scrollOf(region(page))).left).toBe(400);
+    const keys = await box(lyrics(page).locator(".sce-keys"));
+    const count = await box(phrase(page, 2).locator(".sce-lyric-count"));
+    const block = await box(phrase(page, 2));
+    expect(count.x).toBeGreaterThanOrEqual(keys.x + keys.width - 0.5);
+    expect(count.x + count.width).toBeLessThanOrEqual(block.x + block.width + 0.5);
+  });
+
+  test("a line whose counts differ shows where its note starts are, as ticks with no syllable", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    const cells = lyrics(page).locator(".sce-lyric-syl");
+    // Lines 1, 3 and 4 have a syllable on each of their eight notes; line 2 has seven syllables and eight note starts.
+    await expect(cells).toHaveCount(32);
+    await expect(cells.filter({ hasText: /\S/ })).toHaveCount(24);
+  });
+
+  test("the editor of a loose line opens under its own row, which does not move; the editor of a placed line is not under the heading of the loose lines", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, WITH_LOOSE);
+    const pick = unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ });
+    const before = await box(pick);
+    await press(pick);
+    const editor = unaligned(page).getByRole("group", { name: "Line 3", exact: true });
+    await expect(editor).toBeVisible();
+    await expect(editor.locator(".sce-lyric-caption")).toHaveText("Line 3");
+    const after = await box(pick);
+    expect(Math.abs(after.y - before.y)).toBeLessThan(0.5);
+    expect((await box(editor)).y).toBeGreaterThan(after.y + after.height - 1);
+
+    await press(phrase(page, 1));
+    const placed = lyrics(page).getByRole("group", { name: "Line 1", exact: true });
+    await expect(placed.locator(".sce-lyric-caption")).toHaveText("Line 1");
+    const heading = lyrics(page).locator(".sce-lyric-title");
+    expect((await box(placed)).y + (await box(placed)).height).toBeLessThanOrEqual((await box(heading)).y + 0.5);
+  });
+
+  test("a refused text is marked on the box and said under it, and both go when the text is changed", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(phrase(page, 1));
+    await textbox(page).fill("[Verse]");
+    await textbox(page).press("Enter");
+    await expect(textbox(page)).toHaveAttribute("aria-invalid", "true");
+    const problem = lyrics(page).locator(".sce-lyric-problem");
+    await expect(problem).toContainText("A lyric line cannot be only a [section] label");
+    await expect(textbox(page)).toHaveAccessibleDescription(/^A lyric line cannot be only a \[section\] label/);
+    await textbox(page).fill("一二三四五六七八九");
+    await expect(textbox(page)).not.toHaveAttribute("aria-invalid", "true");
+    await expect(problem).toBeHidden();
+  });
+
+  test("the keys are described to a screen reader while the track can edit, and the way to place a loose line is said in the panel", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness, WITH_LOOSE);
+    const describedBy = await phrases(page).getAttribute("aria-describedby");
+    expect(describedBy).not.toBeNull();
+    await expect(lyrics(page).locator(`[id="${describedBy}"]`)).toHaveText(/^Select a line to edit its text/);
+    await expect(lyrics(page).locator(".sce-lyric-note")).toHaveText(
+      "Drag a line onto bars, or choose it and type a bar number.",
+    );
+    await expect(grip(page)).toHaveAttribute("title", "Drag line 3 onto bars");
+
+    await harness.layout.setView({ editable: false });
+    await expect(phrases(page)).not.toHaveAttribute("aria-describedby", /.+/);
+    await expect(lyrics(page).locator(".sce-lyric-note")).toBeHidden();
+  });
+
+  test("Home and End on a handle move its edge as far as the other lines and the section allow, each in one step", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness, GAPPED);
+    await handle(page, "End", 1).focus();
+    await page.keyboard.press("End");
+    expect((await storedLines(page))?.[0]?.phrase).toEqual({ firstBar: 2, barCount: 3 });
+    await handle(page, "Start", 2).focus();
+    await page.keyboard.press("Home");
+    expect((await storedLines(page))?.[1]?.phrase).toEqual({ firstBar: 3, barCount: 3 });
+    expect(await harness.layout.undo()).toBe(true);
+    expect((await storedLines(page))?.[1]?.phrase).toEqual({ firstBar: 5, barCount: 1 });
+    expect(await harness.layout.undo()).toBe(true);
+    expect(await storedLines(page)).toEqual(GAPPED);
+  });
+
+  test("the New line button is not flush with the edges of the head", async ({ page, harness }) => {
+    await openTrack(harness);
+    const head = await box(lyrics(page).locator(".sce-lyric-head"));
+    const newLine = await box(button(page, "New line"));
+    expect(newLine.y - head.y).toBeGreaterThanOrEqual(1.5);
+    expect(head.y + head.height - (newLine.y + newLine.height)).toBeGreaterThanOrEqual(1.5);
+  });
+});
+
+test.describe("the head of the track", () => {
+  for (const [language, legend] of [
+    ["en", "syllables / note starts"],
+    ["zh", "音节 / 音符起点"],
+  ] as const) {
+    test(`says what the two numbers of a block are, in ${language}`, async ({ page, harness }) => {
+      await openTrack(harness, LINES, { language });
+      await expect(lyrics(page).locator(".sce-lyric-head").getByText(legend, { exact: true })).toBeVisible();
+    });
+  }
 });
