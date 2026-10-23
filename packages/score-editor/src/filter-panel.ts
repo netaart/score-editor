@@ -155,13 +155,16 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   const key = conditionRow("key", (t) => t.key);
   const keyChoice = select(key.fields, (t) => t.keyChoice);
 
+  // Each number keeps the words around it on one line, so a line breaks between the two numbers and not inside one.
   const count = conditionRow("count", (t) => t.count);
-  word(count.fields, (t) => t.countEveryBefore);
-  const countEvery = number(count.fields, (t) => t.countEvery);
-  word(count.fields, (t) => t.countEveryAfter);
-  word(count.fields, (t) => t.countSkipBefore);
-  const countSkip = number(count.fields, (t) => t.countSkip);
-  word(count.fields, (t) => t.countSkipAfter);
+  const countEveryPhrase = create(doc, "span", "sce-filter-phrase", count.fields);
+  word(countEveryPhrase, (t) => t.countEveryBefore);
+  const countEvery = number(countEveryPhrase, (t) => t.countEvery);
+  word(countEveryPhrase, (t) => t.countEveryAfter);
+  const countSkipPhrase = create(doc, "span", "sce-filter-phrase", count.fields);
+  word(countSkipPhrase, (t) => t.countSkipBefore);
+  const countSkip = number(countSkipPhrase, (t) => t.countSkip);
+  word(countSkipPhrase, (t) => t.countSkipAfter);
 
   const invertLabel = create(doc, "label", "sce-filter-check sce-filter-invert", rows);
   const invert = create(doc, "input", "", invertLabel);
@@ -173,9 +176,11 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     invertHint.textContent = t.invertHint;
   });
 
-  const status = create(doc, "div", "sce-filter-status", panel);
+  // The status and the buttons stay at the bottom edge while the conditions scroll, so the result is in view as they change.
+  const footer = create(doc, "div", "sce-filter-footer", panel);
+  const status = create(doc, "div", "sce-filter-status", footer);
   status.setAttribute("role", "status");
-  const actions = create(doc, "div", "sce-filter-actions", panel);
+  const actions = create(doc, "div", "sce-filter-actions", footer);
   const reapply = create(doc, "button", "sce-button", actions);
   reapply.type = "button";
   const done = create(doc, "button", "sce-button", actions);
