@@ -408,7 +408,10 @@ test.describe("while the session is read-only", () => {
     await press(check(page, "Count"));
 
     expect(await harness.layout.selection()).toEqual([ID.C4, ID.E4, ID.G4, ID.C5, ID.E5]);
-    await expect(status(page)).toHaveText("5 of 9 notes selected");
+    // No frame is drawn while read-only, so the line says where the selection went.
+    await expect(status(page)).toHaveText(
+      "5 of 9 notes selected. This view is read-only, so the notes are not framed.",
+    );
     expect(await harness.layout.canUndo()).toBe(false);
   });
 });
@@ -545,5 +548,47 @@ test.describe("the panel's place and size", () => {
       expect(under || over).toBe(true);
       expect(frame.width).toBeLessThan(view.width / 2);
     }
+  });
+});
+
+test.describe("what the status line says when no note matches", () => {
+  test("says nothing is selected, and why when a range or a number cannot match", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    await pitchLowest(page).selectOption({ label: "E4" });
+    await pitchHighest(page).selectOption({ label: "A4" });
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4, ID.G4, ID.A4]);
+
+    // Every note of the melody is in C major, so none is out of the key.
+    await press(check(page, "Pitch"));
+    await keyChoice(page).selectOption({ label: "Out of the key" });
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(status(page)).toHaveText("No note matches these conditions. Nothing is selected.");
+
+    // A range with its ends the wrong way round, and a count that is not a count, are named as the reason.
+    const REASON =
+      "No note matches: a range has its ends the wrong way round, or a number is not valid. Nothing is selected.";
+    await press(check(page, "Key"));
+    await pitchLowest(page).selectOption({ label: "A4" });
+    await pitchHighest(page).selectOption({ label: "C4" });
+    await expect(status(page)).toHaveText(REASON);
+
+    await press(check(page, "Pitch"));
+    await type(barFirst(page), 3);
+    await type(barLast(page), 2);
+    await expect(status(page)).toHaveText(REASON);
+    await press(check(page, "Time"));
+    await lengthShortest(page).selectOption({ label: "1/1" });
+    await lengthLongest(page).selectOption({ label: "1/4" });
+    await expect(status(page)).toHaveText(REASON);
+    await press(check(page, "Length"));
+    await type(countEvery(page), 0);
+    await expect(status(page)).toHaveText(REASON);
+    await type(countEvery(page), 2);
+    await expect(status(page)).toHaveText("5 of 9 notes selected");
+    await countEvery(page).fill("");
+    await countEvery(page).press("Enter");
+    await expect(status(page)).toHaveText(REASON);
+    expect(await harness.layout.selection()).toEqual([]);
   });
 });
