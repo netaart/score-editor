@@ -534,6 +534,20 @@ test.describe("giving a drag up", () => {
   });
 });
 
+test.describe("the browser's pan", () => {
+  // The touchmove guard cancels a pan once a drag has begun. This style is what keeps the browser from starting one on
+  // its own, and it holds when the page is too busy to answer in time. Real touch input cannot tell the two apart.
+  test("is off on a selected note and left on for the rest of the track", async ({ page, harness, press }) => {
+    await openTrack(harness, LEAD);
+    await press(block(page, C4));
+
+    await expect(block(page, "C4, bar 1 beat 1, length 1 beat, selected")).toHaveCSS("touch-action", "none");
+    await expect(block(page, "G4, bar 2 beat 1")).not.toHaveCSS("touch-action", "none");
+    // Chromium writes the track's `pan-x pan-y pinch-zoom` as its keyword.
+    await expect(slot(page, "vocal").locator(".sce-axis")).toHaveCSS("touch-action", "manipulation");
+  });
+});
+
 test.describe("a finger on a selected note", () => {
   test.beforeEach(({ isMobile }) => {
     test.skip(!isMobile, "these are touch gestures");
