@@ -77,6 +77,8 @@ const ownerGroups = {
   "references/headless-layer.md": [
     "ApplyProjectResult",
     "ApplyScoreResult",
+    "CommandListResult",
+    "applyCommandList",
     "applyProjectCommand",
     "applyScoreCommand",
     "ScoreCommand",
