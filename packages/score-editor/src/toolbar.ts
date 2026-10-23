@@ -2,6 +2,7 @@
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
 import { create, requireDom } from "./dom";
+import type { DraftKeeper } from "./draft-keeper";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor, viewName } from "./i18n";
@@ -33,6 +34,11 @@ export interface ToolbarOptions extends EditingPartOptions {
    * that mounts `mountSynthPreview` in a place of its own turns it off, so the control is not there twice.
    */
   synthPreview?: boolean;
+  /**
+   * The draft keeper of this editor. While it is opening, the badge says so in place of "Read only"; a host that keeps
+   * the session read-only until `keeper.ready` gets the right word that way.
+   */
+  draftKeeper?: DraftKeeper;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -119,7 +125,6 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     t = messagesFor(language);
     root.lang = language;
     setTitle();
-    badge.textContent = t.readOnly;
     history.setAttribute("aria-label", t.history);
     for (const [button, label, keys] of [
       [undo, t.undo, "Ctrl/Cmd+Z"],
@@ -138,7 +143,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     const readable = session.reading.kind === "score";
     const deletable = canDeleteSelection(session);
     const arrangement = !options.viewSwitch || arrangementShown(session);
-    const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView].join();
+    const opening = options.draftKeeper?.status === "opening";
+    const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView, opening].join();
     if (shown === drawn) return;
     drawn = shown;
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
@@ -146,6 +152,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     history.hidden = !editable || !readable;
     remove.hidden = history.hidden || !arrangement;
     badge.hidden = editable;
+    badge.textContent = opening ? t.draftOpening : t.readOnly;
     undo.setAttribute("aria-disabled", String(!session.canUndo));
     redo.setAttribute("aria-disabled", String(!session.canRedo));
     remove.setAttribute("aria-disabled", String(!deletable));
@@ -153,6 +160,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
 
   draw();
   const unsubscribe = session.subscribe(draw);
+  const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {
     destroy() {
@@ -160,6 +168,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       destroyed = true;
       abort.abort();
       unsubscribe();
+      unsubscribeKeeper?.();
       zoom.destroy();
       views?.destroy();
       select.destroy();

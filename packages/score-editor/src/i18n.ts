@@ -77,6 +77,8 @@ export interface Messages {
   /** Draft keeper notices: the source changed under a draft, and a write or removal did not reach the host store. */
   draftSourceChanged: string;
   draftSaveFailed: string;
+  /** What the badge says in place of "Read only" while a draft keeper is still reading the host's store. */
+  draftOpening: string;
 }
 
 const en: Messages = {
@@ -157,6 +159,7 @@ const en: Messages = {
   previewBlocked: "Blocked by the browser. Press Preview again.",
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
+  draftOpening: "Opening draft…",
 };
 
 const zh: Messages = {
@@ -230,6 +233,7 @@ const zh: Messages = {
   previewBlocked: "浏览器没有允许发声，请再按一次试听",
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
+  draftOpening: "正在打开草稿…",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
