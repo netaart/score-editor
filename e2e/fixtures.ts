@@ -26,7 +26,11 @@ interface PageSession {
   selection: string[];
   insertionPoint: { tick: number } | null;
   view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
-  reading: { kind: string; score?: { notes: Array<{ id: string; voice: string; midi: number | null }> } };
+  reading: {
+    kind: string;
+    score?: { notes: Array<{ id: string; voice: string; start: number; duration: number; midi: number | null }> };
+  };
+  grid: { value: number; dotted?: boolean };
   activeView: string;
   rejectedText: { text: string; diagnostics: Array<{ code: string }> } | null;
   canUndo: boolean;
@@ -208,6 +212,20 @@ export class Layout {
   /** Selects exactly these notes through the session, as a host or a later view part would. */
   select(noteIds: string[]) {
     return this.page.evaluate((ids) => window.harness.layout.live().select(ids), noteIds);
+  }
+
+  /** The grid, as the session holds it. */
+  grid() {
+    return this.page.evaluate(() => ({ ...window.harness.layout.live().grid }));
+  }
+
+  /** The pitched notes of the score as the session reads it: voice, first tick, length in ticks and MIDI number. */
+  pitchedNotes() {
+    return this.page.evaluate(() =>
+      (window.harness.layout.live().reading.score?.notes ?? [])
+        .filter((found) => found.midi !== null)
+        .map(({ voice, start, duration, midi }) => ({ voice, start, duration, midi })),
+    );
   }
 
   /** The insertion point, as the session holds it. */
@@ -540,6 +558,49 @@ export class Finger {
   async close() {
     await this.cdp.detach();
   }
+}
+
+/** A way to press, move and lift one pointer: a mouse on the desktop project, a finger on the phone project. */
+export interface Pointer {
+  down(point: Point): Promise<void>;
+  move(point: Point): Promise<void>;
+  up(): Promise<void>;
+  close(): Promise<void>;
+}
+
+/**
+ * The pointer the project has. A finger waits `holdMs` after it goes down, 550 ms unless the test says otherwise: as long
+ * as a person rests it to start a box. A gesture that must start before the hold is over (a slide on a selected note)
+ * asks for 0.
+ */
+export async function pointerOf(
+  page: Page,
+  harness: Harness,
+  isMobile: boolean,
+  options: { shift?: boolean; holdMs?: number } = {},
+): Promise<Pointer> {
+  if (!isMobile) {
+    return {
+      async down(point) {
+        if (options.shift) await page.keyboard.down("Shift");
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.down();
+      },
+      move: (point) => page.mouse.move(point.x, point.y, { steps: 8 }),
+      async up() {
+        await page.mouse.up();
+        if (options.shift) await page.keyboard.up("Shift");
+      },
+      close: async () => {},
+    };
+  }
+  const finger = await harness.finger(options.shift ? { shift: true } : {});
+  return {
+    down: (point) => finger.down(point, options.holdMs ?? 550),
+    move: (point) => finger.move(point),
+    up: () => finger.up(),
+    close: () => finger.close(),
+  };
 }
 
 export const test = base.extend<{

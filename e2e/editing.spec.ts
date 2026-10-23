@@ -133,7 +133,9 @@ test.describe("the toolbar part", () => {
     press,
   }) => {
     await openTrack(harness);
-    await expect(toolbar(page).getByText("Arrangement", { exact: true })).toBeVisible();
+    // On a phone's width the row is full of controls: the title gives way to them, and the row scrolls.
+    const title = toolbar(page).getByText("Arrangement", { exact: true });
+    await (isMobile ? expect(title).toBeAttached() : expect(title).toBeVisible());
     await expect(toolbar(page).getByRole("group", { name: "Zoom" })).toBeVisible();
     const history = toolbar(page).getByRole("group", { name: "History" });
     await expect(history.getByRole("button")).toHaveCount(2);
@@ -208,18 +210,20 @@ test.describe("the toolbar part", () => {
     await expect(toolbar(page).getByText("Read only", { exact: true })).toBeVisible();
   });
 
-  test("speaks the session's language", async ({ page, harness }) => {
+  test("speaks the session's language", async ({ page, harness, isMobile }) => {
+    // On a phone's width the title gives way to the controls (see above), so it is attached there and visible elsewhere.
+    const shown = (title: Locator) => (isMobile ? expect(title).toBeAttached() : expect(title).toBeVisible());
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["toolbar", "vocal"], language: "zh" });
     await expect(toolbar(page).getByRole("group", { name: "历史" })).toBeVisible();
     await expect(toolbar(page).getByRole("button", { name: "撤销", exact: true })).toBeVisible();
     await expect(toolbar(page).getByRole("button", { name: "重做", exact: true })).toBeVisible();
     await expect(toolbar(page).getByRole("button", { name: "删除", exact: true })).toBeVisible();
-    await expect(toolbar(page).getByText("编曲视图", { exact: true })).toBeVisible();
+    await shown(toolbar(page).getByText("编曲视图", { exact: true }));
 
     await harness.layout.setView({ language: "en" });
     await expect(undoButton(page)).toBeVisible();
     await expect(deleteButton(page)).toBeVisible();
-    await expect(toolbar(page).getByText("Arrangement", { exact: true })).toBeVisible();
+    await shown(toolbar(page).getByText("Arrangement", { exact: true }));
   });
 
   test("scrolls sideways when its box is narrower than its controls, and every control can be reached", async ({
