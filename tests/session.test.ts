@@ -743,6 +743,23 @@ describe("a project command through the session", () => {
     expect(session.project).toEqual(project);
     expect(session.canUndo).toBe(false);
   });
+
+  it("applies several commands as one step of the history", () => {
+    const session = open();
+    const changes = listen(session);
+
+    const result = session.dispatchAll([
+      { type: "setStyle", style: "jazz" },
+      { type: "setSeed", seed: 3 },
+    ]);
+
+    expect(result).toMatchObject({ ok: true, diagnostics: [] });
+    expect(session.project).toEqual({ ...project, style: "jazz", seed: 3 });
+    expect(changes).toHaveLength(1);
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual(project);
+    expect(session.canUndo()).toBe(false);
+  });
 });
 
 describe("replacing the score text", () => {
