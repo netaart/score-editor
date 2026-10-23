@@ -9,6 +9,7 @@ import {
   mount,
   mountChordTrack,
   mountCutNotice,
+  mountFilterPanel,
   mountProblemView,
   mountStaffView,
   mountStaleNotice,
@@ -85,6 +86,7 @@ const VIEW_PARTS = {
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+  filter: (el, session) => mountFilterPanel(el, session),
 };
 
 const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };

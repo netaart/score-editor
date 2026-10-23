@@ -4,6 +4,7 @@
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
+import { mountFilterPanel } from "./filter-panel";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
@@ -88,6 +89,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const refused = sayRefusals(live, session, options.onRefused);
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
+  // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
+  const filter = mountFilterPanel(row, session);
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -163,6 +166,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      filter.destroy();
       synth?.destroy();
       root.remove();
       releaseStyles();

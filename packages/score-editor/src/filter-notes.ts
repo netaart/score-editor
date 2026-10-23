@@ -1,4 +1,4 @@
-// ABOUTME: filterNotes: the notes of a score that satisfy a set of conditions, as ids. Pure: it reads the score and nothing else.
+// ABOUTME: filterNotes: the notes of a score that satisfy a set of conditions, as ids, and the counts the Filter panel shows. Pure: it reads the score and nothing else.
 // ABOUTME: A tie chain counts as one note and a rest as none; conditions combine with "and", and invert takes the others.
 import { effectiveKeyAt } from "./commands-shared";
 import type { Note, Score } from "./score";
@@ -128,4 +128,36 @@ export function filterNotes(score: Score, filter: NoteFilter): string[] {
   const chosen = chains.filter((chain) => taken.has(chain) !== (filter.invert === true));
   const picked = new Set(chosen.flatMap((chain) => chain.members.map((member) => member.id)));
   return score.notes.filter((note) => picked.has(note.id)).map((note) => note.id);
+}
+
+/** What the Filter panel offers choices from: how many notes a score has, its pitch range and the lengths its notes have. */
+export interface NoteSummary {
+  readonly notes: number;
+  readonly lowest: number | null;
+  readonly highest: number | null;
+  /** The distinct lengths in ticks, shortest first. */
+  readonly durations: ReadonlyArray<number>;
+}
+
+/** The notes of a score as `filterNotes` counts them: a tie chain once, a rest never. Not part of the package entry. */
+export function summarizeNotes(score: Score): NoteSummary {
+  const chains = chainsOf(score);
+  let lowest: number | null = null;
+  let highest: number | null = null;
+  for (const { midi } of chains) {
+    if (lowest === null || midi < lowest) lowest = midi;
+    if (highest === null || midi > highest) highest = midi;
+  }
+  return {
+    notes: chains.length,
+    lowest,
+    highest,
+    durations: [...new Set(chains.map((chain) => chain.duration))].sort((a, b) => a - b),
+  };
+}
+
+/** How many notes, counted as `filterNotes` counts them, the ids name: the chains that have one of them. Not part of the package entry. */
+export function countNotes(score: Score, ids: ReadonlyArray<string>): number {
+  const named = new Set(ids);
+  return chainsOf(score).filter((chain) => chain.members.some((member) => named.has(member.id))).length;
 }

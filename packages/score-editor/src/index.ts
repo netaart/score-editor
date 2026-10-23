@@ -43,6 +43,7 @@ export { handleEditingInput } from "./editing-input";
 // Selecting notes by conditions.
 export type { NoteFilter } from "./filter-notes";
 export { filterNotes } from "./filter-notes";
+export { mountFilterPanel } from "./filter-panel";
 export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
 export {
   alignedLyricLines,
