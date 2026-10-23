@@ -212,8 +212,8 @@ export class Editor implements MountedEditor {
 
   /**
    * Puts the fields the host changed into the session, once a draft being read has been put there: the draft holds the
-   * fields of an older project, and what the host passed after it is newer. The fields go in as one history step; a value
-   * a command refuses goes to the host, and the other fields still go in.
+   * fields of an older project, and what the host passed after it is newer. The fields go in as one history step; a
+   * value a command refuses goes to the host, and the other fields still go in.
    */
   private carry(commands: ReadonlyArray<ProjectCommand>): void {
     if (commands.length === 0) return;
@@ -246,7 +246,10 @@ export class Editor implements MountedEditor {
     this.session.setView({ editable: this.editable && this.drafts.status !== "opening" });
   }
 
-  /** A command was refused and nothing changed (the user's keys caused it, or a value the host passed): tell the host once, in the current language. */
+  /**
+   * A command was refused and nothing changed (the user's keys caused it, or a value the host passed): tell the host
+   * once, in the current language.
+   */
   private refused(diagnostics: ReadonlyArray<Diagnostic>): void {
     const first = diagnostics[0];
     if (first === undefined) return;
