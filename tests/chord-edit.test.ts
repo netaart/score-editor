@@ -10,6 +10,7 @@ import {
   type EditingSession,
   nearestChordSlot,
   type SongProject,
+  splitChordName,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
@@ -228,5 +229,38 @@ describe("the names a chord picker offers", () => {
 
     expect(names).toHaveLength(35 * 15 * 2);
     expect(refused).toEqual([]);
+  });
+});
+
+describe("splitting a chord name by a vocabulary", () => {
+  const song2 = song2Dialect.constraints.chords;
+
+  it("gives the root, the quality and the bass of a name the vocabulary has", () => {
+    expect(splitChordName("Am", song2)).toEqual({ root: "A", quality: "m", bass: null });
+    expect(splitChordName("Bb", song2)).toEqual({ root: "Bb", quality: "", bass: null });
+    expect(splitChordName("Cdim7", song2)).toEqual({ root: "C", quality: "dim7", bass: null });
+    expect(splitChordName("Bbm7b5", song2)).toEqual({ root: "Bb", quality: "m7b5", bass: null });
+    expect(splitChordName("F#m7/C#", song2)).toEqual({ root: "F#", quality: "m7", bass: "C#" });
+    expect(splitChordName("Dbb/Ab", song2)).toEqual({ root: "Dbb", quality: "", bass: "Ab" });
+  });
+
+  it("gives nothing for a name the vocabulary does not have", () => {
+    for (const name of ["", "c", "Cmaj", "CM7", "C13", "H", "C/", "C/E/G", "C/3", "C /E", "/E", "C#/", "Am7b"]) {
+      expect(splitChordName(name, song2), name).toBeNull();
+    }
+  });
+
+  it("gives nothing for a name with a bass where the vocabulary has no slash bass", () => {
+    const flat = { ...song2, slashBass: false };
+    expect(splitChordName("C/E", flat)).toBeNull();
+    expect(splitChordName("C", flat)).toEqual({ root: "C", quality: "", bass: null });
+  });
+
+  it("follows a narrower vocabulary", () => {
+    const narrow = { roots: ["C", "Bb"], qualities: ["", "7"], slashBass: true };
+    expect(splitChordName("Bb7/C", narrow)).toEqual({ root: "Bb", quality: "7", bass: "C" });
+    expect(splitChordName("Cm", narrow)).toBeNull();
+    expect(splitChordName("D", narrow)).toBeNull();
+    expect(splitChordName("C/D", narrow)).toBeNull();
   });
 });

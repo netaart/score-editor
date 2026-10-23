@@ -35,3 +35,37 @@ export function chordChoices(vocabulary: ChordVocabulary): ChordChoices {
   }
   return { letters, qualities: vocabulary.qualities, slashBass: vocabulary.slashBass };
 }
+
+/** A chord name taken apart: its root, its quality (the empty string for a major triad) and its bass, if it has one. */
+export interface ChordNameParts {
+  readonly root: string;
+  readonly quality: string;
+  readonly bass: string | null;
+}
+
+/** The root and quality that make up all of `text`, preferring the longest root that fits. */
+function rootAndQuality(text: string, vocabulary: ChordVocabulary): { root: string; quality: string } | null {
+  const roots = [...vocabulary.roots].sort((a, b) => b.length - a.length);
+  for (const root of roots) {
+    if (!text.startsWith(root)) continue;
+    const quality = text.slice(root.length);
+    if (vocabulary.qualities.includes(quality)) return { root, quality };
+  }
+  return null;
+}
+
+/**
+ * Takes `name` apart by `vocabulary`: a root and one quality, then, where the vocabulary has slash bass, optionally a
+ * slash and a root. Null when the name is not exactly that, so a name is accepted if and only if this gives parts.
+ */
+export function splitChordName(name: string, vocabulary: ChordVocabulary): ChordNameParts | null {
+  const slash = name.indexOf("/");
+  if (slash < 0) {
+    const found = rootAndQuality(name, vocabulary);
+    return found && { ...found, bass: null };
+  }
+  if (!vocabulary.slashBass || name.indexOf("/", slash + 1) >= 0) return null;
+  const bass = name.slice(slash + 1);
+  const found = rootAndQuality(name.slice(0, slash), vocabulary);
+  return found && vocabulary.roots.includes(bass) ? { ...found, bass } : null;
+}
