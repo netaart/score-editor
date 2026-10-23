@@ -168,6 +168,7 @@ const ownerGroups = {
     "mountStaleNotice",
     "mountViewSwitch",
     "mountSynthPreview",
+    "mountLyricTrack",
     "previewPlayer",
     "previewNote",
     "PreviewPlayer",

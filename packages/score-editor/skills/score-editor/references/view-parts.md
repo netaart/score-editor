@@ -24,6 +24,7 @@ added; calling it twice is harmless.
 | `mountStaleNotice(el, session)` | One sentence while the text view holds text the project did not take, or nothing. | — |
 | `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
+| `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). | `AxisPartOptions` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
 voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean }`:
@@ -127,6 +128,37 @@ mountToolbar(document.querySelector(".toolbar")!, session, { hintId: "score-hint
 mountVoiceTrack(document.querySelector(".vocal")!, session, { voice: "Vocal", onRefused });
 
 session.setView({ editable: false }); // every part follows: no control, no selection, no keys
+```
+
+## The lyric track
+
+`mountLyricTrack` is the bottom track of the arrangement in the default editor, and a part like the others: it follows the
+session's zoom, scroll and language, and takes `{ scroller?, onRefused? }`. A phrase block says its counts in words for a
+screen reader ("equal" or "differ"), not only in colour. Lines that are not on bars, or whose phrase no longer fits the
+score, are listed under the lane and counted.
+
+While `session.view.editable` is true, each edit is one command and one undo step, and a refusal is said in the part's live
+region and sent to `onRefused`, as for the other parts:
+
+| The user | What happens |
+| --- | --- |
+| Clicks or taps a phrase, or a line in the unaligned list | Chooses the line and opens its text in an editor under the lane. |
+| Types in the editor, then Enter or leaves the box | `setLyricLineText`, only when the text changed. Escape gives the text up. |
+| Presses Split at caret, Merge with next, Delete line | `splitLyricLine` (with the bar when the line is on bars), `mergeLyricLines`, `deleteLyricLine`. |
+| Presses New line, types, presses Add | `insertLyricLine` at the end, into the unaligned area. |
+| Drags the handle at an edge of a phrase | `setLyricLinePhrase` to the nearest bar line; when two lines share the edge, both commands go as one step (`session.dispatchAll`). Escape gives the drag up. |
+| Drags the grip of an unaligned line onto a bar | `setLyricLinePhrase` with a one-bar phrase on that bar; a bar that already has a line is refused. |
+| Types a bar number in the editor of an unaligned line and presses Place on bar | The same one-bar phrase, with no drag. |
+| Tab, then Left and Right, Home and End, Enter or Space, Delete or Backspace, Escape | The phrases are one tab stop; the arrows step from line to line and choose each; Enter or Space moves to the text editor; Delete or Backspace removes the line; Escape drops the choice. A handle is a slider: its Left and Right keys move the edge by one bar. |
+
+A finger's slide on empty track space scrolls; only a handle or a grip starts a drag, and no long press is needed. A
+host that draws its own lyric view reuses the rules the track uses, with no DOM (see the headless layer: `lyricRows`,
+`lyricBoundaryPlan`, `lyricDropPlan`, `lyricSplitCommand`).
+
+```ts
+import { mountLyricTrack } from "@neta-art/score-editor";
+
+mountLyricTrack(document.querySelector(".lyrics")!, session, { onRefused }); // its own scroll surface, like a voice track
 ```
 
 ## Usage
