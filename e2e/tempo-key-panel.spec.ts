@@ -108,3 +108,47 @@ test.describe("the tempo in the toolbar, refused and told", () => {
     await expect(tempoField(page)).toHaveAttribute("max", "400");
   });
 });
+
+const keyMenu = (page: Page) => toolbar(page).getByRole("combobox", { name: "Key" });
+
+test.describe("the key in the toolbar", () => {
+  test("lists the dialect's major and minor keys, with the score's key chosen", async ({ page, harness }) => {
+    await openSong(harness, SONG.replace("K:C", "K:D"));
+
+    await expect(keyMenu(page)).toHaveValue("D");
+    const major = keyMenu(page).locator('optgroup[label="Major"] > option');
+    const minor = keyMenu(page).locator('optgroup[label="Minor"] > option');
+    await expect(major).toHaveCount(15);
+    await expect(minor).toHaveCount(15);
+    await expect(major.filter({ hasText: /^Eb$/ })).toHaveCount(1);
+    await expect(minor.filter({ hasText: /^F#m$/ })).toHaveCount(1);
+  });
+
+  test("choosing a key moves the notes there by the shortest way and the signature with them, as one undo step", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+    await expect(keyMenu(page)).toHaveValue("C");
+
+    await keyMenu(page).selectOption("G");
+
+    // C to G is five semitones down, not seven up: C D E F | G become G A B C | D, an octave and a bit lower.
+    const moved = SONG.replace("K:C", "K:G").replace("C4D4E4F4|G16|", "G,4A,4B,4C4|D16|");
+    await expect.poll(() => scoreText(page)).toBe(moved);
+    await expect(keyMenu(page)).toHaveValue("G");
+
+    await press(undoButton(page));
+    expect(await scoreText(page)).toBe(SONG);
+    await expect(keyMenu(page)).toHaveValue("C");
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("is there while the editor can edit and not while it is read-only", async ({ page, harness }) => {
+    await openSong(harness, SONG, {}, { editable: false });
+    await expect(keyMenu(page)).toBeHidden();
+    await harness.layout.setEditable(true);
+    await expect(keyMenu(page)).toBeVisible();
+  });
+});
