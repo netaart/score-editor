@@ -561,3 +561,110 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await expect(zh.getByText("3 / 2,000 字")).toBeVisible();
   });
 });
+
+test.describe("the controls in the default editor at the window's width", () => {
+  const project = { style: "warm pop, 100 BPM", scoreMode: "melody", seed: 3, lyrics: "[a]\nla la" };
+  const editorProjectButton = (page: Page) => page.getByRole("button", { name: /^Project/ });
+  /** The popover itself: the box that is placed, and that has the panel inside it. */
+  const editorPopover = (page: Page) => page.getByRole("region", { name: "Project" }).locator("xpath=..");
+  const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
+
+  test("are in the default editor: tempo, key, transpose and the Project button, and the panel opens", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: SONG }, project });
+    await expect(page.getByRole("spinbutton", { name: "Tempo (BPM)" })).toHaveValue("100");
+    await expect(page.getByRole("combobox", { name: "Key" })).toHaveValue("C");
+    await expect(page.getByRole("button", { name: "Transpose up a semitone" })).toBeVisible();
+
+    await press(editorProjectButton(page));
+    await expect(page.getByRole("textbox", { name: "Style description" })).toHaveValue("warm pop, 100 BPM");
+  });
+
+  test("in a 320 pixel box the two transpose buttons stay on one line and nothing is wider than the box", async ({
+    page,
+    harness,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 700 });
+    await harness.mount({ score: { text: SONG }, project });
+    const down = await box(page.getByRole("button", { name: "Transpose down a semitone" }));
+    const up = await box(page.getByRole("button", { name: "Transpose up a semitone" }));
+    expect(Math.abs(down.y - up.y)).toBeLessThan(1);
+    expect(down.x + down.width).toBeLessThanOrEqual(up.x + 1);
+    for (const control of [
+      page.getByRole("spinbutton", { name: "Tempo (BPM)" }),
+      page.getByRole("combobox", { name: "Key" }),
+      page.getByRole("button", { name: "Transpose up a semitone" }),
+      editorProjectButton(page),
+    ]) {
+      const found = await box(control);
+      expect(found.x).toBeGreaterThanOrEqual(0);
+      expect(found.x + found.width).toBeLessThanOrEqual(320);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  });
+
+  test("on a window narrower than 40em the panel spans the window under the button", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await page.setViewportSize({ width: 500, height: 700 });
+    await harness.mount({ score: { text: SONG }, project });
+    await press(editorProjectButton(page));
+    const opened = await box(editorPopover(page));
+    const button = await box(editorProjectButton(page));
+    expect(opened.x).toBeCloseTo(8, 0);
+    expect(opened.x + opened.width).toBeCloseTo(492, 0);
+    expect(opened.y).toBeGreaterThanOrEqual(button.y + button.height);
+  });
+
+  test("on a wide window the panel stays under its button, inside the window", async ({ page, harness, press }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await harness.mount({ score: { text: SONG }, project });
+    await press(editorProjectButton(page));
+    const opened = await box(editorPopover(page));
+    const button = await box(editorProjectButton(page));
+    expect(opened.x).toBeGreaterThanOrEqual(8 - 0.5);
+    expect(opened.x + opened.width).toBeLessThanOrEqual(1280 - 8 + 0.5);
+    expect(opened.y).toBeGreaterThanOrEqual(button.y + button.height);
+    expect(opened.width).toBeLessThan(500);
+  });
+
+  test("where the pointer is coarse the fields are 16 pixels and the controls 36 pixels high", async ({
+    page,
+    harness,
+    isMobile,
+    press,
+  }) => {
+    test.skip(!isMobile, "a coarse pointer is the phone project's");
+    await harness.mount({ score: { text: withChords }, project });
+    await press(editorProjectButton(page));
+    const fontSize = (target: Locator) => target.evaluate((el) => getComputedStyle(el).fontSize);
+    for (const field of [
+      page.getByRole("spinbutton", { name: "Tempo (BPM)" }),
+      page.getByRole("combobox", { name: "Key" }),
+      page.getByRole("textbox", { name: "Style description" }),
+      page.getByRole("spinbutton", { name: "Seed" }),
+    ]) {
+      expect(await fontSize(field)).toBe("16px");
+    }
+    for (const control of [
+      page.getByRole("spinbutton", { name: "Tempo (BPM)" }),
+      page.getByRole("combobox", { name: "Key" }),
+      page.getByRole("button", { name: "Transpose up a semitone" }),
+      page.getByRole("button", { name: "Transpose down a semitone" }),
+      editorProjectButton(page),
+      page.getByRole("spinbutton", { name: "Seed" }),
+      page.getByRole("button", { name: "Clear the seed" }),
+      page.getByRole("button", { name: "Delete all chords" }),
+    ]) {
+      expect((await box(control)).height).toBeGreaterThanOrEqual(36);
+    }
+    expect((await box(page.getByRole("radio", { name: "Full" }).locator("xpath=.."))).height).toBeGreaterThanOrEqual(
+      36,
+    );
+  });
+});
