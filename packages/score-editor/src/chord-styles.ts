@@ -55,7 +55,6 @@ export const chordCss = `
 }
 .sce-root.sce-part-chord-track[data-editable="true"] .sce-timeline {
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
 }
 @media (forced-colors: active) {
   .sce-root .sce-chord-hover {
@@ -63,6 +62,10 @@ export const chordCss = `
   }
   .sce-root :is(.sce-chord-cursor[data-open], .sce-chord-cursor:focus-visible) {
     border-color: CanvasText;
+  }
+  .sce-root .sce-chip[aria-checked="true"] {
+    background: Highlight;
+    color: HighlightText;
   }
 }
 
@@ -113,17 +116,31 @@ export const chordCss = `
   font-size: 0.92em;
 }
 .sce-root .sce-chip-row {
+  display: grid;
+  gap: 4px;
+}
+/* The letters and the spellings keep their columns, so a choice stays where it was when the root changes. */
+.sce-root .sce-chip-letters {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.sce-root .sce-chip-spellings {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.sce-root .sce-picker-bass-body .sce-chip-letters {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.sce-root .sce-chip-types {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
 }
 .sce-root .sce-chip {
   justify-content: center;
-  padding: 0 8px;
+  min-width: 0;
+  padding: 0 4px;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root .sce-chip-letters .sce-chip {
-  min-width: 2.4em;
+.sce-root .sce-chip-types .sce-chip {
+  padding: 0 8px;
 }
 .sce-root .sce-chip[aria-checked="true"],
 .sce-root .sce-picker-primary {
@@ -172,9 +189,6 @@ export const chordCss = `
 @media (pointer: coarse) {
   .sce-root .sce-chip-row {
     gap: 6px;
-  }
-  .sce-root .sce-chip-letters .sce-chip {
-    min-width: 40px;
   }
 }
 `;

@@ -283,6 +283,8 @@ export function mountChordPicker(
     function update(): void {
       readout.textContent = compose(draft);
       if (!letters || !accidentals || !types) return;
+      // Opening the bass note or choosing a spelling changes the height, so the picker is placed again.
+      const grows = panel.matches(":popover-open");
       letters.set(letterItems, letterOf(draft.root));
       accidentals.set(spellings(draft.root), draft.root);
       types.set(
@@ -300,6 +302,7 @@ export function mountChordPicker(
         bassAccidentals.set(draft.bass === null ? [] : spellings(draft.bass), draft.bass);
         bassAccidentals.element.hidden = draft.bass === null;
       }
+      if (grows) place(panel, request.anchor);
     }
 
     const actions = create(doc, "div", "sce-picker-actions", panel);
