@@ -117,6 +117,17 @@ export function mountChordEditing(
     return area.width > 0 ? ((clientX - area.left) / area.width) * d.ticks : 0;
   }
 
+  /**
+   * The place a press at `event` takes: the start of the chord whose name is under it, when one is, since pressing a chord
+   * is asking to change it; otherwise the start nearest to it.
+   */
+  function slotUnder(d: Drawn, event: MouseEvent): ChordSlot | null {
+    const item = event.target instanceof Element ? event.target.closest(".sce-chord") : null;
+    const chord = item ? d.score.chords[Array.prototype.indexOf.call(d.timeline.children, item)] : undefined;
+    const named = chord ? d.slots.find((slot) => slot.start === chord.start) : undefined;
+    return named ?? nearestChordSlot(d.slots, tickAt(d, event.clientX));
+  }
+
   function frameSlot(element: HTMLElement, slot: ChordSlot): void {
     element.style.setProperty("--t", String(slot.start));
     element.style.setProperty("--w", String(slot.duration));
@@ -212,7 +223,7 @@ export function mountChordEditing(
         hideHover();
         return;
       }
-      const slot = nearestChordSlot(d.slots, tickAt(d, event.clientX));
+      const slot = slotUnder(d, event);
       if (!slot) return;
       frameSlot(d.hover, slot);
       d.hover.hidden = false;
@@ -237,7 +248,7 @@ export function mountChordEditing(
       }
       if (!start || !(event.target instanceof Element) || !d.timeline.contains(event.target)) return;
       if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > SLOP) return;
-      const slot = nearestChordSlot(d.slots, tickAt(d, event.clientX));
+      const slot = slotUnder(d, event);
       if (slot) openPicker(d, slot);
     },
     { signal },
