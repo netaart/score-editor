@@ -1,6 +1,8 @@
 // ABOUTME: filterNotes: the notes of a score that satisfy a set of conditions, as ids. Pure: it reads the score and nothing else.
 // ABOUTME: A tie chain counts as one note and a rest as none; conditions combine with "and", and invert takes the others.
+import { effectiveKeyAt } from "./commands-shared";
 import type { Note, Score } from "./score";
+import { keyPitchClasses } from "./spelling";
 
 /** An inclusive range of whole or fractional numbers; a bound that is not given is open. */
 interface Range {
@@ -18,6 +20,13 @@ export interface NoteFilter {
   readonly pitch?: Range;
   /** Ticks. A note passes when it starts at `from` or later and before `to`, so ranges that meet share no note. */
   readonly time?: { readonly from?: number; readonly to?: number };
+  /** Ticks, both bounds inclusive: the length of the whole note, a tie chain counted as one. */
+  readonly duration?: Range;
+  /**
+   * Whether the pitch class of the note is in the scale of the key in force where the note starts ("in"), or is not ("out").
+   * A minor key counts as its natural minor. A note whose key cannot be read is neither in nor out.
+   */
+  readonly key?: "in" | "out";
 }
 
 /** One note as the filter sees it: a tie chain, or a single note that is tied to nothing. */
@@ -65,6 +74,14 @@ function chainsOf(score: Score): Chain[] {
   return chains;
 }
 
+/** Whether the note is in the key in force at its start; null when that key cannot be read. */
+function inKey(score: Score, chain: Chain, scales: Map<string, ReadonlySet<number> | null>): boolean | null {
+  const key = effectiveKeyAt(score, chain.start);
+  if (!scales.has(key)) scales.set(key, keyPitchClasses(key));
+  const scale = scales.get(key);
+  return scale === undefined || scale === null ? null : scale.has(chain.midi % 12);
+}
+
 function within(value: number, range: Range): boolean {
   return (range.min === undefined || value >= range.min) && (range.max === undefined || value <= range.max);
 }
@@ -79,9 +96,12 @@ function startsIn(start: number, time: { readonly from?: number; readonly to?: n
  */
 export function filterNotes(score: Score, filter: NoteFilter): string[] {
   const picked = new Set<string>();
+  const scales = new Map<string, ReadonlySet<number> | null>();
   for (const chain of chainsOf(score)) {
     if (filter.pitch !== undefined && !within(chain.midi, filter.pitch)) continue;
     if (filter.time !== undefined && !startsIn(chain.start, filter.time)) continue;
+    if (filter.duration !== undefined && !within(chain.duration, filter.duration)) continue;
+    if (filter.key !== undefined && inKey(score, chain, scales) !== (filter.key === "in")) continue;
     for (const member of chain.members) picked.add(member.id);
   }
   return score.notes.filter((note) => picked.has(note.id)).map((note) => note.id);

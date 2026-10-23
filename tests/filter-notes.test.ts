@@ -88,3 +88,59 @@ describe("the time condition", () => {
     expect(filterNotes(MELODY, { time: { from: 3072 } })).toEqual([ID.E5]);
   });
 });
+
+describe("the duration condition", () => {
+  it("takes the notes from the shortest to the longest length, both inclusive", () => {
+    expect(filterNotes(MELODY, { duration: { min: 512, max: 512 } })).toEqual([ID.G4, ID.C5]);
+    expect(filterNotes(MELODY, { duration: { max: 256 } })).toEqual([ID.C4, ID.D4, ID.E4, ID.F4, ID.A4, ID.E5]);
+  });
+
+  it("measures a tie chain as one note, the length of all its segments", () => {
+    // D5 is two 512-tick segments joined over the bar line: one note of 1024, not two of 512.
+    expect(filterNotes(MELODY, { duration: { min: 1024 } })).toEqual([ID.D5, ID.D5tail]);
+    expect(filterNotes(MELODY, { duration: { min: 512, max: 768 } })).toEqual([ID.G4, ID.C5]);
+  });
+});
+
+describe("the key condition", () => {
+  /**
+   * C major until tick 512, G major from there. Pitch classes by hand: C major is C D E F G A B, G major is G A B C D E F#.
+   *   @0 C4 60 in C        @256 D#4 63 out of C   @512 F#4 66 in G (F in the G key signature)   @768 Bb4 70 out of G
+   *   @1024 G4 67 in G     @1280 F#4 66 in G      @1536 F4 65 (natural sign) out of G          @1792 A4 69 in G
+   */
+  const CHANGING = vocal("C4^D4[K:G]F4_B4|G4F4=F4A4|");
+
+  it("takes the notes whose pitch class is in the key that is in force where the note starts", () => {
+    expect(filterNotes(CHANGING, { key: "in" })).toEqual([
+      "Vocal:0",
+      "Vocal:512",
+      "Vocal:1024",
+      "Vocal:1280",
+      "Vocal:1792",
+    ]);
+  });
+
+  it("takes the others when asked for the notes out of the key", () => {
+    expect(filterNotes(CHANGING, { key: "out" })).toEqual(["Vocal:256", "Vocal:768", "Vocal:1536"]);
+  });
+
+  it("reads a minor key as its natural minor scale and a flat key by pitch class, not by spelling", () => {
+    // A minor: A B C D E F G. @0 A4 69 in, @256 G#4 68 out, @512 F4 65 in, @768 F#4 66 out.
+    const minor = vocal("A4^G4F4^F4|", "Am");
+    expect(filterNotes(minor, { key: "in" })).toEqual(["Vocal:0", "Vocal:512"]);
+    expect(filterNotes(minor, { key: "out" })).toEqual(["Vocal:256", "Vocal:768"]);
+    // E flat major: Eb F G Ab Bb C D. @0 E4 (flat by the key) 63 in, @256 E natural 64 out, @512 B4 (flat by the key) 70 in,
+    // @768 D#4 63 in: the same pitch as Eb.
+    const flat = vocal("E4=E4B4^D4|", "Eb");
+    expect(filterNotes(flat, { key: "in" })).toEqual(["Vocal:0", "Vocal:512", "Vocal:768"]);
+    expect(filterNotes(flat, { key: "out" })).toEqual(["Vocal:256"]);
+  });
+
+  it("judges a tie chain by the key at its start", () => {
+    // The G4 at 768 is tied over the bar line, and the key becomes D flat major at 1024, where a G is out of the key. The
+    // chain starts in C major, where G is in, so both of its segments are in and none is out.
+    const tied = vocal("C4D4E4G4-|[K:Db]G4z4z8|");
+    expect(filterNotes(tied, { key: "in" })).toEqual(["Vocal:0", "Vocal:256", "Vocal:512", "Vocal:768", "Vocal:1024"]);
+    expect(filterNotes(tied, { key: "out" })).toEqual([]);
+  });
+});
