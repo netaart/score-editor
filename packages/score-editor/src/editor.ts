@@ -8,6 +8,7 @@ import { mountCutNotice } from "./cut-notice";
 import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { createDraftBinding, type DraftBinding, type DraftTarget, sameOriginal } from "./draft-binding";
+import { mountDraftConflict } from "./draft-conflict";
 import { installEditKeys } from "./edit-keys";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
@@ -99,6 +100,7 @@ export class Editor implements MountedEditor {
     this.parts.push(
       mountToolbar(this.root, this.session, { hintId, onRefused, viewSwitch: true, draftKeeper: this.drafts }),
     );
+    this.parts.push(mountDraftConflict(this.root, this.session, this.drafts));
     this.parts.push(mountCutNotice(this.root, this.session));
     this.stalePane = pane(this.root);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));

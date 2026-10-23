@@ -79,6 +79,13 @@ export interface Messages {
   draftSaveFailed: string;
   /** What the badge says in place of "Read only" while a draft keeper is still reading the host's store. */
   draftOpening: string;
+  /** The conflict strip: its name, the sentence that says what happened, and each way out with what it does. */
+  draftConflict: string;
+  draftConflictText: string;
+  draftOverwrite: string;
+  draftOverwriteNote: string;
+  draftLoadTheirs: string;
+  draftLoadTheirsNote: string;
 }
 
 const en: Messages = {
@@ -160,6 +167,13 @@ const en: Messages = {
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
   draftOpening: "Opening draft…",
+  draftConflict: "Draft conflict",
+  draftConflictText:
+    "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
+  draftOverwrite: "Overwrite with my version",
+  draftOverwriteNote: "The other version is replaced by yours.",
+  draftLoadTheirs: "Load the other version",
+  draftLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
 };
 
 const zh: Messages = {
@@ -234,6 +248,12 @@ const zh: Messages = {
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
   draftOpening: "正在打开草稿…",
+  draftConflict: "草稿冲突",
+  draftConflictText: "这份草稿在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
+  draftOverwrite: "用我的版本覆盖",
+  draftOverwriteNote: "对方的版本会被你的版本替换。",
+  draftLoadTheirs: "载入对方的版本",
+  draftLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
