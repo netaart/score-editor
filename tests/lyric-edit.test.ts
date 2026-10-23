@@ -161,7 +161,7 @@ describe("dragging the edge of a phrase", () => {
 
   it("moves a shared boundary right by shrinking the line that gives up bars first", () => {
     // "verse one" (bars 2-3) and "verse two" (bars 4-5) meet at the line before bar 4; the same worked list as the
-    // seam 2 case for a shared boundary.
+    // seam 1 case for a shared boundary.
     const plan = lyricBoundaryPlan(score, LINES, { line: 1, edge: "end", tick: 5 * BAR });
 
     expect(plan?.boundary).toBe(5);
