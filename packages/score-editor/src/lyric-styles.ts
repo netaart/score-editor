@@ -51,7 +51,9 @@ export const lyricCss = `
 .sce-root .sce-lyric-lane .sce-empty {
   position: sticky;
   top: 0;
+  z-index: 1;
   padding-top: 7px;
+  background: var(--sce-_bg);
 }
 .sce-root .sce-lyric-phrases,
 .sce-root .sce-lyric-syllables {
@@ -150,6 +152,13 @@ export const lyricCss = `
   overflow: hidden;
   border-left: 1px solid var(--sce-_line-strong);
   white-space: nowrap;
+}
+/* The strut fills the first line of the cell, so a syllable that does not fit beside it wraps to a line that is clipped away: left out whole. */
+.sce-root .sce-lyric-syl::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 100%;
 }
 
 /* The two edges of a phrase: a bar with a wide hit area round it; on a touch screen the area is a fingertip wide. */
@@ -252,7 +261,7 @@ export const lyricCss = `
   position: sticky;
   left: var(--sce-_keys);
   box-sizing: border-box;
-  width: min(36em, calc(100vw - var(--sce-_keys)));
+  width: min(36em, calc(var(--sce-_view, 100vw) - var(--sce-_keys)));
   padding: 6px 8px 8px;
 }
 .sce-root .sce-lyric-title {
@@ -361,7 +370,7 @@ export const lyricCss = `
   display: none;
 }
 .sce-root .sce-lyric-bar {
-  flex: 0 0 6em;
+  flex: 0 0 8em;
 }
 .sce-root .sce-lyric-actions {
   display: flex;

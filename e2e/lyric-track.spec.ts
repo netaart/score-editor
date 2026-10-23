@@ -1019,3 +1019,62 @@ test.describe("the life of the part", () => {
     expect(await harness.layout.retainedHtml()).toBe(drawn);
   });
 });
+
+test.describe("the room the track has", () => {
+  test("a syllable that does not fit its cell is left out whole, never cut in the middle of a glyph", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    const cells = lyrics(page).locator(".sce-lyric-syl");
+    // Where each cell's text is drawn, against the cell: inside it, or on a line the cell clips away.
+    const shown = () =>
+      cells.evaluateAll((els) =>
+        els.map((cell) => {
+          const range = document.createRange();
+          range.selectNodeContents(cell);
+          const text = range.getBoundingClientRect();
+          const frame = cell.getBoundingClientRect();
+          const inside = text.right <= frame.right + 0.5 && text.bottom <= frame.bottom + 0.5;
+          const clippedAway = text.top >= frame.bottom - 1 || text.left >= frame.right - 1;
+          return inside ? "shown" : clippedAway ? "left out" : "cut";
+        }),
+      );
+    expect(new Set(await shown())).toEqual(new Set(["shown"]));
+
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    const states = await shown();
+    expect(states).not.toContain("cut");
+    expect(states).toContain("left out");
+  });
+
+  test("the panel is no wider than the box the editor is in, whatever the page's width", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await lyrics(page).evaluate((el) => {
+      (el.parentElement as HTMLElement).style.width = "320px";
+    });
+    await press(phrase(page, 2));
+    const panel = await box(lyrics(page).locator(".sce-lyric-panel"));
+    const surface = await box(region(page));
+    expect(panel.x + panel.width).toBeLessThanOrEqual(surface.x + surface.width + 0.5);
+    expect(panel.width).toBeGreaterThan(200);
+  });
+
+  test("the fields say what they are for in words before anything is typed", async ({ page, harness, press }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await press(unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ }));
+    await expect(lyrics(page).getByRole("spinbutton", { name: "Bar number", exact: true })).toHaveAttribute(
+      "placeholder",
+      "Bar number",
+    );
+    await button(page, "New line").click();
+    await expect(lyrics(page).getByRole("textbox", { name: "New lyric line text", exact: true })).toHaveAttribute(
+      "placeholder",
+      "New lyric line text",
+    );
+  });
+});

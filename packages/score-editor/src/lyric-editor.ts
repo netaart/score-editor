@@ -87,6 +87,7 @@ export function createLyricEditor(
   bar.step = "1";
   bar.inputMode = "numeric";
   bar.setAttribute("aria-label", t.lyricBarField);
+  bar.placeholder = t.lyricBarField;
   const placeButton = create(doc, "button", "sce-button sce-lyric-button", place);
   placeButton.type = "button";
   placeButton.textContent = t.lyricPlace;
@@ -138,6 +139,7 @@ export function createLyricEditor(
       const name = next === "line" ? t.lyricTextLabel : t.lyricNewTextLabel;
       element.setAttribute("aria-label", next === "line" ? t.lyricEditorLabel(options.line) : name);
       input.setAttribute("aria-label", name);
+      input.placeholder = name;
       split.hidden = merge.hidden = remove.hidden = next === "new";
       add.hidden = next === "line";
       place.hidden = !options.canPlace;

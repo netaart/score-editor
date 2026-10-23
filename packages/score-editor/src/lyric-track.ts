@@ -92,6 +92,23 @@ interface Drawn {
 }
 
 /**
+ * Keeps `--sce-_view` on the part root as wide as the surface the track scrolls in, so the panel under the lane can be as wide
+ * as what is in view, whatever box the host gives the editor, and not as wide as the page.
+ */
+function followViewWidth(root: HTMLElement, surface: HTMLElement, signal: AbortSignal): void {
+  const fit = () => {
+    if (surface.clientWidth > 0) root.style.setProperty("--sce-_view", `${surface.clientWidth}px`);
+    else root.style.removeProperty("--sce-_view");
+  };
+  fit();
+  const Observer = root.ownerDocument.defaultView?.ResizeObserver;
+  if (!Observer) return;
+  const observer = new Observer(fit);
+  observer.observe(surface);
+  signal.addEventListener("abort", () => observer.disconnect(), { once: true });
+}
+
+/**
  * Mounts the lyric track on `el`. It draws from the session's project and follows its zoom, scroll and language: each
  * lyric line that sits on bars is a block over them with the number of its syllables over the number of its note starts,
  * green when the two are equal and yellow, with a broken line, when not; when they are equal each syllable stands at its
@@ -519,6 +536,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         live = region;
         refuse = sayRefusals(region, session, options?.onRefused);
         own.setAttribute("data-editable", String(session.view.editable));
+        followViewWidth(own, options?.scroller ?? own, signal);
         own.addEventListener("click", onClick, { signal });
         own.addEventListener("keydown", onKeyDown, { signal });
         installLyricPointer(own, signal, {
