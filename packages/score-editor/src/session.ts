@@ -145,6 +145,11 @@ export interface EditingSession {
    */
   dispatch(command: ScoreCommand | ProjectCommand): DispatchResult;
   /**
+   * Applies several commands as one step of the history, through the same path as `dispatch`. Any refused command
+   * refuses the whole list and changes nothing; the notices of the steps that were taken come back once each.
+   */
+  dispatchAll(commands: ReadonlyArray<ScoreCommand | ProjectCommand>): DispatchResult;
+  /**
    * What `dispatch` of `replaceScoreText` with `text` would say, without changing or announcing anything: the
    * diagnostics it would be refused with, the notices it would be taken with, and none when it would take the text
    * plainly. `isNoticeDiagnostic` tells the two apart; a result with no other diagnostic is a text the session takes. The
@@ -412,6 +417,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     dispatch(command) {
       return applyCommands([command], isProjectCommand(command) ? command : undefined);
+    },
+    dispatchAll(commands) {
+      return applyCommands(commands);
     },
     runTool(tool, values = {}) {
       const result = applyToolRequest(tool, { project, selection, values }, dialects);

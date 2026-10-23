@@ -1,12 +1,13 @@
 // ABOUTME: The default editor: one editing session and the public view parts, laid out in a toolbar, a scroller and a problem view.
 // ABOUTME: Everything it adds is registered so destroy() removes it: the parts remove their own, the frame removes the rest.
 
+import { applyProjectCommand } from "./apply";
 import { notesByVoice, pitchRangeOf } from "./arrangement";
 import { installZoomGestures } from "./axis";
 import { mountChordTrack } from "./chord-track";
 import type { ProjectCommand } from "./commands-project";
 import { mountCutNotice } from "./cut-notice";
-import { type Diagnostic, formatDiagnostic } from "./diagnostics";
+import { type Diagnostic, formatDiagnostic, isNoticeDiagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { createDraftBinding, type DraftBinding } from "./draft-binding";
 import { mountDraftConflict } from "./draft-conflict";
@@ -187,15 +188,33 @@ export class Editor implements MountedEditor {
 
   /**
    * Puts the fields the host changed into the session, once a draft being read has been put there: the draft holds the
-   * fields of an older project, and what the host passed after it is newer. A value a command refuses goes to the host.
+   * fields of an older project, and what the host passed after it is newer. The fields go in as one history step; a value
+   * a command refuses goes to the host, and the other fields still go in.
    */
   private carry(commands: ReadonlyArray<ProjectCommand>): void {
     if (commands.length === 0) return;
     this.drafts.afterOpening(() => {
-      for (const command of commands) {
-        const result = this.session.dispatch(command);
+      const dialect = this.options.dialects.find(this.session.project.modelId);
+      if (dialect === undefined) {
+        const result = this.session.dispatchAll(commands);
         if (!result.ok) this.refused(result.diagnostics);
+        return;
       }
+      const accepted: ProjectCommand[] = [];
+      let current = this.session.project;
+      for (const command of commands) {
+        const applied = applyProjectCommand(dialect, current, command);
+        const refusals = applied.diagnostics.filter((diagnostic) => !isNoticeDiagnostic(diagnostic));
+        if (refusals.length > 0) {
+          this.refused(refusals);
+          continue;
+        }
+        current = applied.project;
+        accepted.push(command);
+      }
+      if (accepted.length === 0) return;
+      const result = this.session.dispatchAll(accepted);
+      if (!result.ok) this.refused(result.diagnostics);
     });
   }
 
