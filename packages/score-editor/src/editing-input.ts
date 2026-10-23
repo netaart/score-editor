@@ -196,10 +196,19 @@ function pressNoteKey(session: EditingSession, input: EditingKeyInput): EditingI
   }
 }
 
-/** Whether Delete has a note to act on: the session is editable and a pitched note is selected. */
-export function canDeleteSelection(session: EditingSession): boolean {
+/**
+ * Whether the editing keys have a note to act on: the session is editable, the arrangement is shown and a pitched note
+ * is selected. Then the arrow keys move and resize the selection, and no key steps from note to note or moves the
+ * insertion point.
+ */
+export function canEditSelection(session: EditingSession): boolean {
   const score = readableScore(session);
   return session.view.editable && score !== null && pitchedSelection(score, session.selection).length > 0;
+}
+
+/** Whether Delete has a note to act on: the same notes the editing keys act on. */
+export function canDeleteSelection(session: EditingSession): boolean {
+  return canEditSelection(session);
 }
 
 /** Turns the selected notes into rests, as one edit. Nothing is handled when no selected note is pitched. */

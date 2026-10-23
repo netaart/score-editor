@@ -954,8 +954,7 @@ test.describe("a subset from the keyboard", () => {
 
     await page.keyboard.press("Alt+Shift+Space");
     await page.keyboard.press("Alt+Control+ArrowRight");
-    // Shift with the arrows is kept for what the spec plans for it, and Control with Shift for the selection keys.
-    await page.keyboard.press("Shift+ArrowRight");
+    // Control with Shift is kept for the selection keys; Shift with the arrows resizes the notes (move-resize.spec.ts).
     await page.keyboard.press("Control+Shift+ArrowRight");
     await page.keyboard.press("Control+Shift+Space");
     await expect(pitch(page, "D4")).toBeFocused();

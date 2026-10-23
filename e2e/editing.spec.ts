@@ -814,9 +814,10 @@ test.describe("selecting a note by keyboard", () => {
     // The ring says where the keys act when the keys brought the focus there; a pointer already knows.
     expect(await selected(page, D4).evaluate((el) => el.matches(":focus-visible"))).toBe(false);
 
-    await page.keyboard.press("ArrowRight");
-    await expect(selected(page, E4)).toBeFocused();
-    expect(await selected(page, E4).evaluate((el) => el.matches(":focus-visible"))).toBe(true);
+    // Control walks the focus; the plain arrows edit the selected note (move-resize.spec.ts).
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(note(page, E4)).toBeFocused();
+    expect(await note(page, E4).evaluate((el) => el.matches(":focus-visible"))).toBe(true);
   });
 
   test("Enter and Space select the note in focus without moving", async ({ page, harness }) => {
@@ -827,7 +828,7 @@ test.describe("selecting a note by keyboard", () => {
     await expect(selected(page, C4)).toBeFocused();
     expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
 
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Control+ArrowRight");
     await harness.layout.select([]);
     await page.keyboard.press("Space");
     await expect(selected(page, D4)).toBeFocused();
@@ -841,14 +842,16 @@ test.describe("selecting a note by keyboard", () => {
     await openTrack(harness);
     await tabToNotes(page);
 
+    // With no note selected the plain arrows step and select. Once one is selected they edit it, so the walk goes on with
+    // Control, which moves the focus alone.
     await page.keyboard.press("ArrowLeft");
     await expect(selected(page, C4)).toBeFocused();
     await page.keyboard.press("End");
     await expect(selected(page, G4)).toBeFocused();
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Control+ArrowRight");
     await expect(selected(page, G4)).toBeFocused();
-    await page.keyboard.press("ArrowLeft");
-    await expect(selected(page, F4)).toBeFocused();
+    await page.keyboard.press("Control+ArrowLeft");
+    await expect(note(page, F4)).toBeFocused();
     await page.keyboard.press("Home");
     await expect(selected(page, C4)).toBeFocused();
     expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
@@ -860,7 +863,8 @@ test.describe("selecting a note by keyboard", () => {
     await openTrack(harness);
     await tabToNotes(page);
     await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Control+ArrowRight");
+    await page.keyboard.press("Enter");
     await expect(selected(page, E4)).toBeFocused();
 
     await page.keyboard.press("Tab");
@@ -875,24 +879,24 @@ test.describe("selecting a note by keyboard", () => {
     harness,
   }) => {
     await openTrack(harness);
-    await harness.layout.select(["Vocal:256"]);
     await trackRegion(page).focus();
 
+    // With no note selected; with one selected the arrows edit it, whatever holds the focus (move-resize.spec.ts).
     await page.keyboard.press("Home");
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 0 });
     await page.keyboard.press("ArrowRight");
     expect(await harness.layout.insertionPoint()).toEqual({ tick: 256 });
-    expect(await harness.layout.selection()).toEqual(["Vocal:256"]);
+    expect(await harness.layout.selection()).toEqual([]);
   });
 
-  test("leaves a key with a modifier to the editing keys, so Shift and Ctrl keep their room", async ({
+  test("leaves a key with Alt, or with Control and Shift, to the others, so they keep their room", async ({
     page,
     harness,
   }) => {
     await openTrack(harness);
     await tabToNotes(page);
     await page.keyboard.press("Enter");
-    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Control+Shift+ArrowRight");
     await page.keyboard.press("Alt+ArrowRight");
     await expect(selected(page, C4)).toBeFocused();
     expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
@@ -909,7 +913,7 @@ test.describe("selecting a note by keyboard", () => {
     await expect(selected(page, D4)).toBeFocused();
     await expect(said(page)).toHaveText("");
 
-    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Control+ArrowRight");
     await harness.layout.select([]);
     await page.keyboard.press("Enter");
     await expect(said(page)).toHaveText("Selected E4, bar 1 beat 3");
@@ -924,8 +928,8 @@ test.describe("selecting a note by keyboard", () => {
     await press(note(page, D4));
     await expect(selected(page, D4)).toBeFocused();
 
-    await page.keyboard.press("ArrowRight");
-    await expect(selected(page, E4)).toBeFocused();
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(note(page, E4)).toBeFocused();
   });
 
   test("read-only offers no note to reach by Tab", async ({ page, harness }) => {
