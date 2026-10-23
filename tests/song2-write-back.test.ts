@@ -125,19 +125,56 @@ z16|z16|z16`);
     roundTrip(output);
   });
 
-  it("states a moved cut in Ins when a command outside the bar grid writes it", () => {
-    const input = `${H2}
+  describe("commands that do not change bars", () => {
+    const cutText = `${H2}
 K:C
+% a
 V: Vocal
 C16`;
-    const output = succeed(input, { type: "setTempo", bpm: 88 });
 
-    expect(output).toBe(`${H2.replace("Q:1/4=120", "Q:1/4=88")}
+    it("setTempo leaves the cut line without a closing barline", () => {
+      const output = succeed(cutText, { type: "setTempo", bpm: 97 });
+
+      expect(output).toBe(`${H2.replace("Q:1/4=120", "Q:1/4=97")}
 K:C
+% a
 V: Vocal
-C16|`);
-    const score = roundTrip(output);
-    expect(score.truncation).toEqual({ voice: "Ins", bar: 0, short: false });
+C16`);
+      expect(roundTrip(output).truncation).toEqual({ voice: "Vocal", bar: 1, short: false });
+    });
+
+    it("transpose by 2 leaves the cut line without a closing barline", () => {
+      const output = succeed(cutText, { type: "transpose", semitones: 2 });
+
+      expect(output).toBe(`${H2}
+K:D
+% a
+V: Vocal
+D16`);
+      expect(roundTrip(output).truncation).toEqual({ voice: "Vocal", bar: 1, short: false });
+    });
+
+    it("setKey leaves the cut line without a closing barline", () => {
+      const output = succeed(cutText, { type: "setKey", key: "D" });
+
+      expect(output).toBe(`${H2}
+K:D
+% a
+V: Vocal
+D16`);
+      expect(roundTrip(output).truncation).toEqual({ voice: "Vocal", bar: 1, short: false });
+    });
+
+    it("setChord leaves the cut line without a closing barline", () => {
+      const output = succeed(cutText, { type: "setChord", noteId: "Vocal:0", name: "C" });
+
+      expect(output).toBe(`${H2}
+K:C
+% a
+V: Vocal
+"C"C16`);
+      expect(roundTrip(output).truncation).toEqual({ voice: "Vocal", bar: 1, short: false });
+    });
   });
 
   it("keeps the Vocal bars when the Ins block is missing", () => {

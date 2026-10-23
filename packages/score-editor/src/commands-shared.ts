@@ -40,6 +40,19 @@ export function withoutUnfinishedChord(truncation: Truncation | null): Truncatio
   return { voice: truncation.voice, bar: truncation.bar, short: truncation.short };
 }
 
+/**
+ * RULES.md W16: only a bar command may move a boundary cut in Vocal into Ins when Ins has no
+ * measure at or after it. The cut goes to the first measure Ins lacks.
+ */
+export function writableCut(score: Pick<Score, "voices" | "notes">, truncation: Truncation | null): Truncation | null {
+  if (truncation === null || truncation.voice !== "Vocal" || truncation.short) return truncation;
+  if (!score.voices.includes("Ins")) return truncation;
+  let end = 0;
+  for (const note of score.notes) if (note.voice === "Ins" && note.bar + 1 > end) end = note.bar + 1;
+  if (end >= truncation.bar) return truncation;
+  return { voice: "Ins", bar: end, short: false };
+}
+
 /** True when the cut measure has no finished note, rest or chord left, so the writer drops its line. */
 function cutBarIsEmptyAfterChords(score: Score, chords: ReadonlyArray<Chord>, truncation: Truncation | null): boolean {
   if (truncation === null || !truncation.short) return false;
