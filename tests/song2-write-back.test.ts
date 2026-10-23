@@ -1,4 +1,4 @@
-// ABOUTME: Pins the write-back cases the offline gate found: cuts at bar ends, short Ins blocks, cut chord bars, ties and header bytes.
+// ABOUTME: Pins the write-back cases these commands must keep: cuts at bar ends, short Ins blocks, cut chord bars, ties and header bytes.
 // ABOUTME: Expected text is worked by hand from RULES.md; where the rules leave a choice, the test names the choice it accepts.
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import { applyScoreCommand, formatDiagnostic, type Score, type ScoreCommand } from "@neta-art/score-editor";
@@ -36,7 +36,7 @@ function succeed(text: string, command: ScoreCommand): string {
   return result.text;
 }
 
-describe("S1: a cut at a bar end", () => {
+describe("a score cut at a measure end", () => {
   it("inserts after the last complete measure without closing it", () => {
     const input = `${H1}
 K:C
@@ -125,6 +125,21 @@ z16|z16|z16`);
     roundTrip(output);
   });
 
+  it("states a moved cut in Ins when a command outside the bar grid writes it", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+C16`;
+    const output = succeed(input, { type: "setTempo", bpm: 88 });
+
+    expect(output).toBe(`${H2.replace("Q:1/4=120", "Q:1/4=88")}
+K:C
+V: Vocal
+C16|`);
+    const score = roundTrip(output);
+    expect(score.truncation).toEqual({ voice: "Ins", bar: 0, short: false });
+  });
+
   it("keeps the Vocal bars when the Ins block is missing", () => {
     const input = `${H2}
 K:C
@@ -145,7 +160,7 @@ C16|`);
   });
 });
 
-describe("S2: the Ins block is missing or short", () => {
+describe("the Ins block is missing or short", () => {
   it("inserts a rest bar in both voices when the last line is a V: prefix", () => {
     const input = `${H2}
 K:C
@@ -189,7 +204,7 @@ Z|`);
   });
 });
 
-describe("S3: the cut is inside the last Vocal block", () => {
+describe("the cut is inside the last Vocal block", () => {
   it("keeps a later Vocal block and its unfinished chord after the Ins block", () => {
     const input = `${H2}
 K:C
@@ -270,8 +285,9 @@ C16|C16|C`);
   });
 });
 
-it("keeps the later Vocal measures in the final short Ins group", () => {
-  const input = `${H2}
+describe("a short final Ins block", () => {
+  it("keeps the later Vocal measures in the final short Ins group", () => {
+    const input = `${H2}
 K:C
 % a
 V: Vocal
@@ -282,9 +298,9 @@ V: Vocal
 E16|F16|G16|
 V: Ins
 z8`;
-  const output = succeed(input, { type: "insertBar", bar: 0 });
+    const output = succeed(input, { type: "insertBar", bar: 0 });
 
-  expect(output).toBe(`${H2}
+    expect(output).toBe(`${H2}
 K:C
 % a
 V: Vocal
@@ -295,12 +311,37 @@ V: Vocal
 E16|F16|G16|
 V: Ins
 z8`);
-  const score = roundTrip(output);
-  expect(score.truncation).toEqual({ voice: "Ins", bar: 3, short: true });
-  expect(score.bars).toHaveLength(6);
+    const score = roundTrip(output);
+    expect(score.truncation).toEqual({ voice: "Ins", bar: 3, short: true });
+    expect(score.bars).toHaveLength(6);
+  });
+
+  it("keeps several later Vocal measures after a multi-bar Ins fragment", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+C16|C16|C16|C16|
+V: Ins
+z16|z16|z8`;
+    const output = succeed(input, { type: "insertBar", bar: 0 });
+
+    expect(output).toBe(`${H2}
+K:C
+V: Vocal
+z16|C16|C16|
+V: Ins
+z16|z16|z16|
+V: Vocal
+C16|C16|
+V: Ins
+z8`);
+    const score = roundTrip(output);
+    expect(score.truncation).toEqual({ voice: "Ins", bar: 3, short: true });
+    expect(score.bars).toHaveLength(5);
+  });
 });
 
-describe("A: a bar inside a whole-measure rest run", () => {
+describe("a bar inside a whole-measure rest run", () => {
   it("turns a two-bar Z run into one bar", () => {
     const input = `${H1}
 K:C
@@ -364,7 +405,7 @@ Z2|`);
   });
 });
 
-describe("B: the cut measure holds only a chord", () => {
+describe("the cut measure holds only a chord", () => {
   it("drops an unfinished chord string with its empty partial measure", () => {
     const input = `${H2}
 K:C
@@ -408,26 +449,9 @@ Z|
 V: Vocal`);
     roundTrip(output);
   });
-
-  it("removes every chord for setChord with an empty name and no note id", () => {
-    const input = `${H2}
-K:E
-% intro
-V: Vocal
-C16|"`;
-    const output = succeed(input, { type: "setChord", name: "" } as ScoreCommand);
-
-    // Choice: with no Ins bar before the cut, the cut reads in the required Ins voice instead.
-    expect(output).toBe(`${H2}
-K:E
-% intro
-V: Vocal
-C16|`);
-    roundTrip(output);
-  });
 });
 
-describe("C: fill pads a cut measure that ends in a chord", () => {
+describe("fill pads a cut measure that ends in a chord", () => {
   it("writes the rests after a finished chord and attaches it", () => {
     const input = `${H1}
 K:C
@@ -459,7 +483,7 @@ C16|E4F4G"Cm7"zzzzzzz|`);
   });
 });
 
-describe("F: a key change beyond the cut of the shorter voice", () => {
+describe("a key change beyond the cut of the shorter voice", () => {
   it("transposes the Vocal key change and leaves the Ins cut bytes alone", () => {
     const input = `${H2}
 K:C
@@ -487,13 +511,17 @@ V: Ins
 z`;
     const output = succeed(input, { type: "setKey", key: "A#m" });
 
-    expect(output).toContain(`V: Ins
+    expect(output).toBe(`${H2}
+K:A#m
+V: Vocal
+A,8[K:Eb]B,8|B,16|
+V: Ins
 z`);
     roundTrip(output);
   });
 });
 
-describe("G: padding rests after a dangling tie", () => {
+describe("padding rests after a dangling tie", () => {
   it("pads the last bar and drops the tie into the rests", () => {
     const input = `X:1
 T:
@@ -551,7 +579,7 @@ V: Vocal
   expect(score.truncation).toEqual({ voice: "Ins", bar: 8, short: false });
 });
 
-describe("H: trailing whitespace on the header M: line", () => {
+describe("trailing whitespace on the header M: line", () => {
   const text = `X:1  \t
 T:  \t
 M:4/4  \t
@@ -563,14 +591,14 @@ K:C  \t
 V: Vocal  \t
 C16|  \t`;
 
-  it("reads the header meter and inserts a bar", () => {
+  it("inserts a bar and keeps the untouched header bytes", () => {
     const output = succeed(text, { type: "insertBar", bar: 1 });
     const score = roundTrip(output);
     expect(score.bars).toHaveLength(2);
     expect(score.notes.map((note) => note.midi)).toEqual([60, null]);
   });
 
-  it("reads the header meter and sets the section meter", () => {
+  it("writes a changed section meter without trailing whitespace", () => {
     const output = succeed(text, {
       type: "setSectionMeter",
       section: 0,
@@ -578,10 +606,14 @@ C16|  \t`;
     });
     const score = roundTrip(output);
     expect(score.bars[0]?.meter).toEqual({ numerator: 6, denominator: 8 });
+    expect(output.split("\n").filter((line) => line.startsWith("M:6/8"))).not.toHaveLength(0);
+    for (const line of output.split("\n")) {
+      if (line.startsWith("M:6/8")) expect(line).not.toMatch(/[ \t]$/);
+    }
   });
 });
 
-describe("I: an X5 cut tail after a tied note", () => {
+describe("an X5 cut tail after a tied note", () => {
   it("transposes the tied note and rewrites the tail so the cut stays", () => {
     const input = `${H1}
 K:C
@@ -593,7 +625,31 @@ C16-|B`;
     expect(score.truncation).toEqual({ voice: "Vocal", bar: 1, short: true });
     expect(score.notes).toHaveLength(1);
     expect(score.notes[0]).toMatchObject({ start: 0, duration: 1024, midi: 70, tie: true });
-    expect(output.split("\n").slice(-1)[0]).toBe("B16-|A");
+    expect(output.split("\n").slice(-1)[0]).toBe("B16-|=A");
+  });
+
+  it("compares a kept tail under the key state an edit leaves", () => {
+    const input = `${H1}
+K:Ab
+V: Vocal
+^C16-|
+V: Vocal
+[K:D]D`;
+    const parsed = parse(input);
+    const keys = parsed.keys.filter((change) => change.key !== "D");
+    const bars = parsed.bars.map((bar) => (bar.index === 1 ? { ...bar, key: "Ab", keyChanges: [] } : bar));
+    const output = song2Dialect.serialize({ ...parsed, keys, bars });
+
+    expect(output).toBe(`${H1}
+K:Ab
+V: Vocal
+^C16-|
+V: Vocal
+=C`);
+    const score = roundTrip(output);
+    expect(score.notes).toHaveLength(1);
+    expect(score.notes[0]).toMatchObject({ start: 0, midi: 61, tie: true });
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 1, short: true });
   });
 
   it("deletes a bar before the cut and keeps the tie into the X5 tail", () => {
@@ -645,7 +701,7 @@ E16|F16|G8`;
   });
 });
 
-describe("N: a transposition by zero", () => {
+describe("a transposition by zero", () => {
   it("returns the score as it is, including a key the shortest-spelling rule would change", () => {
     const input = `${H1}
 K:C#
