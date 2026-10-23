@@ -90,7 +90,7 @@ export function createDraftBinding(session: EditingSession, notify: (notice: Not
     },
     overwrite: () => keeper?.overwrite() ?? Promise.resolve(),
     loadTheirs: () => keeper?.loadTheirs() ?? Promise.resolve(),
-    restoreOriginal: () => keeper?.restoreOriginal() ?? Promise.resolve(),
+    restoreOriginal: () => keeper?.restoreOriginal() ?? Promise.resolve(false),
     handoff: (): Promise<DraftHandoffResult> => keeper?.handoff() ?? Promise.resolve("failed"),
     follow(store, project, between) {
       if (finished) return;

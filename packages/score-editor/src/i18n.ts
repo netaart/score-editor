@@ -92,6 +92,8 @@ export interface Messages {
   restoreWarning: string;
   restoreCancel: string;
   restoreDone: string;
+  /** Said when the original is back but the stored draft could not be cleared. */
+  restoreNotCleared: string;
 }
 
 const en: Messages = {
@@ -185,6 +187,8 @@ const en: Messages = {
   restoreWarning: "Every change you made is discarded and the saved draft is deleted. You can't undo this.",
   restoreCancel: "Cancel",
   restoreDone: "The original score is back",
+  restoreNotCleared:
+    "The original score is back, but the saved draft could not be deleted. The next change tries again.",
 };
 
 const zh: Messages = {
@@ -270,6 +274,7 @@ const zh: Messages = {
   restoreWarning: "你做过的所有修改都会丢弃，已保存的草稿也会删除，之后无法撤销。",
   restoreCancel: "取消",
   restoreDone: "已恢复原谱",
+  restoreNotCleared: "已恢复原谱，但保存的草稿没能删除。下一次改动会再试。",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

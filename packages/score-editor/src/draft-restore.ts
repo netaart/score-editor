@@ -63,12 +63,16 @@ export function mountRestoreControl(
     { signal },
   );
   cancel.addEventListener("click", () => popover.hidePopover(), { signal });
+  let destroyed = false;
   confirm.addEventListener(
     "click",
     () => {
       popover.hidePopover();
-      void keeper.restoreOriginal();
-      say(messagesFor(session.view.language).restoreDone);
+      void keeper.restoreOriginal().then((cleared) => {
+        if (destroyed) return;
+        const t = messagesFor(session.view.language);
+        say(cleared ? t.restoreDone : t.restoreNotCleared);
+      });
     },
     { signal },
   );
@@ -98,7 +102,6 @@ export function mountRestoreControl(
   draw();
   const unsubscribeSession = session.subscribe(draw);
   const unsubscribeKeeper = keeper.subscribe(draw);
-  let destroyed = false;
   return {
     destroy() {
       if (destroyed) return;

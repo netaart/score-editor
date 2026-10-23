@@ -22,7 +22,7 @@ keeper.subscribe(({ status }) => showConflict(status === "conflict"));
 await keeper.overwrite(); // keep this window's project
 await keeper.loadTheirs(); // take the other window's draft
 await keeper.handoff(); // "written" | "unchanged" | "conflict" | "failed"
-await keeper.restoreOriginal(); // original back, history reset, draft cleared
+await keeper.restoreOriginal(); // original back, history reset; true when the draft was cleared
 keeper.destroy(); // stops the timer and subscription, starts one pending write
 ```
 
@@ -58,7 +58,8 @@ The wording, the question's text and the update rules are in the package README'
 - **Notices.** Pass `notify` and show `draft-source-changed` and `draft-save-failed` in the host's own toast system.
 - **When to hand off or restore.** `handoff()` saves at once with the current joined lyrics and score; when the
   project equals the original it writes nothing and resolves `"unchanged"`. `restoreOriginal()` is the user's
-  "back to the generated version" action and clears whatever draft is stored.
+  "back to the generated version" action and clears whatever draft is stored; it resolves `false` when a conflict or
+  a failure left the draft, which is also sent to `notify` as `draft-save-failed`.
 
 The draft format, `contentHash`, the full store contract and the open/inherit/keep/conflict/failure/restore rules are
 in the package README's [Drafts section](../../../README.md#drafts). The public pieces are `ScoreDraft` and
