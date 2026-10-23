@@ -1,5 +1,5 @@
 // ABOUTME: The project commands that carry a host's change of a project's style, score mode and seed into a session that holds the user's edits.
-// ABOUTME: A field with no project command (the model, the stored lyric lines) is not carried; the original's own fields are never compared here.
+// ABOUTME: A field with no project command (the model) and the stored lyric lines are not carried; the original's own fields are never compared here.
 import type { ProjectCommand } from "./commands-project";
 import type { SongProject } from "./score";
 
