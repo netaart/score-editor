@@ -2,7 +2,7 @@
 // ABOUTME: The debounce runs on the page's faked clock; the conflict, the failure and the inheritance are caused by what the store holds.
 import { createHash } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
-import { expect, type Harness, test, vocalOnly } from "./fixtures";
+import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 /** Four quarter notes, then a whole note. */
 const QUARTERS = vocalOnly("C4D4E4F4|G16|");
@@ -490,6 +490,122 @@ test.describe("a save that fails", () => {
     expect(second?.result).toMatch(/^v\d+$/);
     expect(draftOf(second).project.score).toBe(QUARTERS.replace("C4D4E4F4|", "C4z4z4F4|"));
     expect(await harness.notices()).toHaveLength(1);
+  });
+});
+
+test.describe("restoring the original", () => {
+  const restore = (page: Page) => page.getByRole("button", { name: "Restore original", exact: true });
+  const question = (page: Page) => page.getByRole("dialog", { name: "Go back to the original score?" });
+
+  /** An editor opened on a saved draft (the D is a rest), with the E also turned into a rest and saved. */
+  async function editedTwice(page: Page, harness: Harness, press: (target: Locator) => Promise<void>) {
+    const store = new Store(page);
+    await store.seed("test-page", storedDraft({ source: { lyrics: "", score: QUARTERS }, score: WITHOUT_D }));
+    await openEditor(page, harness);
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    return store;
+  }
+
+  test("asks once, in the editor, what will be lost; Cancel changes nothing", async ({ page, harness, press }) => {
+    const store = await editedTwice(page, harness, press);
+
+    await press(restore(page));
+
+    await expect(question(page)).toBeVisible();
+    await expect(question(page)).toContainText(
+      "Every change you made is discarded and the saved draft is deleted. You can't undo this.",
+    );
+    await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeFocused();
+    const asked = await box(question(page));
+    const viewport = page.viewportSize();
+    expect(asked.x).toBeGreaterThanOrEqual(0);
+    expect(asked.x + asked.width).toBeLessThanOrEqual(viewport?.width ?? 0);
+
+    await press(page.getByRole("button", { name: "Cancel", exact: true }));
+
+    await expect(question(page)).toBeHidden();
+    await expect(restore(page)).toBeFocused();
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    await expect(noteNamed(page, E4)).toHaveCount(0);
+    expect(await store.callsOf("remove")).toEqual([]);
+  });
+
+  test("Restore original shows the original, removes the draft with the version the editor wrote, and says so", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = await editedTwice(page, harness, press);
+    const [write] = await store.callsOf("write");
+    await press(restore(page));
+
+    await press(question(page).getByRole("button", { name: "Restore original", exact: true }));
+
+    await expect(question(page)).toBeHidden();
+    await expect(noteNamed(page, D4)).toBeVisible();
+    await expect(noteNamed(page, E4)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveAttribute("aria-disabled", "true");
+    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    expect((await store.callsOf("remove"))[0]).toMatchObject({
+      key: "test-page",
+      expected: write?.result,
+      result: "removed",
+    });
+    expect(await store.fileOf("test-page")).toBeNull();
+    await expect(page.getByRole("status").filter({ hasText: "The original score is back" })).toHaveCount(1);
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toHaveLength(1);
+    expect(await harness.notices()).toEqual([]);
+  });
+
+  test("an edit not yet saved is dropped with the rest, and nothing is written", async ({ page, harness, press }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+
+    await press(restore(page));
+    await press(question(page).getByRole("button", { name: "Restore original", exact: true }));
+    await expect(noteNamed(page, D4)).toBeVisible();
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+
+    expect(await store.callsOf("write")).toEqual([]);
+    expect(await store.callsOf("remove")).toEqual([]);
+  });
+
+  test("the control is not there while the editor is read-only, and follows update from one to the other", async ({
+    page,
+    harness,
+  }) => {
+    await page.clock.install();
+    await harness.mount({ score: { text: QUARTERS }, drafts: true, editable: false });
+    await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+    await expect(restore(page)).toHaveCount(0);
+
+    await harness.update({ editable: true });
+    await expect(restore(page)).toBeVisible();
+    await harness.update({ editable: false });
+    await expect(restore(page)).toHaveCount(0);
+  });
+
+  test("the Escape key closes the question and gives the focus back to the button", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "keys are checked on the desktop project");
+    await openEditor(page, harness);
+    await restore(page).click();
+    await expect(question(page)).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(question(page)).toBeHidden();
+    await expect(restore(page)).toBeFocused();
   });
 });
 
