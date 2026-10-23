@@ -63,6 +63,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "cut-other-voice-short",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = [
