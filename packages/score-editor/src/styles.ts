@@ -256,7 +256,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button)::after {
   content: "";
   width: 5px;
   height: 5px;

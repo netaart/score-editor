@@ -11,6 +11,7 @@ import {
   mountChordTrack,
   mountCutNotice,
   mountProblemView,
+  mountProjectPanel,
   mountStaffView,
   mountStaleNotice,
   mountSynthPreview,
@@ -86,6 +87,16 @@ const VIEW_PARTS = {
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+  // The song project panel as a part of its own; a refusal is told to the host as the editor tells it.
+  panel: (el, session) =>
+    mountProjectPanel(el, session, {
+      onRefused: (diagnostics) =>
+        notices.push({
+          code: "command-refused",
+          level: "warning",
+          message: formatDiagnostic(diagnostics[0], session.view.language),
+        }),
+    }),
   // The default editor's toolbar: the view switch, and the tempo, key, transpose and Project controls. A refusal is told
   // to the host as the editor tells it, so the notices list shows what a host would be sent.
   "toolbar-song": (el, session) =>

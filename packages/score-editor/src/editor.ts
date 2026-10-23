@@ -89,7 +89,15 @@ export class Editor implements MountedEditor {
 
     const hintId = `sce-hint-${n}`;
     const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
-    this.parts.push(mountToolbar(this.root, this.session, { hintId, onRefused, viewSwitch: true }));
+    this.parts.push(
+      mountToolbar(this.root, this.session, {
+        hintId,
+        onRefused,
+        viewSwitch: true,
+        tempoKey: true,
+        projectPanel: true,
+      }),
+    );
     this.parts.push(mountCutNotice(this.root, this.session));
     this.stalePane = pane(this.root);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));

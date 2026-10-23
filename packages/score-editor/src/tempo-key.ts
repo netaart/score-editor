@@ -161,15 +161,19 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
   function draw(force = false): void {
     if (session.view.language !== language) applyLanguage();
     const { reading, dialect } = session;
-    const shown = session.view.editable && reading.kind === "score" && dialect !== undefined;
-    group.hidden = !shown;
-    if (!shown || dialect === undefined || reading.kind !== "score") return;
+    const editable = session.view.editable && dialect !== undefined;
+    group.hidden = !(editable && reading.kind === "score");
+    // An editable session whose score does not read yet keeps the group's size while it is hidden, so the controls that
+    // come after the view switch cannot move the switch when they appear (the stylesheet says where it matters).
+    group.toggleAttribute("data-waiting", editable && reading.kind !== "score");
+    if (dialect === undefined) return;
     const { tempo: range } = dialect.constraints;
     tempo.min = String(range.min);
     tempo.max = String(range.max);
-    if (force || !hasFocus(tempo)) tempo.value = String(reading.score.tempo.bpm);
-    const current = startKeyOf(reading.score);
+    const current = reading.kind === "score" ? startKeyOf(reading.score) : undefined;
     fillKeys(dialect.constraints.keys, current);
+    if (reading.kind !== "score") return;
+    if (force || !hasFocus(tempo)) tempo.value = String(reading.score.tempo.bpm);
     if (current !== undefined) keys.value = current;
   }
 

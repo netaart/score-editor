@@ -89,6 +89,38 @@ export interface Messages {
   transposeUp: string;
   /** Said when the whole song moved by a semitone; `semitones` is -1 or 1. */
   transposed(semitones: number): string;
+  /** The song project panel and its toolbar button; `projectNotices` is the button's name while the project carries notices. */
+  projectName: string;
+  projectNotices(count: number): string;
+  projectNotSet: string;
+  projectStyle: string;
+  projectStyleHint: string;
+  projectStyleEmpty: string;
+  projectMode: string;
+  projectModeFull: string;
+  projectModeFullHint: string;
+  projectModeMelody: string;
+  projectModeMelodyHint: string;
+  projectModeEmpty: string;
+  projectSeed: string;
+  projectSeedClear: string;
+  projectSeedClearName: string;
+  projectSeedHint: string;
+  projectSeedEmpty: string;
+  projectLyrics: string;
+  projectLyricsHint: string;
+  projectLyricsEmpty: string;
+  projectLyricsUnreadable: string;
+  /** The joined lyrics' length against what generation accepts; both numbers come formatted. */
+  projectLyricsCount(count: string, max: string): string;
+  projectRemoveChords: string;
+  projectSwitchToFull: string;
+  /** Said when a field of the panel was taken. */
+  projectStyleSaid: string;
+  projectSeedSaid(seed: number): string;
+  projectSeedClearedSaid: string;
+  projectModeSaid(mode: "full" | "melody"): string;
+  projectChordsRemovedSaid: string;
 }
 
 const en: Messages = {
@@ -179,6 +211,35 @@ const en: Messages = {
   transposeDown: "Transpose down a semitone",
   transposeUp: "Transpose up a semitone",
   transposed: (semitones) => `Transposed ${semitones < 0 ? "down" : "up"} a semitone`,
+  projectName: "Project",
+  projectNotices: (count) => `Project, ${count} ${count === 1 ? "notice" : "notices"}`,
+  projectNotSet: "Not set",
+  projectStyle: "Style description",
+  projectStyleHint: "A BPM written here follows the tempo.",
+  projectStyleEmpty: "Not set. Describe the style you want.",
+  projectMode: "Score mode",
+  projectModeFull: "Full",
+  projectModeFullHint: "Melody and chords",
+  projectModeMelody: "Melody",
+  projectModeMelodyHint: "Melody only, no chords",
+  projectModeEmpty: "Not set. Choose one.",
+  projectSeed: "Seed",
+  projectSeedClear: "Clear",
+  projectSeedClearName: "Clear the seed",
+  projectSeedHint: "Clear it to let each generation pick its own.",
+  projectSeedEmpty: "Not set. Each generation picks its own.",
+  projectLyrics: "Lyrics",
+  projectLyricsHint: "As the next generation receives them.",
+  projectLyricsEmpty: "No lyrics yet.",
+  projectLyricsUnreadable: "The score can’t be read, so the lyrics can’t be joined.",
+  projectLyricsCount: (count, max) => `${count} of ${max} characters`,
+  projectRemoveChords: "Delete all chords",
+  projectSwitchToFull: "Switch to full",
+  projectStyleSaid: "Style description updated",
+  projectSeedSaid: (seed) => `Seed set to ${seed}`,
+  projectSeedClearedSaid: "Seed cleared",
+  projectModeSaid: (mode) => `Score mode set to ${mode}`,
+  projectChordsRemovedSaid: "All chords deleted",
 };
 
 const zh: Messages = {
@@ -262,6 +323,35 @@ const zh: Messages = {
   transposeDown: "降半音",
   transposeUp: "升半音",
   transposed: (semitones) => (semitones < 0 ? "整首已降半音" : "整首已升半音"),
+  projectName: "歌曲项目",
+  projectNotices: (count) => `歌曲项目，${count} 条提示`,
+  projectNotSet: "未设置",
+  projectStyle: "风格描述",
+  projectStyleHint: "这里写的 BPM 会跟着速度一起改。",
+  projectStyleEmpty: "未设置。写下想要的风格。",
+  projectMode: "谱面模式",
+  projectModeFull: "完整（full）",
+  projectModeFullHint: "旋律和和弦",
+  projectModeMelody: "旋律（melody）",
+  projectModeMelodyHint: "只有旋律，没有和弦",
+  projectModeEmpty: "未设置。请选一个。",
+  projectSeed: "种子",
+  projectSeedClear: "清除",
+  projectSeedClearName: "清除种子",
+  projectSeedHint: "清除后，每次生成会自己挑种子。",
+  projectSeedEmpty: "未设置。每次生成会自己挑种子。",
+  projectLyrics: "歌词",
+  projectLyricsHint: "下一次生成收到的样子。",
+  projectLyricsEmpty: "还没有歌词。",
+  projectLyricsUnreadable: "谱面读不出来，所以拼不出歌词。",
+  projectLyricsCount: (count, max) => `${count} / ${max} 字`,
+  projectRemoveChords: "删掉所有和弦",
+  projectSwitchToFull: "改为 full",
+  projectStyleSaid: "风格描述已更新",
+  projectSeedSaid: (seed) => `种子已设为 ${seed}`,
+  projectSeedClearedSaid: "种子已清除",
+  projectModeSaid: (mode) => `谱面模式已设为 ${mode}`,
+  projectChordsRemovedSaid: "所有和弦已删除",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

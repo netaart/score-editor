@@ -8,6 +8,7 @@ import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountProjectControl } from "./project-control";
 import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -41,6 +42,12 @@ export interface ToolbarOptions extends EditingPartOptions {
    * no control; the default editor turns it on.
    */
   tempoKey?: boolean;
+  /**
+   * Whether the toolbar holds the Project button, which opens the song project panel (`mountProjectPanel`) under it. The
+   * button is there while the session has a dialect, in read-only mode too, where the panel only shows. Off by default; the
+   * default editor turns it on. A host that mounts `mountProjectPanel` in a place of its own leaves it off.
+   */
+  projectPanel?: boolean;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -115,6 +122,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
         },
       })
     : null;
+  const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
 
@@ -202,6 +210,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       views?.destroy();
       select.destroy();
       song?.destroy();
+      projectControl?.destroy();
       synth?.destroy();
       root.remove();
       releaseStyles();
