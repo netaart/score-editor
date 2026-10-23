@@ -2,7 +2,7 @@
 // ABOUTME: The debounce runs on the page's faked clock; the conflict, the failure and the inheritance are caused by what the store holds.
 import { createHash } from "node:crypto";
 import type { Locator, Page } from "@playwright/test";
-import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
+import { box, expect, expectCount, type Harness, test, vocalOnly } from "./fixtures";
 
 /** Four quarter notes, then a whole note. */
 const QUARTERS = vocalOnly("C4D4E4F4|G16|");
@@ -99,6 +99,9 @@ function storedDraft(options: {
   score: string;
   lyrics?: string;
   lyricLines?: unknown[];
+  style?: string;
+  seed?: number | null;
+  scoreMode?: "full" | "melody";
   handoffHash?: string | null;
   updatedAt?: number;
 }): string {
@@ -107,12 +110,12 @@ function storedDraft(options: {
     sourceKey: options.sourceKey ?? "test-page",
     sourceHash: hashOf(options.source.lyrics, options.source.score),
     project: {
-      style: "",
+      style: options.style ?? "",
       lyrics: options.lyrics ?? options.source.lyrics,
       lyricLines: options.lyricLines ?? [],
       score: options.score,
-      scoreMode: "full",
-      seed: null,
+      scoreMode: options.scoreMode ?? "full",
+      seed: options.seed ?? null,
     },
     handoffHash: options.handoffHash ?? null,
     updatedAt: options.updatedAt ?? 1_000,
@@ -126,7 +129,14 @@ function draftOf(call: { text?: string | undefined } | undefined) {
     version: number;
     sourceKey: string;
     sourceHash: string;
-    project: { score: string; lyrics: string; style: string; lyricLines: unknown[] };
+    project: {
+      score: string;
+      lyrics: string;
+      style: string;
+      lyricLines: unknown[];
+      scoreMode: "full" | "melody";
+      seed: number | null;
+    };
     handoffHash: string | null;
     updatedAt: number;
   };
@@ -172,7 +182,7 @@ test.describe("a draft is written after the edits", () => {
     expect(await store.callsOf("write")).toEqual([]);
 
     await page.clock.runFor(200);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     const [write] = await store.callsOf("write");
     expect(write?.key).toBe("test-page");
     expect(write?.expected).toBeNull();
@@ -204,7 +214,7 @@ test.describe("a draft is written after the edits", () => {
     expect(await store.callsOf("write")).toEqual([]);
 
     await page.clock.runFor(200);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     expect(draftOf((await store.callsOf("write"))[0]).project.score).toBe(WITHOUT_D_E_F);
     await page.clock.runFor(5 * DEBOUNCE_MS);
     expect(await store.callsOf("write")).toHaveLength(1);
@@ -222,7 +232,7 @@ test.describe("a draft equal to the original is not kept", () => {
     await press(noteNamed(page, D4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     const [write] = await store.callsOf("write");
     expect(write?.result).toMatch(/^v\d+$/);
 
@@ -232,7 +242,7 @@ test.describe("a draft equal to the original is not kept", () => {
     expect(await store.callsOf("remove")).toEqual([]);
     await page.clock.runFor(200);
 
-    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    await expectCount(() => store.callsOf("remove"), 1);
     const [removal] = await store.callsOf("remove");
     expect(removal?.key).toBe("test-page");
     expect(removal?.expected).toBe(write?.result);
@@ -274,7 +284,7 @@ test.describe("opening", () => {
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     const [write] = await store.callsOf("write");
     expect(write?.expected).toBe(version);
     expect(draftOf(write).project.score).toBe(QUARTERS.replace("C4D4E4F4|", "C4z4z4F4|"));
@@ -290,7 +300,7 @@ test.describe("opening", () => {
     await openEditor(page, harness);
 
     await expect(noteNamed(page, D4)).toBeVisible();
-    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    await expectCount(() => store.callsOf("remove"), 1);
     expect(await store.callsOf("remove")).toEqual([
       { method: "remove", key: "test-page", expected: version, result: "removed" },
     ]);
@@ -352,7 +362,7 @@ test.describe("a draft that another window changed first", () => {
     await press(noteNamed(page, D4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     const theirs = await store.external(
       "test-page",
       storedDraft({ source: { lyrics: "", score: QUARTERS }, score: THEIRS }),
@@ -360,7 +370,7 @@ test.describe("a draft that another window changed first", () => {
     await press(noteNamed(page, F4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(2);
+    await expectCount(() => store.callsOf("write"), 2);
     return { store, theirs };
   }
 
@@ -417,7 +427,7 @@ test.describe("a draft that another window changed first", () => {
     await press(overwrite(page));
 
     await expect(overwrite(page)).toBeHidden();
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(3);
+    await expectCount(() => store.callsOf("write"), 3);
     const write = (await store.callsOf("write"))[2];
     expect(write?.expected).toBe(theirs);
     expect(write?.result).toMatch(/^v\d+$/);
@@ -430,7 +440,7 @@ test.describe("a draft that another window changed first", () => {
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(4);
+    await expectCount(() => store.callsOf("write"), 4);
     expect((await store.callsOf("write"))[3]?.expected).toBe(write?.result);
   });
 
@@ -478,7 +488,7 @@ test.describe("a draft that another window changed first", () => {
     await press(noteNamed(page, F4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(3);
+    await expectCount(() => store.callsOf("write"), 3);
     expect((await store.callsOf("write"))[2]?.expected).toBe(theirs);
   });
 });
@@ -493,7 +503,7 @@ test.describe("a save that fails", () => {
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
 
-    await expect.poll(async () => (await harness.notices()).length).toBe(1);
+    await expectCount(() => harness.notices(), 1);
     expect(await harness.notices()).toEqual([
       {
         code: "draft-save-failed",
@@ -508,7 +518,7 @@ test.describe("a save that fails", () => {
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(2);
+    await expectCount(() => store.callsOf("write"), 2);
     const second = (await store.callsOf("write"))[1];
     expect(second?.expected).toBeNull();
     expect(second?.result).toMatch(/^v\d+$/);
@@ -529,7 +539,7 @@ test.describe("restoring the original", () => {
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     return store;
   }
 
@@ -572,7 +582,7 @@ test.describe("restoring the original", () => {
     await expect(noteNamed(page, D4)).toBeVisible();
     await expect(noteNamed(page, E4)).toBeVisible();
     await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveAttribute("aria-disabled", "true");
-    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    await expectCount(() => store.callsOf("remove"), 1);
     expect((await store.callsOf("remove"))[0]).toMatchObject({
       key: "test-page",
       expected: write?.result,
@@ -656,12 +666,12 @@ test.describe("a new song inherits the lyric lines of the draft it was regenerat
     );
     await openEditor(page, harness, { project: newSong });
 
-    await expect.poll(async () => (await store.callsOf("list")).length).toBe(1);
+    await expectCount(() => store.callsOf("list"), 1);
     expect((await store.callsOf("read")).map((call) => call.key)).toEqual(["new-song", "old-song"]);
     expect(await store.callsOf("write")).toEqual([]);
 
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     const [write] = await store.callsOf("write");
     expect(write?.key).toBe("new-song");
     expect(write?.expected).toBeNull();
@@ -690,14 +700,14 @@ test.describe("a new song inherits the lyric lines of the draft it was regenerat
     );
     await openEditor(page, harness, { project: newSong });
 
-    await expect.poll(async () => (await store.callsOf("list")).length).toBe(1);
+    await expectCount(() => store.callsOf("list"), 1);
     await page.clock.runFor(10 * DEBOUNCE_MS);
     expect(await store.callsOf("write")).toEqual([]);
   });
 });
 
 test.describe("when nothing may be written", () => {
-  test("a read-only editor never calls the store, whatever is done to it", async ({ page, harness }) => {
+  test("a read-only editor never calls the store, and a press of Delete changes nothing in it", async ({ page, harness }) => {
     const store = new Store(page);
     await store.seed("test-page", storedDraft({ source: { lyrics: "", score: QUARTERS }, score: WITHOUT_D }));
     await page.clock.install();
@@ -747,14 +757,14 @@ test.describe("update and destroy with drafts", () => {
     await press(noteNamed(page, D4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     const [write] = await store.callsOf("write");
 
     await harness.update({ score: { text: OTHER } });
 
     await expect(a4(page)).toBeVisible();
     await expect(noteNamed(page, D4)).toBeVisible();
-    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    await expectCount(() => store.callsOf("remove"), 1);
     expect((await store.callsOf("remove"))[0]).toMatchObject({ key: "test-page", expected: write?.result });
     expect((await harness.notices()).map((notice) => notice.code)).toEqual(["draft-source-changed"]);
     await page.clock.runFor(5 * DEBOUNCE_MS);
@@ -774,7 +784,7 @@ test.describe("update and destroy with drafts", () => {
     await harness.update({ project: { sourceKey: "other-song" }, score: { text: OTHER } });
 
     await expect(a4(page)).toBeVisible();
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     const [write] = await store.callsOf("write");
     expect(write?.key).toBe("test-page");
     expect(write?.expected).toBeNull();
@@ -799,7 +809,7 @@ test.describe("update and destroy with drafts", () => {
     await press(noteNamed(page, D4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
 
     await harness.update({ score: { text: QUARTERS } });
     await page.clock.runFor(5 * DEBOUNCE_MS);
@@ -821,7 +831,7 @@ test.describe("update and destroy with drafts", () => {
 
     await harness.update({ drafts: false });
 
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     await expect(page.getByRole("button", { name: "Restore original" })).toHaveCount(0);
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
@@ -850,7 +860,7 @@ test.describe("update and destroy with drafts", () => {
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
   });
 
   test("destroying the editor saves what was pending, once, and the store is not called again", async ({
@@ -865,7 +875,7 @@ test.describe("update and destroy with drafts", () => {
 
     await harness.destroy();
 
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     expect(draftOf((await store.callsOf("write"))[0]).project.score).toBe(WITHOUT_D);
     const calls = (await store.calls()).length;
     await page.clock.runFor(5 * DEBOUNCE_MS);
@@ -884,12 +894,12 @@ test.describe("other changes to the options with drafts", () => {
     await press(noteNamed(page, D4));
     await page.keyboard.press("Delete");
     await page.clock.runFor(DEBOUNCE_MS + 100);
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
 
     await harness.update({ project: { lyrics: "[a]\nnew words" } });
 
     await expect(noteNamed(page, D4)).toBeVisible();
-    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    await expectCount(() => store.callsOf("remove"), 1);
     expect((await harness.notices()).map((notice) => notice.code)).toEqual(["draft-source-changed"]);
     await page.clock.runFor(5 * DEBOUNCE_MS);
     expect(await store.callsOf("write")).toHaveLength(1);
@@ -907,7 +917,7 @@ test.describe("other changes to the options with drafts", () => {
 
     await harness.update({ editable: false });
 
-    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expectCount(() => store.callsOf("write"), 1);
     await expect(page.getByText("Read only", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Restore original" })).toHaveCount(0);
     const calls = (await store.calls()).length;

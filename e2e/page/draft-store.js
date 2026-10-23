@@ -24,6 +24,20 @@ export function createFakeDraftStore() {
     calls.push(call);
     return call;
   };
+  /** The answer of a write or removal that does not go through: a failure it was told to make, or a version that is not the stored one. */
+  const refuse = (method, call, key, expected) => {
+    if (failures[method] > 0) {
+      failures[method] -= 1;
+      call.result = "failed";
+      return { ok: false, reason: "failed" };
+    }
+    const current = files.get(key)?.version ?? null;
+    if (current !== expected) {
+      call.result = "conflict";
+      return { ok: false, reason: "conflict" };
+    }
+    return null;
+  };
 
   return {
     async read(key) {
@@ -40,16 +54,8 @@ export function createFakeDraftStore() {
     },
     async write(key, text, expected) {
       const call = record({ method: "write", key, text, expected });
-      if (failures.write > 0) {
-        failures.write -= 1;
-        call.result = "failed";
-        return { ok: false, reason: "failed" };
-      }
-      const current = files.get(key)?.version ?? null;
-      if (current !== expected) {
-        call.result = "conflict";
-        return { ok: false, reason: "conflict" };
-      }
+      const refusal = refuse("write", call, key, expected);
+      if (refusal) return refusal;
       const version = newVersion();
       files.set(key, { text, version });
       call.result = version;
@@ -57,16 +63,8 @@ export function createFakeDraftStore() {
     },
     async remove(key, expected) {
       const call = record({ method: "remove", key, expected });
-      if (failures.remove > 0) {
-        failures.remove -= 1;
-        call.result = "failed";
-        return { ok: false, reason: "failed" };
-      }
-      const current = files.get(key)?.version ?? null;
-      if (current !== expected) {
-        call.result = "conflict";
-        return { ok: false, reason: "conflict" };
-      }
+      const refusal = refuse("remove", call, key, expected);
+      if (refusal) return refusal;
       files.delete(key);
       call.result = "removed";
       return { ok: true, version: newVersion() };
