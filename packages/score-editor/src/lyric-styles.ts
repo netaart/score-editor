@@ -273,6 +273,7 @@ export const lyricCss = `
 }
 /* The grip is the one place a drag of a line begins, so a slide anywhere else on the track stays a scroll. */
 .sce-root .sce-lyric-grip {
+  display: block;
   flex: none;
   width: 28px;
   height: 28px;

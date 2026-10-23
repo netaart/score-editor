@@ -1,13 +1,24 @@
 // ABOUTME: The lyric track view part: the song's lyric lines as phrase blocks over their bars, with the syllable and note-start counts.
 // ABOUTME: Green when the counts are equal, yellow when not; the syllables stand on their notes, lines not on bars are listed below.
-import { gridRunsOf } from "./arrangement";
+import { gridRunsOf, gridTicks } from "./arrangement";
 import { type BuiltAxis, type Grid, mountAxisPart } from "./axis-part";
 import type { ProjectCommand } from "./commands-project";
 import { create } from "./dom";
 import type { Messages } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
-import { type LyricRow, lyricRows, lyricSplitCommand } from "./lyric-edit";
+import {
+  barLineTick,
+  type LyricBoundaryPlan,
+  type LyricDropPlan,
+  type LyricEdge,
+  type LyricRow,
+  lyricBoundaryPlan,
+  lyricDropPlan,
+  lyricRows,
+  lyricSplitCommand,
+} from "./lyric-edit";
 import { createLyricEditor, type LyricEditor } from "./lyric-editor";
+import { installLyricPointer, type LyricPreview } from "./lyric-track-pointer";
 import { lyricLinesOf } from "./lyrics";
 import type { LyricPhrase, Score } from "./score";
 import type { EditingSession } from "./session";
@@ -37,13 +48,16 @@ interface PhraseView {
   readonly element: HTMLElement;
   readonly count: HTMLElement;
   readonly text: HTMLElement;
+  /** The handles on the phrase's two edges, while the track is editable. */
+  handles: { readonly start: HTMLElement; readonly end: HTMLElement } | null;
 }
 
 /** A line of the unaligned area as the track keeps it. */
 interface ItemView {
   readonly element: HTMLElement;
-  /** Whether the item is drawn for editing: a button that chooses the line, or plain text. */
+  /** Whether the item is drawn for editing: a grip to drag it by and a button that chooses the line, or plain text. */
   pick: boolean;
+  grip: HTMLElement | null;
   text: HTMLElement;
 }
 
@@ -52,6 +66,9 @@ interface Drawn {
   readonly score: Score;
   readonly t: Messages;
   readonly lane: HTMLElement;
+  /** The pinned corner: the lane's drawn time begins at its right edge when the lane is scrolled under it. */
+  readonly keys: HTMLElement;
+  readonly ticks: number;
   readonly empty: HTMLElement;
   readonly phrases: HTMLElement;
   readonly syllables: HTMLElement;
@@ -63,6 +80,8 @@ interface Drawn {
   readonly editor: LyricEditor;
   readonly views: Map<number, PhraseView>;
   readonly items: Map<number, ItemView>;
+  /** The marks a drag in progress draws in the lane. */
+  marks: HTMLElement[];
   /** What the last draw was made from: a change in any of these draws again. */
   shown: {
     readonly project: unknown;
@@ -184,6 +203,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
           element,
           count: create(doc, "span", "sce-lyric-count", body),
           text: create(doc, "span", "sce-lyric-text", body),
+          handles: null,
         };
         d.views.set(row.index, view);
       }
@@ -208,7 +228,51 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
           selected,
         }),
       );
+      drawHandles(d, view, row, phrase, editable);
       if (d.phrases.children[at] !== view.element) d.phrases.insertBefore(view.element, d.phrases.children[at] ?? null);
+    }
+  }
+
+  /** The two edge handles of a phrase: sliders on the bar lines, which a pointer drags and the keys step by one bar. */
+  function drawHandles(d: Drawn, view: PhraseView, row: LyricRow, phrase: LyricPhrase, editable: boolean): void {
+    if (!editable) {
+      view.handles?.start.remove();
+      view.handles?.end.remove();
+      view.handles = null;
+      return;
+    }
+    const doc = d.lane.ownerDocument;
+    if (!view.handles) {
+      const made = (edge: LyricEdge) => {
+        const handle = create(doc, "div", "sce-lyric-handle", view.element);
+        handle.setAttribute("role", "slider");
+        handle.dataset.edge = edge;
+        return handle;
+      };
+      view.handles = { start: made("start"), end: made("end") };
+    }
+    const lines = linesNow(d.score);
+    const limits = (edge: LyricEdge): { lowest: number; highest: number } => {
+      const low = lyricBoundaryPlan(d.score, lines, { line: row.index, edge, tick: 0 });
+      const high = lyricBoundaryPlan(d.score, lines, { line: row.index, edge, tick: d.ticks });
+      return { lowest: low?.boundary ?? 0, highest: high?.boundary ?? 0 };
+    };
+    const tab = chosen === row.index ? "0" : "-1";
+    for (const edge of ["start", "end"] as const) {
+      const handle = view.handles[edge];
+      // A start edge sits on the bar that begins the phrase; an end edge on the bar that ends it. Both read as bar numbers.
+      const now = edge === "start" ? phrase.firstBar + 1 : phrase.firstBar + phrase.barCount;
+      const { lowest, highest } = limits(edge);
+      const shift = edge === "start" ? 1 : 0;
+      handle.setAttribute("aria-valuemin", String(lowest + shift));
+      handle.setAttribute("aria-valuemax", String(highest + shift));
+      handle.setAttribute("aria-valuenow", String(now));
+      handle.setAttribute("aria-valuetext", d.t.lyricBarValue(now));
+      handle.setAttribute(
+        "aria-label",
+        edge === "start" ? d.t.lyricStartHandle(row.index + 1, now) : d.t.lyricEndHandle(row.index + 1, now),
+      );
+      handle.setAttribute("tabindex", tab);
     }
   }
 
@@ -244,12 +308,17 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         const element = create(doc, "li", "sce-lyric-item");
         element.setAttribute("role", "listitem");
         element.dataset.line = String(row.index);
-        item = { element, pick: false, text: create(doc, "span", "sce-lyric-item-text", element) };
+        item = { element, pick: false, grip: null, text: create(doc, "span", "sce-lyric-item-text", element) };
         d.items.set(row.index, item);
       }
       if (item.pick !== editable) {
         item.text.remove();
+        item.grip?.remove();
         item.pick = editable;
+        // The grip is where a line is picked up to be dropped on bars; it is not a control a keyboard reaches, and the
+        // editor under the lane offers the same placement by a bar number.
+        item.grip = editable ? create(doc, "span", "sce-lyric-grip", item.element) : null;
+        item.grip?.setAttribute("aria-hidden", "true");
         item.text = editable
           ? create(doc, "button", "sce-lyric-item-text sce-lyric-pick", item.element)
           : create(doc, "span", "sce-lyric-item-text", item.element);
@@ -267,6 +336,88 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     d.unaligned.hidden = loose.length === 0;
     d.title.hidden = loose.length === 0;
     setText(d.badge, String(loose.length));
+  }
+
+  function clearPreview(d: Drawn): void {
+    for (const mark of d.marks) mark.remove();
+    d.marks = [];
+    for (const view of d.views.values()) view.element.removeAttribute("data-previewing");
+    d.lane.removeAttribute("data-dropping");
+  }
+
+  /** Shows what a drag in progress would do: the blocks it moves, and the bar line or the bar it lands on. */
+  function preview(show: LyricPreview | null): void {
+    const d = drawn;
+    if (!d) return;
+    clearPreview(d);
+    if (!show) {
+      // Draw the project as it is: a drag that was given up leaves the blocks where the project has them.
+      d.shown = null;
+      draw();
+      return;
+    }
+    const doc = d.lane.ownerDocument;
+    if (show.kind === "boundary") {
+      for (const move of show.plan.moves) {
+        const view = d.views.get(move.line);
+        if (!view) continue;
+        const { start, end } = phraseTicks(d.score, move.phrase);
+        view.element.setAttribute("style", `--t:${start};--d:${end - start}`);
+        view.element.setAttribute("data-previewing", "");
+      }
+      const guide = create(doc, "div", "sce-lyric-guide", d.lane);
+      guide.setAttribute("aria-hidden", "true");
+      guide.setAttribute("style", `--t:${barLineTick(d.score, show.plan.boundary)}`);
+      d.marks.push(guide);
+    } else {
+      const { start, end } = phraseTicks(d.score, show.plan.phrase);
+      const mark = create(doc, "div", "sce-lyric-drop", d.lane);
+      mark.setAttribute("aria-hidden", "true");
+      mark.dataset.free = String(show.plan.free);
+      mark.setAttribute("style", `--t:${start};--d:${end - start}`);
+      d.marks.push(mark);
+      d.lane.setAttribute("data-dropping", "");
+    }
+  }
+
+  function sendBoundary(line: number, plan: LyricBoundaryPlan): void {
+    const d = drawn;
+    const moved = plan.moves.find((move) => move.line === line)?.phrase;
+    if (!d || !moved || !run(plan.commands)) return;
+    live?.say(d.t.lyricMoved(line + 1, moved.firstBar + 1, moved.firstBar + moved.barCount));
+  }
+
+  function sendDrop(line: number, plan: LyricDropPlan): void {
+    const d = drawn;
+    if (!d || plan.commands.length === 0) return;
+    const text = linesNow(d.score)[line]?.text;
+    if (!run(plan.commands)) return;
+    // The project keeps lines on bars in the order of their bars, so the line may have moved up the list.
+    const placed = linesNow(d.score).findIndex(
+      (found) => found.text === text && found.phrase?.firstBar === plan.phrase.firstBar,
+    );
+    live?.say(d.t.lyricPlaced((placed < 0 ? line : placed) + 1, plan.phrase.firstBar + 1));
+  }
+
+  /** The keys of a handle: Left and Right move its edge one bar line. */
+  function onKeyDown(event: KeyboardEvent): void {
+    const d = drawn;
+    if (!d || !session.view.editable || event.defaultPrevented || event.isComposing) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    if (!(event.target instanceof HTMLElement)) return;
+    const handle = event.target.closest<HTMLElement>(".sce-lyric-handle");
+    const owner = handle?.closest<HTMLElement>("[data-line]");
+    const edge = handle?.dataset.edge;
+    if (!handle || !owner || (edge !== "start" && edge !== "end")) return;
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (step === 0) return;
+    event.preventDefault();
+    const line = Number(owner.dataset.line);
+    const row = lyricRows(d.score, linesNow(d.score))[line];
+    if (!row?.phrase) return;
+    const now = edge === "start" ? row.phrase.firstBar : row.phrase.firstBar + row.phrase.barCount;
+    const plan = lyricBoundaryPlan(d.score, linesNow(d.score), { line, edge, tick: barLineTick(d.score, now + step) });
+    if (plan && plan.moves.length > 0) sendBoundary(line, plan);
   }
 
   /** A press on a phrase or on an item of the unaligned area chooses its line. */
@@ -290,6 +441,31 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         refuse = sayRefusals(region, session, options?.onRefused);
         own.setAttribute("data-editable", String(session.view.editable));
         own.addEventListener("click", onClick, { signal });
+        own.addEventListener("keydown", onKeyDown, { signal });
+        installLyricPointer(own, signal, {
+          editable: () => session.view.editable,
+          tickAt(clientX) {
+            const d = drawn;
+            const rect = d?.lane.getBoundingClientRect();
+            return d && rect && rect.width > 0 ? ((clientX - rect.left) / rect.width) * d.ticks : null;
+          },
+          overLane(x, y) {
+            const d = drawn;
+            if (!d) return false;
+            const lane = d.lane.getBoundingClientRect();
+            const keys = d.keys.getBoundingClientRect();
+            const surface = (options?.scroller ?? own).getBoundingClientRect();
+            const left = Math.max(lane.left, keys.right, surface.left);
+            const right = Math.min(lane.right, surface.right);
+            return x >= left && x < right && y >= lane.top && y < lane.bottom;
+          },
+          boundaryPlan: (line, edge, tick) =>
+            drawn ? lyricBoundaryPlan(drawn.score, linesNow(drawn.score), { line, edge, tick }) : null,
+          dropPlan: (line, tick) => (drawn ? lyricDropPlan(drawn.score, linesNow(drawn.score), { line, tick }) : null),
+          preview,
+          sendBoundary,
+          sendDrop,
+        });
       },
       refresh: draw,
       build(canvas, score, t): BuiltAxis {
@@ -363,6 +539,8 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
           score,
           t,
           lane,
+          keys,
+          ticks: gridTicks(score),
           empty,
           phrases,
           syllables,
@@ -374,6 +552,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
           editor,
           views: new Map(),
           items: new Map(),
+          marks: [],
           shown: null,
         };
         draw();

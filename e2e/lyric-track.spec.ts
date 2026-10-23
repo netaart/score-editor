@@ -1,7 +1,7 @@
 // ABOUTME: Seam 5 for the lyric track: its phrases, the green and yellow counts, syllables on notes, the unaligned area and its editing.
 // ABOUTME: Each case runs with a mouse on the desktop project and with a finger on the phone project, and reads what the session holds.
 import type { Locator, Page } from "@playwright/test";
-import { box, expect, type Harness, test } from "./fixtures";
+import { box, expect, type Harness, type Point, test } from "./fixtures";
 
 const HEADER = [
   "X:1",
@@ -373,5 +373,267 @@ test.describe("splitting, merging, deleting and adding a line", () => {
   test("a read-only track has no buttons to change a line", async ({ page, harness }) => {
     await openTrack(harness, LINES, { editable: false });
     await expect(lyrics(page).getByRole("button")).toHaveCount(0);
+  });
+});
+
+/** A zoom at which all eight bars fit the narrowest card the layout page makes: a bar is 40 pixels wide. */
+const FIT_ZOOM = 0.25;
+
+/** A way to press, move and lift one pointer: a mouse on the desktop project, a finger on the phone project. */
+interface Pointer {
+  down(point: Point): Promise<void>;
+  move(point: Point): Promise<void>;
+  up(): Promise<void>;
+  close(): Promise<void>;
+}
+
+async function pointerOf(page: Page, harness: Harness, isMobile: boolean): Promise<Pointer> {
+  if (!isMobile) {
+    return {
+      async down(point) {
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.down();
+      },
+      move: (point) => page.mouse.move(point.x, point.y, { steps: 8 }),
+      up: () => page.mouse.up(),
+      close: async () => {},
+    };
+  }
+  const finger = await harness.finger();
+  return {
+    down: (point) => finger.down(point),
+    move: (point) => finger.move(point),
+    up: () => finger.up(),
+    close: () => finger.close(),
+  };
+}
+
+/** Where a bar line is on the page, in the middle of the phrase row. */
+async function barLine(page: Page, bar: number): Promise<Point> {
+  const area = await box(phrases(page));
+  return { x: area.x + (bar * BAR * area.width) / TICKS, y: area.y + area.height / 2 };
+}
+
+/** The handle on an edge of a line's phrase. */
+const handle = (page: Page, edge: "Start" | "End", line: number) =>
+  lyrics(page).getByRole("slider", { name: new RegExp(`^${edge} of line ${line},`) });
+
+/** Presses on the bar line a phrase edge is on, slides to another bar line, and lets go. */
+async function dragEdge(page: Page, harness: Harness, isMobile: boolean, from: number, to: number) {
+  const pointer = await pointerOf(page, harness, isMobile);
+  try {
+    await pointer.down(await barLine(page, from));
+    await pointer.move(await barLine(page, to));
+    await pointer.up();
+  } finally {
+    await pointer.close();
+  }
+}
+
+/** Two lines in a Verse of four bars with two free bars between them. */
+const GAPPED: Line[] = [
+  { text: "一二三四", phrase: { firstBar: 2, barCount: 1 } },
+  { text: "五六七八", phrase: { firstBar: 5, barCount: 1 } },
+];
+
+test.describe("dragging the edge of a phrase", () => {
+  test("an edge with free room moves only its line, in one step that one undo takes back", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, GAPPED);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    await dragEdge(page, harness, isMobile, 3, 5);
+    expect(await storedLines(page)).toEqual([{ text: "一二三四", phrase: { firstBar: 2, barCount: 3 } }, GAPPED[1]]);
+    await expect(handle(page, "End", 1)).toHaveAttribute("aria-valuenow", "5");
+    expect(await harness.layout.undo()).toBe(true);
+    expect(await storedLines(page)).toEqual(GAPPED);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("the left edge moves the same way", async ({ page, harness, isMobile }) => {
+    await openTrack(harness, GAPPED);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    await dragEdge(page, harness, isMobile, 5, 3);
+    expect(await storedLines(page)).toEqual([GAPPED[0], { text: "五六七八", phrase: { firstBar: 3, barCount: 3 } }]);
+  });
+
+  test("a boundary two lines share moves both, in one step", async ({ page, harness, isMobile }) => {
+    await openTrack(harness);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    await dragEdge(page, harness, isMobile, 4, 5);
+    expect(await storedLines(page)).toEqual([
+      LINES[0],
+      { text: "甲乙丙丁戊己庚", phrase: { firstBar: 2, barCount: 3 } },
+      { text: "子丑寅卯辰巳午未", phrase: { firstBar: 5, barCount: 1 } },
+      LINES[3],
+      LINES[4],
+    ]);
+    expect(await harness.layout.undo()).toBe(true);
+    expect(await storedLines(page)).toEqual(LINES);
+    expect(await harness.layout.canUndo()).toBe(false);
+
+    await dragEdge(page, harness, isMobile, 4, 3);
+    expect((await storedLines(page))?.slice(1, 3)).toEqual([
+      { text: "甲乙丙丁戊己庚", phrase: { firstBar: 2, barCount: 1 } },
+      { text: "子丑寅卯辰巳午未", phrase: { firstBar: 3, barCount: 3 } },
+    ]);
+  });
+
+  test("a drag past what the bars allow is held: a line keeps a bar, a section keeps its lines", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    await dragEdge(page, harness, isMobile, 4, 8);
+    expect((await storedLines(page))?.slice(1, 3)).toEqual([
+      { text: "甲乙丙丁戊己庚", phrase: { firstBar: 2, barCount: 3 } },
+      { text: "子丑寅卯辰巳午未", phrase: { firstBar: 5, barCount: 1 } },
+    ]);
+  });
+
+  test("the block follows the pointer while it is down, and a drag back to the start sends nothing", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, GAPPED);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    const pointer = await pointerOf(page, harness, isMobile);
+    try {
+      const block = phrase(page, 1);
+      const before = await box(block);
+      await pointer.down(await barLine(page, 3));
+      await pointer.move(await barLine(page, 4));
+      await expect.poll(async () => (await box(block)).width).toBeGreaterThan(before.width + 30);
+      await expect(lyrics(page).locator(".sce-lyric-guide")).toHaveCount(1);
+      await pointer.move(await barLine(page, 3));
+      await pointer.up();
+    } finally {
+      await pointer.close();
+    }
+    await expect(lyrics(page).locator(".sce-lyric-guide")).toHaveCount(0);
+    expect(await storedLines(page)).toEqual(GAPPED);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a drag the browser takes back sends nothing", async ({ page, harness, isMobile }) => {
+    await openTrack(harness, GAPPED);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    const watcher = await harness.watchPointer();
+    const pointer = await pointerOf(page, harness, isMobile);
+    try {
+      await pointer.down(await barLine(page, 3));
+      await pointer.move(await barLine(page, 4));
+      await watcher.cancel(handle(page, "End", 1));
+      await pointer.up();
+    } finally {
+      await pointer.close();
+    }
+    expect(await storedLines(page)).toEqual(GAPPED);
+    await expect(lyrics(page).locator(".sce-lyric-guide")).toHaveCount(0);
+  });
+
+  test("a read-only track has no handles", async ({ page, harness }) => {
+    await openTrack(harness, LINES, { editable: false });
+    await expect(lyrics(page).getByRole("slider")).toHaveCount(0);
+  });
+});
+
+/** Two lines with free bars between them, and a line that is not on bars. */
+const WITH_LOOSE: Line[] = [...GAPPED, { text: "尚未对齐的一行", phrase: null }];
+
+/** The grip of the first line in the unaligned area. */
+const grip = (page: Page) => unaligned(page).locator(".sce-lyric-grip").first();
+
+/** The middle of a bar in the phrase row. */
+async function barMiddle(page: Page, bar: number): Promise<Point> {
+  const start = await barLine(page, bar);
+  const next = await barLine(page, bar + 1);
+  return { x: (start.x + next.x) / 2, y: start.y };
+}
+
+async function centreOf(target: Locator): Promise<Point> {
+  const area = await box(target);
+  return { x: area.x + area.width / 2, y: area.y + area.height / 2 };
+}
+
+test.describe("dragging a line from the unaligned area onto bars", () => {
+  test("the bar it is let go over gives the line a one-bar phrase, in one step that one undo takes back", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    const pointer = await pointerOf(page, harness, isMobile);
+    try {
+      await pointer.down(await centreOf(grip(page)));
+      await pointer.move(await barMiddle(page, 3));
+      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveCount(1);
+      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveAttribute("data-free", "true");
+      await pointer.up();
+    } finally {
+      await pointer.close();
+    }
+    // The project keeps the lines on bars in the order of their bars, so the dropped line stands between the two.
+    expect(await storedLines(page)).toEqual([
+      GAPPED[0],
+      { text: "尚未对齐的一行", phrase: { firstBar: 3, barCount: 1 } },
+      GAPPED[1],
+    ]);
+    await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveCount(0);
+    await expect(unaligned(page)).toBeHidden();
+    await expect(lyrics(page).getByRole("status")).toHaveText("Line 2 placed on bar 4");
+    expect(await harness.layout.undo()).toBe(true);
+    expect(await storedLines(page)).toEqual(WITH_LOOSE);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a bar that already has a line is no place to drop: the refusal is said and nothing changes", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    const pointer = await pointerOf(page, harness, isMobile);
+    try {
+      await pointer.down(await centreOf(grip(page)));
+      await pointer.move(await barMiddle(page, 2));
+      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveAttribute("data-free", "false");
+      await pointer.up();
+    } finally {
+      await pointer.close();
+    }
+    expect(await storedLines(page)).toEqual(WITH_LOOSE);
+    expect(await harness.layout.canUndo()).toBe(false);
+    await expect(lyrics(page).getByRole("status")).toContainText("overlaps line 1");
+  });
+
+  test("letting go away from the lane sends nothing", async ({ page, harness, isMobile }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    const pointer = await pointerOf(page, harness, isMobile);
+    try {
+      const start = await centreOf(grip(page));
+      await pointer.down(start);
+      await pointer.move(await barMiddle(page, 3));
+      await pointer.move({ x: start.x + 60, y: start.y });
+      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveCount(0);
+      await pointer.up();
+    } finally {
+      await pointer.close();
+    }
+    expect(await storedLines(page)).toEqual(WITH_LOOSE);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a read-only track has no grips", async ({ page, harness }) => {
+    await openTrack(harness, WITH_LOOSE, { editable: false });
+    await expect(lyrics(page).locator(".sce-lyric-grip")).toHaveCount(0);
   });
 });
