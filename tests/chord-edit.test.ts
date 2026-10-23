@@ -3,6 +3,7 @@
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
   type ChordSlot,
+  chordChoices,
   chordSlots,
   createDialectRegistry,
   createEditingSession,
@@ -162,5 +163,70 @@ describe("the nearest place for a chord", () => {
 
   it("is nothing where there is no place", () => {
     expect(nearestChordSlot([], 10)).toBeNull();
+  });
+});
+
+describe("the names a chord picker offers", () => {
+  // RULES.md C1 and C2: a letter and its five spellings, then fifteen qualities, then an optional slash bass.
+  const QUALITIES = [
+    "",
+    "m",
+    "dim",
+    "aug",
+    "7",
+    "maj7",
+    "m7",
+    "dim7",
+    "m7b5",
+    "sus4",
+    "sus2",
+    "6",
+    "m6",
+    "7sus4",
+    "m(maj7)",
+  ];
+
+  it("are the letters of the dialect's roots in the order C D E F G A B, with the spellings flat to sharp", () => {
+    const choices = chordChoices(song2Dialect.constraints.chords);
+
+    expect(choices.letters.map((found) => found.letter)).toEqual(["C", "D", "E", "F", "G", "A", "B"]);
+    expect(choices.letters.find((found) => found.letter === "F")?.roots).toEqual(["Fbb", "Fb", "F", "F#", "F##"]);
+    expect(choices.letters.find((found) => found.letter === "B")?.roots).toEqual(["Bbb", "Bb", "B", "B#", "B##"]);
+    expect(choices.qualities).toEqual(QUALITIES);
+    expect(choices.slashBass).toBe(true);
+  });
+
+  it("are only what a narrower vocabulary has", () => {
+    const choices = chordChoices({ roots: ["Bb", "C", "F#", "Eb", "Bbb"], qualities: ["", "7"], slashBass: false });
+
+    expect(choices.letters).toEqual([
+      { letter: "C", roots: ["C"] },
+      { letter: "E", roots: ["Eb"] },
+      { letter: "F", roots: ["F#"] },
+      { letter: "B", roots: ["Bbb", "Bb"] },
+    ]);
+    expect(choices.qualities).toEqual(["", "7"]);
+    expect(choices.slashBass).toBe(false);
+  });
+
+  it("leave out a root that is not a letter with the spellings the vocabulary documents", () => {
+    const choices = chordChoices({ roots: ["C", "H", "Cx", "c", "C###"], qualities: [""], slashBass: false });
+
+    expect(choices.letters).toEqual([{ letter: "C", roots: ["C"] }]);
+  });
+
+  it("build only names the song2 command accepts: every root with every quality, and every bass", () => {
+    const session = open({ score: CHORDED });
+    const choices = chordChoices(song2Dialect.constraints.chords);
+    const roots = choices.letters.flatMap((found) => found.roots);
+    const names = [
+      ...roots.flatMap((root) => choices.qualities.map((quality) => `${root}${quality}`)),
+      ...roots.flatMap((bass) => choices.qualities.map((quality) => `C${quality}/${bass}`)),
+    ];
+
+    const refused = names.filter((name) => !session.dispatch({ type: "setChord", noteId: "Vocal:256", name }).ok);
+
+    expect(names).toHaveLength(35 * 15 * 2);
+    expect(refused).toEqual([]);
   });
 });
