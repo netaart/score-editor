@@ -336,7 +336,7 @@ The empty string is a major triad. `Cmaj`, `Cmaj9`, `C13`, `A7alt`, `C:maj`, `CM
 
 A writer that implements these rules MUST produce text that reads back to the same score. These requirements are format rules only; editing behaviour is outside this document.
 
-**W1 — line endings and whitespace.** Write LF line endings only, no CR, no byte-order mark, no trailing spaces or tabs, and no blank lines except optionally one final LF after the last line. Do not rely on a reader’s trimming.
+**W1 — line endings and whitespace.** Write LF line endings only, no CR, no byte-order mark, no trailing spaces or tabs, and no blank lines except optionally one final LF after the last line. This governs every line the writer writes; a line it copies untouched keeps the bytes it was read with, including trailing whitespace, and a line it writes or rewrites carries none. Do not rely on a reader’s trimming.
 
 **W2 — header.** Write the fixed header in order: `X:1`, `T:`, `M:<n>/<d>`, `L:1/<d>`, `Q:1/4=<bpm>`, the exact `Vocal` definition, optionally the exact `Ins` definition, and `K:<key>`. Write no other header field. Write a new `bpm` from 20 through 400; keep an unchanged `Q:` line exactly as read (H5). Write only a key from H9 and a meter and unit from H3 and H4.
 
@@ -365,6 +365,12 @@ A writer that implements these rules MUST produce text that reads back to the sa
 **W14 — complete scores only.** A writer that produces a new score MUST write a complete score with every block and closing barline; it MUST NOT emit a cut tail. A writer that edits a cut score keeps its cut: an unchanged cut tail is emitted byte for byte (X17); bars before it MAY be rewritten under W2–W13; a rewritten partial measure keeps its finished tokens and its X4 remainder, and keeps an X5 remainder only while the tie into it is unchanged. An edit after which the text would read with a different cut, or with none, is not writable.
 
 **W15 — the two cut repairs end the cut.** A command that repairs a cut is not an ordinary edit under W14. `fill` pads every voice that stops before the score's last measure with rests, through that measure, so the text reads complete. `delete` removes the incomplete measure in every voice that has one, with its unfinished bytes, and removes the measure itself when no voice keeps material in it; it refuses when another voice still uses the measure. Both leave a complete score with no cut. Every rest is written in D1 values, splitting a longer length into consecutive rests.
+
+**W16 — a boundary cut that `Vocal` cannot end with.** A cut at a measure boundary in `Vocal` is normally written as a final `V: Vocal` block with no music line (X3(g), X8). It cannot be written that way when the score has `Ins` and `Ins` still has to open its block in the current group, with no measure at or after the cut: the reader requires that `Ins` block before any later `Vocal` block, so the trailing `V: Vocal` would be read as a wrong voice order. The writer then states the cut in `Ins` at the first measure `Ins` lacks, keeping every finished measure before it. This is the one exception to W14's "a different cut is not writable", the way W15 is an exception for the two repairs; the command still succeeds, with the cut in the only voice that can state it.
+
+**W17 — a short final `Ins` block.** In the final group, the partial `Ins` measure and every later `Vocal` measure stay in one group: the `Vocal` block comes first, then the short `Ins` block that ends the text (X9). A short `Ins` block before any later group would be a `bar-count` error (V2).
+
+**W18 — an X5 tail whose tie moved.** When an edit changes the pitch of the note an X5 tail continues, the writer rewrites the tail's note so its computed pitch still differs from the tied note (P14). It compares the tail's computed pitch under the key state the edit leaves, not only the tied note's MIDI: deleting an inline `[K:…]` can change how the old tail bytes read without changing that MIDI. Keeping bytes that now compute the tied pitch would turn the tail into a finished continuation.
 
 ## Reading diagnostic codes
 
