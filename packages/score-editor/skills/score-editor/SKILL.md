@@ -19,6 +19,7 @@ Every layer is public and usable on its own. Pick the smallest one that serves t
 | Get a working editor in one call and choose only its language and project | `mount(el, options)` | [references/mount.md](references/mount.md) |
 | Let a person hear the score as a synthetic preview with a playhead, or sound one note | View parts, and the headless schedule | [references/view-parts.md](references/view-parts.md#the-synth-preview) |
 | Save edits as host-stored drafts, restore them on open, or inherit lyric lines into a regenerated song | Draft keeper | [references/drafts.md](references/drafts.md) |
+| Select notes by what they are (pitch, time, length, in or out of key, every Nth), in code or with a panel | Headless `filterNotes`, and the Filter panel part | [references/headless-layer.md](references/headless-layer.md#picking-notes-by-conditions), [references/view-parts.md](references/view-parts.md#selecting-by-filter) |
 
 ## Choose an extension point
 
