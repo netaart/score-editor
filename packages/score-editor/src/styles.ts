@@ -284,6 +284,12 @@ const css = `
   background: currentColor;
   vertical-align: middle;
 }
+/* Forced colors repaint every fill but a system color, which would take the dot out. */
+@media (forced-colors: active) {
+  .sce-root .sce-grid-dot {
+    background: CanvasText;
+  }
+}
 /* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
 .sce-root .sce-step {
   justify-content: center;

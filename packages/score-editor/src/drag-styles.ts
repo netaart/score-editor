@@ -14,7 +14,7 @@ const grip = (side: "start" | "end") => `
   ${side === "start" ? "left: 0" : "right: 0"};
   width: var(--sce-_edge);
   cursor: ew-resize;
-  background: linear-gradient(var(--sce-_bg), var(--sce-_bg)) center / 2px 50% no-repeat;`;
+  background: linear-gradient(var(--sce-_grip), var(--sce-_grip)) center / 2px 50% no-repeat;`;
 
 export const dragCss = `
 /*
@@ -28,6 +28,7 @@ export const dragCss = `
   touch-action: none;
   container-type: inline-size;
   --sce-_edge: ${fine}px;
+  --sce-_grip: var(--sce-_bg);
 }
 @media (pointer: coarse) {
   .sce-root[data-editable="true"] .sce-note[data-selected] {
@@ -83,6 +84,14 @@ export const dragCss = `
 @media (forced-colors: active) {
   .sce-root .sce-ghost {
     border-color: CanvasText;
+  }
+  .sce-root[data-editable="true"] .sce-note[data-selected] {
+    --sce-_grip: CanvasText;
+  }
+  /* The system drops a gradient from a fill it repaints; the grip is a gradient of one system color, so it keeps it. */
+  .sce-root[data-editable="true"] .sce-note[data-selected]::before,
+  .sce-root[data-editable="true"] .sce-note[data-selected]::after {
+    forced-color-adjust: none;
   }
 }
 `;

@@ -376,6 +376,30 @@ test.describe("where a dropped note lands", () => {
     await expect(ghosts(page)).toHaveCount(0);
   });
 
+  test("the default editor tells the host of that refusal once, as it does for the keys", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    await harness.mount({ score: { text: vocalOnly("C8z8|G16|") } });
+    const notes = page.getByRole("list", { name: "Vocal" }).getByRole("listitem");
+    await press(notes.first());
+    const from = await centreOf(notes.first());
+    const lane = await box(page.locator(".sce-lane").first());
+
+    await drag(page, harness, isMobile, from, { x: lane.x + lane.width - 2, y: from.y });
+
+    await expect.poll(async () => (await harness.notices()).length).toBe(1);
+    expect(await harness.notices()).toEqual([
+      {
+        code: "command-refused",
+        level: "warning",
+        message: "The note would end past the end of the score. (bar 1, beat 1)",
+      },
+    ]);
+  });
+
   test("a drag that ends where it began changes nothing and leaves no step in the history", async ({
     page,
     harness,
@@ -531,6 +555,39 @@ test.describe("giving a drag up", () => {
 
     expect(await noteList(harness)).toEqual([vocal(0, BEAT, C), vocal(BEAT, BEAT, 62), vocal(4 * BEAT, 4 * BEAT, 67)]);
     expect(await harness.layout.canUndo()).toBe(false);
+  });
+});
+
+test.describe("forced colors", () => {
+  // The system draws every fill in its own palette, so the marks that are a colour of their own must say it: a grip
+  // painted in the colour of the ground would be the colour of the note, and a dotted grid would lose its dot.
+  test("keep the grips on a selected note and the dot of a dotted grid in view", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the grips of a finger need a note wider than this one");
+    await page.emulateMedia({ forcedColors: "active" });
+    await openTrack(harness, vocalOnly("z4C8z4|G16|"));
+    await press(gridButton(page));
+    await press(gridItem(page, "Dotted 1/8"));
+    await press(block(page, "C4, bar 1 beat 2"));
+
+    const dot = gridButton(page).locator(".sce-grid-dot");
+    const [dotFill, buttonFill] = await Promise.all([
+      dot.evaluate((el) => getComputedStyle(el).backgroundColor),
+      gridButton(page).evaluate((el) => getComputedStyle(el).backgroundColor),
+    ]);
+    expect(dotFill).not.toBe(buttonFill);
+
+    const note = block(page, "C4, bar 1 beat 2, length 2 beats, selected");
+    const noteFill = await note.evaluate((el) => getComputedStyle(el).backgroundColor);
+    for (const side of ["::before", "::after"]) {
+      const grip = await note.evaluate((el, pseudo) => getComputedStyle(el, pseudo).backgroundImage, side);
+      expect(grip).toContain("gradient");
+      expect(grip).not.toContain(noteFill);
+    }
   });
 });
 
