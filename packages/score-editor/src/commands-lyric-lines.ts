@@ -1,7 +1,7 @@
 // ABOUTME: The lyric-line project commands: set text, insert, delete, split, merge and set a phrase, with their refusals.
 // ABOUTME: They change only lyricLines and lyrics; a line is named by its index in the project's own line order.
 import { commandRefusal } from "./command-refusal";
-import type { ProjectCommand } from "./commands-project";
+import type { ProjectCommand, ProjectCommandResult } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import { joinLyrics, lyricLabelName, lyricLinesOf, lyricPhraseProblem, sectionIndexAt } from "./lyrics";
@@ -22,14 +22,18 @@ export type LyricLineCommand = Extract<
   }
 >;
 
-export type LyricLineCommandResult =
-  | { readonly ok: true; readonly project: SongProject }
-  | { readonly ok: false; readonly diagnostic: Diagnostic };
-
 const HAN_OR_KANA = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 
-function lineAt(index: number): { readonly line: number } {
-  return { line: Math.max(1, index + 1) };
+type LinePosition =
+  | { readonly ok: true; readonly at: { readonly line: number } }
+  | { readonly ok: false; readonly diagnostic: Diagnostic };
+
+function linePosition(lines: ReadonlyArray<LyricLine>, line: number, allowEnd = false): LinePosition {
+  const last = allowEnd ? lines.length : lines.length - 1;
+  if (!Number.isInteger(line) || line < 0 || line > last) {
+    return commandRefusal("lyric-line-out-of-range", { line, lines: lines.length });
+  }
+  return { ok: true, at: { line: line + 1 } };
 }
 
 /** The phrase a command acts on: `null` when there is none, or when the stored one no longer fits this score. */
@@ -39,7 +43,7 @@ function effectivePhrase(score: Score, line: LyricLine): LyricPhrase | null {
 }
 
 /** The order `joinLyrics` needs: valid aligned lines by first bar, then every unaligned line in its stored order. */
-function canonical(score: Score, lines: ReadonlyArray<LyricLine>): LyricLine[] {
+function orderForJoin(score: Score, lines: ReadonlyArray<LyricLine>): LyricLine[] {
   const indexed = lines.map((line, index) => ({ line, index }));
   const aligned = indexed
     .filter(({ line }) => effectivePhrase(score, line) !== null)
@@ -68,7 +72,7 @@ function sameLines(left: ReadonlyArray<LyricLine>, right: ReadonlyArray<LyricLin
  * Writes the new lines, and their join when the lines or the join changed. A project without stored lines takes the
  * computed layout even when a command changes nothing, as the first lyric edit of an old song does.
  */
-function withLines(project: SongProject, score: Score, lines: ReadonlyArray<LyricLine>): LyricLineCommandResult {
+function withLines(project: SongProject, score: Score, lines: ReadonlyArray<LyricLine>): ProjectCommandResult {
   const source = lyricLinesOf(project, score);
   const joined = joinLyrics(score, lines);
   const linesChanged = !sameLines(lines, source);
@@ -87,15 +91,11 @@ function textProblem(text: unknown): TextProblem | null {
   return lyricLabelName(text) === null ? null : "label";
 }
 
-function textRefusal(problem: TextProblem, at: ReturnType<typeof lineAt>): LyricLineCommandResult {
+function textRefusal(problem: TextProblem, at: { readonly line: number }): ProjectCommandResult {
   return commandRefusal("lyric-text-invalid", { reason: problem }, at);
 }
 
-function phraseRefusal(
-  score: Score,
-  phrase: LyricPhrase,
-  at: ReturnType<typeof lineAt>,
-): LyricLineCommandResult | null {
+function phraseRefusal(score: Score, phrase: LyricPhrase, at: { readonly line: number }): ProjectCommandResult | null {
   const problem = lyricPhraseProblem(score, phrase);
   if (problem === null) return null;
   const place = Number.isInteger(phrase.firstBar) && phrase.firstBar >= 0 ? { ...at, bar: phrase.firstBar + 1 } : at;
@@ -106,13 +106,13 @@ function phraseRefusal(
   return commandRefusal("lyric-phrase-invalid", params, place);
 }
 
-/** The first line already on a bar this phrase would take; `null` when the phrase is free. */
+/** The first bar two phrases share, naming the other line; `null` when they share none. */
 function overlapRefusal(
   score: Score,
   lines: ReadonlyArray<LyricLine>,
   phrase: LyricPhrase,
   ignored: number,
-): LyricLineCommandResult | null {
+): ProjectCommandResult | null {
   const start = phrase.firstBar;
   const end = start + phrase.barCount;
   for (let index = 0; index < lines.length; index += 1) {
@@ -121,10 +121,11 @@ function overlapRefusal(
     if (other === null) continue;
     const otherEnd = other.firstBar + other.barCount;
     if (start < otherEnd && other.firstBar < end) {
+      const shared = Math.max(start, other.firstBar);
       return commandRefusal(
         "lyric-phrase-overlap",
-        { line: index + 1, bar: phrase.firstBar + 1, barCount: phrase.barCount },
-        { line: index + 1, bar: phrase.firstBar + 1 },
+        { line: index + 1, bar: shared + 1, barCount: phrase.barCount },
+        { line: index + 1, bar: shared + 1 },
       );
     }
   }
@@ -132,10 +133,12 @@ function overlapRefusal(
 }
 
 function joinedText(left: string, right: string): string {
-  const last = Array.from(left).at(-1);
-  const first = Array.from(right)[0];
+  const firstPart = left.trimEnd();
+  const secondPart = right.trimStart();
+  const last = Array.from(firstPart).at(-1);
+  const first = Array.from(secondPart)[0];
   const noSpace = last !== undefined && first !== undefined && HAN_OR_KANA.test(last) && HAN_OR_KANA.test(first);
-  return noSpace ? `${left}${right}` : `${left} ${right}`;
+  return noSpace ? `${firstPart}${secondPart}` : `${firstPart} ${secondPart}`;
 }
 
 function setText(
@@ -143,21 +146,16 @@ function setText(
   score: Score,
   lines: ReadonlyArray<LyricLine>,
   command: Extract<LyricLineCommand, { type: "setLyricLineText" }>,
-): LyricLineCommandResult {
-  if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
-    return commandRefusal(
-      "lyric-line-out-of-range",
-      { line: lineAt(command.line).line, lines: lines.length },
-      lineAt(command.line),
-    );
-  }
-  const at = lineAt(command.line);
+): ProjectCommandResult {
+  const position = linePosition(lines, command.line);
+  if (!position.ok) return position;
+  const at = position.at;
   const problem = textProblem(command.text);
   if (problem !== null) return textRefusal(problem, at);
   const old = lines[command.line] as LyricLine;
   const next = [...lines];
   next[command.line] = { text: command.text, phrase: effectivePhrase(score, old) };
-  return withLines(project, score, canonical(score, next));
+  return withLines(project, score, orderForJoin(score, next));
 }
 
 function insertLine(
@@ -165,15 +163,10 @@ function insertLine(
   score: Score,
   lines: ReadonlyArray<LyricLine>,
   command: Extract<LyricLineCommand, { type: "insertLyricLine" }>,
-): LyricLineCommandResult {
-  if (!Number.isInteger(command.index) || command.index < 0 || command.index > lines.length) {
-    return commandRefusal(
-      "lyric-line-out-of-range",
-      { line: lineAt(command.index).line, lines: lines.length },
-      lineAt(command.index),
-    );
-  }
-  const at = lineAt(command.index);
+): ProjectCommandResult {
+  const position = linePosition(lines, command.line, true);
+  if (!position.ok) return position;
+  const at = position.at;
   const problem = textProblem(command.text);
   if (problem !== null) return textRefusal(problem, at);
   const phrase = command.phrase ?? null;
@@ -184,8 +177,8 @@ function insertLine(
     if (overlap !== null) return overlap;
   }
   const next = [...lines];
-  next.splice(command.index, 0, { text: command.text, phrase });
-  return withLines(project, score, canonical(score, next));
+  next.splice(command.line, 0, { text: command.text, phrase });
+  return withLines(project, score, orderForJoin(score, next));
 }
 
 function deleteLine(
@@ -193,19 +186,14 @@ function deleteLine(
   score: Score,
   lines: ReadonlyArray<LyricLine>,
   command: Extract<LyricLineCommand, { type: "deleteLyricLine" }>,
-): LyricLineCommandResult {
-  if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
-    return commandRefusal(
-      "lyric-line-out-of-range",
-      { line: lineAt(command.line).line, lines: lines.length },
-      lineAt(command.line),
-    );
-  }
-  return withLines(
-    project,
+): ProjectCommandResult {
+  const position = linePosition(lines, command.line);
+  if (!position.ok) return position;
+  const next = orderForJoin(
     score,
     lines.filter((_line, index) => index !== command.line),
   );
+  return withLines(project, score, next);
 }
 
 function splitLine(
@@ -213,15 +201,10 @@ function splitLine(
   score: Score,
   lines: ReadonlyArray<LyricLine>,
   command: Extract<LyricLineCommand, { type: "splitLyricLine" }>,
-): LyricLineCommandResult {
-  if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
-    return commandRefusal(
-      "lyric-line-out-of-range",
-      { line: lineAt(command.line).line, lines: lines.length },
-      lineAt(command.line),
-    );
-  }
-  const at = lineAt(command.line);
+): ProjectCommandResult {
+  const position = linePosition(lines, command.line);
+  if (!position.ok) return position;
+  const at = position.at;
   const line = lines[command.line] as LyricLine;
   const chars = Array.from(line.text);
   if (!Number.isInteger(command.offset) || command.offset <= 0 || command.offset >= chars.length) {
@@ -245,22 +228,20 @@ function splitLine(
   let firstPhrase: LyricPhrase | null = phrase;
   let secondPhrase: LyricPhrase | null = null;
   if (phrase !== null && command.bar !== undefined) {
-    if (
-      !Number.isInteger(command.bar) ||
-      command.bar <= phrase.firstBar ||
-      command.bar >= phrase.firstBar + phrase.barCount
-    ) {
-      const place = Number.isInteger(command.bar) ? { ...at, bar: command.bar + 1 } : at;
-      const params = Number.isInteger(command.bar) ? { reason: "bar", bar: command.bar + 1 } : { reason: "bar" };
-      return commandRefusal("lyric-split-invalid", params, place);
+    const bar = command.bar;
+    if (!Number.isInteger(bar) || bar < 0) {
+      return commandRefusal("lyric-split-invalid", { reason: "bar", bar }, at);
     }
-    firstPhrase = { firstBar: phrase.firstBar, barCount: command.bar - phrase.firstBar };
-    secondPhrase = { firstBar: command.bar, barCount: phrase.firstBar + phrase.barCount - command.bar };
+    if (bar <= phrase.firstBar || bar >= phrase.firstBar + phrase.barCount) {
+      return commandRefusal("lyric-split-invalid", { reason: "bar", bar }, { ...at, bar: bar + 1 });
+    }
+    firstPhrase = { firstBar: phrase.firstBar, barCount: bar - phrase.firstBar };
+    secondPhrase = { firstBar: bar, barCount: phrase.firstBar + phrase.barCount - bar };
   }
 
   const next = [...lines];
   next.splice(command.line, 1, { text: firstText, phrase: firstPhrase }, { text: secondText, phrase: secondPhrase });
-  return withLines(project, score, canonical(score, next));
+  return withLines(project, score, orderForJoin(score, next));
 }
 
 function mergeLines(
@@ -268,15 +249,10 @@ function mergeLines(
   score: Score,
   lines: ReadonlyArray<LyricLine>,
   command: Extract<LyricLineCommand, { type: "mergeLyricLines" }>,
-): LyricLineCommandResult {
-  if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
-    return commandRefusal(
-      "lyric-line-out-of-range",
-      { line: lineAt(command.line).line, lines: lines.length },
-      lineAt(command.line),
-    );
-  }
-  const at = lineAt(command.line);
+): ProjectCommandResult {
+  const position = linePosition(lines, command.line);
+  if (!position.ok) return position;
+  const at = position.at;
   if (command.line + 1 >= lines.length) {
     return commandRefusal("lyric-lines-not-mergeable", { reason: "no-next" }, at);
   }
@@ -288,12 +264,18 @@ function mergeLines(
   let phrase: LyricPhrase | null;
   if (leftPhrase !== null && rightPhrase !== null) {
     if (sectionIndexAt(score, leftPhrase.firstBar) !== sectionIndexAt(score, rightPhrase.firstBar)) {
-      return commandRefusal("lyric-lines-not-mergeable", { reason: "not-one-section" }, lineAt(command.line + 1));
+      return commandRefusal(
+        "lyric-lines-not-mergeable",
+        { reason: "not-one-section" },
+        {
+          line: command.line + 2,
+        },
+      );
     }
     const leftEnd = leftPhrase.firstBar + leftPhrase.barCount;
     const rightEnd = rightPhrase.firstBar + rightPhrase.barCount;
     if (leftEnd !== rightPhrase.firstBar && rightEnd !== leftPhrase.firstBar) {
-      return commandRefusal("lyric-lines-not-mergeable", { reason: "not-adjacent" }, lineAt(command.line + 1));
+      return commandRefusal("lyric-lines-not-mergeable", { reason: "not-adjacent" }, { line: command.line + 2 });
     }
     const first = Math.min(leftPhrase.firstBar, rightPhrase.firstBar);
     phrase = { firstBar: first, barCount: Math.max(leftEnd, rightEnd) - first };
@@ -307,7 +289,7 @@ function mergeLines(
 
   const next = [...lines];
   next.splice(command.line, 2, { text, phrase });
-  return withLines(project, score, canonical(score, next));
+  return withLines(project, score, orderForJoin(score, next));
 }
 
 function setPhrase(
@@ -315,26 +297,23 @@ function setPhrase(
   score: Score,
   lines: ReadonlyArray<LyricLine>,
   command: Extract<LyricLineCommand, { type: "setLyricLinePhrase" }>,
-): LyricLineCommandResult {
-  if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
-    return commandRefusal(
-      "lyric-line-out-of-range",
-      { line: lineAt(command.line).line, lines: lines.length },
-      lineAt(command.line),
-    );
-  }
-  const at = lineAt(command.line);
+): ProjectCommandResult {
+  const position = linePosition(lines, command.line);
+  if (!position.ok) return position;
+  const at = position.at;
   const phrase = command.phrase ?? null;
+  const old = lines[command.line] as LyricLine;
   if (phrase !== null) {
+    const text = textProblem(old.text);
+    if (text !== null) return textRefusal(text, at);
     const invalid = phraseRefusal(score, phrase, at);
     if (invalid !== null) return invalid;
     const overlap = overlapRefusal(score, lines, phrase, command.line);
     if (overlap !== null) return overlap;
   }
   const next = [...lines];
-  const old = lines[command.line] as LyricLine;
   next[command.line] = { text: old.text, phrase };
-  return withLines(project, score, canonical(score, next));
+  return withLines(project, score, orderForJoin(score, next));
 }
 
 /** Applies one lyric-line command. It reads the score once and leaves the project unchanged on every refusal. */
@@ -342,7 +321,7 @@ export function runLyricLineCommand(
   dialect: ScoreDialect,
   project: SongProject,
   command: LyricLineCommand,
-): LyricLineCommandResult {
+): ProjectCommandResult {
   const parsed = dialect.parse(project.score);
   if (parsed.score === null) {
     return { ok: false, diagnostic: parsed.diagnostics[0] ?? fallbackDiagnostic() };

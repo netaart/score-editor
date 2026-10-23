@@ -36,7 +36,7 @@ export type ProjectCommand =
   | { readonly type: "setLyricLineText"; readonly line: number; readonly text: string }
   | {
       readonly type: "insertLyricLine";
-      readonly index: number;
+      readonly line: number;
       readonly text: string;
       readonly phrase: LyricPhrase | null;
     }

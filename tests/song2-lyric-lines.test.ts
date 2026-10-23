@@ -1,21 +1,20 @@
-// ABOUTME: Seam 1 for the lyric-line commands: set text, insert, delete, split, merge and set a phrase, through the package entry.
+// ABOUTME: Seam 2 for the lyric-line commands: set text, insert, delete, split, merge and set a phrase, through the package entry.
 // ABOUTME: Every case states the hand-written lines and lyrics before and after; every refusal keeps the project byte for byte.
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  alignedLyricLines,
   alignLyricLine,
   applyCommandList,
   applyProjectCommand,
   applyScoreCommand,
   checkProject,
-  createDialectRegistry,
-  createEditingSession,
-  type EditingSession,
   formatDiagnostic,
   joinLyrics,
   type LyricLine,
   lyricLinesOf,
   type ScoreCommand,
   type SongProject,
+  unalignedLyricLines,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
@@ -49,6 +48,11 @@ const TWO_BAR_SCORE = `${HEADER}
 K:C
 V: Vocal
 C16|D16|`;
+
+const THREE_BAR_SCORE = `${HEADER}
+K:C
+V: Vocal
+C16|D16|E16|`;
 
 const LINES: ReadonlyArray<LyricLine> = [
   { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
@@ -155,11 +159,32 @@ chorus`);
 
   it("refuses a missing line, empty text, a line break and a section label", () => {
     const missing = refused(project(), { type: "setLyricLineText", line: 9, text: "x" }, "lyric-line-out-of-range");
-    expect(missing?.at).toEqual({ line: 10 });
+    expect(missing?.at).toEqual({});
 
     refused(project(), { type: "setLyricLineText", line: 0, text: "   " }, "lyric-text-invalid");
     refused(project(), { type: "setLyricLineText", line: 0, text: "two\nlines" }, "lyric-text-invalid");
     refused(project(), { type: "setLyricLineText", line: 0, text: "[Verse]" }, "lyric-text-invalid");
+  });
+});
+
+describe("a position that is not a lyric line", () => {
+  it("names the value it was given and has no place", () => {
+    for (const line of [-1, 1.5, 4]) {
+      const input = project();
+      const result = applyProjectCommand(song2Dialect, input, { type: "deleteLyricLine", line });
+
+      expect(result.project).toBe(input);
+      expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["lyric-line-out-of-range"]);
+      const diagnostic = result.diagnostics[0];
+      if (diagnostic === undefined) throw new Error("the position refusal was not reported");
+      expect(diagnostic.at).toEqual({});
+      expect(formatDiagnostic(diagnostic, "en")).toBe(`There is no lyric line at position ${line}.`);
+    }
+  });
+
+  it("puts a real line in the place", () => {
+    const diagnostic = refused(project(), { type: "setLyricLineText", line: 1, text: "" }, "lyric-text-invalid");
+    expect(diagnostic?.at).toEqual({ line: 2 });
   });
 });
 
@@ -172,7 +197,7 @@ describe("inserting a lyric line", () => {
     const input = withLines(lines, "[Intro]\nintro line\n[Chorus]\nchorus");
     const result = accepted(input, {
       type: "insertLyricLine",
-      index: 1,
+      line: 1,
       text: "new line",
       phrase: { firstBar: 4, barCount: 2 },
     });
@@ -193,7 +218,7 @@ chorus`);
   it("puts a line with no phrase in the unaligned area, after the aligned lines", () => {
     const result = acceptWithNotice(
       project(),
-      { type: "insertLyricLine", index: 0, text: "loose", phrase: null },
+      { type: "insertLyricLine", line: 0, text: "loose", phrase: null },
       "lyrics-unaligned",
     );
 
@@ -204,14 +229,14 @@ chorus`);
     ]);
   });
 
-  it("places an inserted unaligned line among the existing unaligned lines at its index", () => {
+  it("places an inserted unaligned line among the existing unaligned lines at its position", () => {
     const lines: ReadonlyArray<LyricLine> = [
       { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
       { text: "loose one", phrase: null },
       { text: "loose two", phrase: null },
     ];
     const input = withLines(lines, "[Intro]\nintro line");
-    const result = accepted(input, { type: "insertLyricLine", index: 1, text: "between", phrase: null });
+    const result = accepted(input, { type: "insertLyricLine", line: 1, text: "between", phrase: null });
 
     expect(result.lyricLines).toEqual([
       { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
@@ -221,23 +246,23 @@ chorus`);
     ]);
   });
 
-  it("refuses an index outside the lines, bad text, an invalid phrase and an overlap", () => {
-    refused(project(), { type: "insertLyricLine", index: -1, text: "x", phrase: null }, "lyric-line-out-of-range");
-    refused(project(), { type: "insertLyricLine", index: 5, text: "x", phrase: null }, "lyric-line-out-of-range");
-    refused(project(), { type: "insertLyricLine", index: 0, text: "", phrase: null }, "lyric-text-invalid");
+  it("refuses a position outside the lines, bad text, an invalid phrase and an overlap", () => {
+    refused(project(), { type: "insertLyricLine", line: -1, text: "x", phrase: null }, "lyric-line-out-of-range");
+    refused(project(), { type: "insertLyricLine", line: 5, text: "x", phrase: null }, "lyric-line-out-of-range");
+    refused(project(), { type: "insertLyricLine", line: 0, text: "", phrase: null }, "lyric-text-invalid");
     refused(
       project(),
-      { type: "insertLyricLine", index: 0, text: "x", phrase: { firstBar: 0, barCount: 0 } },
+      { type: "insertLyricLine", line: 0, text: "x", phrase: { firstBar: 0, barCount: 0 } },
       "lyric-phrase-invalid",
     );
     refused(
       project(),
-      { type: "insertLyricLine", index: 0, text: "x", phrase: { firstBar: 0, barCount: 3 } },
+      { type: "insertLyricLine", line: 0, text: "x", phrase: { firstBar: 0, barCount: 3 } },
       "lyric-phrase-invalid",
     );
     refused(
       project(),
-      { type: "insertLyricLine", index: 0, text: "x", phrase: { firstBar: 6, barCount: 2 } },
+      { type: "insertLyricLine", line: 0, text: "x", phrase: { firstBar: 6, barCount: 2 } },
       "lyric-phrase-overlap",
     );
   });
@@ -267,6 +292,25 @@ chorus`);
 
     expect(result.lyricLines).toEqual(LINES);
     expect(result.lyrics).toBe(JOINED);
+  });
+
+  it("restores the stored order after a shorter score leaves a stale line in the middle", () => {
+    const lines: ReadonlyArray<LyricLine> = [
+      { text: "one", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "stale", phrase: { firstBar: 2, barCount: 1 } },
+      { text: "valid", phrase: { firstBar: 1, barCount: 1 } },
+    ];
+    const replaced = accepted(withLines(lines, "one\nvalid", { score: THREE_BAR_SCORE }), {
+      type: "replaceScoreText",
+      text: TWO_BAR_SCORE,
+    });
+
+    const deleted = accepted(replaced, { type: "deleteLyricLine", line: 0 });
+
+    expect(deleted.lyricLines).toEqual([
+      { text: "valid", phrase: { firstBar: 1, barCount: 1 } },
+      { text: "stale", phrase: { firstBar: 2, barCount: 1 } },
+    ]);
   });
 
   it("refuses a missing line and leaves the project as it was", () => {
@@ -376,6 +420,9 @@ chorus`);
       { type: "splitLyricLine", line: 1, offset: 1.5 },
       "lyric-split-invalid",
     );
+  });
+
+  it("refuses a split that leaves an empty half", () => {
     refused(
       withLines([{ text: " a", phrase: { firstBar: 2, barCount: 1 } }], "[Verse]\n a"),
       { type: "splitLyricLine", line: 0, offset: 1 },
@@ -383,7 +430,7 @@ chorus`);
     );
   });
 
-  it("refuses a bar outside the phrase, at its start, at its end, or not a whole number", () => {
+  it("refuses a bar outside the phrase, at its start or at its end", () => {
     refused(
       withLines(SPLIT_LINES, SPLIT_JOINED),
       { type: "splitLyricLine", line: 1, offset: 2, bar: 2 },
@@ -399,11 +446,18 @@ chorus`);
       { type: "splitLyricLine", line: 1, offset: 2, bar: 1 },
       "lyric-split-invalid",
     );
-    refused(
-      withLines(SPLIT_LINES, SPLIT_JOINED),
-      { type: "splitLyricLine", line: 1, offset: 2, bar: 2.5 },
-      "lyric-split-invalid",
-    );
+  });
+
+  it("refuses a negative or fractional bar with the value it was given", () => {
+    for (const bar of [-1, 1.5]) {
+      const diagnostic = refused(
+        withLines(SPLIT_LINES, SPLIT_JOINED),
+        { type: "splitLyricLine", line: 1, offset: 2, bar },
+        "lyric-split-invalid",
+      );
+      expect(diagnostic?.params).toEqual({ reason: "bar", bar });
+      expect(diagnostic?.at).toEqual({ line: 2 });
+    }
   });
 
   it("refuses a split that would make a section label or a missing line", () => {
@@ -451,6 +505,22 @@ chorus`);
     ];
     const kana = accepted(withLines(kanaLines, "[Verse]\nこん\nにちは"), { type: "mergeLyricLines", line: 0 });
     expect(kana.lyricLines).toEqual([{ text: "こんにちは", phrase: { firstBar: 2, barCount: 2 } }]);
+  });
+
+  it("trims the join edges before applying the one-space or no-space rule", () => {
+    const latin: ReadonlyArray<LyricLine> = [
+      { text: "foo ", phrase: { firstBar: 2, barCount: 1 } },
+      { text: "bar", phrase: { firstBar: 3, barCount: 1 } },
+    ];
+    const spaced = accepted(withLines(latin, "[Verse]\nfoo \nbar"), { type: "mergeLyricLines", line: 0 });
+    expect(spaced.lyricLines).toEqual([{ text: "foo bar", phrase: { firstBar: 2, barCount: 2 } }]);
+
+    const han: ReadonlyArray<LyricLine> = [
+      { text: "你 ", phrase: { firstBar: 2, barCount: 1 } },
+      { text: "好", phrase: { firstBar: 3, barCount: 1 } },
+    ];
+    const joined = accepted(withLines(han, "[Verse]\n你 \n好"), { type: "mergeLyricLines", line: 0 });
+    expect(joined.lyricLines).toEqual([{ text: "你好", phrase: { firstBar: 2, barCount: 2 } }]);
   });
 
   it("keeps the aligned phrase when an aligned line merges with an unaligned one", () => {
@@ -597,6 +667,33 @@ verse two
     expect(fractional?.params.reason).toBe("not-integer");
   });
 
+  it("names the first bar the new phrase shares with the other line", () => {
+    const lines: ReadonlyArray<LyricLine> = [
+      { text: "first", phrase: { firstBar: 3, barCount: 1 } },
+      { text: "second", phrase: { firstBar: 4, barCount: 2 } },
+    ];
+    const diagnostic = refused(
+      withLines(lines, "[Verse]\nfirst\nsecond"),
+      { type: "setLyricLinePhrase", line: 0, phrase: { firstBar: 2, barCount: 3 } },
+      "lyric-phrase-overlap",
+    );
+
+    expect(diagnostic?.at).toEqual({ line: 2, bar: 5 });
+    expect(diagnostic?.params).toMatchObject({ line: 2, bar: 5 });
+  });
+
+  it("refuses to put a line whose text is a label on a phrase", () => {
+    const input = withLines([{ text: "[Verse]", phrase: null }], "", { score: TWO_BAR_SCORE });
+    const diagnostic = refused(
+      input,
+      { type: "setLyricLinePhrase", line: 0, phrase: { firstBar: 0, barCount: 1 } },
+      "lyric-text-invalid",
+    );
+
+    expect(diagnostic?.params).toEqual({ reason: "label" });
+    expect(diagnostic?.at).toEqual({ line: 1 });
+  });
+
   it("refuses a phrase that overlaps another line instead of shrinking that line", () => {
     const overlap = refused(
       project(),
@@ -639,38 +736,8 @@ describe("a shared boundary moves as one command list", () => {
   });
 });
 
-describe("lyric commands through the session", () => {
-  const dialects = createDialectRegistry([song2Dialect]);
-
-  function open(): EditingSession {
-    return createEditingSession({ project: project(), dialects });
-  }
-
-  it("makes each command one history step, and one undo brings the whole project back", () => {
-    const cases: ReadonlyArray<[string, Parameters<EditingSession["dispatch"]>[0], number]> = [
-      ["set text", { type: "setLyricLineText", line: 1, text: "new verse" }, 0],
-      ["insert", { type: "insertLyricLine", index: 0, text: "loose", phrase: null }, 1],
-      ["delete", { type: "deleteLyricLine", line: 2 }, 0],
-      ["split", { type: "splitLyricLine", line: 1, offset: 2, bar: 3 }, 0],
-      ["merge", { type: "mergeLyricLines", line: 1 }, 0],
-      ["set phrase", { type: "setLyricLinePhrase", line: 1, phrase: { firstBar: 2, barCount: 1 } }, 0],
-    ];
-
-    for (const [label, command, noticeCount] of cases) {
-      const session = open();
-      const before = session.project;
-      const result = session.dispatch(command);
-
-      expect(result.ok, label).toBe(true);
-      expect(result.diagnostics, label).toHaveLength(noticeCount);
-      expect(session.canUndo, label).toBe(true);
-      expect(session.undo(), label).toBe(true);
-      expect(session.project, label).toEqual(before);
-      expect(session.canUndo, label).toBe(false);
-    }
-  });
-
-  it("refuses a lyric command as a score command", () => {
+describe("a lyric command is not a score command", () => {
+  it("is refused by applyScoreCommand", () => {
     const result = applyScoreCommand(song2Dialect, SCORE, {
       type: "setLyricLineText",
       line: 0,
@@ -685,10 +752,6 @@ describe("lyric commands through the session", () => {
 });
 
 describe("a stored phrase that no longer fits the score", () => {
-  const THREE_BARS = `${HEADER}
-K:C
-V: Vocal
-C16|D16|E16|`;
   const ONE_BAR = `${HEADER}
 K:C
 V: Vocal
@@ -699,43 +762,27 @@ C16|`;
     { text: "three", phrase: { firstBar: 2, barCount: 1 } },
   ];
 
-  it("is read as unaligned by the join, the alignment and the notice, but is not rewritten", () => {
+  it("is read as unaligned by the classifiers, the join, the alignment and the notice, but is not rewritten", () => {
     const input = withLines(LINES_THREE, "one\ntwo\nthree", { score: ONE_BAR });
-    const parsed = lyricLinesOf(input, song2Dialect.parse(ONE_BAR).score as never);
+    const { score } = song2Dialect.parse(ONE_BAR);
+    expect(score).not.toBeNull();
+    if (score === null) throw new Error("the one-bar score did not read");
+    const parsed = lyricLinesOf(input, score);
 
     expect(parsed).toEqual(LINES_THREE);
-    expect(joinLyrics(song2Dialect.parse(ONE_BAR).score as never, parsed)).toBe("one");
+    expect(joinLyrics(score, parsed)).toBe("one");
     const second = parsed[1] as LyricLine;
-    const alignment = alignLyricLine(song2Dialect.parse(ONE_BAR).score as never, second);
+    const alignment = alignLyricLine(score, second);
     expect(alignment.onsets).toEqual([]);
     expect(alignment.equal).toBe(false);
+    expect(alignedLyricLines(parsed, score)).toEqual([LINES_THREE[0]]);
+    expect(unalignedLyricLines(parsed, score)).toEqual([LINES_THREE[1], LINES_THREE[2]]);
+    expect(alignedLyricLines(parsed)).toHaveLength(3);
+    expect(unalignedLyricLines(parsed)).toEqual([]);
     expect(checkProject(song2Dialect, input).map((diagnostic) => [diagnostic.code, diagnostic.params])).toEqual([
       ["lyrics-unaligned", { count: 2 }],
     ]);
     expect(input.lyricLines).toEqual(LINES_THREE);
-  });
-
-  it("keeps the stored lines through a replaced score text and the next command touching one turns it unaligned", () => {
-    const session = createEditingSession({
-      project: withLines(LINES_THREE, "one\ntwo\nthree", { score: THREE_BARS }),
-      dialects: createDialectRegistry([song2Dialect]),
-    });
-
-    const replaced = session.dispatch({ type: "replaceScoreText", text: ONE_BAR });
-    expect(replaced.ok).toBe(true);
-    expect(replaced.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.params])).toEqual([
-      ["lyrics-unaligned", { count: 2 }],
-    ]);
-    expect(session.project.lyricLines).toEqual(LINES_THREE);
-
-    const changed = session.dispatch({ type: "setLyricLineText", line: 1, text: "changed" });
-    expect(changed.ok).toBe(true);
-    expect(session.project.lyricLines).toEqual([
-      { text: "one", phrase: { firstBar: 0, barCount: 1 } },
-      { text: "changed", phrase: null },
-      { text: "three", phrase: { firstBar: 2, barCount: 1 } },
-    ]);
-    expect(session.project.lyrics).toBe("one");
   });
 });
 
