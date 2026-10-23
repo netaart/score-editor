@@ -175,7 +175,8 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
   }
 
   function choose(line: number | null): void {
-    if (!drawn) return;
+    // The line that is already chosen keeps its box: what was typed in it, its caret and the mark on a refused text.
+    if (!drawn || (line !== null && line === chosen)) return;
     chosen = line;
     adding = false;
     const lines = linesNow(drawn.score);
@@ -563,9 +564,10 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     if (plan && plan.moves.length > 0) sendBoundary(line, plan);
   }
 
-  /** A press on a phrase or on an item of the unaligned area chooses its line. */
+  /** A press on a phrase or on an item of the unaligned area chooses its line; a press in the editor, which a loose line's item holds, does not. */
   function onClick(event: MouseEvent): void {
-    if (!session.view.editable || !(event.target instanceof Element)) return;
+    if (!drawn || !session.view.editable || !(event.target instanceof Element)) return;
+    if (drawn.editor.element.contains(event.target)) return;
     const owner = event.target.closest<HTMLElement>(".sce-lyric-phrase, .sce-lyric-item");
     if (!owner || owner.dataset.line === undefined) return;
     choose(Number(owner.dataset.line));

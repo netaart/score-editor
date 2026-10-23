@@ -252,6 +252,57 @@ test.describe("choosing a line and editing its text", () => {
     await expect(phrase(page, 1)).not.toHaveAccessibleName(/selected/);
     await expect(unaligned(page).getByRole("button")).toHaveCount(0);
   });
+
+  test("a press inside the box of a line not on bars keeps the text typed in it and puts the caret where the press was", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await press(unaligned(page).getByRole("button", { name: /^Line 5, not aligned/ }));
+    await press(textbox(page));
+    await page.keyboard.press("End");
+    await page.keyboard.type("续");
+    await expect(textbox(page)).toHaveValue("尚未对齐的一行续");
+
+    await press(textbox(page), { x: 2, y: 10 });
+    await expect(textbox(page)).toHaveValue("尚未对齐的一行续");
+    expect(await textbox(page).evaluate((el) => (el as HTMLInputElement).selectionStart)).toBe(0);
+    await expect(textbox(page)).toBeFocused();
+    expect(await storedLines(page)).toEqual(LINES);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a press inside the box, or on the line that is already chosen, keeps the mark on a refused text", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    const row = unaligned(page).getByRole("button", { name: /^Line 5, not aligned/ });
+    const reason = unaligned(page)
+      .getByRole("group", { name: "Line 5", exact: true })
+      .getByText("A lyric line cannot be only a [section] label");
+    await press(row);
+    await press(textbox(page));
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type("[Verse]");
+    await page.keyboard.press("Enter");
+    await expect(textbox(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(reason).toBeVisible();
+
+    await press(textbox(page), { x: 2, y: 10 });
+    await expect(textbox(page)).toHaveValue("[Verse]");
+    await expect(textbox(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(reason).toBeVisible();
+
+    await press(row);
+    await expect(textbox(page)).toHaveValue("[Verse]");
+    await expect(textbox(page)).toHaveAttribute("aria-invalid", "true");
+    await expect(reason).toBeVisible();
+    expect(await storedLines(page)).toEqual(LINES);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
 });
 
 const button = (page: Page, name: string) => lyrics(page).getByRole("button", { name, exact: true });
