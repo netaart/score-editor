@@ -66,6 +66,8 @@ components:
     height: "1.85em"
   band:
     height: "1.7em"
+  band-coarse:
+    height: "25px"
   chord-row:
     height: "2em"
   note:
@@ -258,7 +260,23 @@ A 1.85em row (24px at the default size). Each bar number sits at the left edge o
 
 ### Section bands
 
-A 1.7em row. One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing.
+A 1.7em row (25px on a coarse pointer). One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing. While the session is editable a band opens the section menu (next).
+
+### Section menu
+
+While the session is editable each section band is a button laid over the whole band, so a press anywhere on it opens the menu and the pinned name keeps its place. A chevron follows the name (the 5px mark of the zoom value and the Select button); hover tints the band by 6% of text, only where a pointer hovers, the open state by 10%, and keyboard focus draws the 2px accent outline inside the band, because a ring outside it would be hidden by the rows around it. A read-only session draws the band as before: no button, no chevron, no menu, no key.
+
+**Menu.** The popover menu of the zoom control and the Select menu (`popover-menu.ts`), hung under the start of the band's pinned name, since the band's own start may be scrolled away. It is as wide as its text, so a menu near the right edge is not squeezed, and is then nudged into the window. Choices in three groups: Rename (the unnamed opening says "Name this section") and "Start a section at a bar"; Move earlier, Move later and Duplicate; Delete section. The three that ask for text end in an ellipsis. Delete comes last, because the first choice takes the focus and Enter on a destructive first choice is the wrong default, and it says "section", because the toolbar's Delete only turns notes into rests. The choices are made when the menu first opens, so a band holds two nodes until it is pressed.
+
+**A choice that cannot be done.** A choice the commands would refuse is `aria-disabled` and muted. Their words are its `aria-description`, and for the eye they stand once, under the last of a run of muted choices that are refused in the same words, aligned with the labels: a note under each choice said one sentence three times in the unnamed section's menu. The words are not written here. The menu dry-runs each command (`sectionActions`), so a rule that changes in the commands changes the menu, and the menu adds no refusal of its own. Pressing a muted choice does nothing and leaves the menu open, so the words can be read on a touch screen, where there is no tooltip, and it says them in the live region.
+
+**Form.** Rename, Name this section and Start a section at a bar ask for text in a popover (`role="dialog"`) under the band, not a modal: the task needs neither interruption nor protected focus. A line of context comes first (which bars the section covers), then the Bar field (Start only) and the Name field, then Cancel and a confirm in 600 weight that names the act ("Rename", "Name", "Start section"). Enter submits; Escape, Cancel and a press outside close it and give the focus back to the band. The bar offered is inside the section and does not start it: the insertion point's bar when it is such a bar, else the section's second bar. The field takes any number, and says under itself, before the form is sent, when the bar starts a section and so renames it. A refusal after a submit shows under the field it is about (`role="alert"`); that field takes `aria-invalid` and a 2px text-colour border, so it is a shape and not a colour, and takes the focus; the refusal also goes to `onRefused`. The form sends what was typed, and the commands alone decide what a bar or a name may be.
+
+**Keys.** Bands are not tab stops: the Tab order of the arrangement is pinned, with one tab stop among the notes. Shift and F10, or the Menu key, on the ruler or the arrangement opens the menu of the section at the insertion point (the first section when there is none); Left, Right, Home and End walk the bands; Enter or Space opens the one in focus; a right click opens it too. After a choice the focus goes to the band of the section acted on (the copy, the moved section, the new section, or the one that took a deleted section's place) and the view scrolls to it, and a polite live region says what was done.
+
+**Touch.** Menu items are 40px and the form's fields 36px with type of at least 16px (below that a phone zooms the page when a field takes the focus, as the text view's box notes). The row of bands is 25px and the control reaches 12px up into the row of bar numbers, which takes no press: 36px of target, as the rule for controls asks, without taking height from a phone's frame. A 36px row did take it: in the multi-select spec the finger-drawn selection box no longer found empty lane to start on. Nothing reaches down into the marks row.
+
+**Considered and not built.** Bar numbers as buttons (about 235 of them on a real song, thinned out at low zoom, and no path for a keyboard); the insertion point alone as the way to name a bar (it is hidden state, and a tick and not a bar); a modal dialog.
 
 ### Marks row
 
