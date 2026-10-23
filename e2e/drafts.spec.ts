@@ -491,6 +491,28 @@ test.describe("a draft that another window changed first", () => {
     await expectCount(() => store.callsOf("write"), 3);
     expect((await store.callsOf("write"))[2]?.expected).toBe(theirs);
   });
+
+  test("the strip takes no focus, and Restore original stays there during it", async ({ page, harness, press }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expectCount(() => store.callsOf("write"), 1);
+    await store.external("test-page", storedDraft({ source: { lyrics: "", score: QUARTERS }, score: THEIRS }));
+
+    await press(noteNamed(page, F4));
+    const remove = page.getByRole("button", { name: "Delete", exact: true });
+    await remove.focus();
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+
+    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(remove).toBeFocused();
+    await expect(overwrite(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
+    expect((await store.callsOf("write"))[1]?.result).toBe("conflict");
+  });
 });
 
 test.describe("a save that fails", () => {
@@ -593,6 +615,36 @@ test.describe("restoring the original", () => {
     await page.clock.runFor(5 * DEBOUNCE_MS);
     expect(await store.callsOf("write")).toHaveLength(1);
     expect(await harness.notices()).toEqual([]);
+  });
+
+  test("a removal that fails shows the original and says the draft could not be cleared", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = await editedTwice(page, harness, press);
+    await store.failNext("remove");
+
+    await press(restore(page));
+    await press(question(page).getByRole("button", { name: "Restore original", exact: true }));
+
+    await expect(noteNamed(page, D4)).toBeVisible();
+    await expect(noteNamed(page, E4)).toBeVisible();
+    await expectCount(() => store.callsOf("remove"), 1);
+    expect((await store.callsOf("remove"))[0]?.result).toBe("failed");
+    expect(await store.fileOf("test-page")).not.toBeNull();
+    await expect(
+      page
+        .getByRole("status")
+        .filter({ hasText: "The original score is back, but the saved draft could not be deleted" }),
+    ).toHaveCount(1);
+    expect(await harness.notices()).toEqual([
+      {
+        code: "draft-save-failed",
+        level: "error",
+        message: "The draft was not saved or cleared. The next change tries again.",
+      },
+    ]);
   });
 
   test("an edit not yet saved is dropped with the rest, and nothing is written", async ({ page, harness, press }) => {
@@ -742,6 +794,30 @@ test.describe("when nothing may be written", () => {
     await expect(noteNamed(page, D4)).toHaveCount(0);
     expect(await store.calls()).toEqual([]);
     await expect(page.getByRole("button", { name: "Restore original" })).toHaveCount(0);
+  });
+
+  test("an editor without a store builds no restore control and no strip, and builds both when a store arrives", async ({
+    page,
+    harness,
+  }) => {
+    const restore = page.getByRole("button", { name: "Restore original", exact: true });
+    const strip = page.locator(".sce-part-draft-conflict");
+    await page.clock.install();
+    await harness.mount({ score: { text: QUARTERS } });
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+
+    await expect(restore).toHaveCount(0);
+    await expect(page.locator(".sce-restore-button")).toHaveCount(0);
+    await expect(page.locator(".sce-restore-popover")).toHaveCount(0);
+    await expect(strip).toHaveCount(0);
+
+    await harness.update({ drafts: true });
+    await expect(restore).toBeVisible();
+    await expect(strip).toHaveCount(1);
+
+    await harness.update({ drafts: false });
+    await expect(restore).toHaveCount(0);
+    await expect(strip).toHaveCount(0);
   });
 });
 
@@ -929,7 +1005,7 @@ test.describe("the host changes a field that is not part of the original", () =>
     });
   }
 
-  test("two fields changed in one update are both carried", async ({ page, harness, press }) => {
+  test("two fields changed in one update are both carried, as one history step", async ({ page, harness, press }) => {
     const store = await editedAndSaved(page, harness, press);
 
     await harness.update({ project: { style: "jazz", seed: 7 } });
@@ -940,6 +1016,15 @@ test.describe("the host changes a field that is not part of the original", () =>
     expect(project.style).toBe("jazz");
     expect(project.seed).toBe(7);
     expect(project.score).toBe(WITHOUT_D);
+
+    await press(page.getByRole("button", { name: "Undo", exact: true }));
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+
+    await expectCount(() => store.callsOf("write"), 3);
+    const undone = draftOf((await store.callsOf("write"))[2]).project;
+    expect(undone.style).toBe("");
+    expect(undone.seed).toBeNull();
+    expect(undone.score).toBe(WITHOUT_D);
   });
 
   test("a value that the project commands refuse is told to the host, and the fields beside it are still carried", async ({

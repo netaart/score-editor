@@ -690,6 +690,26 @@ test.describe("destroying the view parts", () => {
     await baseline.detach();
   });
 
+  test("the draft conflict strip draws its two ways out and leaves nothing when destroyed", async ({ page, harness }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["draft-conflict"] });
+    const part = slot(page, "draft-conflict");
+    await expect(part.getByRole("alert")).toHaveText(
+      "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
+    );
+    await expect(part.getByRole("button", { name: "Overwrite with my version" })).toBeVisible();
+    await expect(part.getByRole("button", { name: "Load the other version" })).toBeVisible();
+
+    await harness.layout.retain("draft-conflict");
+    await harness.layout.destroyPart("draft-conflict", 2);
+    await expect(slot(page, "draft-conflict").locator("*")).toHaveCount(0);
+    const retained = await harness.layout.retainedHtml();
+
+    await harness.layout.setView({ language: "zh" });
+    await harness.layout.replace({ score: { vector: "reject-duration-five" } });
+    expect(await harness.layout.retainedHtml()).toBe(retained);
+    await harness.layout.close();
+  });
+
   test("the text view destroyed with text it had not handed over hands nothing over afterwards", async ({
     page,
     harness,

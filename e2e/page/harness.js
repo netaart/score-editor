@@ -10,6 +10,7 @@ import {
   mount,
   mountChordTrack,
   mountCutNotice,
+  mountDraftConflict,
   mountProblemView,
   mountStaffView,
   mountStaleNotice,
@@ -84,6 +85,29 @@ const LAYOUT_PARTS = {
 };
 
 /**
+ * A draft keeper already in conflict, for the conflict strip's lifetime case: the part reads its status, subscribes, and
+ * takes the two ways out, so the stub answers those and nothing else.
+ */
+function conflictKeeper() {
+  const listeners = new Set();
+  return {
+    status: "conflict",
+    ready: Promise.resolve(),
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    overwrite: () => Promise.resolve(),
+    loadTheirs: () => Promise.resolve(),
+    restoreOriginal: () => Promise.resolve(true),
+    handoff: () => Promise.resolve("unchanged"),
+    destroy() {
+      listeners.clear();
+    },
+  };
+}
+
+/**
  * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for
  * them, and the lists of the parts the older specs walk through do not include them.
  */
@@ -93,6 +117,7 @@ const VIEW_PARTS = {
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+  "draft-conflict": (el, session) => mountDraftConflict(el, session, conflictKeeper()),
 };
 
 const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };
