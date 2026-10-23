@@ -83,6 +83,25 @@ export function withoutEmptyCutBar(score: Score): Pick<Score, "bars" | "truncati
   };
 }
 
+/**
+ * The model after a chord removal. Removing the last finished chord also removes an unfinished chord
+ * string at the cut (RULES.md C8), and an emptied cut measure; chord material that remains keeps it.
+ */
+export function withoutChordMaterial(
+  score: Score,
+  chords: ReadonlyArray<Chord>,
+): Pick<Score, "bars" | "truncation" | "sections" | "chords" | "hasChords"> {
+  const trimmed = chords.length === 0 ? withoutEmptyCutBar(score) : null;
+  const truncation =
+    trimmed?.truncation ?? (chords.length === 0 ? withoutUnfinishedChord(score.truncation) : score.truncation);
+  return {
+    ...(trimmed ?? { bars: score.bars, sections: score.sections }),
+    chords,
+    truncation,
+    hasChords: hasChordsAfter(chords, truncation),
+  };
+}
+
 export function barTicks(meter: Meter): number {
   return (4 * meter.numerator * TICKS_PER_QUARTER) / meter.denominator;
 }
