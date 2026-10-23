@@ -231,3 +231,312 @@ test.describe("transposing in the toolbar", () => {
     await expect(transposeDown(page)).toBeVisible();
   });
 });
+
+const projectButton = (page: Page) => toolbar(page).getByRole("button", { name: /^Project/ });
+const panel = (page: Page) => toolbar(page).getByRole("region", { name: "Project" });
+const styleBox = (page: Page) => panel(page).getByRole("textbox", { name: "Style description" });
+const modeRadio = (page: Page, name: "Full" | "Melody") => panel(page).getByRole("radio", { name });
+const seedField = (page: Page) => panel(page).getByRole("spinbutton", { name: "Seed" });
+const lyricsRegion = (page: Page) => panel(page).getByRole("region", { name: "Lyrics" });
+
+/** Opens the song project panel from the toolbar, as a person does with a click or a tap. */
+async function openPanel(page: Page, press: (target: Locator) => Promise<void>) {
+  await press(projectButton(page));
+  await expect(panel(page)).toBeVisible();
+}
+
+test.describe("the song project panel", () => {
+  test("opens from the toolbar's Project button and shows the style, the score mode, the seed and the lyrics", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { style: "warm pop, 100 BPM", scoreMode: "melody", seed: 42, lyrics: "la la la" });
+    await expect(panel(page)).toBeHidden();
+    await expect(projectButton(page)).toHaveAttribute("aria-expanded", "false");
+
+    await openPanel(page, press);
+
+    await expect(projectButton(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(styleBox(page)).toHaveValue("warm pop, 100 BPM");
+    await expect(modeRadio(page, "Melody")).toBeChecked();
+    await expect(modeRadio(page, "Full")).not.toBeChecked();
+    await expect(seedField(page)).toHaveValue("42");
+    await expect(lyricsRegion(page)).toBeVisible();
+  });
+
+  test("closes with Escape and gives the focus back to the button, and leaves the selection alone", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+    await harness.layout.select(["Vocal:0"]);
+    await openPanel(page, press);
+    await styleBox(page).focus();
+
+    await page.keyboard.press("Escape");
+
+    await expect(panel(page)).toBeHidden();
+    await expect(projectButton(page)).toBeFocused();
+    expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
+  });
+});
+
+test.describe("the song project panel's fields", () => {
+  test("a style typed and left is taken as one undo step; closing the panel takes what was typed", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { style: "warm pop" });
+    await openPanel(page, press);
+
+    await styleBox(page).fill("slow jazz, brushes");
+    await styleBox(page).blur();
+    expect((await project(page)).style).toBe("slow jazz, brushes");
+    expect(await harness.layout.canUndo()).toBe(true);
+
+    await styleBox(page).fill("slow jazz, brushes and bass");
+    await page.keyboard.press("Escape");
+    await expect(panel(page)).toBeHidden();
+    expect((await project(page)).style).toBe("slow jazz, brushes and bass");
+
+    await harness.layout.undo();
+    expect((await project(page)).style).toBe("slow jazz, brushes");
+    await harness.layout.undo();
+    expect((await project(page)).style).toBe("warm pop");
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("the score mode is chosen with one press, as one undo step", async ({ page, harness, press }) => {
+    await openSong(harness, SONG, { scoreMode: "melody" });
+    await openPanel(page, press);
+
+    await press(modeRadio(page, "Full"));
+    await expect(modeRadio(page, "Full")).toBeChecked();
+    expect((await project(page)).scoreMode).toBe("full");
+
+    await harness.layout.undo();
+    expect((await project(page)).scoreMode).toBe("melody");
+    await expect(modeRadio(page, "Melody")).toBeChecked();
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a seed is typed, then cleared with the Clear button; each is one undo step", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { seed: 42 });
+    await openPanel(page, press);
+
+    await seedField(page).fill("-7");
+    await seedField(page).press("Enter");
+    expect((await project(page)).seed).toBe(-7);
+
+    await press(panel(page).getByRole("button", { name: "Clear the seed" }));
+    expect((await project(page)).seed).toBeNull();
+    await expect(seedField(page)).toHaveValue("");
+
+    await harness.layout.undo();
+    expect((await project(page)).seed).toBe(-7);
+    await expect(seedField(page)).toHaveValue("-7");
+    await harness.layout.undo();
+    expect((await project(page)).seed).toBe(42);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a seed that is not a whole number is refused with the reason, and the field goes back", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { seed: 42 });
+    await openPanel(page, press);
+
+    await seedField(page).fill("1.5");
+    await seedField(page).press("Enter");
+
+    const notices = await harness.notices();
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ code: "command-refused", message: expect.stringContaining("1.5") });
+    await expect(seedField(page)).toHaveValue("42");
+    expect((await project(page)).seed).toBe(42);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("fields the host did not give say so, and a person can fill each one", async ({ page, harness, press }) => {
+    // A score whose opening section has no name: with no lyric lines either, the joined lyrics are empty.
+    await openSong(harness, SONG.replace("% a\n", ""), { style: "", scoreMode: undefined, seed: null, lyrics: "" });
+    await openPanel(page, press);
+
+    await expect(styleBox(page)).toHaveValue("");
+    await expect(panel(page).getByText("Not set. Describe the style you want.")).toBeVisible();
+    await expect(modeRadio(page, "Full")).not.toBeChecked();
+    await expect(modeRadio(page, "Melody")).not.toBeChecked();
+    await expect(panel(page).getByText("Not set. Choose one.")).toBeVisible();
+    await expect(seedField(page)).toHaveValue("");
+    await expect(panel(page).getByText("Not set. Each generation picks its own.")).toBeVisible();
+    await expect(panel(page).getByText("No lyrics yet.")).toBeVisible();
+    await expect(panel(page).getByText("0 of 2,000 characters")).toBeVisible();
+
+    await styleBox(page).fill("lofi");
+    await styleBox(page).blur();
+    await press(modeRadio(page, "Melody"));
+    await seedField(page).fill("9");
+    await seedField(page).press("Enter");
+
+    const fields = await project(page);
+    expect([fields.style, fields.scoreMode, fields.seed]).toEqual(["lofi", "melody", 9]);
+    await expect(panel(page).getByText("Not set. Describe the style you want.")).toBeHidden();
+    await expect(panel(page).getByText("Not set. Choose one.")).toBeHidden();
+    await expect(panel(page).getByText("Not set. Each generation picks its own.")).toBeHidden();
+  });
+});
+
+test.describe("the song project panel's lyrics and notices", () => {
+  const joined = (page: Page) => lyricsRegion(page).evaluate((element) => element.textContent);
+
+  test("shows the lyrics as they are joined, with their count", async ({ page, harness, press }) => {
+    await openSong(harness, SONG, { lyrics: "[a]\nla la la\ndo re mi" });
+    await openPanel(page, press);
+
+    // "[a]" and two lines of eight characters, with a line break between each: 3 + 1 + 8 + 1 + 8.
+    expect(await joined(page)).toBe("[a]\nla la la\ndo re mi");
+    await expect(panel(page).getByText("21 of 2,000 characters")).toBeVisible();
+    await expect(panel(page).getByRole("note")).toHaveCount(0);
+    await expect(projectButton(page)).toHaveAccessibleName("Project");
+  });
+
+  test("a line the score has no bar for is told as unaligned and is left out of the count", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { lyrics: "[a]\nla la la\ndo re mi\nextra" });
+    await openPanel(page, press);
+
+    expect(await joined(page)).toBe("[a]\nla la la\ndo re mi");
+    await expect(panel(page).getByText("21 of 2,000 characters")).toBeVisible();
+    await expect(
+      panel(page).getByRole("note").filter({ hasText: "1 lyric line is unaligned and left out of the joined lyrics." }),
+    ).toHaveCount(1);
+    await expect(projectButton(page)).toHaveAccessibleName("Project, 1 notice");
+  });
+
+  test("over 2,000 characters the panel says so and still lets the person edit", async ({ page, harness, press }) => {
+    const long = `[a]\n${"a".repeat(1100)}\n${"b".repeat(1100)}`;
+    await openSong(harness, SONG, { lyrics: long, style: "pop" });
+    await openPanel(page, press);
+
+    // "[a]" 3, two lines of 1,100, two line breaks: 3 + 1 + 1100 + 1 + 1100 = 2,205.
+    await expect(panel(page).getByText("2,205 of 2,000 characters")).toBeVisible();
+    await expect(
+      panel(page)
+        .getByRole("note")
+        .filter({ hasText: "The joined lyrics are 2205 characters; song2 generation accepts 2000." }),
+    ).toHaveCount(1);
+    await expect(projectButton(page)).toHaveAccessibleName("Project, 1 notice");
+
+    await styleBox(page).fill("pop, bright");
+    await styleBox(page).blur();
+    expect((await project(page)).style).toBe("pop, bright");
+  });
+
+  test("a melody project with chords says so; deleting the chords is one undo step", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
+    await openSong(harness, withChords, { scoreMode: "melody" });
+    await openPanel(page, press);
+    const notice = panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" });
+    await expect(notice).toHaveCount(1);
+
+    await press(notice.getByRole("button", { name: "Delete all chords" }));
+
+    expect(await scoreText(page)).not.toContain('"C"');
+    expect(await scoreText(page)).not.toContain('"G"');
+    expect((await project(page)).scoreMode).toBe("melody");
+    await expect(notice).toHaveCount(0);
+
+    await harness.layout.undo();
+    expect(await scoreText(page)).toBe(withChords);
+    await expect(notice).toHaveCount(1);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("switching to full from the notice keeps the chords; it is one undo step", async ({ page, harness, press }) => {
+    const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
+    await openSong(harness, withChords, { scoreMode: "melody" });
+    await openPanel(page, press);
+    const notice = panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" });
+
+    await press(notice.getByRole("button", { name: "Switch to full" }));
+
+    expect((await project(page)).scoreMode).toBe("full");
+    expect(await scoreText(page)).toBe(withChords);
+    await expect(notice).toHaveCount(0);
+    await expect(modeRadio(page, "Full")).toBeChecked();
+
+    await harness.layout.undo();
+    expect((await project(page)).scoreMode).toBe("melody");
+    await expect(notice).toHaveCount(1);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+});
+
+test.describe("the song project panel, read-only and in Chinese", () => {
+  test("read-only shows the values and edits nothing; the notices stay and the fixes do not", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
+    await openSong(
+      harness,
+      withChords,
+      { style: "warm pop", scoreMode: "melody", seed: 5, lyrics: "[a]\nla la la" },
+      { editable: false },
+    );
+    await expect(projectButton(page)).toBeVisible();
+    await openPanel(page, press);
+
+    await expect(panel(page).getByText("warm pop", { exact: true })).toBeVisible();
+    await expect(panel(page).getByText("Melody", { exact: true }).locator("visible=true")).toBeVisible();
+    await expect(panel(page).getByText("5", { exact: true })).toBeVisible();
+    await expect(panel(page).getByText("12 of 2,000 characters")).toBeVisible();
+    expect(await lyricsRegion(page).evaluate((element) => element.textContent)).toBe("[a]\nla la la");
+    await expect(panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" })).toHaveCount(1);
+    for (const control of ["textbox", "radio", "spinbutton", "button"] as const) {
+      await expect(panel(page).getByRole(control)).toHaveCount(0);
+    }
+    expect(await harness.layout.canUndo()).toBe(false);
+
+    await harness.layout.setEditable(true);
+    await expect(styleBox(page)).toHaveValue("warm pop");
+    await expect(panel(page).getByRole("button", { name: "Delete all chords" })).toBeVisible();
+  });
+
+  test("read-only says that a field is not set", async ({ page, harness, press }) => {
+    await openSong(harness, SONG, { style: "", scoreMode: undefined, seed: null }, { editable: false });
+    await openPanel(page, press);
+    await expect(panel(page).getByText("Not set", { exact: true })).toHaveCount(3);
+  });
+
+  test("speaks Chinese when the session does", async ({ page, harness, press }) => {
+    await openSong(harness, SONG, { style: "", scoreMode: "full", seed: null }, { language: "zh" });
+    const button = toolbar(page).getByRole("button", { name: /^歌曲项目/ });
+    await press(button);
+    const zh = toolbar(page).getByRole("region", { name: "歌曲项目" });
+    await expect(zh).toBeVisible();
+    await expect(zh.getByRole("textbox", { name: "风格描述" })).toBeVisible();
+    await expect(zh.getByRole("radio", { name: "完整（full）" })).toBeChecked();
+    await expect(zh.getByRole("spinbutton", { name: "种子" })).toBeVisible();
+    await expect(zh.getByRole("region", { name: "歌词" })).toBeVisible();
+    // The joined lyrics are the label of the score's one named section, "[a]": three characters.
+    await expect(zh.getByText("3 / 2,000 字")).toBeVisible();
+  });
+});
