@@ -2,7 +2,8 @@
 // ABOUTME: The view parts turn their events into these inputs, so a host's own views get the same keys and clicks.
 
 import { gridTicks } from "./arrangement";
-import { gridStepOf } from "./commands-notes";
+import type { ScoreCommand } from "./commands";
+import { type Grid, gridStepOf } from "./commands-notes";
 import type { Diagnostic } from "./diagnostics";
 import { gridLineAfter, gridLineBefore, snapToGrid } from "./grid";
 import type { Score } from "./score";
@@ -50,7 +51,14 @@ export type EditingInput =
   /** A control that inverts the selection: it does what Ctrl+Shift+A does. */
   | { readonly type: "invert-selection" }
   /** A control that clears the selection: it does what Escape does. */
-  | { readonly type: "clear-selection" };
+  | { readonly type: "clear-selection" }
+  /**
+   * A drag that moves the selected notes, as one edit: by `timeTicks` in time, which the session's grid snaps each start
+   * to, and by `semitones` in pitch. It does what an arrow key does, with the distance the pointer covered.
+   */
+  | { readonly type: "move-notes"; readonly timeTicks: number; readonly semitones: number }
+  /** A drag of one edge of the selected notes, as one edit: the edge moves by `timeTicks`, snapped to the session's grid. */
+  | { readonly type: "resize-notes"; readonly edge: "start" | "end"; readonly timeTicks: number };
 
 /** What an input came to. */
 export interface EditingInputResult {
@@ -125,6 +133,69 @@ function deleteTool(score: Score): ScoreTool {
   };
 }
 
+/**
+ * Moves or resizes the selected pitched notes with one command on the session's grid. Nothing is handled when no pitched
+ * note is selected, which leaves the key to the insertion point. The offsets are whole ticks and semitones, so a pointer's
+ * fraction is rounded here and the command never refuses it as a fraction.
+ */
+function editSelection(
+  session: EditingSession,
+  command: (noteIds: string[], grid: Grid) => ScoreCommand,
+): EditingInputResult {
+  const score = readableScore(session);
+  if (score === null) return IGNORED;
+  const noteIds = pitchedSelection(score, session.selection);
+  if (noteIds.length === 0) return IGNORED;
+  const result = session.dispatch(command(noteIds, session.grid));
+  return { handled: true, refused: result.ok ? [] : result.diagnostics };
+}
+
+function moveSelection(session: EditingSession, timeTicks: number, semitones: number): EditingInputResult {
+  return editSelection(session, (noteIds, grid) => ({
+    type: "moveNotes",
+    noteIds,
+    timeTicks: Math.round(timeTicks),
+    semitones: Math.round(semitones),
+    grid,
+  }));
+}
+
+function resizeSelection(session: EditingSession, edge: "start" | "end", timeTicks: number): EditingInputResult {
+  return editSelection(session, (noteIds, grid) => ({
+    type: "resizeNotes",
+    noteIds,
+    edge,
+    timeTicks: Math.round(timeTicks),
+    grid,
+  }));
+}
+
+/**
+ * What an arrow key does to the selected notes. Left and Right move them by a grid step, Up and Down by a semitone and
+ * with Shift by an octave; Shift with Left and Right moves the end edge by a grid step. Ctrl, Cmd and Alt are left to the
+ * keys that walk the focus and to the system.
+ */
+function pressNoteKey(session: EditingSession, input: EditingKeyInput): EditingInputResult {
+  if (input.ctrlKey === true || input.metaKey === true || input.altKey === true) return IGNORED;
+  const step = gridStepOf(session.grid);
+  const shift = input.shiftKey === true;
+  if (step === null) return IGNORED;
+  switch (input.key) {
+    case "ArrowLeft":
+    case "ArrowRight": {
+      const direction = input.key === "ArrowRight" ? 1 : -1;
+      return shift ? resizeSelection(session, "end", direction * step) : moveSelection(session, direction * step, 0);
+    }
+    case "ArrowUp":
+    case "ArrowDown": {
+      const direction = input.key === "ArrowUp" ? 1 : -1;
+      return moveSelection(session, 0, direction * (shift ? 12 : 1));
+    }
+    default:
+      return IGNORED;
+  }
+}
+
 /** Whether Delete has a note to act on: the session is editable and a pitched note is selected. */
 export function canDeleteSelection(session: EditingSession): boolean {
   const score = readableScore(session);
@@ -170,6 +241,8 @@ function pressKey(session: EditingSession, input: EditingKeyInput): EditingInput
   }
   const selecting = selectionActionOf(input);
   if (selecting !== null) return handleEditingInput(session, { type: selecting });
+  const editing = pressNoteKey(session, input);
+  if (editing.handled) return editing;
   const score = readableScore(session);
   const step = gridStepOf(session.grid) ?? 1;
   const tick = score === null ? null : insertionPointTargetOf(score, step, session.insertionPoint, input);
@@ -200,6 +273,10 @@ export function handleEditingInput(session: EditingSession, input: EditingInput)
       return selectWith(session, (score) => invertSelection(session, score));
     case "clear-selection":
       return selectWith(session, () => clearSelection(session));
+    case "move-notes":
+      return moveSelection(session, input.timeTicks, input.semitones);
+    case "resize-notes":
+      return resizeSelection(session, input.edge, input.timeTicks);
     case "key":
       return pressKey(session, input);
   }

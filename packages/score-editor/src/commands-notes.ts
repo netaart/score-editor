@@ -61,8 +61,9 @@ interface Placement {
   readonly order: number;
 }
 
+/** The grid line nearest `tick`. Adding zero turns the -0 that rounding a small negative gives into 0, which the read-back compares with Object.is. */
 function snap(tick: number, step: number): number {
-  return Math.round(tick / step) * step;
+  return Math.round(tick / step) * step + 0;
 }
 
 /** One step of a grid in ticks, or null for a grid that is not one: a value outside the offered ones, or a dotted flag that is no boolean. */
@@ -332,6 +333,54 @@ function placeChords(
   return { notes: next, chords };
 }
 
+/** A chain of tied notes as one thing with a pitch: from where it starts to where it ends. */
+export interface Chain {
+  readonly start: number;
+  readonly end: number;
+  readonly midi: number;
+}
+
+/**
+ * Where a chain lands under a command at one grid step, before the refusal rules and the overlap rule act on it. A move
+ * snaps the start only when it moves in time and keeps the length; a resize snaps the edge it moves and keeps the other.
+ * The command and everything that shows or follows its result read the arithmetic here.
+ */
+export function landing(chain: Chain, command: MoveResizeCommand, step: number): Chain {
+  if (command.type === "moveNotes") {
+    const start = command.timeTicks === 0 ? chain.start : snap(chain.start + command.timeTicks, step);
+    return { start, end: start + (chain.end - chain.start), midi: chain.midi + command.semitones };
+  }
+  if (command.edge === "start") {
+    return { start: snap(chain.start + command.timeTicks, step), end: chain.end, midi: chain.midi };
+  }
+  return { start: chain.start, end: snap(chain.end + command.timeTicks, step), midi: chain.midi };
+}
+
+/**
+ * The id each named note will have after the command: a chain is named by its first segment, which starts where the
+ * chain lands, so the note a user moved is found again by its new start. Ids that name nothing pitched are left out.
+ */
+export function movedIds(score: Score, command: MoveResizeCommand): Map<string, string> {
+  const moved = new Map<string, string>();
+  const step = gridStepOf(command.grid);
+  if (step === null) return moved;
+  const byVoice = new Map<string, NoteSpan[]>();
+  for (const id of command.noteIds) {
+    const note = score.notes.find((candidate) => candidate.id === id);
+    if (note === undefined || note.midi === null) continue;
+    let spans = byVoice.get(note.voice);
+    if (spans === undefined) {
+      spans = spansOf(score, note.voice);
+      byVoice.set(note.voice, spans);
+    }
+    const span = spans.find((candidate) => candidate.notes?.some((member) => member.id === id));
+    if (span === undefined) continue;
+    const { start } = landing({ start: span.start, end: span.end, midi: span.midi as number }, command, step);
+    moved.set(id, noteId(span.voice, start));
+  }
+  return moved;
+}
+
 /**
  * Moves or resizes the whole tie chain of every named note as one command. All targets are checked before anything
  * changes, so a refusal names the first note that cannot be placed and leaves the score as it was.
@@ -397,20 +446,11 @@ export function runNoteCommand(
   const scoreEnd = last === undefined ? 0 : last.start + last.length;
   const placements: Placement[] = [];
   for (const { span, namedId, order } of chosen) {
-    const length = span.end - span.start;
-    let start: number;
-    let end: number;
-    if (command.type === "moveNotes") {
-      start = command.timeTicks === 0 ? span.start : snap(span.start + command.timeTicks, step);
-      end = start + length;
-    } else if (command.edge === "start") {
-      start = snap(span.start + command.timeTicks, step);
-      end = span.end;
-    } else {
-      start = span.start;
-      end = snap(span.end + command.timeTicks, step);
-    }
-    const midi = (span.midi as number) + (command.type === "moveNotes" ? command.semitones : 0);
+    const { start, end, midi } = landing(
+      { start: span.start, end: span.end, midi: span.midi as number },
+      command,
+      step,
+    );
     const at = noteAt(score, namedId);
     if (start < 0) return commandRefusal("note-before-start", {}, at);
     if (end > scoreEnd) return commandRefusal("note-past-end", {}, at);

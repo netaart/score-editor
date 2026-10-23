@@ -3,7 +3,7 @@
 
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
-import { type Grid, isGridAllowed } from "./commands-notes";
+import { type Grid, isGridAllowed, movedIds } from "./commands-notes";
 import { isProjectCommand, type ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
@@ -309,19 +309,53 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     return a.length === b.length && a.every((id, at) => id === b[at]);
   }
 
-  function projectChanged(cause: SessionChangeCause, command?: ProjectCommand): void {
-    const kept = idsStillInScore(selection);
+  /**
+   * `following` is the selection to keep, when the change moved the notes it names to ids of their own; it replaces the
+   * current selection before ids that name no note are dropped.
+   */
+  function projectChanged(
+    cause: SessionChangeCause,
+    command?: ProjectCommand,
+    following?: ReadonlyArray<string>,
+  ): void {
+    const kept = idsStillInScore(following ?? selection);
     const selectionChanged = !sameIds(kept, selection);
     selection = kept;
     rejectedText = null;
     announce(cause, { project: true, selection: selectionChanged, ...(command === undefined ? {} : { command }) });
   }
 
-  function commit(next: SongProject, cause: SessionChangeCause, command?: ProjectCommand): void {
+  /**
+   * The selection a move or a resize leaves: the notes it named are found again by their new ids, which are their new
+   * starts. Undefined for every other command, which keeps the selection as ids that still name a note.
+   */
+  function followedSelection(commands: ReadonlyArray<ScoreCommand | ProjectCommand>): string[] | undefined {
+    const only = commands[0];
+    const reading = read();
+    if (commands.length !== 1 || only === undefined || reading.kind !== "score") return undefined;
+    if (only.type !== "moveNotes" && only.type !== "resizeNotes") return undefined;
+    const moved = movedIds(reading.score, only);
+    return [...new Set(selection.map((id) => moved.get(id) ?? id))];
+  }
+
+  /** The selections around a step that moved notes, so an undo and a redo put the selection back with the notes. */
+  const selectionBefore = new WeakMap<SongProject, ReadonlyArray<string>>();
+  const selectionAfter = new WeakMap<SongProject, ReadonlyArray<string>>();
+
+  function commit(
+    next: SongProject,
+    cause: SessionChangeCause,
+    command?: ProjectCommand,
+    following?: ReadonlyArray<string>,
+  ): void {
+    if (following !== undefined) {
+      selectionBefore.set(project, selection);
+      selectionAfter.set(next, following);
+    }
     past.push(project);
     future.length = 0;
     project = next;
-    projectChanged(cause, command);
+    projectChanged(cause, command, following);
   }
 
   /** The one path a list of commands takes into the history: all apply, or none does. */
@@ -331,9 +365,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   ): DispatchResult {
     return withDialect<DispatchResult>(
       (dialect) => {
+        const following = followedSelection(commands);
         const applied = applyCommandList(dialect, project, commands);
         if (!applied.ok) return { ok: false, project, diagnostics: applied.diagnostics };
-        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch", named);
+        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch", named, following);
         return { ok: true, project, diagnostics: applied.diagnostics };
       },
       (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),
@@ -472,7 +507,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       if (previous === undefined) return false;
       future.push(project);
       project = previous;
-      projectChanged("undo");
+      projectChanged("undo", undefined, selectionBefore.get(previous));
       return true;
     },
     redo() {
@@ -480,7 +515,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       if (next === undefined) return false;
       past.push(project);
       project = next;
-      projectChanged("redo");
+      projectChanged("redo", undefined, selectionAfter.get(next));
       return true;
     },
     subscribe(call) {
