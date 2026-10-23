@@ -166,3 +166,29 @@ test.describe("the length condition", () => {
     await expect(status(page)).toHaveText("1 of 9 notes selected");
   });
 });
+
+/** C major until the middle of bar 1, then G major; the pitches are worked out in tests/filter-notes.test.ts. */
+const KEY_CHANGE = vocalOnly("C4^D4[K:G]F4_B4|G4F4=F4A4|");
+const keyChoice = (page: Page) => panel(page).getByRole("combobox", { name: "In or out of the key", exact: true });
+
+test.describe("the key condition", () => {
+  test("selects the notes in the key in force where each starts, or the notes out of it", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, KEY_CHANGE);
+    await openPanel(page, press);
+
+    await expect(keyChoice(page).locator("option")).toHaveText(["In the key", "Out of the key"]);
+    await keyChoice(page).selectOption({ label: "Out of the key" });
+    // D#4 (the C major bar), B-flat4 (G major) and the F natural of bar 2 (G major).
+    expect(await harness.layout.selection()).toEqual(["Vocal:256", "Vocal:768", "Vocal:1536"]);
+    await expect(check(page, "Key")).toBeChecked();
+    await expect(status(page)).toHaveText("3 of 8 notes selected");
+
+    await keyChoice(page).selectOption({ label: "In the key" });
+    expect(await harness.layout.selection()).toEqual(["Vocal:0", "Vocal:512", "Vocal:1024", "Vocal:1280", "Vocal:1792"]);
+    await expect(status(page)).toHaveText("5 of 8 notes selected");
+  });
+});

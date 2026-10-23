@@ -30,6 +30,7 @@ interface Conditions {
   time: { on: boolean; first: number | null; last: number | null };
   /** Lengths in ticks. */
   length: { on: boolean; min: number | null; max: number | null };
+  key: { on: boolean; mode: "in" | "out" };
 }
 
 function gcd(a: number, b: number): number {
@@ -146,6 +147,9 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   word(length.fields, (t) => t.to);
   const lengthLongest = select(length.fields, (t) => t.lengthLongest);
 
+  const key = conditionRow("key", (t) => t.key);
+  const keyChoice = select(key.fields, (t) => t.keyChoice);
+
   const status = create(doc, "div", "sce-filter-status", panel);
   status.setAttribute("role", "status");
   const actions = create(doc, "div", "sce-filter-actions", panel);
@@ -156,6 +160,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     pitch: { on: false, min: null, max: null },
     time: { on: false, first: null, last: null },
     length: { on: false, min: null, max: null },
+    key: { on: false, mode: "in" },
   };
   /** The reading the open panel was last filled from. */
   let rendered: ScoreReading | null = null;
@@ -171,6 +176,8 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     title.textContent = t.panel;
     done.textContent = t.done;
     for (const apply of texts) apply(t);
+    const { reading } = session;
+    if (reading.kind === "score" && panel.matches(":popover-open")) render(reading.score);
     renderStatus(true);
   }
 
@@ -241,6 +248,17 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       if (kept !== null) field.value = String(kept);
     }
     length.check.checked = conditions.length.on;
+
+    keyChoice.replaceChildren(
+      ...(["in", "out"] as const).map((mode) => {
+        const option = doc.createElement("option");
+        option.value = mode;
+        option.textContent = mode === "in" ? t.keyIn : t.keyOut;
+        return option;
+      }),
+    );
+    keyChoice.value = conditions.key.mode;
+    key.check.checked = conditions.key.on;
   }
 
   /** Takes what the person set in a field of the panel into the conditions. */
@@ -254,6 +272,8 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     conditions.length.on = length.check.checked;
     if (lengthShortest.value !== "") conditions.length.min = Number(lengthShortest.value);
     if (lengthLongest.value !== "") conditions.length.max = Number(lengthLongest.value);
+    conditions.key.on = key.check.checked;
+    if (keyChoice.value === "in" || keyChoice.value === "out") conditions.key.mode = keyChoice.value;
   }
 
   function currentFilter(score: Score): { filter: NoteFilter; count: number } {
@@ -261,6 +281,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       pitch?: { min: number; max: number };
       time?: { from?: number; to?: number };
       duration?: { min: number; max: number };
+      key?: "in" | "out";
     } = {};
     let count = 0;
     const { pitch: p } = conditions;
@@ -276,6 +297,10 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     }
     if (conditions.length.on && conditions.length.min !== null && conditions.length.max !== null) {
       filter.duration = { min: conditions.length.min, max: conditions.length.max };
+      count += 1;
+    }
+    if (conditions.key.on) {
+      filter.key = conditions.key.mode;
       count += 1;
     }
     return { filter, count };
