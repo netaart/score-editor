@@ -170,6 +170,9 @@ function resizeSelection(session: EditingSession, edge: "start" | "end", timeTic
   }));
 }
 
+/** The four arrows that edit a selected note; Ctrl, Cmd and Alt are checked beside them. */
+const NOTE_EDIT_ARROWS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
+
 /**
  * Whether a key press is one of the note editing keys: an arrow with no Ctrl, Cmd or Alt. Shift is allowed, since it
  * makes Up and Down an octave and Left and Right a resize. The note focus and the editing input ask this one predicate,
@@ -177,9 +180,7 @@ function resizeSelection(session: EditingSession, edge: "start" | "end", timeTic
  */
 export function isNoteEditKey(input: Pick<EditingKeyInput, "key" | "ctrlKey" | "metaKey" | "altKey">): boolean {
   if (input.ctrlKey === true || input.metaKey === true || input.altKey === true) return false;
-  return (
-    input.key === "ArrowLeft" || input.key === "ArrowRight" || input.key === "ArrowUp" || input.key === "ArrowDown"
-  );
+  return NOTE_EDIT_ARROWS.has(input.key);
 }
 
 /**
