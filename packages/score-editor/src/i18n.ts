@@ -77,6 +77,10 @@ export interface Messages {
   /** Draft keeper notices: the source changed under a draft, and a write or removal did not reach the host store. */
   draftSourceChanged: string;
   draftSaveFailed: string;
+  /** The tempo, key and transpose controls of the toolbar: the group's name, the field's name and what is said aloud. */
+  songControls: string;
+  tempo: string;
+  tempoSet(bpm: number): string;
 }
 
 const en: Messages = {
@@ -157,6 +161,9 @@ const en: Messages = {
   previewBlocked: "Blocked by the browser. Press Preview again.",
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
+  songControls: "Tempo and key",
+  tempo: "Tempo (BPM)",
+  tempoSet: (bpm) => `Tempo set to ${bpm} BPM`,
 };
 
 const zh: Messages = {
@@ -230,6 +237,9 @@ const zh: Messages = {
   previewBlocked: "浏览器没有允许发声，请再按一次试听",
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
+  songControls: "速度和调",
+  tempo: "速度（BPM）",
+  tempoSet: (bpm) => `速度已设为 ${bpm} BPM`,
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

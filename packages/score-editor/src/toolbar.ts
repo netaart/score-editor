@@ -1,6 +1,7 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
+import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
@@ -11,6 +12,7 @@ import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import { mountSynthControl } from "./synth-preview";
+import { mountTempoKeyControls } from "./tempo-key";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
@@ -33,6 +35,12 @@ export interface ToolbarOptions extends EditingPartOptions {
    * that mounts `mountSynthPreview` in a place of its own turns it off, so the control is not there twice.
    */
   synthPreview?: boolean;
+  /**
+   * Whether the toolbar holds the tempo field, the key menu and the two transpose buttons, which act on the whole song and
+   * are there while the session is editable and its score reads. Off by default, so a toolbar a host already mounts gains
+   * no control; the default editor turns it on.
+   */
+  tempoKey?: boolean;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -82,10 +90,31 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
   const badge = create(doc, "span", "sce-badge", end ?? row);
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
+  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
+  // project changes by anything else, as the text view keeps its notice.
+  const strip = create(doc, "p", "sce-notice sce-project-notice", root);
+  strip.setAttribute("role", "note");
+  strip.hidden = true;
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
+  let told: ReadonlyArray<Diagnostic> = [];
+  function drawStrip(): void {
+    strip.textContent = told.map((notice) => formatDiagnostic(notice, session.view.language)).join(" ");
+    strip.hidden = told.length === 0;
+  }
+  const song = options.tempoKey
+    ? mountTempoKeyControls(row, session, {
+        refused,
+        live,
+        noticed(notices) {
+          told = notices;
+          drawStrip();
+          return strip.textContent ?? "";
+        },
+      })
+    : null;
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
 
@@ -133,7 +162,10 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
 
   function draw(): void {
-    if (session.view.language !== language) applyLanguage();
+    if (session.view.language !== language) {
+      applyLanguage();
+      drawStrip();
+    }
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
     const deletable = canDeleteSelection(session);
@@ -152,7 +184,13 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
 
   draw();
-  const unsubscribe = session.subscribe(draw);
+  const unsubscribe = session.subscribe((change) => {
+    if (change.project && told.length > 0) {
+      told = [];
+      drawStrip();
+    }
+    draw();
+  });
   let destroyed = false;
   return {
     destroy() {
@@ -163,6 +201,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      song?.destroy();
       synth?.destroy();
       root.remove();
       releaseStyles();
