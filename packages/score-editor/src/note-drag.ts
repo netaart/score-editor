@@ -8,9 +8,16 @@ import type { EditingSession } from "./session";
 
 /**
  * The width of the edge zones at both ends of a selected note, in pixels: where a drag resizes and does not move. A
- * finger gets the wider zone. The stylesheet draws the grips and the cursor with the same numbers.
+ * finger gets the wider zone, narrowed on a narrow note to `EDGE_ZONE_SHARE` of its width but never below
+ * `EDGE_ZONE_FLOOR`. The stylesheet draws the grips and the cursor with the same numbers and the same share and floor.
  */
 export const EDGE_ZONE = { fine: 6, coarse: 12 } as const;
+
+/** On a coarse pointer a zone takes this share of a narrow note's width, so a quarter note keeps a body for a finger. */
+export const EDGE_ZONE_SHARE = 0.3;
+
+/** The narrowest a coarse pointer's zone is, the floor that keeps a grip a usable target on a small note. */
+export const EDGE_ZONE_FLOOR = 8;
 
 /** A zone is only there while the note is at least this many zones wide; a narrower note is all body, and moves. */
 export const ZONES_PER_NOTE = 3;
@@ -21,16 +28,20 @@ export type Grab = { readonly kind: "move" } | { readonly kind: "resize"; readon
 /**
  * What a press at `clientX` on a selected note's block grabs. A block that continues into another note of a tie has no
  * edge on that side: the chain is resized from its two ends only. A note narrower inside its frame than three zones has
- * none, which is when the stylesheet draws no grips. `coarse` says the pointer is a finger or a pen.
+ * none, which is when the stylesheet draws no grips. `coarse` says the pointer is a finger or a pen, whose zone narrows
+ * with the note.
  */
 export function grabAt(block: Element, clientX: number, coarse: boolean): Grab {
-  const zone = coarse ? EDGE_ZONE.coarse : EDGE_ZONE.fine;
   const area = block.getBoundingClientRect();
   // The zones lie inside the frame (the border), which is where the stylesheet draws the grips and measures their room.
   const html = block instanceof HTMLElement ? block : null;
   const left = html?.clientLeft ?? 0;
   const right = html ? html.offsetWidth - html.clientWidth - left : 0;
-  if (area.width - left - right < ZONES_PER_NOTE * zone) return { kind: "move" };
+  const inside = area.width - left - right;
+  const zone = coarse
+    ? Math.max(EDGE_ZONE_FLOOR, Math.min(EDGE_ZONE.coarse, inside * EDGE_ZONE_SHARE))
+    : EDGE_ZONE.fine;
+  if (inside < ZONES_PER_NOTE * zone) return { kind: "move" };
   if (!block.hasAttribute("data-tie-prev") && clientX - (area.left + left) < zone)
     return { kind: "resize", edge: "start" };
   if (!block.hasAttribute("data-tie-next") && area.right - right - clientX < zone)

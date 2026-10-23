@@ -1,9 +1,11 @@
 // ABOUTME: The look of dragging selected notes, as a stylesheet fragment: the edge grips, the cursors, the ghosts and the touch behaviour.
 // ABOUTME: styles.ts appends it to the editor's stylesheet; the edge widths come from note-drag.ts, so the zones a press finds are the ones drawn.
-import { EDGE_ZONE, ZONES_PER_NOTE } from "./note-drag";
+import { EDGE_ZONE, EDGE_ZONE_FLOOR, EDGE_ZONE_SHARE, ZONES_PER_NOTE } from "./note-drag";
 
 const fine = EDGE_ZONE.fine;
 const coarse = EDGE_ZONE.coarse;
+const floor = EDGE_ZONE_FLOOR;
+const share = EDGE_ZONE_SHARE * 100;
 
 /** A grip: a short bar in the colour of the ground, inside the edge zone, which is also where the cursor changes. */
 const grip = (side: "start" | "end") => `
@@ -20,8 +22,9 @@ export const dragCss = `
 /*
  * A selected note is taken hold of by its body, which moves the selection, or by an edge zone, which resizes it. The
  * body shows it with the move cursor, and the zones with grips; a note narrower than ${ZONES_PER_NOTE} zones has none, and is all
- * body. A note that continues into a tied note has no zone on that side. A finger gets the wider zone, and the browser
- * keeps its hands off a selected note, so that a slide on it moves it and does not scroll the lane.
+ * body. A note that continues into a tied note has no zone on that side. A finger gets the wider zone, narrowed on a
+ * narrow note to ${share}% of its width but never below ${floor}px, which is the share and the floor note-drag.ts reads. The
+ * browser keeps its hands off a selected note, so that a slide on it moves it and does not scroll the lane.
  */
 .sce-root[data-editable="true"] .sce-note[data-selected] {
   cursor: move;
@@ -32,7 +35,7 @@ export const dragCss = `
 }
 @media (pointer: coarse) {
   .sce-root[data-editable="true"] .sce-note[data-selected] {
-    --sce-_edge: ${coarse}px;
+    --sce-_edge: max(${floor}px, min(${coarse}px, ${share}%));
   }
 }
 @container (min-width: ${ZONES_PER_NOTE * fine}px) {
@@ -43,7 +46,7 @@ export const dragCss = `
     }
   }
 }
-@container (min-width: ${ZONES_PER_NOTE * coarse}px) {
+@container (min-width: ${ZONES_PER_NOTE * floor}px) {
   @media (pointer: coarse) {
     .sce-root[data-editable="true"] .sce-note[data-selected]:not([data-tie-prev])::before {${grip("start")}
     }
