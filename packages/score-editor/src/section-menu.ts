@@ -331,17 +331,23 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
       }
     };
 
-    const naming: FormKind = section.name === null ? "name" : "rename";
-    choice("rename", `${section.name === null ? t.sectionNameIt : t.sectionRename}…`, () =>
-      draw.form.open(index, naming),
-    );
-    choice("start", `${t.sectionStart}…`, () => draw.form.open(index, "start"));
-    menu.rule();
-    choice("move-earlier", t.sectionMoveEarlier, act("move-earlier"));
-    choice("move-later", t.sectionMoveLater, act("move-later"));
-    choice("duplicate", t.sectionDuplicate, act("duplicate"));
-    menu.rule();
-    choice("delete", t.sectionDelete, act("delete"));
+    // The choices are made when the menu first opens, so the bands of a long song hold two nodes each until one is pressed.
+    let filled = false;
+    const fill = (): void => {
+      if (filled) return;
+      filled = true;
+      const naming: FormKind = section.name === null ? "name" : "rename";
+      choice("rename", `${section.name === null ? t.sectionNameIt : t.sectionRename}…`, () =>
+        draw.form.open(index, naming),
+      );
+      choice("start", `${t.sectionStart}…`, () => draw.form.open(index, "start"));
+      menu.rule();
+      choice("move-earlier", t.sectionMoveEarlier, act("move-earlier"));
+      choice("move-later", t.sectionMoveLater, act("move-later"));
+      choice("duplicate", t.sectionDuplicate, act("duplicate"));
+      menu.rule();
+      choice("delete", t.sectionDelete, act("delete"));
+    };
 
     // A choice the commands would refuse is muted and says why; pressing it does nothing and leaves the menu open.
     // Muted choices that are refused in the same words, side by side, share one note under the last of them.
@@ -361,6 +367,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
       "beforetoggle",
       (event) => {
         if ((event as ToggleEvent).newState !== "open") return;
+        fill();
         latest = sectionActions(session, index);
         const language = session.view.language;
         const entries = [...choices.entries()].map(([name, found]) => {

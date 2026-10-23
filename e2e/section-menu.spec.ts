@@ -94,6 +94,21 @@ test.describe("opening the menu of a section", () => {
     await expect(choice(page, "Section verse", "Rename…")).toBeFocused();
   });
 
+  test("a closed menu holds no choices, so the bands of a long song cost the page almost nothing until one is pressed", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+    const everyChoice = page.getByRole("menuitem", { includeHidden: true });
+    await expect(everyChoice).toHaveCount(0);
+    await press(bandButton(page, "Section verse"));
+    await expect(everyChoice).toHaveCount(MENU_ITEMS.length);
+    await page.keyboard.press("Escape");
+    await press(bandButton(page, "Section chorus"));
+    await expect(everyChoice).toHaveCount(2 * MENU_ITEMS.length);
+  });
+
   test("a press anywhere on the band opens it, also where the name is not", async ({ page, harness, press }) => {
     await openSong(harness);
     const band = await box(bandNames(page).nth(2));
