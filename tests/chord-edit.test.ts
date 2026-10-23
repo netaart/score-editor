@@ -2,10 +2,12 @@
 // ABOUTME: Expected positions and names are worked out by hand from the bar grid and RULES.md C1 to C3, never from the code under test.
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  type ChordSlot,
   chordSlots,
   createDialectRegistry,
   createEditingSession,
   type EditingSession,
+  nearestChordSlot,
   type SongProject,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
@@ -117,5 +119,48 @@ describe("the places a chord can go in a dialect where two voices allow chords",
     const none = { ...constraints, voices: constraints.voices.map((voice) => ({ ...voice, allowsChords: false })) };
 
     expect(chordSlots(reading.score, none)).toEqual([]);
+  });
+});
+
+describe("the nearest place for a chord", () => {
+  function slotsOf(text: string): ReadonlyArray<ChordSlot> {
+    const { reading, constraints } = open({ score: text });
+    if (reading.kind !== "score" || constraints === null) throw new Error("the fixture did not read");
+    return chordSlots(reading.score, constraints);
+  }
+  // Starts at 0, 256, 512, 768, 1024 and 1536.
+  const near = (tick: number) => nearestChordSlot(slotsOf(CHORDED), tick)?.noteId;
+
+  it("is the start closest to the tick", () => {
+    expect(near(100)).toBe("Vocal:0");
+    expect(near(130)).toBe("Vocal:256");
+    expect(near(850)).toBe("Vocal:768");
+    expect(near(900)).toBe("Vocal:1024");
+    expect(near(1250)).toBe("Vocal:1024");
+    expect(near(1300)).toBe("Vocal:1536");
+    expect(near(1400)).toBe("Vocal:1536");
+  });
+
+  it("is the earlier start when the tick is halfway between two", () => {
+    expect(near(128)).toBe("Vocal:0");
+    expect(near(1280)).toBe("Vocal:1024");
+  });
+
+  it("is a rest's start as well as a note's", () => {
+    expect(near(1030)).toBe("Vocal:1024");
+  });
+
+  it("is the first start before the score and the last past its end", () => {
+    expect(near(-40)).toBe("Vocal:0");
+    expect(near(99999)).toBe("Vocal:1536");
+  });
+
+  it("is never an Ins start, even when one is closer", () => {
+    // Ins has a note at 384, 128 ticks from Vocal's 256 and 512.
+    expect(near(380)).toBe("Vocal:256");
+  });
+
+  it("is nothing where there is no place", () => {
+    expect(nearestChordSlot([], 10)).toBeNull();
   });
 });

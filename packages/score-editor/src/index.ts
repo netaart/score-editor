@@ -4,7 +4,7 @@
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
 export type { ChordSlot } from "./chord-edit";
-export { chordSlots } from "./chord-edit";
+export { chordSlots, nearestChordSlot } from "./chord-edit";
 export { mountChordTrack } from "./chord-track";
 export type { ScoreCommand } from "./commands";
 export type { Grid, GridValue, MoveNotesCommand, MoveResizeCommand, ResizeNotesCommand } from "./commands-notes";

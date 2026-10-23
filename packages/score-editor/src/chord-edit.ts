@@ -48,3 +48,22 @@ export function chordSlots(score: Score, constraints: DialectConstraints): Reado
       };
     });
 }
+
+/**
+ * The place whose start is nearest to `tick`; one halfway between two goes to the earlier. Null where there is no place.
+ * `slots` are in time order, as `chordSlots` gives them.
+ */
+export function nearestChordSlot(slots: ReadonlyArray<ChordSlot>, tick: number): ChordSlot | null {
+  let low = 0;
+  let high = slots.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((slots[middle]?.start ?? 0) < tick) low = middle + 1;
+    else high = middle;
+  }
+  const after = slots[low];
+  const before = slots[low - 1];
+  if (before === undefined) return after ?? null;
+  if (after === undefined) return before;
+  return tick - before.start <= after.start - tick ? before : after;
+}
