@@ -132,6 +132,7 @@ const ownerGroups = {
     "lyricBoundaryPlan",
     "lyricDropPlan",
     "lyricSplitCommand",
+    "barLineTick",
   ],
   "references/editing-session.md": [
     "createEditingSession",

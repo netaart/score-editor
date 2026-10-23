@@ -59,12 +59,17 @@ export interface LyricBoundaryPlan {
   readonly commands: ReadonlyArray<ProjectCommand>;
 }
 
-/** The start of the bar line `index`, the one after the last bar being the end of the score. */
+/**
+ * The tick of the bar line `index`: the start of that bar, the line after the last bar being the end of the score. A line
+ * before the first bar is held at the start of the score and one past the end at its end, so a step off either end of the
+ * score lands where it was.
+ */
 export function barLineTick(score: Score, index: number): number {
-  const bar = score.bars[index];
-  if (bar !== undefined) return bar.start;
+  const first = score.bars[0];
   const last = score.bars[score.bars.length - 1];
-  return last === undefined ? 0 : last.start + last.length;
+  if (first === undefined || last === undefined) return 0;
+  if (index <= 0) return first.start;
+  return score.bars[index]?.start ?? last.start + last.length;
 }
 
 /** The bar line nearest `tick`; halfway between two lines belongs to the earlier one. */

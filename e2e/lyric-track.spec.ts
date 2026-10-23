@@ -773,6 +773,29 @@ test.describe("the keyboard", () => {
   });
 });
 
+test.describe("a step past an end of the score", () => {
+  test("goes nowhere from the first phrase's start and the last phrase's end, and the range of the handle says the same", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    const first = handle(page, "Start", 1);
+    await first.focus();
+    await expect(first).toHaveAttribute("aria-valuemin", "1");
+    await expect(first).toHaveAttribute("aria-valuenow", "1");
+    await page.keyboard.press("ArrowLeft");
+    expect(await storedLines(page)).toEqual(LINES);
+
+    const last = handle(page, "End", 4);
+    await last.focus();
+    await expect(last).toHaveAttribute("aria-valuemax", "8");
+    await expect(last).toHaveAttribute("aria-valuenow", "8");
+    await page.keyboard.press("ArrowRight");
+    expect(await storedLines(page)).toEqual(LINES);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+});
+
 test.describe("placing a line on a bar by its number", () => {
   const barField = (page: Page) => lyrics(page).getByRole("spinbutton", { name: "Bar number", exact: true });
 

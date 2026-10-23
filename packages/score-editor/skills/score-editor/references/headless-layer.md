@@ -145,8 +145,9 @@ score counted as unaligned. `lyricBoundaryPlan(score, lines, { line, edge, tick 
 lands (the nearest bar line, held inside the line's section, one bar at least, clear of other lines) and the
 `setLyricLinePhrase` commands to send; a line that shares the edge moves with it, and the one that gives up bars goes
 first. `lyricDropPlan` gives a line one bar, the bar under a tick. `lyricSplitCommand` builds the `splitLyricLine`
-command for a caret. Send a plan's commands as one list (`applyCommandList`, or `session.dispatchAll`) so one gesture is
-one undo step.
+command for a caret. `barLineTick(score, index)` gives the tick of the bar line a plan's `boundary` names, to draw a guide
+there; an index before the first bar gives the start of the score and one past the last bar its end. Send a plan's
+commands as one list (`applyCommandList`, or `session.dispatchAll`) so one gesture is one undo step.
 
 ```ts
 import { applyCommandList, lyricBoundaryPlan, lyricLinesOf } from "@neta-art/score-editor";

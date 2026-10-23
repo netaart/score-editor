@@ -3,6 +3,7 @@
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
   applyCommandList,
+  barLineTick,
   type LyricLine,
   lyricBoundaryPlan,
   lyricDropPlan,
@@ -97,6 +98,26 @@ describe("the rows of the lyric track", () => {
     expect(rows[0]?.alignment?.onsets.length).toBe(4);
     expect(rows[0]?.alignment?.equal).toBe(false);
     expect(rows[0]?.alignment?.notes).toBeNull();
+  });
+});
+
+describe("the tick of a bar line", () => {
+  it("is where the bar starts, and the ends of the score for a line before the first bar or after the last", () => {
+    expect(barLineTick(score, 0)).toBe(0);
+    expect(barLineTick(score, 3)).toBe(3 * BAR);
+    expect(barLineTick(score, 8)).toBe(8 * BAR);
+    expect(barLineTick(score, 9)).toBe(8 * BAR);
+    expect(barLineTick(score, -1)).toBe(0);
+  });
+
+  it("leaves the first phrase where it is when its start edge is stepped to the line before the score", () => {
+    const lines: ReadonlyArray<LyricLine> = [{ text: "intro", phrase: { firstBar: 0, barCount: 2 } }];
+
+    const plan = lyricBoundaryPlan(score, lines, { line: 0, edge: "start", tick: barLineTick(score, -1) });
+
+    expect(plan?.boundary).toBe(0);
+    expect(plan?.moves).toEqual([]);
+    expect(plan?.commands).toEqual([]);
   });
 });
 
