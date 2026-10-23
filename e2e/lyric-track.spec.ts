@@ -168,8 +168,8 @@ test.describe("the unaligned area", () => {
 });
 
 /** The lyric lines the session holds, as the project stores them. */
-function storedLines(page: Page) {
-  return page.evaluate(() => window.harness.layout.live().project.lyricLines ?? null);
+function storedLines(page: Page): Promise<Line[] | null> {
+  return page.evaluate(() => (window.harness.layout.live().project as { lyricLines?: Line[] }).lyricLines ?? null);
 }
 
 /** The text editor of the chosen line. */
@@ -905,7 +905,7 @@ test.describe("when the song changes under the track", () => {
     await textbox(page).fill("戊己庚辛壬");
     await textbox(page).press("Enter");
     expect((await storedLines(page))?.map((line) => line.text)).toEqual(["甲乙丙丁", "戊己庚辛壬", "壬癸子丑"]);
-    expect(await page.evaluate(() => window.harness.layout.live().project.lyrics)).toBe(
+    expect(await page.evaluate(() => (window.harness.layout.live().project as { lyrics?: string }).lyrics)).toBe(
       "[Intro]\n甲乙丙丁\n戊己庚辛壬\n[Verse]\n壬癸子丑\n[Chorus]",
     );
   });
