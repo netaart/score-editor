@@ -79,7 +79,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
-| `MoveNotesCommand`, `ResizeNotesCommand`, `NoteCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
+| `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
 | `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. |
 | `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`); each command is listed in the package README. |
 
