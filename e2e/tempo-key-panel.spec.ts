@@ -152,3 +152,82 @@ test.describe("the key in the toolbar", () => {
     await expect(keyMenu(page)).toBeVisible();
   });
 });
+
+const transposeUp = (page: Page) => toolbar(page).getByRole("button", { name: "Transpose up a semitone", exact: true });
+const transposeDown = (page: Page) =>
+  toolbar(page).getByRole("button", { name: "Transpose down a semitone", exact: true });
+
+test.describe("transposing in the toolbar", () => {
+  test("up a semitone moves every note, the signature with them, and one undo takes it back", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+
+    await press(transposeUp(page));
+
+    // C D E F | G a semitone up are Db Eb F Gb | Ab, which the key of Db writes as D E F G | A.
+    await expect
+      .poll(() => scoreText(page))
+      .toBe(SONG.replace("K:C", "K:Db").replace("C4D4E4F4|G16|", "D4E4F4G4|A16|"));
+    await expect(keyMenu(page)).toHaveValue("Db");
+
+    await press(undoButton(page));
+    expect(await scoreText(page)).toBe(SONG);
+    await expect(keyMenu(page)).toHaveValue("C");
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("down a semitone does the same the other way, in the key that needs the fewest accidentals", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+
+    await press(transposeDown(page));
+
+    // C D E F | G a semitone down are B C# D# E | F#, which the key of B writes as B, C D E | F.
+    await expect
+      .poll(() => scoreText(page))
+      .toBe(SONG.replace("K:C", "K:B").replace("C4D4E4F4|G16|", "B,4C4D4E4|F16|"));
+
+    await press(undoButton(page));
+    expect(await scoreText(page)).toBe(SONG);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a note that would leave the range refuses the whole move: nothing changes and the reason is said", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const top = vocalOnly("g''''4C4D4E4|G16|");
+    await openSong(harness, top);
+
+    await press(transposeUp(page));
+
+    const sayings = toolbar(page).getByRole("status").filter({ hasText: "outside MIDI 0-127" });
+    await expect(sayings).toHaveCount(1);
+    await expect(sayings).toContainText("pitch 128");
+    expect(await harness.notices()).toHaveLength(1);
+    expect((await harness.notices())[0]).toMatchObject({ code: "command-refused", level: "warning" });
+    expect(await scoreText(page)).toBe(top);
+    expect(await harness.layout.canUndo()).toBe(false);
+
+    // The way down is open, so the same control still works on the same score.
+    await press(transposeDown(page));
+    await expect.poll(() => scoreText(page)).not.toBe(top);
+    expect(await harness.layout.canUndo()).toBe(true);
+  });
+
+  test("is there while the editor can edit and not while it is read-only", async ({ page, harness }) => {
+    await openSong(harness, SONG, {}, { editable: false });
+    await expect(transposeUp(page)).toBeHidden();
+    await expect(transposeDown(page)).toBeHidden();
+    await harness.layout.setEditable(true);
+    await expect(transposeUp(page)).toBeVisible();
+    await expect(transposeDown(page)).toBeVisible();
+  });
+});
