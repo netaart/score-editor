@@ -100,6 +100,9 @@ export function mountChordEditing(
 
   const editable = (): boolean =>
     drawn !== null && session.view.editable && arrangementShown(session) && session.constraints !== null;
+  // Set when the part is mounted, as the voice tracks do, so that the root's attributes are in the same order however it
+  // came to be drawn.
+  root.setAttribute("data-editable", "false");
 
   const messages = () => chordMessagesFor(session.view.language);
 
