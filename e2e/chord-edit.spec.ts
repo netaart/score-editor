@@ -11,6 +11,8 @@ interface OpenOptions {
   hostLayer?: boolean;
   width?: number;
   top?: number;
+  /** Pixels by which the stage is wider than the window, as a host page that spills sideways is. */
+  spill?: number;
   parts?: string[];
 }
 
@@ -434,6 +436,29 @@ test.describe("the picker above a host's layer", () => {
   });
 });
 
+test.describe("an empty chord track", () => {
+  test("says how to add a chord while pressing places one, and only says it is empty when pressing does not", async ({
+    page,
+    chords,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    await expect(page.getByText("No chords in this score. Click or tap a beat to add one.")).toBeVisible();
+
+    await chords.setEditable(false);
+    await expect(page.getByText("No chords in this score", { exact: true })).toBeVisible();
+    await expect(page.getByText("Click or tap a beat")).toHaveCount(0);
+
+    await chords.setEditable(true);
+    await expect(page.getByText("Click or tap a beat to add one.")).toBeVisible();
+  });
+
+  test("says it in Chinese too", async ({ page, chords }) => {
+    await chords.openParts({ score: { text: QUARTERS }, language: "zh" });
+
+    await expect(page.getByText("这份乐谱里没有和弦，点按某一拍可以添加。")).toBeVisible();
+  });
+});
+
 test.describe("read-only", () => {
   test("shows the chords, has no keyboard cursor, and a press opens nothing", async ({ page, chords, press }) => {
     await chords.openParts({ score: { text: CHORDED }, editable: false });
@@ -664,13 +689,12 @@ test.describe("what the user sees", () => {
   }) => {
     await chords.openParts({ score: { text: QUARTERS } });
     const frame = page.locator(".sce-chord-cursor");
-    await expect(frame).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+    await expect(frame).toHaveCSS("border-top-width", "0px");
 
     await pressAtTick(page, press, 250);
     await expect(picker(page, "Chord at bar 1 beat 2")).toBeVisible();
     await expect(frame).toHaveCSS("border-top-width", "2px");
     await expect(frame).toHaveCSS("border-top-style", "solid");
-    await expect(frame).not.toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
     // D4 starts one quarter note (40 pixels) in and lasts one quarter note.
     const area = await box(timeline(page));
     const drawn = await box(frame);
@@ -678,7 +702,7 @@ test.describe("what the user sees", () => {
     expect(Math.abs(drawn.width - 40)).toBeLessThan(1.5);
 
     await press(picker(page, "Chord at bar 1 beat 2").getByRole("button", { name: "Cancel", exact: true }));
-    await expect(frame).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+    await expect(frame).toHaveCSS("border-top-width", "0px");
   });
 
   test("a mouse over the track frames, dashed, the start a press would take; the frame is gone when it leaves", async ({
@@ -719,6 +743,10 @@ test.describe("what the user sees", () => {
 
     const size = page.viewportSize();
     const panel = await box(open);
+    if (isMobile) {
+      expect(Math.abs(panel.width - ((size?.width ?? 0) - 16))).toBeLessThan(1);
+      expect(Math.abs(panel.x - 8)).toBeLessThan(1);
+    }
     expect(panel.x).toBeGreaterThanOrEqual(0);
     expect(panel.y).toBeGreaterThanOrEqual(0);
     expect(panel.x + panel.width).toBeLessThanOrEqual((size?.width ?? 0) + 0.5);
@@ -760,7 +788,7 @@ test.describe("in Chinese", () => {
 });
 
 test.describe("a picker above the row", () => {
-  test("when there is no room below the chord row the picker stands above it, and opening the bass note does not clip its buttons", async ({
+  test("when there is no room below the chord row the picker stands above it, and opening the bass note neither clips its buttons nor moves the control that was pressed", async ({
     page,
     chords,
     press,
@@ -775,19 +803,44 @@ test.describe("a picker above the row", () => {
     const row = await box(timeline(page));
     const before = await box(open);
     expect(before.y + before.height).toBeLessThanOrEqual(row.y + 1);
+    const toggle = open.getByRole("button", { name: /^Bass note/ });
+    const toggleBefore = await box(toggle);
 
-    await press(open.getByRole("button", { name: /^Bass note/ }));
+    await press(toggle);
     await open
       .getByRole("radiogroup", { name: "Bass note", exact: true })
       .getByRole("radio", { name: "G", exact: true })
       .click();
 
+    // The picker grows downward from where it was: the control that was pressed stays under the finger.
+    const toggleAfter = await box(toggle);
+    expect(Math.abs(toggleAfter.y - toggleBefore.y)).toBeLessThan(1);
     const after = await box(open);
-    expect(after.y + after.height).toBeLessThanOrEqual(row.y + 1);
     expect(after.y).toBeGreaterThanOrEqual(0);
+    expect(after.y + after.height).toBeLessThanOrEqual(1000);
     const clipped = await open.evaluate((el) => el.scrollHeight - el.clientHeight);
     expect(clipped).toBeLessThanOrEqual(1);
     await press(open.getByRole("button", { name: "Place", exact: true }));
     expect(await chords.scoreText()).toBe(twoVoices('"C/G"C4D4E4F4|G16|', "C16|C16|"));
+  });
+});
+
+test.describe("a page that spills sideways", () => {
+  test("on a touch screen the picker stays inside the width the page lays out in, not inside the wider layout viewport", async ({
+    page,
+    chords,
+    press,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "only a touch browser widens its layout viewport to the content");
+    await chords.openParts({ score: { text: QUARTERS }, spill: 24 });
+    await pressAtTick(page, press, 0);
+    const open = picker(page, "Chord at bar 1 beat 1");
+    await expect(open).toBeVisible();
+
+    const shown = await page.evaluate(() => document.documentElement.clientWidth);
+    const panel = await box(open);
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(shown + 0.5);
   });
 });
