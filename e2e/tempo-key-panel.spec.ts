@@ -420,7 +420,7 @@ test.describe("the song project panel's fields", () => {
     await expect(seedField(page)).toHaveValue("");
     await expect(panel(page).getByText("Not set. Each generation picks its own.")).toBeVisible();
     await expect(panel(page).getByText("No lyrics yet.")).toBeVisible();
-    await expect(panel(page).getByText("0 of 2,000 characters")).toBeVisible();
+    await expect(panel(page).getByText("0 of 2000 characters")).toBeVisible();
 
     await styleBox(page).fill("lofi");
     await styleBox(page).blur();
@@ -445,7 +445,7 @@ test.describe("the song project panel's lyrics and notices", () => {
 
     // "[a]" and two lines of eight characters, with a line break between each: 3 + 1 + 8 + 1 + 8.
     expect(await joined(page)).toBe("[a]\nla la la\ndo re mi");
-    await expect(panel(page).getByText("21 of 2,000 characters")).toBeVisible();
+    await expect(panel(page).getByText("21 of 2000 characters")).toBeVisible();
     await expect(panel(page).getByRole("note")).toHaveCount(0);
     await expect(projectButton(page)).toHaveAccessibleName("Project");
   });
@@ -459,7 +459,7 @@ test.describe("the song project panel's lyrics and notices", () => {
     await openPanel(page, press);
 
     expect(await joined(page)).toBe("[a]\nla la la\ndo re mi");
-    await expect(panel(page).getByText("21 of 2,000 characters")).toBeVisible();
+    await expect(panel(page).getByText("21 of 2000 characters")).toBeVisible();
     await expect(
       panel(page).getByRole("note").filter({ hasText: "1 lyric line is unaligned and left out of the joined lyrics." }),
     ).toHaveCount(1);
@@ -472,7 +472,7 @@ test.describe("the song project panel's lyrics and notices", () => {
     await openPanel(page, press);
 
     // "[a]" 3, two lines of 1,100, two line breaks: 3 + 1 + 1100 + 1 + 1100 = 2,205.
-    await expect(panel(page).getByText("2,205 of 2,000 characters")).toBeVisible();
+    await expect(panel(page).getByText("2205 of 2000 characters")).toBeVisible();
     await expect(
       panel(page)
         .getByRole("note")
@@ -548,7 +548,7 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await expect(panel(page).getByText("warm pop", { exact: true })).toBeVisible();
     await expect(panel(page).getByText("Melody", { exact: true }).locator("visible=true")).toBeVisible();
     await expect(panel(page).getByText("5", { exact: true })).toBeVisible();
-    await expect(panel(page).getByText("12 of 2,000 characters")).toBeVisible();
+    await expect(panel(page).getByText("12 of 2000 characters")).toBeVisible();
     expect(await lyricsRegion(page).evaluate((element) => element.textContent)).toBe("[a]\nla la la");
     await expect(panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" })).toHaveCount(1);
     for (const control of ["textbox", "radio", "spinbutton", "button"] as const) {
@@ -578,7 +578,7 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await expect(zh.getByRole("spinbutton", { name: "种子" })).toBeVisible();
     await expect(zh.getByRole("region", { name: "歌词" })).toBeVisible();
     // The joined lyrics are the label of the score's one named section, "[a]": three characters.
-    await expect(zh.getByText("3 / 2,000 字")).toBeVisible();
+    await expect(zh.getByText("3 / 2000 字")).toBeVisible();
   });
 });
 
@@ -686,5 +686,48 @@ test.describe("the controls in the default editor at the window's width", () => 
     expect((await box(page.getByRole("radio", { name: "Full" }).locator("xpath=.."))).height).toBeGreaterThanOrEqual(
       36,
     );
+  });
+});
+
+test.describe("the panel hangs from its button", () => {
+  const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
+  const projectButton = (page: Page) => page.getByRole("button", { name: /^Project/ });
+  const popover = (page: Page) => page.getByRole("region", { name: "Project" }).locator("xpath=..");
+  const gapUnder = async (page: Page) => {
+    const opened = await box(popover(page));
+    const button = await box(projectButton(page));
+    return opened.y - (button.y + button.height);
+  };
+
+  test("when a notice comes and goes, and the toolbar wraps again, the panel stays under the button", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: withChords }, project: { scoreMode: "full" } });
+    await press(projectButton(page));
+    await expect(popover(page)).toBeVisible();
+    await expect.poll(() => gapUnder(page)).toBeCloseTo(4, 0);
+
+    await press(page.getByRole("radio", { name: "Melody" }));
+    await expect(projectButton(page)).toHaveAccessibleName("Project, 1 notice");
+    await expect.poll(() => gapUnder(page)).toBeCloseTo(4, 0);
+
+    await press(page.getByRole("button", { name: "Delete all chords" }));
+    await expect(projectButton(page)).toHaveAccessibleName("Project");
+    await expect.poll(() => gapUnder(page)).toBeCloseTo(4, 0);
+  });
+
+  test("when the window narrows while it is open, it spans the window", async ({ page, harness, press }) => {
+    await page.setViewportSize({ width: 1280, height: 700 });
+    await harness.mount({ score: { text: SONG } });
+    await press(projectButton(page));
+    await expect(popover(page)).toBeVisible();
+    expect((await box(popover(page))).width).toBeLessThan(500);
+
+    await page.setViewportSize({ width: 500, height: 700 });
+
+    await expect.poll(async () => (await box(popover(page))).x).toBeCloseTo(8, 0);
+    expect(Math.round((await box(popover(page))).width)).toBe(484);
   });
 });
