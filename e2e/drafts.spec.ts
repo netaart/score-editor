@@ -434,6 +434,30 @@ test.describe("a draft that another window changed first", () => {
     expect((await store.callsOf("write"))[3]?.expected).toBe(write?.result);
   });
 
+  test("while the store answers the first press, both choices are off and a second press does nothing", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openEditor(page, harness);
+    const { store } = await conflict(page, press);
+    const readsBefore = (await store.callsOf("read")).length;
+    await store.hold();
+
+    await press(overwrite(page));
+    await expect(overwrite(page)).toHaveAttribute("aria-disabled", "true");
+    await expect(loadTheirs(page)).toHaveAttribute("aria-disabled", "true");
+    // Playwright does not press what is aria-disabled, so the second presses are sent as the click a script could make.
+    await overwrite(page).dispatchEvent("click");
+    await loadTheirs(page).dispatchEvent("click");
+    await store.release();
+
+    await expect(overwrite(page)).toBeHidden();
+    expect((await store.callsOf("read")).length - readsBefore).toBe(1);
+    expect(await store.callsOf("write")).toHaveLength(3);
+    await expect(noteNamed(page, F4)).toHaveCount(0);
+  });
+
   test("loading the other version shows it in the editor and writes nothing", async ({ page, harness, press }) => {
     await openEditor(page, harness);
     const { store, theirs } = await conflict(page, press);
@@ -846,5 +870,56 @@ test.describe("update and destroy with drafts", () => {
     const calls = (await store.calls()).length;
     await page.clock.runFor(5 * DEBOUNCE_MS);
     expect((await store.calls()).length).toBe(calls);
+  });
+});
+
+test.describe("other changes to the options with drafts", () => {
+  test("new lyrics for the same key and score are a new original: the old draft is discarded and told", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+
+    await harness.update({ project: { lyrics: "[a]\nnew words" } });
+
+    await expect(noteNamed(page, D4)).toBeVisible();
+    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    expect((await harness.notices()).map((notice) => notice.code)).toEqual(["draft-source-changed"]);
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toHaveLength(1);
+  });
+
+  test("making the editor read only saves what was pending and ends the keeper; making it editable opens the draft again", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+
+    await harness.update({ editable: false });
+
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expect(page.getByText("Read only", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Restore original" })).toHaveCount(0);
+    const calls = (await store.calls()).length;
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect((await store.calls()).length).toBe(calls);
+
+    await harness.update({ editable: true });
+
+    await expect(page.getByRole("button", { name: "Restore original" })).toBeVisible();
+    expect((await store.callsOf("read")).map((call) => call.key)).toEqual(["test-page", "test-page"]);
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toHaveLength(1);
   });
 });
