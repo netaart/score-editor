@@ -132,7 +132,7 @@ const css = `
   gap: 8px;
   min-height: 40px;
   padding: 4px 12px;
-  /* When the box is narrower than the controls the row scrolls; the title gives way before that. */
+  /* When the box is narrower than the controls the row scrolls; a toolbar that wraps moves a control to a later row. */
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -157,6 +157,13 @@ const css = `
 .sce-root .sce-toolbar:is([data-synth], [data-views]) .sce-title {
   flex: 0 1 auto;
   max-width: 100%;
+}
+/*
+ * A toolbar that neither wraps nor holds a control to wrap it for scrolls sideways. The title keeps its whole text there
+ * instead of being squeezed to nothing, so the name of the view is always in sight; the row scrolls under it.
+ */
+.sce-root .sce-toolbar:not([data-synth]):not([data-views]) .sce-title {
+  flex: none;
 }
 /*
  * In a toolbar with the view switch, the preview control keeps its place while the score does not read. It comes after the
