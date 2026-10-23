@@ -73,16 +73,13 @@ interface Gesture {
   readonly ends: AbortController;
 }
 
-/**
- * Where `x` and `y` are in the lane, in ticks and in rows, kept inside it. A drag lets the rows run past the lane
- * (`rowsFree`), since the notes it carries may go to a pitch the lane does not draw yet; time stays inside the score.
- */
-function placeIn(geometry: LaneGeometry, x: number, y: number, rowsFree = false): { tick: number; row: number } | null {
+/** Where `x` and `y` are in the lane, in ticks and in rows, kept inside it. */
+function placeIn(geometry: LaneGeometry, x: number, y: number): { tick: number; row: number } | null {
   const area = geometry.lane.getBoundingClientRect();
   if (!(area.width > 0) || !(area.height > 0)) return null;
   const across = Math.min(1, Math.max(0, (x - area.left) / area.width));
-  const down = (y - area.top) / area.height;
-  return { tick: across * geometry.ticks, row: (rowsFree ? down : Math.min(1, Math.max(0, down))) * geometry.rows };
+  const down = Math.min(1, Math.max(0, (y - area.top) / area.height));
+  return { tick: across * geometry.ticks, row: down * geometry.rows };
 }
 
 interface Reach {
@@ -195,7 +192,7 @@ export function installLanePointer(
   /** Shows where the selected notes would land if the pointer were let go where it is. */
   function drag(g: Gesture): void {
     if (g.phase !== "dragging" || g.grab === null) return;
-    const now = placeIn(g.geometry, g.last.x, g.last.y, true);
+    const now = placeIn(g.geometry, g.last.x, g.last.y);
     if (now) options.preview.show(previewOf(g.grab, g.anchor, now));
   }
 
@@ -218,7 +215,7 @@ export function installLanePointer(
 
   /** Lets the selected notes go where the drag took them: one edit, as the keys make it. */
   function drop(g: Gesture): void {
-    const now = g.grab === null ? null : placeIn(g.geometry, g.last.x, g.last.y, true);
+    const now = g.grab === null ? null : placeIn(g.geometry, g.last.x, g.last.y);
     // Taken out of the way first: the edit redraws the notes, and the ghosts must not outlive the drag.
     finish();
     if (g.grab === null || now === null) return;

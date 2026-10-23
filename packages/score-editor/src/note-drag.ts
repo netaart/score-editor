@@ -20,14 +20,21 @@ export type Grab = { readonly kind: "move" } | { readonly kind: "resize"; readon
 
 /**
  * What a press at `clientX` on a selected note's block grabs. A block that continues into another note of a tie has no
- * edge on that side: the chain is resized from its two ends only. `coarse` says the pointer is a finger or a pen.
+ * edge on that side: the chain is resized from its two ends only. A note narrower inside its frame than three zones has
+ * none, which is when the stylesheet draws no grips. `coarse` says the pointer is a finger or a pen.
  */
 export function grabAt(block: Element, clientX: number, coarse: boolean): Grab {
   const zone = coarse ? EDGE_ZONE.coarse : EDGE_ZONE.fine;
   const area = block.getBoundingClientRect();
-  if (area.width < ZONES_PER_NOTE * zone) return { kind: "move" };
-  if (!block.hasAttribute("data-tie-prev") && clientX - area.left < zone) return { kind: "resize", edge: "start" };
-  if (!block.hasAttribute("data-tie-next") && area.right - clientX < zone) return { kind: "resize", edge: "end" };
+  // The zones lie inside the frame (the border), which is where the stylesheet draws the grips and measures their room.
+  const html = block instanceof HTMLElement ? block : null;
+  const left = html?.clientLeft ?? 0;
+  const right = html ? html.offsetWidth - html.clientWidth - left : 0;
+  if (area.width - left - right < ZONES_PER_NOTE * zone) return { kind: "move" };
+  if (!block.hasAttribute("data-tie-prev") && clientX - (area.left + left) < zone)
+    return { kind: "resize", edge: "start" };
+  if (!block.hasAttribute("data-tie-next") && area.right - right - clientX < zone)
+    return { kind: "resize", edge: "end" };
   return { kind: "move" };
 }
 

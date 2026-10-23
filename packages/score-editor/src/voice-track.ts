@@ -104,6 +104,9 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     const { lane, notes, top, ticks } = drawn;
     for (const old of lane.querySelectorAll(".sce-ghost")) old.remove();
     const preview = dragChannel(session).current;
+    // Every lane with a selected note in the drag lets its notes wait quietly under the ghosts, whichever lane the pointer is in.
+    if (preview === null) delete lane.dataset.ghosted;
+    else lane.dataset.ghosted = "";
     if (preview === null) return;
     const doc = lane.ownerDocument;
     for (const ghost of ghostsOf(notes, session.selection, preview, session.grid)) {

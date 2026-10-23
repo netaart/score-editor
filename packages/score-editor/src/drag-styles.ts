@@ -60,7 +60,7 @@ export const dragCss = `
 .sce-root .sce-lane[data-dragging] .sce-note {
   cursor: inherit;
 }
-.sce-root .sce-lane[data-dragging] .sce-note[data-selected] {
+.sce-root .sce-lane[data-ghosted] .sce-note[data-selected] {
   opacity: 0.55;
 }
 /*

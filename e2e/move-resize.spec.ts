@@ -195,14 +195,14 @@ test.describe("dragging an edge", () => {
     const { beat } = await metrics(page, 8);
     const zone = zoneOf(isMobile);
     const y = area.y + area.height / 2;
-    const inside = area.x + area.width - zone + 2;
+    const inside = area.x + area.width - zone + 3;
 
     await drag(page, harness, isMobile, { x: inside, y }, { x: inside + beat, y });
     expect(await noteList(harness)).toEqual([vocal(BEAT, 3 * BEAT, C), vocal(4 * BEAT, 4 * BEAT, 67)]);
     await harness.layout.undo();
 
     const again = await box(block(page, "C4, bar 1 beat 2, length 2 beats, selected"));
-    const outside = again.x + again.width - zone - 2;
+    const outside = again.x + again.width - zone - 3;
     await drag(page, harness, isMobile, { x: outside, y }, { x: outside + beat, y });
     expect(await noteList(harness)).toEqual([vocal(2 * BEAT, 2 * BEAT, C), vocal(4 * BEAT, 4 * BEAT, 67)]);
   });
@@ -223,6 +223,32 @@ test.describe("dragging an edge", () => {
 
     // Moved by a beat with its length kept; a resize of the start edge would have shortened it.
     expect(await noteList(harness)).toEqual([vocal(BEAT, 64, C), vocal(4 * BEAT, 4 * BEAT, 67)]);
+  });
+
+  test("what is drawn as a grip is what a press hits: where a note has none, its edge moves it", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    // A quarter note at the default zoom is wide enough for zones with a mouse and, once its frame is counted, too narrow
+    // for a finger's.
+    await openTrack(harness, vocalOnly("C4z12|G16|"));
+    await press(block(page, C4));
+    const selected = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
+    const gripped = await selected.evaluate((el) => getComputedStyle(el, "::after").content !== "none");
+    expect(gripped).toBe(!isMobile);
+    const area = await box(selected);
+    const { beat } = await metrics(page, 8);
+    const from = { x: area.x + area.width - 4, y: area.y + area.height / 2 };
+
+    await drag(page, harness, isMobile, from, { x: from.x + beat, y: from.y });
+
+    expect(await noteList(harness)).toEqual(
+      gripped
+        ? [vocal(0, 2 * BEAT, C), vocal(4 * BEAT, 4 * BEAT, 67)]
+        : [vocal(BEAT, BEAT, C), vocal(4 * BEAT, 4 * BEAT, 67)],
+    );
   });
 
   test("marks the zones with the resize cursor and the body with the move cursor", async ({
