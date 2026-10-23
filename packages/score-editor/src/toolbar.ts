@@ -35,11 +35,7 @@ export interface ToolbarOptions extends EditingPartOptions {
    * that mounts `mountSynthPreview` in a place of its own turns it off, so the control is not there twice.
    */
   synthPreview?: boolean;
-  /**
-   * The draft keeper of this editor. With it the toolbar offers Restore original, after Select, while the keeper is
-   * ready and the session editable; and while the keeper is opening the badge says so in place of "Read only", which is
-   * the right word for a host that keeps the session read-only until `keeper.ready`.
-   */
+  /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
 }
 

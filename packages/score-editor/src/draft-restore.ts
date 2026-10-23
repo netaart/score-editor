@@ -10,10 +10,8 @@ import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
 
 /**
- * Mounts the Restore original button and its question on `el`, before `before` when the toolbar has a later control to
- * place it ahead of. The restore resets the history, so the edits it drops cannot be undone; the question, a native
- * popover so that it stacks above a host's full-screen layer, says so and starts with the focus on Cancel. `say` is how
- * the toolbar tells a screen reader that the original is back.
+ * Mounts the Restore original button and its question on `el`, before `before` when given; `say` is how the toolbar
+ * tells a screen reader the outcome. The design is in DESIGN.md, "Restore original".
  */
 export function mountRestoreControl(
   el: HTMLElement,

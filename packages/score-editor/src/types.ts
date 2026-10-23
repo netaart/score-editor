@@ -61,13 +61,7 @@ export interface MountOptions {
   project: SongProject;
   /** The score dialects this editor can read, built by the host with `createDialectRegistry`. */
   dialects: DialectRegistry;
-  /**
-   * The host's draft storage. Without it the editor keeps no draft and offers no "Restore original". With it, and
-   * while the editor is editable, edits are saved as a draft under the project's `sourceKey`, a saved draft is
-   * restored when the editor opens, and the user is asked what to do when another writer changed the draft first. While
-   * the editor is read-only the store is never called. Changing `sourceKey`, `lyrics` or `score` through `update` starts
-   * over with the new project as the original. See `createDraftKeeper` for what the keeper does.
-   */
+  /** The host's draft storage; see "In the default editor" in the package README. */
   drafts?: DraftStore;
 }
 

@@ -8,12 +8,7 @@ import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
 
-/**
- * Mounts the conflict strip on `el`, bound to `keeper`. A host puts it between the toolbar and the views. It is hidden
- * until the keeper's status is `"conflict"`; then it says that the draft was changed somewhere else and offers the
- * keeper's two ways out, each with a sentence on what it does. The sentence is an alert and the strip takes no focus, so
- * a person in the middle of an edit is told and not interrupted. It follows the session's language.
- */
+/** Mounts the conflict strip on `el`, bound to `keeper`; see DESIGN.md, "Draft conflict strip". */
 export function mountDraftConflict(el: HTMLElement, session: EditingSession, keeper: DraftKeeper): ViewPart {
   requireDom("mountDraftConflict");
   const doc = el.ownerDocument;
