@@ -63,6 +63,18 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "note-before-start",
+  "note-past-end",
+  "note-too-short",
+  "grid-not-allowed",
+  "offset-not-integer",
+  "unit-unknown",
+  "lyric-line-out-of-range",
+  "lyric-phrase-invalid",
+  "lyric-phrase-overlap",
+  "lyric-text-invalid",
+  "lyric-lines-not-mergeable",
+  "lyric-split-invalid",
   "cut-other-voice-short",
 ];
 

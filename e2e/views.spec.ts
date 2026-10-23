@@ -27,6 +27,12 @@ const QUARTERS_WITH_CHORD = QUARTERS.replace("C4D4E4F4|", '"C"C4D4E4F4|');
 /** The pause after the last keystroke before text that reads is handed to the project, as the part keeps it. */
 const PAUSE_MS = 600;
 
+/**
+ * Stops the faked clock. After `clock.install` time still flows, so on a busy machine the pause could pass before a
+ * check that nothing was handed over yet.
+ */
+const stopClock = async (page: Page) => page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+
 async function openText(harness: Harness, options: Record<string, unknown> = {}) {
   await harness.layout.open({ score: { text: QUARTERS }, parts: ["text", "vocal"], ...options });
 }
@@ -67,6 +73,7 @@ test.describe("the text view", () => {
     await page.clock.install();
     await openText(harness);
     await expect(vocalNote(page, D4)).toBeVisible();
+    await stopClock(page);
 
     await textBox(page).fill(QUARTERS_WITHOUT_D);
     await page.clock.runFor(PAUSE_MS - 100);
@@ -107,6 +114,7 @@ test.describe("the text view", () => {
   test("hands over at once when the box loses the focus, without waiting for the pause", async ({ page, harness }) => {
     await page.clock.install();
     await openText(harness);
+    await stopClock(page);
 
     await textBox(page).fill(QUARTERS_WITHOUT_D);
     expect(await harness.layout.scoreText()).toBe(QUARTERS);

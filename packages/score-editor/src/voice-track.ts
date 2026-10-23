@@ -12,7 +12,7 @@ import {
   tieJoins,
 } from "./arrangement";
 import { type BuiltAxis, type Grid, mountAxisPart } from "./axis-part";
-import { tieChain } from "./commands";
+import { tieChain } from "./commands-shared";
 import { create } from "./dom";
 import { handleEditingInput } from "./editing-input";
 import type { Messages } from "./i18n";

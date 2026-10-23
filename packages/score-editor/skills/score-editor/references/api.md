@@ -23,12 +23,13 @@ change. The tests in the repository check that the list stays complete.
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
 | `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
 | `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
+| `applyCommandList` | core | Applies a list of score and project commands as one unit; returns `CommandListResult`, all applied or the untouched project. |
 | `checkProject` | core | Reports the song-project notices of a project as it stands, without changing it. |
 | `lyricLinesOf` | core | The stored lyric lines, or the layout computed from a legacy `lyrics` text. |
 | `layoutLyrics` | core | Lays a legacy `lyrics` text onto a score, one line per bar, with the unaligned area. |
 | `joinLyrics` | core | Writes the joined `lyrics` text from a score and its lyric lines; unaligned lines are left out. |
-| `alignedLyricLines` | core | The lines bound to a phrase. |
-| `unalignedLyricLines` | core | The lines in the unaligned area. |
+| `alignedLyricLines` | core | The lines bound to a phrase that fits the score; pass the score to leave a stale phrase out. |
+| `unalignedLyricLines` | core | The lines in the unaligned area: no phrase, or one that no longer fits the score. |
 | `lyricSyllables` | core | Splits a lyrics text into the syllable units the count uses. |
 | `syllableCount` | core | Counts syllables: Han and kana one each, Latin by vowel groups, `-` by hand. |
 | `noteOnsets` | core | The `Vocal` notes in a phrase that are not rests or tie continuations. |
@@ -45,6 +46,10 @@ change. The tests in the repository check that the list stays complete.
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
 | `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
+| `contentHash` | core | The lowercase SHA-256 of the UTF-8 bytes of `JSON.stringify([lyrics, score])`. |
+| `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
+| `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
+| `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
 
 ## Constants and values
 
@@ -55,7 +60,8 @@ change. The tests in the repository check that the list stays complete.
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
 | `LYRICS_MAX_CHARACTERS` | core | 2000; the limit song2 generation accepts for the joined `lyrics` text. |
-| `NOTICE_CODES` | core | The closed host message codes; today `"command-refused"`. |
+| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`. |
+| `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |
@@ -79,14 +85,17 @@ change. The tests in the repository check that the list stays complete.
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
-| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`); each command is listed in the package README. |
+| `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
+| `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. |
+| `CommandListResult` | `{ ok, project, diagnostics }` from `applyCommandList`: the applied project, or the untouched one with the refusal. |
+| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`); each command is listed in the package README. |
 
 ## Score model types
 
 | Export | What it is |
 | --- | --- |
 | `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`. |
-| `Score` | A parsed score: tempo, voices, bars, keys, sections, notes, chords, truncation, hasChords, source. |
+| `Score` | A parsed score: tempo, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |
@@ -159,3 +168,18 @@ change. The tests in the repository check that the list stays complete.
 | `PreviewEvent` | A `PreviewNoteEvent` or a `PreviewChordEvent`. |
 | `PreviewNoteEvent` | `{ kind: "note", voice, midi, at, length }`. |
 | `PreviewChordEvent` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |
+
+## Draft types
+
+| Export | What it is |
+| --- | --- |
+| `ScoreDraft` | One saved edit: version, source key, source hash, `DraftProject`, handoff hash and update time. |
+| `DraftProject` | The project fields a draft keeps: style, joined `lyrics`, `lyricLines`, score text, score mode and seed. |
+| `DraftStore` | The host's storage: `read`, versioned `write`, versioned `remove`, `list`. |
+| `DraftStoreEntry` | `{ text, version }`; the version is opaque and only handed back. |
+| `DraftWriteResult` | `{ ok: true, version }` or `{ ok: false, reason: "conflict" \| "failed" }`. |
+| `DraftKeeper` | `status`, `ready`, `subscribe`, `overwrite`, `loadTheirs`, `restoreOriginal`, `handoff`, `destroy`. |
+| `DraftKeeperOptions` | `{ session, store, original, notify?, now?, debounceMs? }`. |
+| `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
+| `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
+| `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |

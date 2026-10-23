@@ -62,6 +62,18 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "note-before-start",
+  "note-past-end",
+  "note-too-short",
+  "grid-not-allowed",
+  "offset-not-integer",
+  "unit-unknown",
+  "lyric-line-out-of-range",
+  "lyric-phrase-invalid",
+  "lyric-phrase-overlap",
+  "lyric-text-invalid",
+  "lyric-lines-not-mergeable",
+  "lyric-split-invalid",
   "cut-other-voice-short",
 ] as const;
 
@@ -147,10 +159,22 @@ interface Catalog {
   readonly sectionNameBlank: Text;
   readonly sectionNameLineBreak: Text;
   readonly sectionNameTrailingSpace: Text;
+  readonly noteBeforeStart: Text;
+  readonly notePastEnd: Text;
+  readonly noteTooShort: Text;
+  readonly gridNotAllowed: Text;
+  readonly offsetNotInteger: Text;
+  readonly unitUnknown: Text;
   readonly styleNoBpm: Text;
   readonly melodyWithChords: Text;
   readonly lyricsUnaligned: Text;
   readonly lyricsTooLong: Text;
+  readonly lyricLineOutOfRange: Text;
+  readonly lyricPhraseInvalid: Text;
+  readonly lyricPhraseOverlap: Text;
+  readonly lyricTextInvalid: Text;
+  readonly lyricLinesNotMergeable: Text;
+  readonly lyricSplitInvalid: Text;
   readonly cutOtherVoiceShort: Text;
 }
 
@@ -748,6 +772,58 @@ function chineseSectionNameTrailingSpace(): string {
   return "段落名不能以空格或制表符结尾，因为乐谱格式会去掉它。";
 }
 
+function englishNoteBeforeStart(): string {
+  return "The note would start before the beginning of the score.";
+}
+
+function chineseNoteBeforeStart(): string {
+  return "音符会被移到乐谱开头之前。";
+}
+
+function englishNotePastEnd(): string {
+  return "The note would end past the end of the score.";
+}
+
+function chineseNotePastEnd(): string {
+  return "音符的结尾会超出乐谱的末尾。";
+}
+
+function gridName(params: DiagnosticParams): string {
+  return `${value(params, "grid")}${value(params, "dotted") === "true" ? " dotted" : ""}`;
+}
+
+function englishNoteTooShort(params: DiagnosticParams): string {
+  return `A note cannot be shorter than one grid step of ${gridName(params)}.`;
+}
+
+function chineseNoteTooShort(params: DiagnosticParams): string {
+  return `音符不能短于 ${gridName(params)} 网格的一步。`;
+}
+
+function englishGridNotAllowed(params: DiagnosticParams): string {
+  return `The ${value(params, "grid")}${value(params, "dotted") === "true" ? " dotted" : ""} grid is not one this score can write.`;
+}
+
+function chineseGridNotAllowed(params: DiagnosticParams): string {
+  return `这份乐谱写不出 ${value(params, "grid")}${value(params, "dotted") === "true" ? " 附点" : ""}的网格。`;
+}
+
+function englishOffsetNotInteger(params: DiagnosticParams): string {
+  return `The ${value(params, "field")} offset must be a whole number.`;
+}
+
+function chineseOffsetNotInteger(params: DiagnosticParams): string {
+  return `${value(params, "field") === "pitch" ? "音高" : "时间"}偏移必须是整数。`;
+}
+
+function englishUnitUnknown(): string {
+  return "This score does not state its written duration unit, so its notes cannot be moved on a grid.";
+}
+
+function chineseUnitUnknown(): string {
+  return "这份乐谱没有写明时值单位，所以不能按网格移动音符。";
+}
+
 function englishStyleNoBpm(): string {
   return "The style text has no BPM, so it was left as it is.";
 }
@@ -780,6 +856,142 @@ function englishLyricsTooLong(params: DiagnosticParams): string {
 
 function chineseLyricsTooLong(params: DiagnosticParams): string {
   return `拼回的 lyrics 有 ${value(params, "count")} 字，超过 song2 生成接受的 ${value(params, "max")} 字上限。`;
+}
+
+function englishLyricLineOutOfRange(params: DiagnosticParams): string {
+  return `There is no lyric line at position ${value(params, "line")}.`;
+}
+
+function chineseLyricLineOutOfRange(params: DiagnosticParams): string {
+  return `第 ${value(params, "line")} 行歌词不存在。`;
+}
+
+function englishLyricPhraseInvalid(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "empty":
+      return "A lyric phrase needs at least one bar.";
+    case "outside-score":
+      return "The lyric phrase is outside this score's bars.";
+    case "cross-section":
+      return "A lyric phrase must stay inside one section.";
+    case "not-integer":
+      return "A lyric phrase must start on a whole bar and cover whole bars.";
+    default:
+      return "This lyric phrase is not valid.";
+  }
+}
+
+function chineseLyricPhraseInvalid(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "empty":
+      return "一个乐句至少要覆盖一小节。";
+    case "outside-score":
+      return "乐句超出了这份乐谱的小节。";
+    case "cross-section":
+      return "一个乐句必须落在一个段落里。";
+    case "not-integer":
+      return "乐句必须从整小节开始，覆盖整数个小节。";
+    default:
+      return "这个乐句不合法。";
+  }
+}
+
+function englishLyricPhraseOverlap(params: DiagnosticParams): string {
+  return `The lyric phrase from bar ${value(params, "bar")} for ${value(params, "barCount")} bars overlaps line ${value(params, "line")}.`;
+}
+
+function chineseLyricPhraseOverlap(params: DiagnosticParams): string {
+  return `从第 ${value(params, "bar")} 小节起 ${value(params, "barCount")} 小节的乐句和第 ${value(params, "line")} 行重叠。`;
+}
+
+function englishLyricTextInvalid(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "not-text":
+      return "A lyric line must be text.";
+    case "empty":
+      return "A lyric line cannot be empty.";
+    case "line-break":
+      return "A lyric line cannot contain a line break.";
+    case "label":
+      return "A lyric line cannot be only a [section] label, because it would read as a label when the lyrics are joined.";
+    default:
+      return "This lyric line's text is not valid.";
+  }
+}
+
+function chineseLyricTextInvalid(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "not-text":
+      return "歌词行的内容必须是文本。";
+    case "empty":
+      return "歌词行不能为空。";
+    case "line-break":
+      return "歌词行不能包含换行。";
+    case "label":
+      return "歌词行不能只有 [段落] 标签，否则拼回歌词时会被当成段落标记。";
+    default:
+      return "这一行歌词的内容不合法。";
+  }
+}
+
+function englishLyricLinesNotMergeable(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "no-next":
+      return "The last lyric line has no next line to merge with.";
+    case "not-adjacent":
+      return "The two lyric phrases are not next to each other, so they cannot become one phrase.";
+    case "not-one-section":
+      return "The two lyric phrases are in different sections, so they cannot become one phrase.";
+    default:
+      return "These lyric lines cannot be merged.";
+  }
+}
+
+function chineseLyricLinesNotMergeable(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "no-next":
+      return "最后一行歌词后面没有可以合并的行。";
+    case "not-adjacent":
+      return "两个乐句不相邻，不能合成一个乐句。";
+    case "not-one-section":
+      return "两个乐句在不同的段落里，不能合成一个乐句。";
+    default:
+      return "这些歌词行不能合并。";
+  }
+}
+
+function englishLyricSplitInvalid(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "offset":
+      return "Split a lyric line at a character inside it, not at either end.";
+    case "empty-part":
+      return "Both halves of a split lyric line need text.";
+    case "label-part":
+      return "One half of the split would read as a section label.";
+    case "line-break":
+      return "A split lyric line cannot contain a line break.";
+    case "bar":
+      return "The split bar must leave at least one bar on each side of the phrase.";
+    default:
+      return "This lyric line cannot be split here.";
+  }
+}
+
+function chineseLyricSplitInvalid(params: DiagnosticParams): string {
+  switch (value(params, "reason")) {
+    case "offset":
+      return "拆分歌词行时，拆分位置要在行内，不能在两端。";
+    case "empty-part":
+      return "拆开的两行都需有文字。";
+    case "label-part":
+      return "拆出的其中一半会被当成段落标记。";
+    case "line-break":
+      return "拆开的歌词行不能包含换行。";
+    case "bar":
+      return "拆分用的小节两边都至少要留一小节。";
+    default:
+      return "这一行歌词不能在这里拆开。";
+  }
 }
 
 function englishCutOtherVoiceShort(params: DiagnosticParams): string {
@@ -840,10 +1052,22 @@ const en: Catalog = {
   sectionNameBlank: englishSectionNameBlank,
   sectionNameLineBreak: englishSectionNameLineBreak,
   sectionNameTrailingSpace: englishSectionNameTrailingSpace,
+  noteBeforeStart: englishNoteBeforeStart,
+  notePastEnd: englishNotePastEnd,
+  noteTooShort: englishNoteTooShort,
+  gridNotAllowed: englishGridNotAllowed,
+  offsetNotInteger: englishOffsetNotInteger,
+  unitUnknown: englishUnitUnknown,
   styleNoBpm: englishStyleNoBpm,
   melodyWithChords: englishMelodyWithChords,
   lyricsUnaligned: englishLyricsUnaligned,
   lyricsTooLong: englishLyricsTooLong,
+  lyricLineOutOfRange: englishLyricLineOutOfRange,
+  lyricPhraseInvalid: englishLyricPhraseInvalid,
+  lyricPhraseOverlap: englishLyricPhraseOverlap,
+  lyricTextInvalid: englishLyricTextInvalid,
+  lyricLinesNotMergeable: englishLyricLinesNotMergeable,
+  lyricSplitInvalid: englishLyricSplitInvalid,
   cutOtherVoiceShort: englishCutOtherVoiceShort,
 };
 
@@ -895,10 +1119,22 @@ const zh: Catalog = {
   sectionNameBlank: chineseSectionNameBlank,
   sectionNameLineBreak: chineseSectionNameLineBreak,
   sectionNameTrailingSpace: chineseSectionNameTrailingSpace,
+  noteBeforeStart: chineseNoteBeforeStart,
+  notePastEnd: chineseNotePastEnd,
+  noteTooShort: chineseNoteTooShort,
+  gridNotAllowed: chineseGridNotAllowed,
+  offsetNotInteger: chineseOffsetNotInteger,
+  unitUnknown: chineseUnitUnknown,
   styleNoBpm: chineseStyleNoBpm,
   melodyWithChords: chineseMelodyWithChords,
   lyricsUnaligned: chineseLyricsUnaligned,
   lyricsTooLong: chineseLyricsTooLong,
+  lyricLineOutOfRange: chineseLyricLineOutOfRange,
+  lyricPhraseInvalid: chineseLyricPhraseInvalid,
+  lyricPhraseOverlap: chineseLyricPhraseOverlap,
+  lyricTextInvalid: chineseLyricTextInvalid,
+  lyricLinesNotMergeable: chineseLyricLinesNotMergeable,
+  lyricSplitInvalid: chineseLyricSplitInvalid,
   cutOtherVoiceShort: chineseCutOtherVoiceShort,
 };
 
@@ -1001,6 +1237,18 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.sectionNameLineBreak(diagnostic.params);
     case "section-name-trailing-space":
       return catalog.sectionNameTrailingSpace(diagnostic.params);
+    case "note-before-start":
+      return catalog.noteBeforeStart(diagnostic.params);
+    case "note-past-end":
+      return catalog.notePastEnd(diagnostic.params);
+    case "note-too-short":
+      return catalog.noteTooShort(diagnostic.params);
+    case "grid-not-allowed":
+      return catalog.gridNotAllowed(diagnostic.params);
+    case "offset-not-integer":
+      return catalog.offsetNotInteger(diagnostic.params);
+    case "unit-unknown":
+      return catalog.unitUnknown(diagnostic.params);
     case "style-no-bpm":
       return catalog.styleNoBpm(diagnostic.params);
     case "melody-with-chords":
@@ -1009,6 +1257,18 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.lyricsUnaligned(diagnostic.params);
     case "lyrics-too-long":
       return catalog.lyricsTooLong(diagnostic.params);
+    case "lyric-line-out-of-range":
+      return catalog.lyricLineOutOfRange(diagnostic.params);
+    case "lyric-phrase-invalid":
+      return catalog.lyricPhraseInvalid(diagnostic.params);
+    case "lyric-phrase-overlap":
+      return catalog.lyricPhraseOverlap(diagnostic.params);
+    case "lyric-text-invalid":
+      return catalog.lyricTextInvalid(diagnostic.params);
+    case "lyric-lines-not-mergeable":
+      return catalog.lyricLinesNotMergeable(diagnostic.params);
+    case "lyric-split-invalid":
+      return catalog.lyricSplitInvalid(diagnostic.params);
     case "cut-other-voice-short":
       return catalog.cutOtherVoiceShort(diagnostic.params);
     default:

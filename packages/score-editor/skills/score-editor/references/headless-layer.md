@@ -26,8 +26,10 @@ the unaligned area. Only that binding is stored; syllables, note onsets and whet
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, `voices`, `bars`, `keys`, `sections`, `notes`, `chords`, `truncation`,
-`hasChords`, and a dialect-private `source` the core never reads. `noteId(voice, start)` builds the stable id the
-model uses.
+`hasChords`, an optional `unitTicks`, and a dialect-private `source` the core never reads. `unitTicks` is how many
+ticks one written duration number lasts, so a command can ask the dialect's `constraints.durations` what it can
+write; a score that does not state it is refused by the note commands with `unit-unknown`.
+`noteId(voice, start)` builds the stable id the model uses.
 
 `Bar`, `Note`, `Chord`, `Section`, `Tempo`, `Meter`, `KeyChange` and `Truncation` describe those parts. `Meter` is a
 fraction of a whole note; `Note.midi` is 0-127 or `null` for a rest; `Note.tie` continues into the next note of the
@@ -70,12 +72,22 @@ command runs on the model (`Score`), then the dialect writes it and runs `check`
   returns the diagnostic and no new text. It refuses a `ProjectCommand`.
 - `applyProjectCommand(dialect, project, command)` returns `ApplyProjectResult`: `{ project, diagnostics }`. It takes
   either union; only the score text or the project's own fields can change, and nothing changes on a refusal.
+- `applyCommandList(dialect, project, commands)` returns a `CommandListResult`: `{ ok, project, diagnostics }`. It
+  applies the commands in order through the same path; a notice does not stop the list, but any other diagnostic
+  refuses all of it and returns the project it started from. A shared lyric boundary moves as two
+  `setLyricLinePhrase` commands in one list.
 
 `applyProjectCommand` also runs the song-project rules and can return a notice with the changed project. `checkProject`
 reports those notices for a project as it stands, `isNoticeDiagnostic` tells a notice from a refusal, and
 `NOTICE_DIAGNOSTIC_CODES` lists the notice codes. A result whose diagnostics are all notices is a command that was taken;
 the session does that for you (`dispatch` returns `ok: true` with the notices), and a host that calls this function itself
 should do the same.
+
+The note edits are `MoveNotesCommand` and `ResizeNotesCommand`, both members of `MoveResizeCommand` and of `ScoreCommand`.
+They take several note ids and act on each note's whole tie chain. Their `grid` is a `Grid`: its `value` is a
+`GridValue`, one of 4, 8, 16 or 32, and `dotted` makes a step half as long again. A grid step is allowed only when the
+score's `unitTicks` and the dialect's `constraints.durations` can write it, and a step the score cannot write is
+refused with `grid-not-allowed`. Every refusal code is listed with the command in the package README.
 
 ```ts
 import { applyProjectCommand, isNoticeDiagnostic } from "@neta-art/score-editor";
@@ -114,7 +126,10 @@ whether the written text reads back as the same model.
 The call surface is `lyricLinesOf(project, score)` (the stored lines, or the legacy layout from `layoutLyrics`),
 `joinLyrics(score, lines)`, `alignedLyricLines` and `unalignedLyricLines`, `lyricSyllables` and `syllableCount`,
 `noteOnsets`, `alignLyricLine` (`LyricAlignment`, `LyricSyllableNote`), `lyricCharacterCount` and
-`LYRICS_MAX_CHARACTERS`. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`.
+`LYRICS_MAX_CHARACTERS`. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`. The lyric-line commands
+are `ProjectCommand`s: `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`,
+`mergeLyricLines` and `setLyricLinePhrase`; `applyCommandList` applies several of them as one step. Pass the score to
+`alignedLyricLines` or `unalignedLyricLines` to treat a phrase that no longer fits as unaligned.
 
 The rules — what a label matches, where unaligned lines go, what counts as a syllable, how a command carries the
 lines and when `lyrics` is rewritten — are the contract in the package README's

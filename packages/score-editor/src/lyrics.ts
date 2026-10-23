@@ -46,12 +46,30 @@ function clampPhrase(score: Score, phrase: LyricPhrase): LyricPhrase | null {
   return count === 0 ? null : clipPhraseToSection(score, first, first + count - 1);
 }
 
-/** The label on a legacy lyrics line, or `null` when the line is a lyric line rather than a `[section]` label. */
-function labelOf(line: string): string | null {
+/** The label on a lyrics line, or `null` when the line is a lyric line rather than a `[section]` label. */
+export function lyricLabelName(line: string): string | null {
   const match = /^[ \t]*\[([^\]\r\n]+)\][ \t]*$/.exec(line);
   if (match === null) return null;
   const name = (match[1] as string).trim();
   return name === "" ? null : name;
+}
+
+/** Why a phrase does not fit the score's first invariant, or `null` when it does. */
+export type LyricPhraseProblem = "not-integer" | "empty" | "outside-score" | "cross-section";
+
+/**
+ * A phrase is one or more whole, consecutive bars inside the score and inside one section. This says which part of that
+ * is wrong, so a refusal can name the reason; it does not clip or repair the phrase.
+ */
+export function lyricPhraseProblem(score: Score, phrase: LyricPhrase): LyricPhraseProblem | null {
+  if (!Number.isInteger(phrase.firstBar) || !Number.isInteger(phrase.barCount)) return "not-integer";
+  if (phrase.barCount < 1) return "empty";
+  const last = phrase.firstBar + phrase.barCount - 1;
+  if (phrase.firstBar < 0 || last >= score.bars.length) return "outside-score";
+  const firstSection = sectionIndexAt(score, phrase.firstBar);
+  const lastSection = sectionIndexAt(score, last);
+  if (firstSection < 0 || lastSection < 0) return "outside-score";
+  return firstSection === lastSection ? null : "cross-section";
 }
 
 interface LegacyGroup {
@@ -68,7 +86,7 @@ interface LegacyGroup {
 export function layoutLyrics(score: Score, lyrics: string): LyricLine[] {
   const groups: LegacyGroup[] = [{ name: null, lines: [] }];
   for (const raw of lyrics.replace(/\r\n?/g, "\n").split("\n")) {
-    const label = labelOf(raw);
+    const label = lyricLabelName(raw);
     if (label !== null) {
       groups.push({ name: label, lines: [] });
     } else if (raw.trim() !== "") {
@@ -118,14 +136,18 @@ export function lyricLinesOf(
   return project.lyricLines ?? layoutLyrics(score, project.lyrics);
 }
 
-/** Lines bound to a phrase, in stored order. */
-export function alignedLyricLines(lines: ReadonlyArray<LyricLine>): ReadonlyArray<LyricLine> {
-  return lines.filter((line) => line.phrase !== null);
+/** Lines bound to a phrase that fits the score, in stored order. Without a score, a bound phrase counts as aligned. */
+export function alignedLyricLines(lines: ReadonlyArray<LyricLine>, score?: Score): ReadonlyArray<LyricLine> {
+  return lines.filter(
+    (line) => line.phrase !== null && (score === undefined || lyricPhraseProblem(score, line.phrase) === null),
+  );
 }
 
-/** Lines in the unaligned area, in stored order. */
-export function unalignedLyricLines(lines: ReadonlyArray<LyricLine>): ReadonlyArray<LyricLine> {
-  return lines.filter((line) => line.phrase === null);
+/** Lines in the unaligned area, in stored order: no phrase, or one that no longer fits the score. */
+export function unalignedLyricLines(lines: ReadonlyArray<LyricLine>, score?: Score): ReadonlyArray<LyricLine> {
+  return lines.filter(
+    (line) => line.phrase === null || (score !== undefined && lyricPhraseProblem(score, line.phrase) !== null),
+  );
 }
 
 /**
@@ -140,6 +162,7 @@ export function joinLyrics(score: Score, lines: ReadonlyArray<LyricLine>): strin
       .filter(
         (line) =>
           line.phrase !== null &&
+          lyricPhraseProblem(score, line.phrase) === null &&
           line.phrase.firstBar >= section.firstBar &&
           line.phrase.firstBar < section.firstBar + section.barCount,
       )
@@ -277,8 +300,9 @@ export function noteOnsets(score: Score, phrase: LyricPhrase): Note[] {
 /** Compares a line's syllable count with its phrase's note onsets and, when equal, gives each syllable its note. */
 export function alignLyricLine(score: Score, line: LyricLine): LyricAlignment {
   const syllables = lyricSyllables(line.text);
-  const onsets = line.phrase === null ? [] : noteOnsets(score, line.phrase);
-  const equal = line.phrase !== null && syllables.length === onsets.length;
+  const aligned = line.phrase !== null && lyricPhraseProblem(score, line.phrase) === null;
+  const onsets = aligned && line.phrase !== null ? noteOnsets(score, line.phrase) : [];
+  const equal = aligned && syllables.length === onsets.length;
   return {
     syllables,
     onsets,

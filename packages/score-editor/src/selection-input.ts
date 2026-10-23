@@ -1,6 +1,6 @@
 // ABOUTME: What selecting several notes means for an editing session: toggling one, taking a box, all, the rest, none.
 // ABOUTME: DOM-free, over a session and its score; a tie chain is selected as a whole, so "selected" means a chain with a selected note.
-import { tieChain } from "./commands";
+import { tieChain } from "./commands-shared";
 import type { EditingInputResult, EditingKeyInput } from "./editing-input";
 import type { Score } from "./score";
 import type { EditingSession } from "./session";
