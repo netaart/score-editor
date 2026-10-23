@@ -77,6 +77,31 @@ export interface Messages {
   /** Draft keeper notices: the source changed under a draft, and a write or removal did not reach the host store. */
   draftSourceChanged: string;
   draftSaveFailed: string;
+  /** The section menu. `name` is null for the unnamed music before the first marker. The name of a band's control and of its menu. */
+  sectionButton(name: string | null): string;
+  /** The choices, without the ellipsis the menu adds to the three that open the name form. */
+  sectionRename: string;
+  sectionNameIt: string;
+  sectionStart: string;
+  sectionMoveEarlier: string;
+  sectionMoveLater: string;
+  sectionDuplicate: string;
+  sectionDelete: string;
+  /** The name form: its two fields, the line that says which bars the opened section covers, and its buttons. */
+  sectionFormName: string;
+  sectionFormBar: string;
+  sectionFormCovers(firstBar: number, lastBar: number): string;
+  sectionFormCancel: string;
+  sectionConfirmName: string;
+  sectionConfirmStart: string;
+  /** The prompt for a bar that was not typed: the one thing the form says itself, since every other refusal is a command's. */
+  sectionFormBarMissing: string;
+  /** What a live region says once a section command was taken. */
+  sectionDeleted(name: string | null): string;
+  sectionDuplicated(name: string | null): string;
+  sectionMoved(name: string | null, direction: "earlier" | "later"): string;
+  sectionRenamed(from: string | null, to: string): string;
+  sectionStarted(name: string, bar: number): string;
 }
 
 const en: Messages = {
@@ -157,6 +182,29 @@ const en: Messages = {
   previewBlocked: "Blocked by the browser. Press Preview again.",
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
+  sectionButton: (name) => (name === null ? "Unnamed section" : `Section ${name}`),
+  sectionRename: "Rename",
+  sectionNameIt: "Name this section",
+  sectionStart: "Start a section at a bar",
+  sectionMoveEarlier: "Move earlier",
+  sectionMoveLater: "Move later",
+  sectionDuplicate: "Duplicate",
+  sectionDelete: "Delete",
+  sectionFormName: "Name",
+  sectionFormBar: "Bar",
+  sectionFormCovers: (first, last) =>
+    first === last ? `This section is bar ${first}.` : `This section covers bars ${first} to ${last}.`,
+  sectionFormCancel: "Cancel",
+  sectionConfirmName: "Name",
+  sectionConfirmStart: "Start section",
+  sectionFormBarMissing: "Enter the bar where the section starts.",
+  sectionDeleted: (name) => (name === null ? "Deleted the unnamed section" : `Deleted section “${name}”`),
+  sectionDuplicated: (name) => (name === null ? "Duplicated the unnamed section" : `Duplicated section “${name}”`),
+  sectionMoved: (name, direction) =>
+    `Moved ${name === null ? "the unnamed section" : `section “${name}”`} ${direction}`,
+  sectionRenamed: (from, to) =>
+    from === null ? `Named the unnamed section “${to}”` : `Renamed section “${from}” to “${to}”`,
+  sectionStarted: (name, bar) => `Started section “${name}” at bar ${bar}`,
 };
 
 const zh: Messages = {
@@ -230,6 +278,28 @@ const zh: Messages = {
   previewBlocked: "浏览器没有允许发声，请再按一次试听",
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
+  sectionButton: (name) => (name === null ? "未命名段落" : `段落 ${name}`),
+  sectionRename: "重命名",
+  sectionNameIt: "给这段命名",
+  sectionStart: "从某个小节另起一段",
+  sectionMoveEarlier: "往前移",
+  sectionMoveLater: "往后移",
+  sectionDuplicate: "复制",
+  sectionDelete: "删除",
+  sectionFormName: "名称",
+  sectionFormBar: "小节",
+  sectionFormCovers: (first, last) =>
+    first === last ? `这一段是第 ${first} 小节。` : `这一段是第 ${first} 到 ${last} 小节。`,
+  sectionFormCancel: "取消",
+  sectionConfirmName: "命名",
+  sectionConfirmStart: "另起一段",
+  sectionFormBarMissing: "请填写新段落从第几小节开始。",
+  sectionDeleted: (name) => (name === null ? "已删除未命名的段落" : `已删除段落“${name}”`),
+  sectionDuplicated: (name) => (name === null ? "已复制未命名的段落" : `已复制段落“${name}”`),
+  sectionMoved: (name, direction) =>
+    `${name === null ? "未命名的段落" : `段落“${name}”`}已往${direction === "earlier" ? "前" : "后"}移`,
+  sectionRenamed: (from, to) => (from === null ? `已把未命名的段落命名为“${to}”` : `已把段落“${from}”重命名为“${to}”`),
+  sectionStarted: (name, bar) => `已在第 ${bar} 小节另起段落“${name}”`,
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

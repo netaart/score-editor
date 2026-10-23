@@ -13,11 +13,16 @@ export interface PopoverMenu {
 export interface PopoverMenuOptions {
   /** The item that takes the focus when the menu opens; the first item when this gives none. */
   initialFocus?(items: ReadonlyArray<HTMLButtonElement>): HTMLElement | undefined;
+  /**
+   * Where the menu hangs, when that is not the button's own box: its left edge, and the line it sits 4px under. A button
+   * that is wider than the part of it in view, such as a band, says where its visible start is.
+   */
+  anchor?(): { readonly left: number; readonly bottom: number };
 }
 
 /**
  * Makes the menu that `button` opens, as the last child of `root`. The menu is a native popover, so it stacks above a
- * host's full-screen layer, and it sits under the button, moved left when it would run off the window. The first item,
+ * host's full-screen layer, and it sits under the button, moved left or up when it would run off the window. The first item,
  * or the one `initialFocus` names, takes the focus when it opens, and Up, Down, Home and End move between the items.
  * Everything it adds is removed with `root`.
  */
@@ -41,7 +46,7 @@ export function mountPopoverMenu(
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      const rect = button.getBoundingClientRect();
+      const rect = options.anchor?.() ?? button.getBoundingClientRect();
       menu.style.left = `${rect.left}px`;
       menu.style.top = `${rect.bottom + 4}px`;
     },
@@ -58,6 +63,8 @@ export function mountPopoverMenu(
         const rect = menu.getBoundingClientRect();
         const overflow = rect.right - (view.innerWidth - 8);
         if (overflow > 0) menu.style.left = `${Math.max(8, rect.left - overflow)}px`;
+        const below = rect.bottom - (view.innerHeight - 8);
+        if (below > 0) menu.style.top = `${Math.max(8, rect.top - below)}px`;
       }
       (options.initialFocus?.(items) ?? items[0])?.focus();
     },

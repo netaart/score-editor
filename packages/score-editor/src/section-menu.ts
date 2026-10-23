@@ -1,0 +1,482 @@
+// ABOUTME: The section menu of the time ruler: each section band opens a menu of what the commands can do to its section, and a form for the two choices that need a name.
+// ABOUTME: Menus and the form are built for one drawing of the ruler and dropped with it; the focus and the view are carried over to the section that was acted on.
+import { barIndexAt } from "./arrangement";
+import { revealTick } from "./axis";
+import type { ScoreCommand } from "./commands";
+import { type Diagnostic, formatDiagnostic } from "./diagnostics";
+import { create } from "./dom";
+import type { Messages } from "./i18n";
+import { type LiveRegion, sayRefusals } from "./live-region";
+import { mountPopoverMenu, type PopoverMenu } from "./popover-menu";
+import type { Score } from "./score";
+import { type SectionAction, type SectionActionName, sectionActions } from "./section-actions";
+import type { EditingSession } from "./session";
+import type { AxisPartOptions } from "./types";
+
+/** What the ruler asks of the section menu: wire it to a part root, draw it with the ruler, keep it right after every change. */
+export interface SectionMenus {
+  /** Binds the menu to the ruler's root, the listeners it adds going with `signal`, and the live region it speaks in. */
+  attach(root: HTMLElement, signal: AbortSignal, live: LiveRegion): void;
+  /**
+   * Starts one drawing of the ruler, dropping what the one before it built. Returns what to call on each section band, in
+   * the order they are drawn, with the band and the section's index in the score.
+   */
+  begin(canvas: HTMLElement, score: Score, t: Messages): (band: HTMLElement, section: number) => void;
+  /** Shows or hides the controls for the session's `editable`, and gives the focus back to the section that had it. */
+  refresh(): void;
+  destroy(): void;
+}
+
+/** The section the focus goes to once the ruler has drawn again, found from the score that was drawn. */
+interface Pending {
+  readonly find: (score: Score) => number;
+  /** Whether the view is scrolled to show the section: after a move or a copy, not after a redraw that changed nothing. */
+  readonly reveal: boolean;
+}
+
+/** Everything built for one drawing of the ruler; the maps fill as the bands are drawn. */
+interface Drawing {
+  readonly abort: AbortController;
+  readonly score: Score;
+  readonly t: Messages;
+  readonly container: HTMLElement;
+  readonly bands: Map<number, HTMLElement>;
+  readonly buttons: Map<number, HTMLButtonElement>;
+  readonly menus: Map<number, PopoverMenu>;
+  readonly form: NameForm;
+}
+
+/** One name form for one drawing: filled in and shown for a section, in one of three ways. */
+interface NameForm {
+  readonly element: HTMLElement;
+  open(section: number, how: FormKind): void;
+}
+
+type FormKind = "rename" | "name" | "start";
+
+/** A section's index among the bands, for the arrow keys: the indices of the sections that have a band, in order. */
+function sorted(bands: ReadonlyMap<number, unknown>): number[] {
+  return [...bands.keys()].sort((a, b) => a - b);
+}
+
+/** Where a menu or the form hangs from: the start of the band's name, which stays in view, and the line under the band. */
+function anchorOf(band: HTMLElement): { left: number; bottom: number } {
+  const box = band.getBoundingClientRect();
+  const name = band.querySelector(".sce-section-name")?.getBoundingClientRect();
+  return { left: Math.max(8, name?.left ?? box.left), bottom: box.bottom };
+}
+
+export function createSectionMenus(session: EditingSession, options: AxisPartOptions = {}): SectionMenus {
+  let root: HTMLElement | null = null;
+  let live: LiveRegion | null = null;
+  let say: ((diagnostics: ReadonlyArray<Diagnostic>) => void) | null = null;
+  let pending: Pending | null = null;
+  let shown: boolean | null = null;
+
+  let drawing: Drawing | null = null;
+
+  function speak(words: string): void {
+    live?.say(words);
+  }
+
+  /** Puts the focus on the section `pending` names, and brings it into view when asked. */
+  function settle(): void {
+    const wanted = pending;
+    pending = null;
+    if (!wanted || !drawing) return;
+    const indices = sorted(drawing.buttons);
+    const target = wanted.find(drawing.score);
+    const index = indices.find((found) => found >= target) ?? indices[indices.length - 1];
+    if (index === undefined) return;
+    drawing.buttons.get(index)?.focus({ preventScroll: true });
+    const section = drawing.score.sections[index];
+    const first = section === undefined ? undefined : drawing.score.bars[section.firstBar];
+    if (wanted.reveal && first) revealTick(session, first.start);
+  }
+
+  /** Runs `command`, then says `words` and moves the focus. A refusal changes nothing and is told the way a refused key is. */
+  function run(command: ScoreCommand, next: Pending, words: string): boolean {
+    pending = next;
+    const result = session.dispatch(command);
+    if (!result.ok) {
+      pending = null;
+      say?.(result.diagnostics);
+      return false;
+    }
+    speak(words);
+    settle();
+    return true;
+  }
+
+  function nameFormFor(draw: Omit<Drawing, "form">): NameForm {
+    const { t, score, container } = draw;
+    const doc = container.ownerDocument;
+    const signal = draw.abort.signal;
+    const element = create(doc, "div", "sce-popover sce-section-form", container);
+    element.setAttribute("popover", "auto");
+    element.setAttribute("role", "dialog");
+    const form = create(doc, "form", "sce-form", element);
+    form.noValidate = true;
+
+    const field = (label: string): { wrap: HTMLLabelElement; input: HTMLInputElement } => {
+      const wrap = create(doc, "label", "sce-form-field", form);
+      create(doc, "span", "sce-form-label", wrap).textContent = label;
+      const input = create(doc, "input", "sce-form-input", wrap);
+      input.type = "text";
+      input.autocomplete = "off";
+      input.spellcheck = false;
+      return { wrap, input };
+    };
+    const bar = field(t.sectionFormBar);
+    bar.input.inputMode = "numeric";
+    const name = field(t.sectionFormName);
+    const covers = create(doc, "p", "sce-form-hint", form);
+    const error = create(doc, "p", "sce-form-error", form);
+    error.setAttribute("role", "alert");
+    error.hidden = true;
+    const actions = create(doc, "div", "sce-form-actions", form);
+    const cancel = create(doc, "button", "sce-button", actions);
+    cancel.type = "button";
+    cancel.textContent = t.sectionFormCancel;
+    const confirm = create(doc, "button", "sce-button sce-button-strong", actions);
+    confirm.type = "submit";
+
+    let current: { section: number; how: FormKind } | null = null;
+
+    function showError(words: string, input: HTMLInputElement): void {
+      error.textContent = words;
+      error.hidden = false;
+      for (const each of [bar.input, name.input]) each.removeAttribute("aria-invalid");
+      input.setAttribute("aria-invalid", "true");
+      input.focus();
+    }
+    function clearError(): void {
+      error.hidden = true;
+      error.textContent = "";
+      for (const each of [bar.input, name.input]) each.removeAttribute("aria-invalid");
+    }
+    bar.input.addEventListener("input", clearError, { signal });
+    name.input.addEventListener("input", clearError, { signal });
+    cancel.addEventListener("click", () => element.hidePopover(), { signal });
+
+    element.addEventListener(
+      "beforetoggle",
+      (event) => {
+        if ((event as ToggleEvent).newState !== "open" || !current) return;
+        const band = draw.bands.get(current.section);
+        if (!band) return;
+        const place = anchorOf(band);
+        element.style.left = `${place.left}px`;
+        element.style.top = `${place.bottom + 4}px`;
+      },
+      { signal },
+    );
+
+    form.addEventListener(
+      "submit",
+      (event) => {
+        event.preventDefault();
+        if (!current) return;
+        const { section, how } = current;
+        const typed = name.input.value;
+        const language = session.view.language;
+        const refused = (diagnostics: ReadonlyArray<Diagnostic>, input: HTMLInputElement): void => {
+          const first = diagnostics[0];
+          if (first) showError(formatDiagnostic(first, language), input);
+          options.onRefused?.(diagnostics);
+        };
+        if (how === "start") {
+          const wanted = Number(bar.input.value.trim());
+          if (bar.input.value.trim() === "" || Number.isNaN(wanted)) {
+            showError(t.sectionFormBarMissing, bar.input);
+            return;
+          }
+          const command: ScoreCommand = { type: "nameSection", bar: wanted - 1, name: typed };
+          pending = { find: (found) => found.sections.findIndex((each) => each.firstBar === wanted - 1), reveal: true };
+          const result = session.dispatch(command);
+          if (!result.ok) {
+            pending = null;
+            const bad = result.diagnostics[0]?.code === "bar-out-of-range" ? bar.input : name.input;
+            refused(result.diagnostics, bad);
+            return;
+          }
+          closeForm();
+          speak(t.sectionStarted(typed, wanted));
+          settle();
+          return;
+        }
+        const before = score.sections[section]?.name ?? null;
+        pending = { find: () => section, reveal: false };
+        const result = session.dispatch({ type: "renameSection", section, name: typed });
+        if (!result.ok) {
+          pending = null;
+          refused(result.diagnostics, name.input);
+          return;
+        }
+        closeForm();
+        speak(t.sectionRenamed(before, typed));
+        settle();
+      },
+      { signal },
+    );
+
+    /** The form may already have gone with a drawing that the command made; then there is nothing to close. */
+    function closeForm(): void {
+      if (element.isConnected && element.matches(":popover-open")) element.hidePopover();
+    }
+
+    return {
+      element,
+      open(section, how) {
+        const found = score.sections[section];
+        if (!found) return;
+        current = { section, how };
+        clearError();
+        const title = how === "rename" ? t.sectionRename : how === "name" ? t.sectionNameIt : t.sectionStart;
+        element.setAttribute("aria-label", title);
+        confirm.textContent =
+          how === "rename" ? t.sectionRename : how === "name" ? t.sectionConfirmName : t.sectionConfirmStart;
+        bar.wrap.hidden = how !== "start";
+        covers.hidden = how !== "start";
+        covers.textContent = t.sectionFormCovers(found.firstBar + 1, found.firstBar + found.barCount);
+        name.input.value = how === "rename" ? (found.name ?? "") : "";
+        const point = session.insertionPoint;
+        // A bar the user has not picked is never defaulted to the start of another section, which would rename that one.
+        const second = found.barCount >= 2 ? found.firstBar + 2 : null;
+        const fromPoint = point === null ? null : barIndexAt(score.bars, point.tick) + 1;
+        const start = fromPoint ?? second;
+        bar.input.value = start === null ? "" : String(start);
+        element.showPopover();
+        const view = doc.defaultView;
+        if (view) {
+          const box = element.getBoundingClientRect();
+          const across = box.right - (view.innerWidth - 8);
+          if (across > 0) element.style.left = `${Math.max(8, box.left - across)}px`;
+          const down = box.bottom - (view.innerHeight - 8);
+          if (down > 0) element.style.top = `${Math.max(8, box.top - down)}px`;
+        }
+        const focus = how === "start" ? bar.input : name.input;
+        focus.focus();
+        focus.select();
+      },
+    };
+  }
+
+  function buildBand(draw: Drawing, band: HTMLElement, index: number): void {
+    const { t, score, container } = draw;
+    const section = score.sections[index];
+    if (!section) return;
+    const doc = band.ownerDocument;
+    const signal = draw.abort.signal;
+    const label = t.sectionButton(section.name);
+
+    const button = create(doc, "button", "sce-section-open", band);
+    button.type = "button";
+    button.tabIndex = -1;
+    button.setAttribute("aria-label", label);
+    draw.buttons.set(index, button);
+    draw.bands.set(index, band);
+    const menu = mountPopoverMenu(container, button, signal, { anchor: () => anchorOf(band) });
+    draw.menus.set(index, menu);
+    menu.element.setAttribute("aria-label", label);
+
+    let latest: ReadonlyArray<SectionAction> | null = null;
+    const choices = new Map<SectionActionName, { item: HTMLButtonElement; reason: HTMLElement }>();
+    const choice = (name: SectionActionName, words: string, choose: () => void): void => {
+      const item = menu.item("menuitem", choose);
+      item.setAttribute("aria-label", words);
+      const text = create(doc, "span", "sce-menu-text", item);
+      create(doc, "span", "sce-menu-label", text).textContent = words;
+      const reason = create(doc, "span", "sce-menu-reason", text);
+      reason.hidden = true;
+      choices.set(name, { item, reason });
+    };
+    const act = (name: "move-earlier" | "move-later" | "duplicate" | "delete") => (): void => {
+      const command = latest?.find((found) => found.name === name)?.command;
+      if (!command) return;
+      const current = score.sections[index]?.name ?? null;
+      if (name === "delete") {
+        run(
+          command,
+          { find: (found) => Math.min(index, found.sections.length - 1), reveal: true },
+          t.sectionDeleted(current),
+        );
+      } else if (name === "duplicate") {
+        run(command, { find: () => index + 1, reveal: true }, t.sectionDuplicated(current));
+      } else {
+        const direction = name === "move-earlier" ? "earlier" : "later";
+        const to = name === "move-earlier" ? index - 1 : index + 1;
+        run(command, { find: () => to, reveal: true }, t.sectionMoved(current, direction));
+      }
+    };
+
+    const naming: FormKind = section.name === null ? "name" : "rename";
+    choice("rename", `${section.name === null ? t.sectionNameIt : t.sectionRename}…`, () =>
+      draw.form.open(index, naming),
+    );
+    choice("start", `${t.sectionStart}…`, () => draw.form.open(index, "start"));
+    menu.rule();
+    choice("move-earlier", t.sectionMoveEarlier, act("move-earlier"));
+    choice("move-later", t.sectionMoveLater, act("move-later"));
+    choice("duplicate", t.sectionDuplicate, act("duplicate"));
+    menu.rule();
+    choice("delete", t.sectionDelete, act("delete"));
+
+    // A choice the commands would refuse is muted and says why; pressing it does nothing and leaves the menu open.
+    menu.element.addEventListener(
+      "click",
+      (event) => {
+        if (event.target instanceof Element && event.target.closest('.sce-menu-item[aria-disabled="true"]')) {
+          event.stopPropagation();
+        }
+      },
+      { capture: true, signal },
+    );
+    menu.element.addEventListener(
+      "beforetoggle",
+      (event) => {
+        if ((event as ToggleEvent).newState !== "open") return;
+        latest = sectionActions(session, index);
+        const language = session.view.language;
+        for (const [name, { item, reason }] of choices) {
+          const why = latest?.find((found) => found.name === name)?.unavailable ?? null;
+          item.setAttribute("aria-disabled", String(why !== null));
+          reason.hidden = why === null;
+          const words = why === null ? "" : formatDiagnostic(why, language);
+          reason.textContent = words;
+          if (why === null) item.removeAttribute("aria-description");
+          else item.setAttribute("aria-description", words);
+        }
+      },
+      { signal },
+    );
+
+    const open = (): void => {
+      if (!button.isConnected || menu.element.matches(":popover-open")) return;
+      button.focus();
+      menu.element.showPopover();
+    };
+    band.addEventListener(
+      "contextmenu",
+      (event) => {
+        if (!session.view.editable) return;
+        event.preventDefault();
+        open();
+      },
+      { signal },
+    );
+    button.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+        const order = sorted(draw.buttons);
+        const at = order.indexOf(index);
+        let to: number | undefined;
+        if (event.key === "ArrowLeft") to = order[at - 1];
+        else if (event.key === "ArrowRight") to = order[at + 1];
+        else if (event.key === "Home") to = order[0];
+        else if (event.key === "End") to = order[order.length - 1];
+        else return;
+        event.preventDefault();
+        if (to !== undefined) draw.buttons.get(to)?.focus();
+      },
+      { signal },
+    );
+  }
+
+  /** Opens the menu of the section the insertion point is in, or the first section that has a band. */
+  function openFromKeyboard(): void {
+    if (!drawing) return;
+    const { score, buttons, menus } = drawing;
+    const point = session.insertionPoint;
+    const at = point === null ? 0 : barIndexAt(score.bars, point.tick);
+    const index = score.sections.findIndex((found) => at >= found.firstBar && at < found.firstBar + found.barCount);
+    const order = sorted(buttons);
+    const chosen = buttons.has(index) ? index : order[0];
+    if (chosen === undefined) return;
+    const menu = menus.get(chosen);
+    buttons.get(chosen)?.focus();
+    if (menu && !menu.element.matches(":popover-open")) menu.element.showPopover();
+  }
+
+  function closeEverything(): void {
+    if (!drawing) return;
+    for (const menu of drawing.menus.values()) {
+      if (menu.element.isConnected && menu.element.matches(":popover-open")) menu.element.hidePopover();
+    }
+    const form = drawing.form.element;
+    if (form.isConnected && form.matches(":popover-open")) form.hidePopover();
+  }
+
+  return {
+    attach(own, signal, region) {
+      root = own;
+      live = region;
+      own.setAttribute("data-editable", String(session.view.editable));
+      say = sayRefusals(region, session, options.onRefused);
+      const surface = options.scroller ?? own;
+      surface.addEventListener(
+        "keydown",
+        (event) => {
+          const asks = event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
+          if (!asks || event.defaultPrevented || event.isComposing || !drawing || !session.view.editable) return;
+          const target = event.target;
+          const onBand = target instanceof Element && target.closest(".sce-section-open") !== null;
+          if (target !== surface && !onBand) return;
+          event.preventDefault();
+          if (onBand && target instanceof Element) {
+            const button = target.closest(".sce-section-open");
+            const entry = [...drawing.buttons].find(([, found]) => found === button);
+            const menu = entry === undefined ? undefined : drawing.menus.get(entry[0]);
+            if (menu && !menu.element.matches(":popover-open")) menu.element.showPopover();
+            return;
+          }
+          openFromKeyboard();
+        },
+        { signal },
+      );
+      // Before the ruler draws again, note which band holds the focus, so the redraw can give it back.
+      const unsubscribe = session.subscribe(() => {
+        if (pending !== null || !drawing) return;
+        const active = (own.getRootNode() as Document | ShadowRoot).activeElement;
+        const entry = [...drawing.buttons].find(([, found]) => found === active);
+        if (entry) pending = { find: () => entry[0], reveal: false };
+      });
+      signal.addEventListener("abort", unsubscribe, { once: true });
+    },
+    begin(canvas, score, t) {
+      drawing?.abort.abort();
+      shown = null;
+      const doc = canvas.ownerDocument;
+      const container = create(doc, "div", "sce-section-menus", canvas);
+      const base = {
+        abort: new AbortController(),
+        score,
+        t,
+        container,
+        bands: new Map<number, HTMLElement>(),
+        buttons: new Map<number, HTMLButtonElement>(),
+        menus: new Map<number, PopoverMenu>(),
+      };
+      const draw: Drawing = { ...base, form: nameFormFor(base) };
+      drawing = draw;
+      return (band, index) => buildBand(draw, band, index);
+    },
+    refresh() {
+      if (!drawing || !root) return;
+      const editable = session.view.editable;
+      if (editable !== shown) {
+        shown = editable;
+        root.setAttribute("data-editable", String(editable));
+        for (const button of drawing.buttons.values()) button.hidden = !editable;
+        if (!editable) closeEverything();
+      }
+      settle();
+    },
+    destroy() {
+      drawing?.abort.abort();
+      drawing = null;
+      pending = null;
+    },
+  };
+}
