@@ -144,12 +144,12 @@ region and sent to `onRefused`, as for the other parts:
 | --- | --- |
 | Clicks or taps a phrase, or a line in the unaligned list | Chooses the line and opens its text in an editor under the lane. |
 | Types in the editor, then Enter or leaves the box | `setLyricLineText`, only when the text changed. Escape gives the text up. |
-| Presses Split at caret, Merge with next, Delete line | `splitLyricLine` (with the bar when the line is on bars), `mergeLyricLines`, `deleteLyricLine`. |
+| Presses Split at cursor, Merge with next, Delete line | `splitLyricLine` (with the bar when the line is on bars), `mergeLyricLines`, `deleteLyricLine`. |
 | Presses New line, types, presses Add | `insertLyricLine` at the end, into the unaligned area. |
 | Drags the handle at an edge of a phrase | `setLyricLinePhrase` to the nearest bar line; when two lines share the edge, both commands go as one step (`session.dispatchAll`). Escape gives the drag up. |
 | Drags the grip of an unaligned line onto a bar | `setLyricLinePhrase` with a one-bar phrase on that bar; a bar that already has a line is refused. |
 | Types a bar number in the editor of an unaligned line and presses Place on bar | The same one-bar phrase, with no drag. |
-| Tab, then Left and Right, Home and End, Enter or Space, Delete or Backspace, Escape | The phrases are one tab stop; the arrows step from line to line and choose each; Enter or Space moves to the text editor; Delete or Backspace removes the line; Escape drops the choice. A handle is a slider: its Left and Right keys move the edge by one bar. |
+| Tab, then Left and Right, Home and End, Enter or Space, Delete or Backspace, Escape | The phrases are one tab stop; the arrows step from line to line and choose each; Enter or Space moves to the text editor; Delete or Backspace removes the line; Escape drops the choice. A handle is a slider: its Left and Right keys move the edge by one bar, Home and End as far as it may go. |
 
 A finger's slide on empty track space scrolls; only a handle or a grip starts a drag, and no long press is needed. A
 host that draws its own lyric view reuses the rules the track uses, with no DOM (see the headless layer: `lyricRows`,
