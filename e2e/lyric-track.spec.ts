@@ -1,7 +1,22 @@
 // ABOUTME: Seam 5 for the lyric track: its phrases, the green and yellow counts, syllables on notes, the unaligned area and its editing.
 // ABOUTME: Each case runs with a mouse on the desktop project and with a finger on the phone project, and reads what the session holds.
 import type { Locator, Page } from "@playwright/test";
-import { box, expect, type Harness, type Point, test } from "./fixtures";
+import {
+  box,
+  editorScroller,
+  expect,
+  groundOf,
+  type Harness,
+  lyricDropMark,
+  lyricGrips,
+  lyricGuide,
+  lyricHead,
+  lyricKeys,
+  lyricPanel,
+  lyricSyllableCells,
+  type Point,
+  test,
+} from "./fixtures";
 
 const HEADER = [
   "X:1",
@@ -559,13 +574,13 @@ test.describe("dragging the edge of a phrase", () => {
       await pointer.down(await barLine(page, 3));
       await pointer.move(await barLine(page, 4));
       await expect.poll(async () => (await box(block)).width).toBeGreaterThan(before.width + 30);
-      await expect(lyrics(page).locator(".sce-lyric-guide")).toHaveCount(1);
+      await expect(lyricGuide(lyrics(page))).toHaveCount(1);
       await pointer.move(await barLine(page, 3));
       await pointer.up();
     } finally {
       await pointer.close();
     }
-    await expect(lyrics(page).locator(".sce-lyric-guide")).toHaveCount(0);
+    await expect(lyricGuide(lyrics(page))).toHaveCount(0);
     expect(await storedLines(page)).toEqual(GAPPED);
     expect(await harness.layout.canUndo()).toBe(false);
   });
@@ -584,7 +599,7 @@ test.describe("dragging the edge of a phrase", () => {
       await pointer.close();
     }
     expect(await storedLines(page)).toEqual(GAPPED);
-    await expect(lyrics(page).locator(".sce-lyric-guide")).toHaveCount(0);
+    await expect(lyricGuide(lyrics(page))).toHaveCount(0);
   });
 
   test("a read-only track has no handles", async ({ page, harness }) => {
@@ -597,7 +612,7 @@ test.describe("dragging the edge of a phrase", () => {
 const WITH_LOOSE: Line[] = [...GAPPED, { text: "尚未对齐的一行", phrase: null }];
 
 /** The grip of the first line in the unaligned area. */
-const grip = (page: Page) => unaligned(page).locator(".sce-lyric-grip").first();
+const grip = (page: Page) => lyricGrips(unaligned(page)).first();
 
 /** The middle of a bar in the phrase row. */
 async function barMiddle(page: Page, bar: number): Promise<Point> {
@@ -623,8 +638,8 @@ test.describe("dragging a line from the unaligned area onto bars", () => {
     try {
       await pointer.down(await centreOf(grip(page)));
       await pointer.move(await barMiddle(page, 3));
-      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveCount(1);
-      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveAttribute("data-free", "true");
+      await expect(lyricDropMark(lyrics(page))).toHaveCount(1);
+      await expect(lyricDropMark(lyrics(page))).toHaveAttribute("data-free", "true");
       await pointer.up();
     } finally {
       await pointer.close();
@@ -635,7 +650,7 @@ test.describe("dragging a line from the unaligned area onto bars", () => {
       { text: "尚未对齐的一行", phrase: { firstBar: 3, barCount: 1 } },
       GAPPED[1],
     ]);
-    await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveCount(0);
+    await expect(lyricDropMark(lyrics(page))).toHaveCount(0);
     await expect(unaligned(page)).toBeHidden();
     await expect(lyrics(page).getByRole("status")).toHaveText("Line 2 placed on bar 4");
     expect(await harness.layout.undo()).toBe(true);
@@ -654,7 +669,7 @@ test.describe("dragging a line from the unaligned area onto bars", () => {
     try {
       await pointer.down(await centreOf(grip(page)));
       await pointer.move(await barMiddle(page, 2));
-      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveAttribute("data-free", "false");
+      await expect(lyricDropMark(lyrics(page))).toHaveAttribute("data-free", "false");
       await pointer.up();
     } finally {
       await pointer.close();
@@ -673,7 +688,7 @@ test.describe("dragging a line from the unaligned area onto bars", () => {
       await pointer.down(start);
       await pointer.move(await barMiddle(page, 3));
       await pointer.move({ x: start.x + 60, y: start.y });
-      await expect(lyrics(page).locator(".sce-lyric-drop")).toHaveCount(0);
+      await expect(lyricDropMark(lyrics(page))).toHaveCount(0);
       await pointer.up();
     } finally {
       await pointer.close();
@@ -684,7 +699,7 @@ test.describe("dragging a line from the unaligned area onto bars", () => {
 
   test("a read-only track has no grips", async ({ page, harness }) => {
     await openTrack(harness, WITH_LOOSE, { editable: false });
-    await expect(lyrics(page).locator(".sce-lyric-grip")).toHaveCount(0);
+    await expect(lyricGrips(lyrics(page))).toHaveCount(0);
   });
 });
 
@@ -1024,12 +1039,14 @@ test.describe("the colours", () => {
     return (sector * 60 + 360) % 360;
   }
   /** The wash and the line of a phrase, as the page paints them, with the text colour and the ground they derive from. */
-  const paint = (target: Locator) =>
-    target.evaluate((el) => {
+  const paint = async (target: Locator) => {
+    const ground = await groundOf(target);
+    const look = await target.evaluate((el) => {
       const style = getComputedStyle(el);
-      const ground = getComputedStyle(el.closest(".sce-root") as HTMLElement).backgroundColor;
-      return { wash: style.backgroundColor, line: style.borderTopColor, text: style.color, ground };
+      return { wash: style.backgroundColor, line: style.borderTopColor, text: style.color };
     });
+    return { ...look, ground };
+  };
   /** `share` of one colour and the rest of another, mixed in sRGB as DESIGN.md states the derivations. */
   const mixed = (share: number, colour: [number, number, number], other: [number, number, number]) =>
     colour.map((channel, at) => share * channel + (1 - share) * (other[at] ?? 0));
@@ -1074,18 +1091,13 @@ test.describe("the colours", () => {
       for (const line of [1, 2]) {
         const look = await phrase(page, line).evaluate((el) => {
           const style = getComputedStyle(el);
-          const root = el.closest(".sce-root") as HTMLElement;
-          return {
-            wash: style.backgroundColor,
-            text: style.color,
-            edge: style.borderTopColor,
-            page: getComputedStyle(root).backgroundColor,
-          };
+          return { wash: style.backgroundColor, text: style.color, edge: style.borderTopColor };
         });
+        const pageGround = await groundOf(phrase(page, line));
         expect(contrast(look.text, look.wash), `${scheme} text on the wash of line ${line}`).toBeGreaterThanOrEqual(
           4.5,
         );
-        expect(contrast(look.edge, look.page), `${scheme} line round line ${line}`).toBeGreaterThanOrEqual(3);
+        expect(contrast(look.edge, pageGround), `${scheme} line round line ${line}`).toBeGreaterThanOrEqual(3);
       }
     });
   }
@@ -1123,7 +1135,7 @@ test.describe("in the default editor", () => {
     press,
   }) => {
     await harness.mount({ score: { text: SCORE }, project: { lyricLines: LINES } });
-    const scroller = page.locator(".sce-scroller");
+    const scroller = editorScroller(page);
     const lyricList = scroller.getByRole("list", { name: "Lyrics", exact: true });
     const insList = scroller.getByRole("list", { name: "Ins", exact: true });
     await expect(lyricList.getByRole("listitem")).toHaveCount(4);
@@ -1141,7 +1153,7 @@ test.describe("in the default editor", () => {
 
   test("shows the counts and offers no editing while read-only", async ({ page, harness }) => {
     await harness.mount({ score: { text: SCORE }, project: { lyricLines: LINES }, editable: false });
-    const scroller = page.locator(".sce-scroller");
+    const scroller = editorScroller(page);
     await expect(scroller.getByRole("listitem", { name: /^Line 2, .*they differ/ })).toContainText("7 / 8");
     await expect(scroller.getByRole("slider")).toHaveCount(0);
     await expect(scroller.getByRole("textbox")).toHaveCount(0);
@@ -1241,7 +1253,7 @@ test.describe("the room the track has", () => {
     harness,
   }) => {
     await openTrack(harness);
-    const cells = lyrics(page).locator(".sce-lyric-syl");
+    const cells = lyricSyllableCells(lyrics(page));
     // Where each cell's text is drawn, against the cell: inside it, or on a line the cell clips away.
     const shown = () =>
       cells.evaluateAll((els) =>
@@ -1273,7 +1285,7 @@ test.describe("the room the track has", () => {
       (el.parentElement as HTMLElement).style.width = "320px";
     });
     await press(phrase(page, 2));
-    const panel = await box(lyrics(page).locator(".sce-lyric-panel"));
+    const panel = await box(lyricPanel(lyrics(page)));
     const surface = await box(region(page));
     expect(panel.x + panel.width).toBeLessThanOrEqual(surface.x + surface.width + 0.5);
     expect(panel.width).toBeGreaterThan(200);
@@ -1326,8 +1338,8 @@ test.describe("the track as a person reads it", () => {
     await openTrack(harness);
     await harness.layout.setView({ scrollLeft: 400 });
     await expect.poll(async () => (await harness.scrollOf(region(page))).left).toBe(400);
-    const keys = await box(lyrics(page).locator(".sce-keys"));
-    const count = await box(phrase(page, 2).locator(".sce-lyric-count"));
+    const keys = await box(lyricKeys(lyrics(page)));
+    const count = await box(phrase(page, 2).getByText("7 / 8", { exact: true }));
     const block = await box(phrase(page, 2));
     expect(count.x).toBeGreaterThanOrEqual(keys.x + keys.width - 0.5);
     expect(count.x + count.width).toBeLessThanOrEqual(block.x + block.width + 0.5);
@@ -1338,7 +1350,7 @@ test.describe("the track as a person reads it", () => {
     harness,
   }) => {
     await openTrack(harness);
-    const cells = lyrics(page).locator(".sce-lyric-syl");
+    const cells = lyricSyllableCells(lyrics(page));
     // Lines 1, 3 and 4 have a syllable on each of their eight notes; line 2 has seven syllables and eight note starts.
     await expect(cells).toHaveCount(32);
     await expect(cells.filter({ hasText: /\S/ })).toHaveCount(24);
@@ -1355,15 +1367,15 @@ test.describe("the track as a person reads it", () => {
     await press(pick);
     const editor = unaligned(page).getByRole("group", { name: "Line 3", exact: true });
     await expect(editor).toBeVisible();
-    await expect(editor.locator(".sce-lyric-caption")).toHaveText("Line 3");
+    await expect(editor.getByText("Line 3", { exact: true })).toHaveText("Line 3");
     const after = await box(pick);
     expect(Math.abs(after.y - before.y)).toBeLessThan(0.5);
     expect((await box(editor)).y).toBeGreaterThan(after.y + after.height - 1);
 
     await press(phrase(page, 1));
     const placed = lyrics(page).getByRole("group", { name: "Line 1", exact: true });
-    await expect(placed.locator(".sce-lyric-caption")).toHaveText("Line 1");
-    const heading = lyrics(page).locator(".sce-lyric-title");
+    await expect(placed.getByText("Line 1", { exact: true })).toHaveText("Line 1");
+    const heading = lyrics(page).getByText("Not aligned", { exact: false });
     expect((await box(placed)).y + (await box(placed)).height).toBeLessThanOrEqual((await box(heading)).y + 0.5);
   });
 
@@ -1377,7 +1389,9 @@ test.describe("the track as a person reads it", () => {
     await textbox(page).fill("[Verse]");
     await textbox(page).press("Enter");
     await expect(textbox(page)).toHaveAttribute("aria-invalid", "true");
-    const problem = lyrics(page).locator(".sce-lyric-problem");
+    const problem = lyrics(page)
+      .getByRole("group", { name: "Line 1", exact: true })
+      .getByText("A lyric line cannot be only a [section] label", { exact: true });
     await expect(problem).toContainText("A lyric line cannot be only a [section] label");
     await expect(textbox(page)).toHaveAccessibleDescription(/^A lyric line cannot be only a \[section\] label/);
     await textbox(page).fill("一二三四五六七八九");
@@ -1393,14 +1407,16 @@ test.describe("the track as a person reads it", () => {
     const describedBy = await phrases(page).getAttribute("aria-describedby");
     expect(describedBy).not.toBeNull();
     await expect(lyrics(page).locator(`[id="${describedBy}"]`)).toHaveText(/^Select a line to edit its text/);
-    await expect(lyrics(page).locator(".sce-lyric-note")).toHaveText(
-      "Drag a line onto bars, or choose it and type a bar number.",
-    );
+    await expect(
+      lyrics(page).getByText("Drag a line onto bars, or choose it and type a bar number.", { exact: true }),
+    ).toHaveText("Drag a line onto bars, or choose it and type a bar number.");
     await expect(grip(page)).toHaveAttribute("title", "Drag line 3 onto bars");
 
     await harness.layout.setView({ editable: false });
     await expect(phrases(page)).not.toHaveAttribute("aria-describedby", /.+/);
-    await expect(lyrics(page).locator(".sce-lyric-note")).toBeHidden();
+    await expect(
+      lyrics(page).getByText("Drag a line onto bars, or choose it and type a bar number.", { exact: true }),
+    ).toBeHidden();
   });
 
   test("Home and End on a handle move its edge as far as the other lines and the section allow, each in one step", async ({
@@ -1422,7 +1438,7 @@ test.describe("the track as a person reads it", () => {
 
   test("the New line button is not flush with the edges of the head", async ({ page, harness }) => {
     await openTrack(harness);
-    const head = await box(lyrics(page).locator(".sce-lyric-head"));
+    const head = await box(lyricHead(lyrics(page)));
     const newLine = await box(button(page, "New line"));
     expect(newLine.y - head.y).toBeGreaterThanOrEqual(1.5);
     expect(head.y + head.height - (newLine.y + newLine.height)).toBeGreaterThanOrEqual(1.5);
@@ -1436,7 +1452,7 @@ test.describe("the head of the track", () => {
   ] as const) {
     test(`says what the two numbers of a block are, in ${language}`, async ({ page, harness }) => {
       await openTrack(harness, LINES, { language });
-      await expect(lyrics(page).locator(".sce-lyric-head").getByText(legend, { exact: true })).toBeVisible();
+      await expect(lyricHead(lyrics(page)).getByText(legend, { exact: true })).toBeVisible();
     });
   }
 });

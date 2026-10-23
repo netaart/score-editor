@@ -20,6 +20,38 @@ export function vocalOnly(...music: string[]): string {
   return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
 }
 
+/** The corner of the lyric track where its pitch column begins, which the lane scrolls under. */
+export const lyricKeys = (root: Locator) => root.locator(".sce-keys");
+
+/** The panel under the lyric track's lane, which holds the unaligned list and the editor. */
+export const lyricPanel = (root: Locator) => root.locator(".sce-lyric-panel");
+
+/** The line a lyric edge drag would land on, drawn in the lane while the pointer is down. */
+export const lyricGuide = (root: Locator) => root.locator(".sce-lyric-guide");
+
+/** The bar a lyric line would take if it were let go, drawn in the lane while the pointer is down. */
+export const lyricDropMark = (root: Locator) => root.locator(".sce-lyric-drop");
+
+/** A grip in the lyric track's unaligned list, which a pointer drags onto bars. */
+export const lyricGrips = (root: Locator) => root.locator(".sce-lyric-grip");
+
+/** One cell of the lyric track's syllable row: a note start with its syllable, or empty when the counts differ. */
+export const lyricSyllableCells = (root: Locator) => root.locator(".sce-lyric-syl");
+
+/** The head of the lyric track: its name, its New line button and its legend. */
+export const lyricHead = (root: Locator) => root.locator(".sce-lyric-head");
+
+/** The scroller the default editor shares between its tracks. */
+export const editorScroller = (page: Page) => page.locator(".sce-scroller");
+
+/** The ground colour the package's UI is drawn on, read from the root of the part the element is in. */
+export const groundOf = (target: Locator) =>
+  target.evaluate((el) => {
+    const root = el.closest(".sce-root");
+    if (!root) throw new Error("the element is not in a part");
+    return getComputedStyle(root).backgroundColor;
+  });
+
 /** The editing session as the test page exposes it to the helpers below. */
 interface PageSession {
   project: { score: string };
