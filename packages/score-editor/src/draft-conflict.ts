@@ -29,15 +29,18 @@ export function mountDraftConflict(el: HTMLElement, session: EditingSession, kee
   sentence.setAttribute("role", "alert");
   const choices = create(doc, "div", "sce-draft-choices", strip);
 
-  /** A button and the line that says what it does; a screen reader gets that line as the button's description. */
+  /**
+   * A button of two lines: what it is, and under it what it does, so the cost is inside the thing that is pressed. A
+   * screen reader gets the second line as the button's description, and not twice.
+   */
   const choice = (act: () => Promise<void>) => {
-    const box = create(doc, "div", "sce-draft-choice", choices);
-    const button = create(doc, "button", "sce-button", box);
+    const button = create(doc, "button", "sce-button sce-draft-choice", choices);
     button.type = "button";
-    const note = create(doc, "span", "sce-draft-note", box);
+    const label = create(doc, "span", "sce-draft-label", button);
+    const note = create(doc, "span", "sce-draft-note", button);
     note.setAttribute("aria-hidden", "true");
     button.addEventListener("click", () => void run(act), { signal });
-    return { button, note };
+    return { button, label, note };
   };
 
   /** One way out at a time: a second press while the first is being answered by the store does nothing. */
@@ -71,7 +74,7 @@ export function mountDraftConflict(el: HTMLElement, session: EditingSession, kee
       [overwrite, t.draftOverwrite, t.draftOverwriteNote],
       [loadTheirs, t.draftLoadTheirs, t.draftLoadTheirsNote],
     ] as const) {
-      part.button.textContent = label;
+      part.label.textContent = label;
       part.button.setAttribute("aria-description", note);
       part.note.textContent = note;
     }
