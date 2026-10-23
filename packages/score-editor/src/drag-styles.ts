@@ -5,7 +5,7 @@ import { EDGE_ZONE, EDGE_ZONE_FLOOR, EDGE_ZONE_SHARE, ZONES_PER_NOTE } from "./n
 const fine = EDGE_ZONE.fine;
 const coarse = EDGE_ZONE.coarse;
 const floor = EDGE_ZONE_FLOOR;
-const share = EDGE_ZONE_SHARE * 100;
+const share = Math.round(EDGE_ZONE_SHARE * 100);
 
 /** A grip: a short bar in the colour of the ground, inside the edge zone, which is also where the cursor changes. */
 const grip = (side: "start" | "end") => `
