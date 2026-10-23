@@ -12,7 +12,6 @@ import {
   scoreUnit,
   sectionsFrom,
   splitLength,
-  writableCut,
 } from "./commands-shared";
 import { clearTiesIntoRests } from "./commands-truncation";
 import { type Bar, type Chord, type KeyChange, type Meter, type Note, noteId, type Score, type Section } from "./score";
@@ -127,7 +126,7 @@ function insertBar(score: Score, at: number, constraints: DialectConstraints): S
       notes: orderNotes(score, notes),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation: writableCut({ voices: score.voices, notes }, truncation),
+      truncation,
     },
   };
 }
@@ -282,7 +281,6 @@ function deleteBars(score: Score, from: number, count: number): ScoreCommandResu
 
   const truncation = score.truncation === null ? null : { ...score.truncation, bar: score.truncation.bar - count };
 
-  const nextTruncation = writableCut({ voices: score.voices, notes: finalNotes }, truncation);
   return {
     ok: true,
     score: {
@@ -292,8 +290,8 @@ function deleteBars(score: Score, from: number, count: number): ScoreCommandResu
       notes: orderNotes(score, finalNotes),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation: nextTruncation,
-      hasChords: hasChordsAfter(chords, nextTruncation),
+      truncation,
+      hasChords: hasChordsAfter(chords, truncation),
     },
   };
 }
@@ -488,7 +486,7 @@ function setSectionMeter(
       notes: orderNotes(score, clearTiesIntoRests(notes)),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation: writableCut({ voices: score.voices, notes }, truncation),
+      truncation,
     },
   };
 }

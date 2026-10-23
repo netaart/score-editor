@@ -16,11 +16,7 @@ export function withoutUnfinishedChord(truncation: Truncation | null): Truncatio
 }
 
 /** True when the cut measure has no finished note, rest or chord left, so the writer drops its line. */
-export function cutBarIsEmptyAfterChords(
-  score: Score,
-  chords: ReadonlyArray<Chord>,
-  truncation: Truncation | null,
-): boolean {
+function cutBarIsEmptyAfterChords(score: Score, chords: ReadonlyArray<Chord>, truncation: Truncation | null): boolean {
   if (truncation === null || !truncation.short) return false;
   const bar = score.bars[truncation.bar];
   if (bar === undefined) return false;
@@ -29,26 +25,10 @@ export function cutBarIsEmptyAfterChords(
   return !hasNote && !hasChord;
 }
 
-/**
- * A cut at a measure boundary in Vocal cannot stand before a required Ins block. When Ins has no
- * material at or after that measure, the text can only state the cut in Ins; keep the same place.
- */
-export function writableCut(score: Pick<Score, "voices" | "notes">, truncation: Truncation | null): Truncation | null {
-  if (truncation === null || truncation.voice !== "Vocal" || truncation.short) return truncation;
-  if (!score.voices.includes("Ins")) return truncation;
-  let end = 0;
-  for (const note of score.notes) if (note.voice === "Ins" && note.bar + 1 > end) end = note.bar + 1;
-  if (end >= truncation.bar) return truncation;
-  return { voice: "Ins", bar: end, short: false };
-}
-
 /** The model after removing chords empties the cut measure: its partial bar is gone and the cut moves before it. */
-export function withoutEmptyCutBar(
-  score: Score,
-  chords: ReadonlyArray<Chord>,
-): Pick<Score, "bars" | "truncation" | "sections"> | null {
+export function withoutEmptyCutBar(score: Score): Pick<Score, "bars" | "truncation" | "sections"> | null {
   const truncation = withoutUnfinishedChord(score.truncation);
-  if (!cutBarIsEmptyAfterChords(score, chords, truncation)) return null;
+  if (!cutBarIsEmptyAfterChords(score, [], truncation)) return null;
   const last = score.bars[score.bars.length - 1];
   const bars =
     last !== undefined && truncation !== null && truncation.bar === last.index && last.incomplete

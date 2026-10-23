@@ -66,6 +66,19 @@ function sourceOf(score: Score): Song2Source {
   return source as Song2Source;
 }
 
+/**
+ * RULES.md W16: a boundary cut in Vocal cannot stand before a required Ins block when Ins has no
+ * measure at or after it. The writer states that cut in Ins at the first measure Ins lacks.
+ */
+function withWritableCut(score: Score): Score {
+  const cut = score.truncation;
+  if (cut === null || cut.voice !== "Vocal" || cut.short || !score.voices.includes("Ins")) return score;
+  let end = 0;
+  for (const note of score.notes) if (note.voice === "Ins" && note.bar + 1 > end) end = note.bar + 1;
+  if (end >= cut.bar) return score;
+  return { ...score, truncation: { voice: "Ins", bar: end, short: false } };
+}
+
 export function sameContent(left: BarContent, right: BarContent): boolean {
   if (
     left.start !== right.start ||
@@ -195,8 +208,10 @@ export function writeBar(
   const changes = [...bar.keyChanges].filter((change) => allowedKeys === undefined || allowedKeys.has(change.at));
   for (const inline of sourceBar.inlineKeys) {
     if (allowedKeys !== undefined && !allowedKeys.has(inline.at)) continue;
-    // The timeline is the authority, so a transposed inline key is written at its new spelling.
-    const key = score.keys[inline.timelineIndex]?.key ?? inline.key;
+    // The timeline is the authority, so a transposed inline key is written at its new spelling,
+    // and a key change a command removed is not brought back from the source bytes.
+    const key = score.keys[inline.timelineIndex]?.key;
+    if (key === undefined) continue;
     if (!changes.some((change) => change.at === inline.at && change.key === key)) {
       changes.push({ at: inline.at, key });
     }
@@ -274,12 +289,52 @@ function keyAt(score: Score, at: number): string {
   return key;
 }
 
+/** True when the bytes still read as an X5 tail under the key and signature now in force. */
+function tailStillUnfinished(score: Score, raw: string, last: Note): boolean {
+  const match = /^(\^\^|\^|__|_|=)?([A-G])([',]*)/.exec(raw);
+  if (match === null || last.midi === null) return false;
+  const marks = match[3] ?? "";
+  const letter = (match[2] as string).toUpperCase() as Letter;
+  const written =
+    60 + LETTER_SEMITONES[letter] + 12 * ((marks.match(/'/g)?.length ?? 0) - (marks.match(/,/g)?.length ?? 0));
+  const accidental =
+    match[1] === "^"
+      ? 1
+      : match[1] === "^^"
+        ? 2
+        : match[1] === "_"
+          ? -1
+          : match[1] === "__"
+            ? -2
+            : match[1] === "="
+              ? 0
+              : null;
+  const key = keyAt(score, last.start + last.duration);
+  const alteration = accidental ?? signatureOf(key).values[letter] ?? 0;
+  return written + alteration !== last.midi;
+}
+
+/** Writes a pitch token with an explicit accidental, so the reader cannot inherit the tied pitch (P11). */
+function explicitPitchText(midi: number, fifths: number): string {
+  const spelling = (fifths >= 0 ? SHARP_SPELLING : FLAT_SPELLING)[((midi % 12) + 12) % 12] as {
+    letter: Letter;
+    accidental: number;
+  };
+  const natural = midi - spelling.accidental;
+  const steps = (natural - (60 + LETTER_SEMITONES[spelling.letter])) / 12;
+  if (!Number.isInteger(steps)) throw new Error(`song2: no spelling for MIDI ${midi}`);
+  let letter: string = spelling.letter;
+  if (steps > 0) letter = spelling.letter.toLowerCase() + "'".repeat(steps - 1);
+  else if (steps < 0) letter = spelling.letter + ",".repeat(-steps);
+  return `${accidentalText(spelling.accidental)}${letter}`;
+}
+
 /** RULES.md P14: a rewritten X5 tail must still compute a pitch different from the tied note. */
 export function x5TailText(score: Score, last: Note): string {
   if (last.midi === null) return "";
   const midi = last.midi === 0 ? 1 : last.midi - 1;
   const key = keyAt(score, last.start + last.duration);
-  return pitchText(midi, KEY_FIFTHS.get(key) ?? 0, signatureOf(key), {});
+  return explicitPitchText(midi, KEY_FIFTHS.get(key) ?? 0);
 }
 
 function sourceContentByBar(source: Song2Source): Map<number, BarContent> {
@@ -359,33 +414,45 @@ function writeHeader(score: Score, source: Song2Source, lines: string[]): void {
 
 /** Writes a score: untouched bars keep their read bytes, changed bars are rewritten whole. */
 export function serializeSong2(score: Score): string {
-  const source = sourceOf(score);
-  if (barGridNeedsWriting(score, source) || cutWasRepaired(score, source)) {
-    return score.truncation !== null ? serializeTruncatedBarsSong2(score, source) : serializeBarsSong2(score, source);
+  const target = withWritableCut(score);
+  const source = sourceOf(target);
+  if (barGridNeedsWriting(target, source) || cutWasRepaired(target, source)) {
+    return target.truncation !== null
+      ? serializeTruncatedBarsSong2(target, source)
+      : serializeBarsSong2(target, source);
   }
   const lines = source.text.split("\n");
-  writeHeader(score, source, lines);
+  writeHeader(target, source, lines);
   const dropped = new Set<number>();
   for (const musicLine of source.musicLines) {
     const tail = musicLine.cutTail;
-    const last = lastNoteOf(score, musicLine.voice);
+    const last = lastNoteOf(target, musicLine.voice);
     // RULES.md X17 and C8: an X4 remainder is kept byte for byte while it still belongs; an unfinished chord string
     // goes with the last chord. An X5 remainder is kept only while the note before it still ties into it; once that
     // tie is gone it would read as a finished note.
-    const keepTail = keepsCutTail(score, tail, last?.tie ?? false);
+    const keepTail = keepsCutTail(target, tail, last?.tie ?? false);
     const dropTail = tail !== null && !keepTail;
     const oldLast = sourceLastNote(source, musicLine.voice);
     const tailText =
-      tail !== null && keepTail && tail.kind === "x5" && last !== undefined && oldLast?.midi !== last.midi
-        ? x5TailText(score, last)
+      tail !== null &&
+      keepTail &&
+      tail.kind === "x5" &&
+      last !== undefined &&
+      (oldLast?.midi !== last.midi || !tailStillUnfinished(target, tail.raw, last))
+        ? x5TailText(target, last)
         : (tail?.raw ?? "");
     const lastSegment = musicLine.segments.length - 1;
+    // W16 moved the cut out of this voice; its old partial line becomes a closed complete line.
+    const movedCut =
+      !musicLine.endsWithBarline &&
+      source.truncation?.voice === musicLine.voice &&
+      target.truncation?.voice !== musicLine.voice;
     let changed = false;
     const pieces = musicLine.segments.map((segment, index) => {
       const partial = !musicLine.endsWithBarline && index === lastSegment;
-      const forced = dropTail && partial;
+      const forced = (dropTail && partial) || (movedCut && partial);
       const keySetAt = (bar: Song2SourceBar): ReadonlySet<number> | undefined =>
-        partial && score.truncation?.voice === bar.voice && score.truncation.bar === bar.bar
+        partial && target.truncation?.voice === bar.voice && target.truncation.bar === bar.bar
           ? new Set(bar.inlineKeys.map((change) => change.at))
           : undefined;
       const trim = (content: BarContent, keys: ReadonlySet<number>): BarContent => ({
@@ -393,7 +460,7 @@ export function serializeSong2(score: Score): string {
         keyChanges: content.keyChanges.filter((change) => keys.has(change.at)),
       });
       const matches = (bar: Song2SourceBar): boolean => {
-        const model = barContentOf(score, bar.voice, bar.bar);
+        const model = barContentOf(target, bar.voice, bar.bar);
         const keys = keySetAt(bar);
         return keys === undefined
           ? sameContent(bar.content, model)
@@ -402,12 +469,14 @@ export function serializeSong2(score: Score): string {
       const unchanged = !forced && segment.bars.every(matches);
       if (unchanged) return segment.raw;
       changed = true;
-      const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator, keySetAt(bar))).join("|");
+      const rendered = segment.bars
+        .map((bar) => writeBar(target, bar, source.unitDenominator, keySetAt(bar)))
+        .join("|");
       // A rewritten partial measure keeps its finished tokens and its cut remainder at their end.
       return partial && keepTail && tail !== null ? `${rendered}${tailText}` : rendered;
     });
     if (!changed) continue;
-    const rendered = `${pieces.join("|")}${musicLine.endsWithBarline ? "|" : ""}`;
+    const rendered = `${pieces.join("|")}${musicLine.endsWithBarline || movedCut ? "|" : ""}`;
     if (!musicLine.endsWithBarline && rendered === "") {
       dropped.add(musicLine.line);
       continue;
@@ -453,9 +522,10 @@ function writeMismatch(field?: string): Diagnostic {
 
 /** RULES.md writing check: write, read back, and compare every field of the model except its private source. */
 export function checkSong2(score: Score): ReadonlyArray<Diagnostic> {
+  const target = withWritableCut(score);
   let written: string;
   try {
-    written = serializeSong2(score);
+    written = serializeSong2(target);
   } catch {
     return [writeMismatch()];
   }
@@ -463,7 +533,7 @@ export function checkSong2(score: Score): ReadonlyArray<Diagnostic> {
   if (read.diagnostics.length > 0) return read.diagnostics;
   const reread = read.score;
   if (reread === null) return [writeMismatch()];
-  const field = firstDifferentField(score, reread);
+  const field = firstDifferentField(target, reread);
   if (field !== null) return [writeMismatch(field)];
   return [];
 }

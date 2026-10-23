@@ -437,12 +437,16 @@ function writeGroup(
   return lines;
 }
 
+function voicesAt(index: number, voices: ReadonlyArray<string>, coverage: Map<string, Set<number>>): string {
+  return voices.filter((voice) => coverage.get(voice)?.has(index) ?? false).join(",");
+}
+
 function splitAtCoverage(
   units: ReadonlyArray<Unit>,
   coverage: Map<string, Set<number>>,
   voices: ReadonlyArray<string>,
 ): Unit[] {
-  const key = (index: number): string => voices.filter((voice) => coverage.get(voice)?.has(index) ?? false).join(",");
+  const key = (index: number): string => voicesAt(index, voices, coverage);
   const split: Unit[] = [];
   for (const unit of units) {
     let from = unit.from;
@@ -470,8 +474,6 @@ function groupsOf(
   const groups: Group[] = [];
   let from = 0;
   let size = 0;
-  const voicesAt = (index: number): string =>
-    score.voices.filter((voice) => coverage.get(voice)?.has(index) ?? false).join(",");
   for (const unit of units) {
     const length = unit.end - unit.from;
     if (size > 0) {
@@ -479,7 +481,8 @@ function groupsOf(
       const previous = score.bars[unit.from - 1] as Bar;
       const meterChanged =
         bar.meter.numerator !== previous.meter.numerator || bar.meter.denominator !== previous.meter.denominator;
-      const voicesChanged = splitByCoverage && voicesAt(from) !== voicesAt(unit.from);
+      const voicesChanged =
+        splitByCoverage && voicesAt(from, score.voices, coverage) !== voicesAt(unit.from, score.voices, coverage);
       if (
         voicesChanged ||
         meterChanged ||
@@ -555,7 +558,7 @@ export function serializeTruncatedBarsSong2(score: Score, source: Song2Source): 
   const lastSource = facts.musicLines.find((line) => line.line === lastMusicLine);
   const lastSourceBar = lastSource?.segments[lastSource.segments.length - 1]?.bars.at(-1)?.bar;
   const sourceLastKept = lastSourceBar !== undefined && alignment.oldAt.includes(lastSourceBar);
-  if (
+  const droppedCutBlock =
     cut !== null &&
     !cut.short &&
     cut.bar === score.bars.length &&
@@ -564,18 +567,9 @@ export function serializeTruncatedBarsSong2(score: Score, source: Song2Source): 
     cut.voice !== "Ins" &&
     lastSourceBar !== undefined &&
     lastSourceBar >= score.bars.length &&
-    !sourceLastKept
-  ) {
-    let start = lastMusicLine - 1;
-    while (
-      start > facts.keyIndex &&
-      (facts.lines[start] === `V: ${cut.voice}` ||
-        facts.lines[start]?.startsWith("M:") ||
-        facts.lines[start]?.startsWith("K:"))
-    ) {
-      start -= 1;
-    }
-    cutBlock.push(...facts.lines.slice(start + 1, lastMusicLine));
+    !sourceLastKept;
+  if (droppedCutBlock && lastSource !== undefined) {
+    cutBlock.push(...facts.lines.slice(lastSource.blockStart, lastMusicLine));
   }
   const trailing = facts.lines.slice(lastMusicLine + 1).some((line) => line.trim() !== "");
   const splitByCoverage = cut === null || cut.voice !== "Ins" || !cut.short || trailing;

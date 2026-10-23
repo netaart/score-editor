@@ -120,7 +120,7 @@ export function runRemoveChords(score: Score): ScoreCommandResult {
   if (score.chords.length === 0 && !score.hasChords && score.truncation?.unfinishedChord !== true) {
     return { ok: true, score };
   }
-  const trimmed = withoutEmptyCutBar(score, []);
+  const trimmed = withoutEmptyCutBar(score);
   if (trimmed !== null) {
     const truncation = trimmed.truncation;
     return { ok: true, score: { ...score, ...trimmed, chords: [], hasChords: hasChordsAfter([], truncation) } };
