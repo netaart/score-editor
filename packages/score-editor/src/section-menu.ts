@@ -127,10 +127,10 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
       input.spellcheck = false;
       return { wrap, input };
     };
+    const covers = create(doc, "p", "sce-form-hint", form);
     const bar = field(t.sectionFormBar);
     bar.input.inputMode = "numeric";
     const name = field(t.sectionFormName);
-    const covers = create(doc, "p", "sce-form-hint", form);
     const error = create(doc, "p", "sce-form-error", form);
     error.setAttribute("role", "alert");
     error.hidden = true;
@@ -281,15 +281,16 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     menu.element.setAttribute("aria-label", label);
 
     let latest: ReadonlyArray<SectionAction> | null = null;
-    const choices = new Map<SectionActionName, { item: HTMLButtonElement; reason: HTMLElement }>();
+    const choices = new Map<SectionActionName, { item: HTMLButtonElement; note: HTMLElement }>();
     const choice = (name: SectionActionName, words: string, choose: () => void): void => {
       const item = menu.item("menuitem", choose);
       item.setAttribute("aria-label", words);
-      const text = create(doc, "span", "sce-menu-text", item);
-      create(doc, "span", "sce-menu-label", text).textContent = words;
-      const reason = create(doc, "span", "sce-menu-reason", text);
-      reason.hidden = true;
-      choices.set(name, { item, reason });
+      item.textContent = words;
+      // The note is for the eye: each muted item already carries the same words as its description.
+      const note = create(doc, "div", "sce-menu-note", menu.element);
+      note.setAttribute("aria-hidden", "true");
+      note.hidden = true;
+      choices.set(name, { item, note });
     };
     const act = (name: "move-earlier" | "move-later" | "duplicate" | "delete") => (): void => {
       const command = latest?.find((found) => found.name === name)?.command;
@@ -323,6 +324,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     choice("delete", t.sectionDelete, act("delete"));
 
     // A choice the commands would refuse is muted and says why; pressing it does nothing and leaves the menu open.
+    // Muted choices that are refused in the same words, side by side, share one note under the last of them.
     menu.element.addEventListener(
       "click",
       (event) => {
@@ -338,14 +340,18 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
         if ((event as ToggleEvent).newState !== "open") return;
         latest = sectionActions(session, index);
         const language = session.view.language;
-        for (const [name, { item, reason }] of choices) {
-          const why = latest?.find((found) => found.name === name)?.unavailable ?? null;
-          item.setAttribute("aria-disabled", String(why !== null));
-          reason.hidden = why === null;
-          const words = why === null ? "" : formatDiagnostic(why, language);
-          reason.textContent = words;
-          if (why === null) item.removeAttribute("aria-description");
+        const entries = [...choices.entries()].map(([name, found]) => {
+          const why = latest?.find((action) => action.name === name)?.unavailable ?? null;
+          return { ...found, words: why === null ? null : formatDiagnostic(why, language) };
+        });
+        for (const [at, { item, note, words }] of entries.entries()) {
+          item.setAttribute("aria-disabled", String(words !== null));
+          if (words === null) item.removeAttribute("aria-description");
           else item.setAttribute("aria-description", words);
+          const next = entries[at + 1];
+          const speaks = words !== null && next?.words !== words;
+          note.hidden = !speaks;
+          note.textContent = speaks ? words : "";
         }
       },
       { signal },

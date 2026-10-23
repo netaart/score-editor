@@ -44,18 +44,15 @@ export const sectionMenuCss = `
   display: contents;
 }
 
-/* A choice the commands would refuse stays in the menu, muted, with their words under its name. */
-.sce-root .sce-menu-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 5px 0;
-}
-.sce-root .sce-menu-reason {
+/*
+ * A choice the commands would refuse stays in the menu, muted. Their words stand once under the last of the muted choices
+ * they are said about, aligned with the labels, and not under every one of them.
+ */
+.sce-root .sce-menu-note {
   max-width: 22em;
+  padding: 0 10px 6px 22px;
   color: var(--sce-_muted);
   font-size: 0.92em;
-  white-space: normal;
 }
 
 /* The name form hangs under the band like the menu, and holds one or two text fields. */
@@ -115,7 +112,20 @@ export const sectionMenuCss = `
 .sce-root .sce-button-strong {
   font-weight: 600;
 }
+/*
+ * WCAG 2.5.8 asks a target of at least 24px, and a band is 22px tall, so on a coarse pointer the row of bands is 25px: a
+ * 24px control and the 1px rule under it. It stops there because a phone's frame has little height to give: at the 36px of
+ * a toolbar button, the finger-drawn selection box of the multi-select spec no longer found empty lane to start on. Only
+ * this row grows, and the offset the tracks hang from follows it; the bar numbers and the key and meter row stay as they are.
+ */
 @media (pointer: coarse) {
+  .sce-root.sce-root {
+    --sce-_sections: max(var(--sce-_band), 25px);
+    --sce-_top: calc(var(--sce-_ruler) + var(--sce-_sections) + var(--sce-_band) + var(--sce-_chords));
+  }
+  .sce-root .sce-sections {
+    height: var(--sce-_sections);
+  }
   .sce-root .sce-form-input {
     min-height: 36px;
     font-size: max(16px, 1em);

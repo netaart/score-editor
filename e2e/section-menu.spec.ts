@@ -94,6 +94,18 @@ test.describe("opening the menu of a section", () => {
     await expect(menu(page, "Section chorus")).toBeVisible();
   });
 
+  test("a band is a target of at least 24px where the pointer is coarse, and a mouse keeps the compact row", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    await openSong(harness);
+    const band = await box(bandButton(page, "Section verse"));
+    // WCAG 2.5.8 (AA) asks for a target of at least 24 by 24 CSS pixels.
+    if (isMobile) expect(band.height).toBeGreaterThanOrEqual(24);
+    else expect(band.height).toBeLessThan(30);
+  });
+
   test("the menu hangs under the pinned name of a band whose start is scrolled away", async ({
     page,
     harness,
@@ -238,6 +250,7 @@ test.describe("naming a section", () => {
     await expect(nameField(page, "Rename")).toBeFocused();
     await expect(nameField(page, "Rename")).toHaveValue("verse");
     await expect(barField(page, "Rename")).toBeHidden();
+    await expect(form(page, "Rename").getByText("This section covers")).toBeHidden();
     await nameField(page, "Rename").fill("bridge");
     await page.keyboard.press("Enter");
 
@@ -437,9 +450,17 @@ test.describe("a choice that cannot be done", () => {
     for (const label of ["Duplicate", "Move earlier", "Move later"]) {
       const muted = choice(page, "Unnamed section", label);
       await expect(muted).toHaveAttribute("aria-disabled", "true");
-      await expect(muted.getByText(why)).toBeVisible();
       await expect(muted).toHaveAccessibleDescription(`${why} (bar 1)`);
     }
+    // The three choices are refused in the same words, so the words stand once, under the last of them.
+    const note = menu(page, "Unnamed section").getByText(why);
+    await expect(note).toHaveCount(1);
+    await expect(note).toBeVisible();
+    const lastMuted = await box(choice(page, "Unnamed section", "Duplicate"));
+    const noted = await box(note);
+    const deleting = await box(choice(page, "Unnamed section", "Delete"));
+    expect(noted.y).toBeGreaterThanOrEqual(lastMuted.y + lastMuted.height - 1);
+    expect(noted.y + noted.height).toBeLessThanOrEqual(deleting.y + 1);
     for (const label of ["Name this section…", "Start a section at a bar…", "Delete"]) {
       await expect(choice(page, "Unnamed section", label)).toHaveAttribute("aria-disabled", "false");
     }
@@ -462,14 +483,14 @@ test.describe("a choice that cannot be done", () => {
     await press(bandButton(page, "Section verse"));
     const first = choice(page, "Section verse", "Move earlier");
     await expect(first).toHaveAttribute("aria-disabled", "true");
-    await expect(first.getByText("is already first and cannot move earlier.")).toBeVisible();
+    await expect(menu(page, "Section verse").getByText("is already first and cannot move earlier.")).toBeVisible();
     await expect(choice(page, "Section verse", "Move later")).toHaveAttribute("aria-disabled", "false");
     await page.keyboard.press("Escape");
 
     await press(bandButton(page, "Section chorus"));
     const last = choice(page, "Section chorus", "Move later");
     await expect(last).toHaveAttribute("aria-disabled", "true");
-    await expect(last.getByText("is already last and cannot move later.")).toBeVisible();
+    await expect(menu(page, "Section chorus").getByText("is already last and cannot move later.")).toBeVisible();
     await expect(choice(page, "Section chorus", "Move earlier")).toHaveAttribute("aria-disabled", "false");
   });
 
@@ -478,7 +499,9 @@ test.describe("a choice that cannot be done", () => {
     await press(bandButton(page, "Section verse"));
     const earlier = choice(page, "Section verse", "Move earlier");
     await expect(earlier).toHaveAttribute("aria-disabled", "true");
-    await expect(earlier.getByText("A named section cannot move before the unnamed section")).toBeVisible();
+    await expect(
+      menu(page, "Section verse").getByText("A named section cannot move before the unnamed section"),
+    ).toBeVisible();
   });
 
   test("a section that holds the cut tail cannot be copied or moved, and can be deleted", async ({
@@ -490,11 +513,14 @@ test.describe("a choice that cannot be done", () => {
     await press(bandButton(page, "Section chorus"));
     await expect(choice(page, "Section chorus", "Duplicate")).toHaveAttribute("aria-disabled", "true");
     await expect(choice(page, "Section chorus", "Move earlier")).toHaveAttribute("aria-disabled", "true");
-    await expect(
-      choice(page, "Section chorus", "Duplicate").getByText(
-        "That would touch the score's cut; use the truncation commands for it.",
-      ),
-    ).toBeVisible();
+    // Move earlier and Duplicate are refused in the same words, but Move later is refused in others between them, so the
+    // words stand twice: a note speaks only for muted choices that are side by side.
+    const cut = menu(page, "Section chorus").getByText(
+      "That would touch the score's cut; use the truncation commands for it.",
+    );
+    await expect(cut).toHaveCount(2);
+    await expect(cut.first()).toBeVisible();
+    await expect(cut.last()).toBeVisible();
     await expect(choice(page, "Section chorus", "Delete")).toHaveAttribute("aria-disabled", "false");
     await press(choice(page, "Section chorus", "Delete"));
     await expect(bandNames(page)).toHaveText(["verse"]);
@@ -504,7 +530,7 @@ test.describe("a choice that cannot be done", () => {
     await openSong(harness, ONLY);
     await press(bandButton(page, "Section a"));
     await expect(choice(page, "Section a", "Delete")).toHaveAttribute("aria-disabled", "true");
-    await expect(choice(page, "Section a", "Delete").getByText("The score would have no bars left.")).toBeVisible();
+    await expect(menu(page, "Section a").getByText("The score would have no bars left.")).toBeVisible();
   });
 });
 
