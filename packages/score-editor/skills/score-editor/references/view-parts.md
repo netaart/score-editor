@@ -285,8 +285,8 @@ menu of the section at the insertion point, or of the first section when there i
 (clicked, or given back when a menu closes) is walked with Left, Right, Home and End, and opened with Enter or Space.
 
 `sectionActions(session, section)` is the same answer for a control of your own: the six actions of one section, as
-`SectionAction`s named by `SectionActionName` in the menu's order, each with the command that does it and `unavailable`, a
-`SectionUnavailable` or `null` while it can be done. `rename` and
+`SectionAction`s named by `SectionActionName` in the menu's order, each with the command that does it and `unavailable`, the
+`Diagnostic` the command layer would refuse it with, or `null` while it can be done. `rename` and
 `start` carry no command, because they need a name (and `start` a bar) first; send `renameSection` or `nameSection`
 with it. It asks the commands without applying them, so the project, the history and the listeners are untouched.
 
@@ -296,10 +296,8 @@ import { formatDiagnostic, sectionActions } from "@neta-art/score-editor";
 for (const action of sectionActions(session, 1) ?? []) {
   if (action.unavailable === null) {
     if (action.command !== null) button(action.name).onclick = () => session.dispatch(action.command);
-  } else if (action.unavailable.kind === "refused") {
-    mute(action.name, formatDiagnostic(action.unavailable.diagnostic, session.view.language));
   } else {
-    mute(action.name, "This section has no second bar."); // kind: "single-bar"
+    mute(action.name, formatDiagnostic(action.unavailable, session.view.language));
   }
 }
 ```

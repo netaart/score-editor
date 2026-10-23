@@ -71,8 +71,7 @@ function summary(session: EditingSession, section: number) {
   const actions = sectionActions(session, section);
   if (actions === null) throw new Error("the section has no actions");
   return actions.map((action) => {
-    const why = action.unavailable;
-    return [action.name, why === null ? null : why.kind === "refused" ? why.diagnostic.code : why.kind] as const;
+    return [action.name, action.unavailable?.code ?? null] as const;
   });
 }
 
@@ -96,7 +95,7 @@ describe("what a section offers", () => {
   it("offers the unnamed opening only delete and naming, and says why it cannot be copied or moved", () => {
     expect(summary(open(THREE), 0)).toEqual([
       ["rename", null],
-      ["start", "single-bar"],
+      ["start", null],
       ["move-earlier", "section-unnamed"],
       ["move-later", "section-unnamed"],
       ["duplicate", "section-unnamed"],
@@ -104,10 +103,10 @@ describe("what a section offers", () => {
     ]);
   });
 
-  it("refuses to move the last section later, and a one-bar section has nothing to split", () => {
+  it("refuses to move the last section later, and still lets a section of one bar start a section", () => {
     expect(summary(open(THREE), 2)).toEqual([
       ["rename", null],
-      ["start", "single-bar"],
+      ["start", null],
       ["move-earlier", null],
       ["move-later", "section-move-end"],
       ["duplicate", null],
@@ -151,10 +150,7 @@ describe("what a section offers", () => {
 
   it("gives the reason as the diagnostic of the refusal itself, with the section counted from 1", () => {
     const earlier = sectionActions(open(THREE), 2)?.find((action) => action.name === "move-later");
-    expect(earlier?.unavailable).toEqual({
-      kind: "refused",
-      diagnostic: { code: "section-move-end", params: { section: 3 }, at: { bar: 4 } },
-    });
+    expect(earlier?.unavailable).toEqual({ code: "section-move-end", params: { section: 3 }, at: { bar: 4 } });
   });
 
   it("agrees with the commands: an available action is taken, an unavailable one is refused with the same code", () => {
@@ -168,9 +164,9 @@ describe("what a section offers", () => {
           if (action.unavailable === null) {
             expect(result.ok, `${action.name} of section ${section} in ${score}`).toBe(true);
             expect(session.undo()).toBe(true);
-          } else if (action.unavailable.kind === "refused") {
+          } else {
             expect(result.ok, `${action.name} of section ${section}`).toBe(false);
-            expect(result.diagnostics[0]?.code).toBe(action.unavailable.diagnostic.code);
+            expect(result.diagnostics[0]?.code).toBe(action.unavailable.code);
           }
         }
       }

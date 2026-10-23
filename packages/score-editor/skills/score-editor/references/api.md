@@ -189,6 +189,5 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `SectionAction` | `{ name, command, unavailable }`: one action of a section, the command that does it (`null` for rename and start, which need a name first) and why it cannot be done now. |
+| `SectionAction` | `{ name, command, unavailable }`: one action of a section, the command that does it (`null` for rename and start, which need a name first) and, when the command layer would refuse it, that refusal's `Diagnostic`. |
 | `SectionActionName` | `"rename" | "start" | "move-earlier" | "move-later" | "duplicate" | "delete"`, in the order a menu lists them. |
-| `SectionUnavailable` | `{ kind: "refused", diagnostic }` with the command layer's own refusal, or `{ kind: "single-bar" }` for a section with no second bar to start another at. |
