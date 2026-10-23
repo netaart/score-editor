@@ -8,7 +8,7 @@ import type { SongProject } from "./score";
 export type Language = "zh" | "en";
 
 /**
- * The reasons of the one-time messages the editor sends to the host. The set is closed; a later ticket adds its codes
+ * The reasons of the one-time messages the editor sends to the host. The set is closed; a later version adds its codes
  * here. `command-refused`: the user asked for an edit and the score would not take it, so nothing changed.
  * `draft-source-changed`: a draft was discarded because the original's lyrics and score changed under it.
  * `draft-save-failed`: a draft write or removal did not reach the host store.

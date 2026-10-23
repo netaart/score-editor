@@ -376,7 +376,7 @@ describe("a click on empty space", () => {
     handleEditingInput(session, click.empty(1700));
     expect(session.insertionPoint).toEqual({ tick: 1792 });
 
-    // On an eighth grid the same clicks land on the eighth lines of the 6/8 bar, which 08b's beat lines gave.
+    // On an eighth grid the same clicks land on the eighth lines of the 6/8 bar, which the beat lines gave.
     session.setGrid({ value: 8 });
     handleEditingInput(session, click.empty(1100));
     expect(session.insertionPoint).toEqual({ tick: 1152 });
@@ -456,7 +456,7 @@ describe("the arrow keys, Home and End", () => {
     handleEditingInput(session, key("ArrowRight"));
     expect(session.insertionPoint).toEqual({ tick: 1280 });
 
-    // On an eighth grid the steps in the 6/8 bar are the beats 08b stepped by.
+    // On an eighth grid the steps in the 6/8 bar are the beats the earlier snapping stepped by.
     session.setGrid({ value: 8 });
     session.setInsertionPoint({ tick: 1024 });
     handleEditingInput(session, key("ArrowRight"));
