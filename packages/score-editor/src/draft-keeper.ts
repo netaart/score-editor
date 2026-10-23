@@ -1,6 +1,6 @@
 // ABOUTME: The draft keeper binds one editing session to a host store: it restores, inherits, debounces writes, and resolves conflicts.
 // ABOUTME: Headless like the session: it touches no DOM, calls the store only by source key, and never changes the original project.
-import { contentHash, type DraftProject, draftText, readDraft, type ScoreDraft } from "./drafts";
+import { contentHash, DRAFT_FORMAT_VERSION, type DraftProject, draftText, readDraft, type ScoreDraft } from "./drafts";
 import { messagesFor } from "./i18n";
 import { joinLyrics, lyricLinesOf } from "./lyrics";
 import type { LyricLine, SongProject } from "./score";
@@ -25,7 +25,7 @@ export interface DraftKeeperOptions {
   store: DraftStore;
   /** The untouched source project; the keeper never changes it. */
   original: SongProject;
-  /** Receives the draft notices, in the session's language: a stale source and a save that did not reach the host. */
+  /** Receives the draft notices, in the session's language: a stale source and a save or removal that did not reach the host. */
   notify?: (notice: Notice) => void;
   /** The clock for `updatedAt`; tests inject one. Defaults to `Date.now`. */
   now?: () => number;
@@ -44,8 +44,8 @@ export interface DraftKeeper {
   /** The conflict's second way out: read their draft and put its project into the session. */
   loadTheirs(): Promise<void>;
   /**
-   * Puts the original back and removes its draft. It resets the history through `replaceProject`: the edits it
-   * discards are the whole story of this draft, so there is no meaningful step to undo back to.
+   * Puts the original back and removes whatever draft is stored, even one this keeper believes does not exist. It
+   * resets the history through `replaceProject`: the edits it discards are the whole story of this draft.
    */
   restoreOriginal(): Promise<void>;
   /** Saves at once with the content hash of the current joined lyrics and score as the handoff hash. */
@@ -59,6 +59,12 @@ export interface DraftKeeper {
 
 /** How many other drafts an open reads while looking for a handoff match; a bound on a device with many drafts. */
 const INHERIT_MAX_DRAFTS = 50;
+
+/** The draft the keeper believes is stored: no draft, a version it read or wrote, or a text it cannot read. */
+type DraftCursor =
+  | { readonly kind: "none" }
+  | { readonly kind: "known"; readonly version: string }
+  | { readonly kind: "unknown" };
 
 function sameLines(left: ReadonlyArray<LyricLine>, right: ReadonlyArray<LyricLine>): boolean {
   if (left.length !== right.length) return false;
@@ -89,12 +95,23 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
 
   let status: DraftKeeperStatus = "opening";
   let sourceHash = "";
-  let draftVersion: string | null = null;
-  let draftExists = false;
+  let cursor: DraftCursor = { kind: "none" };
   let handoffHash: string | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let destroyed = false;
   let suppressKeep = 0;
+
+  /** The one place the draft cursor moves, so a removal, a write and an unreadable text cannot drift apart. */
+  function setCursor(next: DraftCursor): void {
+    cursor = next;
+  }
+
+  function expectedVersion(): string | null {
+    return cursor.kind === "known" ? cursor.version : null;
+  }
+
+  function isDestroyed(): boolean {
+    return status === "destroyed";
+  }
 
   function setStatus(next: DraftKeeperStatus): void {
     if (status === next) return;
@@ -110,7 +127,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
   }
 
   function sendNotice(code: NoticeCode): void {
-    if (destroyed) return;
+    if (isDestroyed()) return;
     const messages = messagesFor(session.view.language);
     options.notify?.({
       code,
@@ -180,7 +197,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
 
   async function writeDraft(expected: string | null, handoff: string | null): Promise<boolean> {
     const draft: ScoreDraft = {
-      version: 1,
+      version: DRAFT_FORMAT_VERSION,
       sourceKey: key,
       sourceHash,
       project: storedProject(session.project),
@@ -194,15 +211,18 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       result = { ok: false, reason: "failed" };
     }
     if (result.ok) {
-      draftVersion = result.version;
-      draftExists = true;
+      setCursor({ kind: "known", version: result.version });
       handoffHash = handoff;
-      if (!destroyed && status === "conflict") setStatus("ready");
+      if (!isDestroyed() && status === "conflict") setStatus("ready");
       return true;
     }
-    if (destroyed) return false;
-    if (result.reason === "conflict") setStatus("conflict");
-    else sendNotice("draft-save-failed");
+    if (isDestroyed()) return false;
+    if (result.reason === "conflict") {
+      setCursor({ kind: "unknown" });
+      setStatus("conflict");
+    } else {
+      sendNotice("draft-save-failed");
+    }
     return false;
   }
 
@@ -214,11 +234,13 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       result = { ok: false, reason: "failed" };
     }
     if (result.ok) {
-      draftVersion = result.version;
-      draftExists = false;
+      // A removed key has no version to pass on: the next write creates with `expected: null`.
+      setCursor({ kind: "none" });
       return true;
     }
-    if (destroyed) return false;
+    if (isDestroyed()) return false;
+    // After a failed removal the old version is not safe to reuse; the next write asks the host for a conflict.
+    setCursor({ kind: "unknown" });
     if (result.reason === "conflict") setStatus("conflict");
     else sendNotice("draft-save-failed");
     return false;
@@ -231,7 +253,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
   }
 
   function scheduleKeep(): void {
-    if (destroyed || status === "conflict") return;
+    if (isDestroyed() || status === "conflict") return;
     cancelTimer();
     timer = setTimeout(() => {
       timer = null;
@@ -240,17 +262,16 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
   }
 
   async function flushPending(): Promise<void> {
-    if (destroyed || status === "conflict") return;
+    if (isDestroyed() || status === "conflict") return;
     if (sameAsOriginal(session.project)) {
-      if (!draftExists) return;
-      await removeDraft(draftVersion);
+      if (cursor.kind === "known") await removeDraft(cursor.version);
       return;
     }
-    await writeDraft(draftVersion, handoffHash);
+    await writeDraft(expectedVersion(), handoffHash);
   }
 
   function onSessionChange(change: SessionChange): void {
-    if (destroyed || suppressKeep > 0 || !change.project || status !== "ready") return;
+    if (isDestroyed() || suppressKeep > 0 || !change.project || status !== "ready") return;
     scheduleKeep();
   }
 
@@ -271,65 +292,61 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
     } catch {
       return;
     }
-    if (destroyed) return;
+    if (isDestroyed()) return;
+    const reading = session.reading;
+    if (reading.kind !== "score") return;
     const candidates = keys.filter((candidate) => candidate !== key).slice(0, INHERIT_MAX_DRAFTS);
     let best: { draft: ScoreDraft; version: string } | null = null;
     for (const other of candidates) {
       const entry = await readEntry(other);
-      if (destroyed) return;
+      if (isDestroyed()) return;
       if (entry === null) continue;
       const draft = readDraft(entry.text);
       if (draft === null || draft.sourceKey !== other || draft.handoffHash !== sourceHash) continue;
+      // The lines must join to the new song's own lyrics byte for byte; a draft for other words is not its draft.
+      if (joinLyrics(reading.score, draft.project.lyricLines) !== original.lyrics) continue;
       if (best === null || draft.updatedAt > best.draft.updatedAt) best = { draft, version: entry.version };
     }
     if (best === null) return;
     const match = best;
     handoffHash = null;
     withoutKeep(() => {
-      session.replaceProject({
-        ...original,
-        lyrics: match.draft.project.lyrics,
-        lyricLines: match.draft.project.lyricLines,
-      });
+      session.replaceProject({ ...original, lyricLines: match.draft.project.lyricLines });
     });
     scheduleKeep();
   }
 
   async function start(): Promise<void> {
     sourceHash = await contentHash(original.lyrics, original.score);
-    if (destroyed) return;
+    if (isDestroyed()) return;
     const own = await readEntry(key);
-    if (destroyed) return;
+    if (isDestroyed()) return;
     if (own !== null) {
       const draft = readDraft(own.text);
       if (draft !== null && draft.sourceKey === key && draft.sourceHash === sourceHash) {
-        draftVersion = own.version;
-        draftExists = true;
+        setCursor({ kind: "known", version: own.version });
         handoffHash = draft.handoffHash;
         withoutKeep(() => session.replaceProject(fromDraft(draft)));
         return;
       }
       if (draft !== null && draft.sourceKey === key) {
-        draftVersion = own.version;
-        draftExists = true;
-        await removeDraft(own.version);
-        sendNotice("draft-source-changed");
+        const removed = await removeDraft(own.version);
+        if (removed) sendNotice("draft-source-changed");
         return;
       }
-      // A text that is not a draft of this version leaves the key occupied: a later write replaces that version.
-      draftVersion = own.version;
-      draftExists = true;
+      // A text of a version this package does not know is left alone: only the user's conflict choices may replace it.
+      setCursor({ kind: "unknown" });
     }
     await inherit();
   }
 
   const ready = start().then(
     () => {
-      if (!destroyed && status === "opening") setStatus("ready");
+      if (status === "opening") setStatus("ready");
     },
     (error: unknown) => {
       reportListenerError(error);
-      if (!destroyed && status === "opening") setStatus("ready");
+      if (status === "opening") setStatus("ready");
     },
   );
 
@@ -345,85 +362,76 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       };
     },
     async overwrite() {
-      if (destroyed || status !== "conflict") return;
+      if (isDestroyed() || status !== "conflict") return;
       const entry = await readEntry(key);
-      if (destroyed) return;
-      draftVersion = entry?.version ?? null;
-      draftExists = entry !== null;
+      if (isDestroyed()) return;
+      setCursor(entry === null ? { kind: "none" } : { kind: "unknown" });
       if (!sameAsOriginal(session.project)) {
-        if (await writeDraft(draftVersion, handoffHash)) setStatus("ready");
+        if (await writeDraft(entry?.version ?? null, handoffHash)) setStatus("ready");
         return;
       }
-      if (draftExists && !(await removeDraft(draftVersion))) return;
-      setStatus("ready");
+      if (entry === null) {
+        setStatus("ready");
+        return;
+      }
+      if (await removeDraft(entry.version)) setStatus("ready");
     },
     async loadTheirs() {
-      if (destroyed || status !== "conflict") return;
+      if (isDestroyed() || status !== "conflict") return;
       const entry = await readEntry(key);
-      if (destroyed) return;
+      if (isDestroyed()) return;
       if (entry === null) {
-        draftVersion = null;
-        draftExists = false;
+        setCursor({ kind: "none" });
         handoffHash = null;
         setStatus("ready");
         return;
       }
-      draftVersion = entry.version;
-      draftExists = true;
       const draft = readDraft(entry.text);
-      if (draft !== null && draft.sourceKey === key) {
-        handoffHash = draft.handoffHash;
-        withoutKeep(() => session.replaceProject(fromDraft(draft)));
+      if (draft === null || draft.sourceKey !== key) {
+        // There is nothing this package can read as their draft: leave the conflict for overwrite to answer.
+        setCursor({ kind: "unknown" });
+        return;
       }
+      setCursor({ kind: "known", version: entry.version });
+      handoffHash = draft.handoffHash;
+      withoutKeep(() => session.replaceProject(fromDraft(draft)));
       setStatus("ready");
     },
     async restoreOriginal() {
-      if (destroyed) return;
+      if (isDestroyed()) return;
       cancelTimer();
       withoutKeep(() => session.replaceProject(original));
       handoffHash = null;
-      if (!draftExists) {
+      // Story 71 clears the draft even when this keeper believes there is none: another window may have written one.
+      const entry = await readEntry(key);
+      if (isDestroyed()) return;
+      if (entry === null) {
+        setCursor({ kind: "none" });
         setStatus("ready");
         return;
       }
-      if (await removeDraft(draftVersion)) {
-        setStatus("ready");
-        return;
-      }
-      // This action discards the edits; if another window wrote meanwhile, read its version and remove that too.
-      if (!destroyed && status === "conflict") {
-        const entry = await readEntry(key);
-        if (destroyed) return;
-        if (entry === null) {
-          draftVersion = null;
-          draftExists = false;
-          setStatus("ready");
-          return;
-        }
-        draftVersion = entry.version;
-        if (await removeDraft(entry.version)) setStatus("ready");
-      }
+      setCursor({ kind: "unknown" });
+      if (await removeDraft(entry.version)) setStatus("ready");
     },
     async handoff() {
-      if (destroyed) return "failed";
+      if (isDestroyed()) return "failed";
       cancelTimer();
       const hash = await contentHash(joinedLyrics(session.project), session.project.score);
-      if (destroyed) return "failed";
+      if (isDestroyed()) return "failed";
       if (sameAsOriginal(session.project)) {
-        if (draftExists) await removeDraft(draftVersion);
+        if (cursor.kind === "known") await removeDraft(cursor.version);
         handoffHash = null;
         return "unchanged";
       }
-      if (await writeDraft(draftVersion, hash)) return "written";
+      if (await writeDraft(expectedVersion(), hash)) return "written";
       return status === "conflict" ? "conflict" : "failed";
     },
     destroy() {
-      if (destroyed) return;
+      if (isDestroyed()) return;
       const pending = timer !== null;
       cancelTimer();
       unsubscribeSession();
       if (pending) void flushPending();
-      destroyed = true;
       setStatus("destroyed");
     },
   };

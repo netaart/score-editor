@@ -1,9 +1,8 @@
-// ABOUTME: Seam 5 for the draft keeper: a fake host store records every key, version and text, and a fake clock makes the debounce exact.
+// ABOUTME: Seam 1 for the draft keeper: a fake host store records every key, version and text, and a fake clock makes the debounce exact.
 // ABOUTME: The keeper is imported from the package entry and driven through the real editing session and song2 dialect.
 import { createHash } from "node:crypto";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
-  contentHash,
   createDialectRegistry,
   createDraftKeeper,
   createEditingSession,
@@ -57,11 +56,8 @@ const ORIGINAL: SongProject = {
   sourceKey: "song-1",
 };
 
-const INHERITED_LINES = [
-  { text: "月亮升起", phrase: { firstBar: 0, barCount: 1 } },
-  { text: "Moon rises", phrase: null },
-] as const;
-const INHERITED_LYRICS = "月亮升起";
+/** Lines that join to ORIGINAL.lyrics ("la la"), so the old song's line arrangement belongs to the new song. */
+const INHERITED_LINES = [{ text: "la la", phrase: { firstBar: 0, barCount: 2 } }] as const;
 
 let clock = 1_000;
 
@@ -186,7 +182,7 @@ async function makeDraft(project: SongProject = ORIGINAL, overrides: Partial<Sco
   return {
     version: 1,
     sourceKey: project.sourceKey,
-    sourceHash: await contentHash(ORIGINAL.lyrics, ORIGINAL.score),
+    sourceHash: expectedHash(ORIGINAL.lyrics, ORIGINAL.score),
     project: draftProject(project),
     handoffHash: null,
     updatedAt: 100,
@@ -194,8 +190,8 @@ async function makeDraft(project: SongProject = ORIGINAL, overrides: Partial<Sco
   };
 }
 
-async function sourceHashOf(project: SongProject = ORIGINAL): Promise<string> {
-  return contentHash(project.lyrics, project.score);
+function sourceHashOf(project: SongProject = ORIGINAL): string {
+  return expectedHash(project.lyrics, project.score);
 }
 
 function expectedHash(lyrics: string, score: string): string {
@@ -222,7 +218,7 @@ describe("opening a draft", () => {
   });
 
   it("discards a draft whose source hash is stale and says the original changed", async () => {
-    const stale = await makeDraft(ORIGINAL, { sourceHash: await contentHash("an older lyric", ORIGINAL.score) });
+    const stale = await makeDraft(ORIGINAL, { sourceHash: expectedHash("an older lyric", ORIGINAL.score) });
     store.seed(ORIGINAL.sourceKey, JSON.stringify(stale), "stale-version");
     const session = openSession();
 
@@ -238,11 +234,11 @@ describe("opening a draft", () => {
   });
 
   it("neither restores nor inherits after discarding a stale draft", async () => {
-    const stale = await makeDraft(ORIGINAL, { sourceHash: await contentHash("an older lyric", ORIGINAL.score) });
+    const stale = await makeDraft(ORIGINAL, { sourceHash: expectedHash("an older lyric", ORIGINAL.score) });
     store.seed(ORIGINAL.sourceKey, JSON.stringify(stale));
     const inherited = await makeDraft(
       { ...ORIGINAL, sourceKey: "old-song" },
-      { sourceKey: "old-song", handoffHash: await sourceHashOf() },
+      { sourceKey: "old-song", handoffHash: sourceHashOf() },
     );
     store.seed("old-song", JSON.stringify(inherited));
     const session = openSession();
@@ -265,16 +261,81 @@ describe("opening a draft", () => {
     expect(store.removes()).toEqual([]);
     expect(keeper.status).toBe("ready");
   });
+
+  it("leaves a draft of a version it does not know alone, conflicts on the next write, and lets go only by overwrite", async () => {
+    const futureText = JSON.stringify({ ...(await makeDraft()), version: 2 });
+    store.seed(ORIGINAL.sourceKey, futureText, "unknown-version");
+    const session = openSession();
+
+    const { keeper, notices } = openKeeper(session);
+    await keeper.ready;
+
+    expect(session.project).toBe(ORIGINAL);
+    expect(store.files.get(ORIGINAL.sourceKey)?.text).toBe(futureText);
+    expect(store.removes()).toEqual([]);
+    expect(notices).toEqual([]);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(store.writes()).toHaveLength(1);
+    expect(store.writes()[0]?.expected).toBeNull();
+    expect(keeper.status).toBe("conflict");
+    expect(store.files.get(ORIGINAL.sourceKey)?.text).toBe(futureText);
+
+    // Loading a text this package cannot read does not throw and leaves the conflict for overwrite to answer.
+    await expect(keeper.loadTheirs()).resolves.toBeUndefined();
+    expect(keeper.status).toBe("conflict");
+    expect(session.project.score).toBe(SCORE_WITHOUT_D);
+    expect(store.files.get(ORIGINAL.sourceKey)?.text).toBe(futureText);
+
+    await keeper.overwrite();
+
+    expect(keeper.status).toBe("ready");
+    expect(store.files.get(ORIGINAL.sourceKey)?.text).not.toBe(futureText);
+  });
+
+  it("sends the save-failed notice, not the source-changed one, when discarding a stale draft fails", async () => {
+    const stale = await makeDraft(ORIGINAL, { sourceHash: expectedHash("an older lyric", ORIGINAL.score) });
+    store.seed(ORIGINAL.sourceKey, JSON.stringify(stale), "stale-version");
+    store.failRemoves = 1;
+    const session = openSession();
+
+    const { keeper, notices } = openKeeper(session);
+    await keeper.ready;
+
+    expect(store.files.get(ORIGINAL.sourceKey)?.text).toBe(JSON.stringify(stale));
+    expect(notices.map((notice) => notice.code)).toEqual(["draft-save-failed"]);
+    expect(keeper.status).toBe("ready");
+  });
+
+  it("creates again after discarding a stale draft instead of passing the removal's version", async () => {
+    const stale = await makeDraft(ORIGINAL, { sourceHash: expectedHash("an older lyric", ORIGINAL.score) });
+    store.seed(ORIGINAL.sourceKey, JSON.stringify(stale), "stale-version");
+    const session = openSession();
+
+    const { keeper } = openKeeper(session);
+    await keeper.ready;
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(false);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(store.writes()).toHaveLength(1);
+    expect(store.writes()[0]?.expected).toBeNull();
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(true);
+    expect(keeper.status).toBe("ready");
+  });
 });
 
 describe("inheriting lyric lines", () => {
-  it("takes the draft whose handoff hash matches, with its lyric lines, and keeps the new song as the original", async () => {
+  it("takes the draft whose handoff hash matches, with its lyric lines, and keeps the new song's lyrics byte for byte", async () => {
     const inherited = await makeDraft(
       { ...ORIGINAL, sourceKey: "old-song" },
       {
         sourceKey: "old-song",
-        handoffHash: await sourceHashOf(),
-        project: { ...draftProject(ORIGINAL), lyrics: INHERITED_LYRICS, lyricLines: INHERITED_LINES },
+        handoffHash: sourceHashOf(),
+        project: { ...draftProject(ORIGINAL), lyrics: "old stored words", lyricLines: INHERITED_LINES },
       },
     );
     store.seed("old-song", JSON.stringify(inherited));
@@ -283,11 +344,8 @@ describe("inheriting lyric lines", () => {
     const { keeper } = openKeeper(session);
     await keeper.ready;
 
-    expect(session.project).toEqual({
-      ...ORIGINAL,
-      lyrics: INHERITED_LYRICS,
-      lyricLines: INHERITED_LINES,
-    });
+    expect(session.project).toEqual({ ...ORIGINAL, lyricLines: INHERITED_LINES });
+    expect(session.project.lyrics).toBe(ORIGINAL.lyrics);
     expect(session.project.sourceKey).toBe(ORIGINAL.sourceKey);
     expect(session.project.modelId).toBe(ORIGINAL.modelId);
     expect(session.project.score).toBe(SCORE);
@@ -298,8 +356,8 @@ describe("inheriting lyric lines", () => {
       { ...ORIGINAL, sourceKey: "old-song" },
       {
         sourceKey: "old-song",
-        handoffHash: await sourceHashOf(),
-        project: { ...draftProject(ORIGINAL), lyrics: INHERITED_LYRICS, lyricLines: INHERITED_LINES },
+        handoffHash: sourceHashOf(),
+        project: { ...draftProject(ORIGINAL), lyrics: "old stored words", lyricLines: INHERITED_LINES },
       },
     );
     store.seed("old-song", JSON.stringify(inherited));
@@ -313,7 +371,7 @@ describe("inheriting lyric lines", () => {
     expect(written).toHaveLength(1);
     expect(written[0]?.key).toBe(ORIGINAL.sourceKey);
     const draft = readDraft(written[0]?.text ?? "");
-    expect(draft?.project.lyrics).toBe(INHERITED_LYRICS);
+    expect(draft?.project.lyrics).toBe(ORIGINAL.lyrics);
     expect(draft?.project.lyricLines).toEqual(INHERITED_LINES);
     // Inheritance is not a handoff, so the new draft records none.
     expect(draft?.handoffHash).toBeNull();
@@ -324,18 +382,22 @@ describe("inheriting lyric lines", () => {
       { ...ORIGINAL, sourceKey: "old-a" },
       {
         sourceKey: "old-a",
-        handoffHash: await sourceHashOf(),
+        handoffHash: sourceHashOf(),
         updatedAt: 100,
-        project: { ...draftProject(ORIGINAL), lyrics: "older words", lyricLines: [] },
+        project: {
+          ...draftProject(ORIGINAL),
+          lyrics: "older words",
+          lyricLines: [{ text: "older words", phrase: { firstBar: 0, barCount: 1 } }],
+        },
       },
     );
     const newer = await makeDraft(
       { ...ORIGINAL, sourceKey: "old-b" },
       {
         sourceKey: "old-b",
-        handoffHash: await sourceHashOf(),
+        handoffHash: sourceHashOf(),
         updatedAt: 200,
-        project: { ...draftProject(ORIGINAL), lyrics: INHERITED_LYRICS, lyricLines: INHERITED_LINES },
+        project: { ...draftProject(ORIGINAL), lyrics: "old stored words", lyricLines: INHERITED_LINES },
       },
     );
     store.seed("old-a", JSON.stringify(older));
@@ -345,14 +407,37 @@ describe("inheriting lyric lines", () => {
     const { keeper } = openKeeper(session);
     await keeper.ready;
 
-    expect(session.project.lyrics).toBe(INHERITED_LYRICS);
+    expect(session.project.lyrics).toBe(ORIGINAL.lyrics);
     expect(session.project.lyricLines).toEqual(INHERITED_LINES);
+  });
+
+  it("inherits nothing when the lines join to other lyrics than the new song has", async () => {
+    const inherited = await makeDraft(
+      { ...ORIGINAL, sourceKey: "old-song" },
+      {
+        sourceKey: "old-song",
+        handoffHash: sourceHashOf(),
+        project: {
+          ...draftProject(ORIGINAL),
+          lyrics: "other words",
+          lyricLines: [{ text: "other words", phrase: { firstBar: 0, barCount: 1 } }],
+        },
+      },
+    );
+    store.seed("old-song", JSON.stringify(inherited));
+    const session = openSession();
+
+    const { keeper } = openKeeper(session);
+    await keeper.ready;
+
+    expect(session.project).toBe(ORIGINAL);
+    expect(store.writes()).toEqual([]);
   });
 
   it("stays the original when no draft matches", async () => {
     const first = await makeDraft(
       { ...ORIGINAL, sourceKey: "old-a" },
-      { sourceKey: "old-a", handoffHash: await contentHash("not", "this") },
+      { sourceKey: "old-a", handoffHash: expectedHash("not", "this") },
     );
     store.seed("old-a", JSON.stringify(first));
     const session = openSession();
@@ -390,7 +475,7 @@ describe("keeping a draft", () => {
       score: SCORE_WITHOUT_D,
     });
     expect(draft?.sourceKey).toBe(ORIGINAL.sourceKey);
-    expect(draft?.sourceHash).toBe(await sourceHashOf());
+    expect(draft?.sourceHash).toBe(sourceHashOf());
     expect(draft?.handoffHash).toBeNull();
     expect(draft?.updatedAt).toBe(clock);
   });
@@ -456,12 +541,33 @@ describe("keeping a draft", () => {
     expect(store.writes()).toEqual([]);
     expect(store.removes()).toEqual([]);
   });
+
+  it("creates again after a removal instead of passing the removal's version", async () => {
+    const { keeper } = openKeeper();
+    await keeper.ready;
+    const session = keeperSession(keeper);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await vi.advanceTimersByTimeAsync(1000);
+    session.undo();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(false);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(store.writes()).toHaveLength(2);
+    expect(store.writes()[1]?.expected).toBeNull();
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(true);
+    expect(keeper.status).toBe("ready");
+  });
 });
 
 describe("a conflict", () => {
-  async function conflict() {
+  async function conflict(beforeConflict?: (keeper: ReturnType<typeof createDraftKeeper>) => void) {
     const { keeper, notices } = openKeeper();
     await keeper.ready;
+    beforeConflict?.(keeper);
     const session = keeperSession(keeper);
 
     session.dispatch({ type: "toRest", noteId: "Vocal:256" });
@@ -481,12 +587,13 @@ describe("a conflict", () => {
   }
 
   it("stops writing and announces its state", async () => {
-    const { keeper } = await conflict();
     const states: string[] = [];
-    keeper.subscribe((change) => states.push(change.status));
+    const { keeper } = await conflict((opening) => {
+      opening.subscribe((change) => states.push(change.status));
+    });
 
     expect(keeper.status).toBe("conflict");
-    expect(states).toEqual([]);
+    expect(states).toEqual(["conflict"]);
 
     const before = store.writes().length;
     const session = keeperSession(keeper);
@@ -495,6 +602,7 @@ describe("a conflict", () => {
 
     expect(store.writes()).toHaveLength(before);
     expect(keeper.status).toBe("conflict");
+    expect(states).toEqual(["conflict"]);
   });
 
   it("overwrite reads their version and writes ours over it", async () => {
@@ -508,6 +616,20 @@ describe("a conflict", () => {
     expect(writes[before]?.expected).toBe("their-version");
     expect(writes[before]?.key).toBe(ORIGINAL.sourceKey);
     expect(readDraft(store.files.get(ORIGINAL.sourceKey)?.text ?? "")?.project.score).toBe(session.project.score);
+    expect(keeper.status).toBe("ready");
+  });
+
+  it("writes at the overwritten version on the next edit, with no new conflict", async () => {
+    const { keeper, session } = await conflict();
+    await keeper.overwrite();
+    const version = store.versionOf(ORIGINAL.sourceKey);
+    const before = store.writes().length;
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:1024" });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(store.writes()).toHaveLength(before + 1);
+    expect(store.writes()[before]?.expected).toBe(version);
     expect(keeper.status).toBe("ready");
   });
 
@@ -581,6 +703,54 @@ describe("restoring the original", () => {
     expect(store.writes()).toEqual([]);
     expect(store.removes()).toEqual([]);
     expect(session.project).toEqual(ORIGINAL);
+  });
+
+  it("reads and removes a draft another window created after open", async () => {
+    const { keeper } = openKeeper();
+    await keeper.ready;
+    expect(store.calls.some((call) => call.method === "remove")).toBe(false);
+
+    const ours = await makeDraft(ORIGINAL, {
+      project: { ...draftProject(ORIGINAL), score: SCORE_WITHOUT_D },
+    });
+    store.seed(ORIGINAL.sourceKey, JSON.stringify(ours), "another-window");
+
+    await keeper.restoreOriginal();
+
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(false);
+    expect(store.removes()).toEqual([{ method: "remove", key: ORIGINAL.sourceKey, expected: "another-window" }]);
+    expect(keeper.status).toBe("ready");
+  });
+
+  it("reads and removes a text it cannot read", async () => {
+    const futureText = JSON.stringify({ ...(await makeDraft()), version: 2 });
+    store.seed(ORIGINAL.sourceKey, futureText, "unknown-version");
+    const { keeper } = openKeeper();
+    await keeper.ready;
+
+    await keeper.restoreOriginal();
+
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(false);
+    expect(store.removes()).toEqual([{ method: "remove", key: ORIGINAL.sourceKey, expected: "unknown-version" }]);
+  });
+
+  it("creates again after restore instead of passing the removal's version", async () => {
+    const { keeper } = openKeeper();
+    await keeper.ready;
+    const session = keeperSession(keeper);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await vi.advanceTimersByTimeAsync(1000);
+    await keeper.restoreOriginal();
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(false);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(store.writes()).toHaveLength(2);
+    expect(store.writes()[1]?.expected).toBeNull();
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(true);
+    expect(keeper.status).toBe("ready");
   });
 });
 
@@ -694,7 +864,7 @@ describe("the original", () => {
     const snapshot = JSON.stringify(ORIGINAL);
     const inherited = await makeDraft(
       { ...ORIGINAL, sourceKey: "old-song" },
-      { sourceKey: "old-song", handoffHash: await sourceHashOf() },
+      { sourceKey: "old-song", handoffHash: sourceHashOf() },
     );
     store.seed("old-song", JSON.stringify(inherited));
     const { keeper } = openKeeper();
