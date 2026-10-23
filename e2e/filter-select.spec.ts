@@ -339,3 +339,211 @@ test.describe("re-apply", () => {
     await expect(status(page)).toHaveText("Pick a condition to select notes.");
   });
 });
+
+test.describe("combining the conditions", () => {
+  test("selects the notes that meet every condition that is on, and nothing once the last one is turned off", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+
+    await pitchLowest(page).selectOption({ label: "E4" });
+    await pitchHighest(page).selectOption({ label: "A4" });
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4, ID.G4, ID.A4]);
+
+    // The first bar holds E4 and F4 of those; the count then takes the first of the two.
+    await type(barLast(page), 1);
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4]);
+    await expect(status(page)).toHaveText("2 of 9 notes selected");
+    await press(check(page, "Count"));
+    expect(await harness.layout.selection()).toEqual([ID.E4]);
+    await expect(status(page)).toHaveText("1 of 9 notes selected");
+
+    await press(check(page, "Count"));
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4]);
+    await press(check(page, "Time"));
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4, ID.G4, ID.A4]);
+    await press(check(page, "Pitch"));
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(status(page)).toHaveText("Pick a condition to select notes.");
+  });
+});
+
+test.describe("the panel across closing", () => {
+  test("keeps the conditions of the last selection and the selection itself when it is closed and opened again", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    await pitchLowest(page).selectOption({ label: "E4" });
+    await pitchHighest(page).selectOption({ label: "A4" });
+    await press(check(page, "Invert"));
+    const chosen = [ID.C4, ID.D4, ID.C5, ID.D5, ID.D5tail, ID.E5];
+    expect(await harness.layout.selection()).toEqual(chosen);
+
+    await press(panel(page).getByRole("button", { name: "Done", exact: true }));
+    await expect(panel(page)).toBeHidden();
+    await openPanel(page, press);
+
+    // Opening selected nothing new, and the panel shows what made the selection.
+    expect(await harness.layout.selection()).toEqual(chosen);
+    await expect(check(page, "Pitch")).toBeChecked();
+    await expect(pitchLowest(page)).toHaveValue("64");
+    await expect(pitchHighest(page)).toHaveValue("69");
+    await expect(check(page, "Invert")).toBeChecked();
+    await expect(check(page, "Time")).not.toBeChecked();
+    await expect(status(page)).toHaveText("5 of 9 notes selected");
+  });
+});
+
+test.describe("while the session is read-only", () => {
+  test("selects through the panel all the same, as a step of no history", async ({ page, harness, press }) => {
+    await openTrack(harness, MELODY, { editable: false });
+    await openPanel(page, press);
+
+    await press(check(page, "Count"));
+
+    expect(await harness.layout.selection()).toEqual([ID.C4, ID.E4, ID.G4, ID.C5, ID.E5]);
+    await expect(status(page)).toHaveText("5 of 9 notes selected");
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+});
+
+test.describe("where the panel is offered", () => {
+  test("is there in the arrangement only, and shut when another view takes its place", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+
+    await harness.layout.setActiveView("staff");
+    await expect(filterButton(page)).toBeHidden();
+    await expect(panel(page)).toBeHidden();
+
+    await harness.layout.setActiveView("arrangement");
+    await expect(filterButton(page)).toBeVisible();
+  });
+
+  test("can be mounted on its own, without the toolbar", async ({ page, harness, press }) => {
+    await harness.layout.open({ score: { text: MELODY }, parts: ["filter", "vocal"] });
+    await press(slot(page, "filter").getByRole("button", { name: "Filter", exact: true }));
+    await press(check(page, "Count"));
+    expect(await harness.layout.selection()).toEqual([ID.C4, ID.E4, ID.G4, ID.C5, ID.E5]);
+  });
+
+  test("comes with the assembled editor", async ({ page, harness, press }) => {
+    await harness.mount({ score: { sample: "vocal-only-melody" } });
+    await press(page.getByRole("button", { name: "Filter", exact: true }));
+    await press(check(page, "Count"));
+    await expect(status(page)).toHaveText(/^\d+ of \d+ notes selected$/);
+    await expect(page.getByRole("listitem", { name: /, selected$/ }).first()).toBeAttached();
+  });
+});
+
+test.describe("the language", () => {
+  test("is the session's, also while the panel is open", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    await pitchLowest(page).selectOption({ label: "E4" });
+    await pitchHighest(page).selectOption({ label: "A4" });
+
+    await harness.layout.setView({ language: "zh" });
+
+    const zh = page.getByRole("dialog", { name: "筛选选中", exact: true });
+    await expect(zh).toBeVisible();
+    await expect(toolbar(page).getByRole("button", { name: "筛选", exact: true })).toBeVisible();
+    for (const name of ["音高", "时间", "时值", "调", "个数", "反选"]) {
+      await expect(zh.getByRole("checkbox", { name })).toBeVisible();
+    }
+    await expect(zh.getByRole("combobox", { name: "最低音", exact: true })).toHaveValue("64");
+    await expect(zh.getByRole("spinbutton", { name: "每几个取一个", exact: true })).toBeVisible();
+    await expect(zh.getByRole("spinbutton", { name: "跳过前几个", exact: true })).toBeVisible();
+    await expect(zh.getByRole("button", { name: "重新应用", exact: true })).toBeVisible();
+    await expect(zh.getByRole("button", { name: "完成", exact: true })).toBeVisible();
+    await expect(zh.getByRole("status")).toHaveText("已选中 4 个音符，共 9 个");
+  });
+});
+
+test.describe("keys pressed in the panel", () => {
+  test("belong to the panel in the assembled editor: Delete does not delete the selected notes, plus and minus do not zoom, Escape closes it", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "keys are for the desktop project");
+    await harness.mount({ score: { sample: "vocal-only-melody" } });
+    const filter = page.getByRole("button", { name: "Filter", exact: true });
+    const zoom = page.getByRole("button", { name: /^Zoom \d+%$/ });
+    const zoomBefore = (await zoom.textContent()) ?? "";
+    await press(filter);
+    await press(check(page, "Count"));
+    await expect(status(page)).toHaveText(/^\d+ of \d+ notes selected$/);
+    const said = await status(page).textContent();
+
+    await reapply(page).focus();
+    await page.keyboard.press("Delete");
+    await page.keyboard.press("+");
+    await page.keyboard.press("-");
+    await expect(status(page)).toHaveText(said ?? "");
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+    await expect(zoom).toHaveText(zoomBefore);
+
+    await page.keyboard.press("Escape");
+    await expect(panel(page)).toBeHidden();
+    await expect(filter).toBeFocused();
+    // On the arrangement the same key zooms, so the zoom above was not missing for another reason.
+    await page.getByRole("region", { name: "Arrangement" }).focus();
+    await page.keyboard.press("+");
+    await expect(zoom).not.toHaveText(zoomBefore);
+  });
+});
+
+test.describe("the panel's place and size", () => {
+  test("hangs from its button on the desktop and is a sheet from the bottom edge on a phone, with controls a finger can press", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    const frame = await box(panel(page));
+    const view = page.viewportSize();
+    if (!view) throw new Error("no viewport");
+
+    if (isMobile) {
+      expect(frame.x).toBeLessThanOrEqual(1);
+      expect(frame.x + frame.width).toBeGreaterThanOrEqual(view.width - 1);
+      expect(frame.y + frame.height).toBeGreaterThanOrEqual(view.height - 1);
+      const controls = panel(page).locator("select, input[type=number], .sce-filter-check, .sce-filter-actions button");
+      const sizes = await controls.evaluateAll((found) =>
+        found.map((control) => ({
+          height: control.getBoundingClientRect().height,
+          text: Number.parseFloat(getComputedStyle(control).fontSize),
+          field: control instanceof HTMLSelectElement || control instanceof HTMLInputElement,
+        })),
+      );
+      expect(sizes.length).toBeGreaterThan(10);
+      for (const size of sizes) {
+        expect(size.height).toBeGreaterThanOrEqual(40);
+        // A field set in text under 16 px makes a phone zoom the page when it is focused.
+        if (size.field) expect(size.text).toBeGreaterThanOrEqual(16);
+      }
+    } else {
+      const button = await box(filterButton(page));
+      const nudged = frame.x + frame.width >= view.width - 9;
+      if (!nudged) expect(Math.abs(frame.x - button.x)).toBeLessThanOrEqual(1);
+      const under = frame.y >= button.y + button.height;
+      const over = frame.y + frame.height <= button.y;
+      expect(under || over).toBe(true);
+      expect(frame.width).toBeLessThan(view.width / 2);
+    }
+  });
+});
