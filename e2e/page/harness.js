@@ -1,6 +1,7 @@
 // ABOUTME: Page-side half of the mount seam: mounts the built editor, or single view parts on one session, and exposes window.harness.
 // ABOUTME: The host is the bare test page; it builds the dialect registry and fetches the test scores itself.
 
+import { createFakeDraftStore } from "/e2e/page/draft-store.js";
 import { syntheticSong } from "/e2e/page/synthetic.js";
 import { song2Dialect } from "/packages/score-dialect-song2/dist/index.js";
 import {
@@ -31,6 +32,9 @@ let project = null;
 let vectors = null;
 /** The notices the mounted editor sent to its host, in order. */
 const notices = [];
+/** The host's draft store: what `drafts: true` in the options of `mount` and `update` stands for. */
+const drafts = createFakeDraftStore();
+const withDrafts = (options) => (options.drafts === true ? { ...options, drafts } : options);
 
 /**
  * The score text a test asks for: `{ sample }` is a file of the dialect's samples, `{ vector }` the text of a
@@ -324,6 +328,7 @@ window.harness = {
   stage,
   layout,
   notices,
+  drafts,
   host: hostPage,
   shadowRoot: null,
   /** The single-note preview export, called as a host calls it. */
@@ -352,7 +357,7 @@ window.harness = {
       project,
       dialects,
       notify: (notice) => notices.push(notice),
-      ...options,
+      ...withDrafts(options),
     });
   },
   async update({ score, project: fields, ...options } = {}) {
@@ -360,7 +365,7 @@ window.harness = {
       project = await projectFrom(project, score, fields);
       options.project = project;
     }
-    editor.update(options);
+    editor.update(withDrafts(options));
   },
   destroy() {
     editor.destroy();
