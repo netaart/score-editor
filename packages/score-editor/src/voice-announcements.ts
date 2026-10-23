@@ -1,6 +1,7 @@
 // ABOUTME: What a voice track says to a screen reader: which of its notes were selected, where the insertion point is, what was deleted or moved.
 // ABOUTME: It follows the session and reads only the session and the score; it never looks at another view part.
-import { insertionPosition, lengthInBeats, notesByVoice, pitchName, positionOf, tieJoins } from "./arrangement";
+import { insertionPosition, lengthInBeats, notesByVoice, pitchName, positionOf } from "./arrangement";
+import { tieChain } from "./commands-shared";
 import { messagesFor } from "./i18n";
 import type { LiveRegion } from "./live-region";
 import type { Score } from "./score";
@@ -64,19 +65,15 @@ export function announceVoice(
     if (reading.kind !== "score") return { score: null, pitched: new Set(), selected: [], spans: [] };
     const notes = notesByVoice(reading.score).get(voice) ?? [];
     const pitched = new Set(notes.filter((note) => note.midi !== null).map((note) => note.id));
-    const joins = tieJoins(notes);
     const selected = selection.filter((id) => pitched.has(id));
     const spans = selected.map((id): Span => {
-      const at = notes.findIndex((note) => note.id === id);
-      const first = notes[at];
-      let end = first?.start ?? 0;
-      for (let index = at; index >= 0 && index < notes.length; index++) {
-        const note = notes[index];
-        if (note === undefined) break;
-        end = note.start + note.duration;
-        if (!joins.has(note.id)) break;
-      }
-      return { midi: first?.midi ?? 0, start: first?.start ?? 0, end };
+      const note = notes.find((found) => found.id === id);
+      if (note === undefined) return { midi: 0, start: 0, end: 0 };
+      // The chain starts at its first note, whichever of its halves is selected, so a move of any half is a move of one note.
+      const members = tieChain(notes, note, notes);
+      const first = members[0] ?? note;
+      const last = members[members.length - 1] ?? note;
+      return { midi: first.midi ?? 0, start: first.start, end: last.start + last.duration };
     });
     return { score: reading.score, pitched, selected, spans };
   }
