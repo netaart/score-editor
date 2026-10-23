@@ -321,6 +321,27 @@ test.describe("the song project panel's fields", () => {
     expect((await project(page)).scoreMode).toBe("melody");
     await expect(modeRadio(page, "Melody")).toBeChecked();
     expect(await harness.layout.canUndo()).toBe(false);
+
+    await press(modeRadio(page, "Full"));
+    await press(modeRadio(page, "Melody"));
+    expect((await project(page)).scoreMode).toBe("melody");
+    await harness.layout.undo();
+    expect((await project(page)).scoreMode).toBe("full");
+  });
+
+  test("a popover that is closed from outside while the style box has the focus still takes what was typed", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { style: "warm pop" });
+    await openPanel(page, press);
+    await styleBox(page).fill("slow jazz");
+
+    await page.evaluate(() => document.querySelector<HTMLElement>(".sce-project-popover")?.hidePopover());
+
+    await expect(panel(page)).toBeHidden();
+    expect((await project(page)).style).toBe("slow jazz");
   });
 
   test("a seed is typed, then cleared with the Clear button; each is one undo step", async ({
