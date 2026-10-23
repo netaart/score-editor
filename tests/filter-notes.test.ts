@@ -190,15 +190,14 @@ G,4A,4B,8|
 describe("a count that cannot be made", () => {
   // No condition is refused and none throws: numbers that mean no place in the line take nothing, as an empty range does.
   it("takes nothing when N is not a whole number of 1 or more, or skip is not a whole number of 0 or more", () => {
-    for (const count of [
+    const counts: Array<NonNullable<NoteFilter["count"]>> = [
       { every: 0 },
       { every: -2 },
       { every: 1.5 },
       { every: 2, skip: -1 },
       { every: 2, skip: 0.5 },
-    ]) {
-      expect(filterNotes(MELODY, { count }), JSON.stringify(count)).toEqual([]);
-    }
+    ];
+    for (const count of counts) expect(filterNotes(MELODY, { count }), JSON.stringify(count)).toEqual([]);
   });
 });
 
