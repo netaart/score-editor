@@ -106,6 +106,12 @@ export interface SessionChange {
    * changed project alone.
    */
   readonly command?: ProjectCommand;
+  /**
+   * The grid that was dropped for the default because the project or the dialects no longer allow it. It is present on
+   * the one change that dropped it, with `gridDropped` absent from every later change since the grid is then the
+   * default already. A host can use it to say once what changed.
+   */
+  readonly gridDropped?: Grid;
 }
 
 export type SessionListener = (change: SessionChange) => void;
@@ -310,6 +316,21 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   }
 
   /**
+   * Leaves the grid in force when the score can write it, and otherwise puts the default grid in force and returns the
+   * one it dropped. A score that cannot be read says nothing about what it can write, so the grid stays. The default
+   * itself is never dropped again: it is the grid the session goes back to, whether or not this score can write it.
+   */
+  function droppedGrid(): Grid | undefined {
+    const found = read();
+    if (found.kind !== "score" || sameGrid(grid, DEFAULT_GRID)) return undefined;
+    const allowed = withDialect((dialect) => isGridAllowed(found.score, grid, dialect.constraints), () => true);
+    if (allowed) return undefined;
+    const dropped = grid;
+    grid = DEFAULT_GRID;
+    return dropped;
+  }
+
+  /**
    * `following` is the selection to keep, when the change moved the notes it names to ids of their own; it replaces the
    * current selection before ids that name no note are dropped.
    */
@@ -322,7 +343,13 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     const selectionChanged = !sameIds(kept, selection);
     selection = kept;
     rejectedText = null;
-    announce(cause, { project: true, selection: selectionChanged, ...(command === undefined ? {} : { command }) });
+    const gridDropped = droppedGrid();
+    announce(cause, {
+      project: true,
+      selection: selectionChanged,
+      ...(command === undefined ? {} : { command }),
+      ...(gridDropped === undefined ? {} : { gridDropped }),
+    });
   }
 
   /**
@@ -401,7 +428,13 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       selection = [];
       insertionPoint = null;
       rejectedText = null;
-      announce("replace", { project: true, selection: hadSelection, insertionPoint: hadInsertionPoint });
+      const gridDropped = droppedGrid();
+      announce("replace", {
+        project: true,
+        selection: hadSelection,
+        insertionPoint: hadInsertionPoint,
+        ...(gridDropped === undefined ? {} : { gridDropped }),
+      });
     },
     replaceDialects(next) {
       if (next === dialects) return;

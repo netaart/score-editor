@@ -3,7 +3,7 @@
 
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
-import { canDeleteSelection, handleEditingInput } from "./editing-input";
+import { canEditSelection, handleEditingInput } from "./editing-input";
 import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
@@ -54,6 +54,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const releaseStyles = acquireStyles(el);
   const root = create(doc, "div", "sce-root sce-part sce-part-toolbar");
   el.appendChild(root);
+  const live = createLiveRegion(root);
 
   const row = create(doc, "div", "sce-toolbar", root);
   if (options.viewSwitch) row.dataset.views = "";
@@ -74,7 +75,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
-  const grid = mountGridControl(row, session);
+  const grid = mountGridControl(row, session, live);
   create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -86,7 +87,6 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
-  const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
@@ -138,7 +138,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (session.view.language !== language) applyLanguage();
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
-    const deletable = canDeleteSelection(session);
+    const deletable = canEditSelection(session);
     const arrangement = !options.viewSwitch || arrangementShown(session);
     const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView].join();
     if (shown === drawn) return;

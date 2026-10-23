@@ -5,6 +5,7 @@ import { create } from "./dom";
 import { GRID_CHOICES, sameGrid } from "./grid";
 import { messagesFor } from "./i18n";
 import { lineIcon } from "./icons";
+import type { LiveRegion } from "./live-region";
 import { mountPopoverMenu } from "./popover-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -20,10 +21,10 @@ const FINEST = 32;
 /**
  * Mounts the Grid menu on `el`. It is drawn while the session is editable, has a score to show and shows the arrangement.
  * Choosing a grid sets the session's grid, which every part bound to the session then follows. A grid the score cannot
- * write is muted and does nothing; the 1/32 pair is left out of the menu for a score that cannot write 1/32, unless it is
- * the grid in force, so the menu never loses the choice it shows.
+ * write is muted and does nothing; the 1/32 pair is left out of the menu for a score that cannot write 1/32. A grid the
+ * session puts back to the default, because the project or the dialects no longer allow it, is said once in `live`.
  */
-export function mountGridControl(el: HTMLElement, session: EditingSession): ViewPart {
+export function mountGridControl(el: HTMLElement, session: EditingSession, live: LiveRegion): ViewPart {
   const doc = el.ownerDocument;
   const abort = new AbortController();
   const { signal } = abort;
@@ -88,7 +89,7 @@ export function mountGridControl(el: HTMLElement, session: EditingSession): View
     // The 1/32 pair stands or falls with plain 1/32: where a score can write that, the dotted one shows too, muted if it
     // cannot be written, as every other dotted step is.
     const finestAt = choices.findIndex(({ grid }) => grid.value === FINEST && grid.dotted !== true);
-    const finestShown = allowed[finestAt] === true || current.value === FINEST;
+    const finestShown = allowed[finestAt] === true;
     choices.forEach(({ grid, item }, at) => {
       const allowedHere = allowed[at] === true;
       item.setAttribute("aria-checked", String(sameGrid(grid, current)));
@@ -98,8 +99,18 @@ export function mountGridControl(el: HTMLElement, session: EditingSession): View
     });
   }
 
+  /** Says a grid the session put back to the default, once, in the language of the editor. */
+  function announceDrop(change: { readonly gridDropped?: Grid }): void {
+    const dropped = change.gridDropped;
+    if (dropped === undefined) return;
+    live.say(messagesFor(session.view.language).gridDropped(dropped));
+  }
+
   draw();
-  const unsubscribe = session.subscribe(draw);
+  const unsubscribe = session.subscribe((change) => {
+    draw();
+    announceDrop(change);
+  });
   let destroyed = false;
   return {
     destroy() {
