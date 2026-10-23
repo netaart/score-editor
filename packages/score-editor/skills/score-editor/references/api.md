@@ -14,7 +14,7 @@ change. The tests in the repository check that the list stays complete.
 | `mountCutNotice` | core | Mounts the cut-notice view part. |
 | `mountProblemView` | core | Mounts the problem view part. |
 | `mountTimeRuler` | core | Mounts the time-ruler view part; takes `AxisPartOptions`. |
-| `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. |
+| `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. While the session is editable, a press places, changes or removes a chord through a picker. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
 | `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. |
@@ -41,6 +41,10 @@ change. The tests in the repository check that the list stays complete.
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
+| `chordSlots` | core | The places a chord can go in a `Score`: the starts of notes and rests in voices the constraints allow chords on, as `ChordSlot`s. Pure. |
+| `nearestChordSlot` | core | The `ChordSlot` nearest a tick, the earlier one on a tie; null when there is none. Pure. |
+| `chordChoices` | core | What a chord picker may offer from a `ChordVocabulary`: letters with their spellings, types, and whether a bass note is allowed, as `ChordChoices`. Pure. |
+| `splitChordName` | core | Splits a chord name into `ChordNameParts` by a vocabulary; null when the vocabulary does not allow the name. The grammar `setChord` checks. Pure. |
 | `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete, a toggle, a box, select all, invert, clear) to a session; returns `EditingInputResult`. |
 | `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
@@ -121,6 +125,15 @@ change. The tests in the repository check that the list stays complete.
 | `ParseResult` | `{ score, diagnostics }`; score is null exactly on an error-level diagnostic. |
 | `DialectConstraints` | The declared voices, keys, tempo, section marker, lyrics, durations, meter and chords. |
 | `ChordVocabulary`, `DurationSet`, `MeterRule` | The chord vocabulary, accepted duration numbers and meter rule types. |
+
+## Chord editing types
+
+| Export | What it is |
+| --- | --- |
+| `ChordSlot` | `{ noteId, voice, start, duration, chord, before }`: a start a chord can go on, the chord there (or null) and the chord in force before it (or null). |
+| `ChordChoices` | `{ letters, qualities, slashBass }`: what a picker offers. |
+| `ChordLetter` | `{ letter, roots }`: one letter A-G and the root spellings the vocabulary has on it. |
+| `ChordNameParts` | `{ root, quality, bass }`: a chord name split by a vocabulary; `bass` is null without a slash bass. |
 
 ## Apply result types
 

@@ -144,6 +144,22 @@ tempo range, section marker, lyric rule, durations, meter rule and chord vocabul
 `Language` is `"zh" | "en"`. `Notice` is a one-time message for the host's own toast system, `NoticeCode` its
 machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-refused"`, sent when the score would not take an edit the user asked for).
 
+## Chord places and the names a vocabulary allows
+
+The chord picker of the chord track is built from four pure functions, which a host with its own chord input can use. `chordSlots(score, constraints)` lists the places a chord can go as `ChordSlot`s: the start of every note or rest in a voice whose constraints allow chords, sorted by start (a start two voices share belongs to the voice listed first). A slot is `{ noteId, voice, start, duration, chord, before }`: `chord` is the chord on that start or null and `before` the chord in force before it or null. `nearestChordSlot(slots, tick)` is the slot nearest a tick, the earlier on a tie, and null for no slots. `chordChoices(vocabulary)` is what a picker may offer, a `ChordChoices`, `{ letters, qualities, slashBass }`, where each `ChordLetter` is `{ letter, roots }` and holds the spellings the vocabulary has on that letter. `splitChordName(name, vocabulary)` is the grammar `setChord` checks: it returns `ChordNameParts`, `{ root, quality, bass }`, or null when the vocabulary does not allow the name.
+
+```ts
+const { constraints, reading } = session;
+if (constraints && reading.kind === "score") {
+  const slots = chordSlots(reading.score, constraints);
+  const slot = nearestChordSlot(slots, 600); // the start nearest tick 600
+  const choices = chordChoices(constraints.chords); // letters, qualities, slashBass
+  if (slot && splitChordName("Am7/G", constraints.chords)) {
+    session.dispatch({ type: "setChord", noteId: slot.noteId, name: "Am7/G" });
+  }
+}
+```
+
 ## The preview schedule
 
 `schedulePreview(score, fromTick = 0)` turns a `Score` into what a synthetic preview plays: a `PreviewSchedule`, which is

@@ -17,7 +17,7 @@ added; calling it twice is harmless.
 | `mountCutNotice(el, session)` | The one sentence saying the score text stops before the song does, or nothing. | — |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
 | `mountTimeRuler(el, session, options?)` | Bar numbers, section bands, and key/meter/cut marks. | `AxisPartOptions` |
-| `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line. | `AxisPartOptions` |
+| `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line; while the session is editable, a press places, changes or removes a chord (see editing below). | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
 | `mountTextView(el, session)` | The score text in a box with line numbers, a status sentence, and the problems of text that cannot be read. | — |
 | `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only. | — |
@@ -105,12 +105,14 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 | Presses Ctrl or Cmd plus A, plus Shift, or Escape; or chooses an item of the Select menu | A part that hears the key; the toolbar | Selects every pitched note; inverts the selection; clears it (Escape clears whatever ids are selected, and is left to the host when none is). |
 | Presses Tab, then Left and Right, Home and End, Enter or Space | The notes of a voice track | The notes are one tab stop. With a note in focus, Left and Right step to the neighbour and select it, Home and End go to the first and last, Enter or Space selects the one in focus. With Ctrl or Cmd the four navigation keys move the focus without selecting, and Shift plus Space or Enter adds the note in focus or takes it out with its tie chain. |
 | Presses Left, Right, Home or End with the focus elsewhere in a part | Any time-axis part | Moves the insertion point; Left and Right keep scrolling while there is none. |
+| Clicks or taps the chord track, or the name of a chord | The chord track | Opens the chord picker at the nearest start of a note or rest in a voice that allows chords (for `song2`, `Vocal`), or at the chord pressed. It offers only what `session.constraints.chords` allows; Place, Change or Remove is one `setChord` and one history step. The taken start is framed while the picker is open. |
+| Presses Tab, then Left and Right, Ctrl or Cmd plus Left and Right, Home and End, Enter, Space, Delete | The chord track | The track has one tab stop, its cursor, first in the Tab order before the notes. Left and Right step from start to start, with Ctrl or Cmd from chord to chord, Home and End to the first and last start; Enter or Space opens the picker; Delete or Backspace removes the chord under the cursor. In the picker the arrows choose within a row, Tab moves between rows, Enter places, Escape closes, and the focus returns to the cursor. |
 | Presses Delete or Backspace, or the Delete button | A part that hears the key; the toolbar | Turns every selected pitched note into a rest as one history step. The button is muted until a pitched note is selected. |
 | Presses Ctrl or Cmd plus Z, plus Shift for redo, Ctrl plus Y, or the undo and redo buttons | A part that hears the key; the toolbar | Moves one history step. |
 
 Keys are heard by a part while the focus is inside it; a part that handles one keeps it from the browser. Each part
 also keeps one polite live region (`role="status"`, visually hidden) and says in the session's language what happened:
-a voice track says which of its own notes were selected, deleted, or brought back by an undo; the track of the score's
+a voice track says which of its own notes were selected, deleted, or brought back by an undo; the chord track says the chord it placed, changed or removed, and what an undo or a redo did to a chord; the track of the score's
 first voice says where the insertion point moved; a part that heard a refused edit says why and where. No part reads
 another part, so a part mounted alone speaks for what it draws and nothing else.
 
