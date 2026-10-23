@@ -651,14 +651,12 @@ export async function drag(
   during: () => Promise<void> = async () => {},
 ) {
   const pointer = await pointerOf(page, harness, isMobile, { holdMs: 0 });
-  try {
+  await withPointer(pointer, async () => {
     await pointer.down(from);
     await pointer.move(to);
     await during();
     await pointer.up();
-  } finally {
-    await pointer.close();
-  }
+  });
 }
 
 /** Runs a gesture with one pointer and always lets the pointer go, even when the gesture fails. */
