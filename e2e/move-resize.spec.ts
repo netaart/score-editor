@@ -104,6 +104,21 @@ test.describe("dragging the selected notes", () => {
     expect(await harness.layout.canUndo()).toBe(false);
   });
 
+  test("shows the note on the grid and not where the pointer is", async ({ page, harness, press, isMobile }) => {
+    await openTrack(harness, LEAD);
+    await press(block(page, C4));
+    const from = await centreOf(block(page, `${C4}, length 1 beat, selected`));
+    const { lane, beat } = await metrics(page, 8);
+
+    await drag(page, harness, isMobile, from, { x: from.x + 1.3 * beat, y: from.y }, async () => {
+      // 1.3 beats of pointer is 333 ticks: the nearest line of a quarter grid is 1 beat.
+      await expect(ghosts(page)).toHaveCount(1);
+      expect((await box(ghosts(page))).x).toBeCloseTo(lane.x + beat, 0);
+    });
+
+    expect((await noteList(harness))[0]).toEqual(vocal(BEAT, BEAT, C));
+  });
+
   test("carries every selected note by the same time and pitch, in one step", async ({
     page,
     harness,
@@ -183,6 +198,23 @@ test.describe("dragging an edge", () => {
     // The note starts where it did not before, so it has a new id; the selection is on it.
     expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
     await expect(block(page, "C4, bar 1 beat 1, length 3 beats, selected")).toBeVisible();
+  });
+
+  test("an edge taken a little past the start of the score lands on the start", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    const area = await half(page, harness, press);
+    const { beat } = await metrics(page, 8);
+    const from = { x: area.x + 3, y: area.y + area.height / 2 };
+
+    // 1.2 beats left of an edge that is 1 beat from the start: the grid takes the start to the line it is nearest, 0.
+    await drag(page, harness, isMobile, from, { x: from.x - 1.2 * beat, y: from.y });
+
+    expect(await noteList(harness)).toEqual([vocal(0, 3 * BEAT, C), vocal(4 * BEAT, 4 * BEAT, 67)]);
+    expect(await harness.layout.scoreText()).toContain("C12z4|");
   });
 
   test("a press just inside the edge zone resizes, and one just outside it moves", async ({
