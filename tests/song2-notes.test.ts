@@ -1,4 +1,4 @@
-// ABOUTME: Seam 1 for the note commands: move and resize, their grid, their overlap rule and their bar-line splits.
+// ABOUTME: The note commands with song2 at seam 2: move and resize, their grid, their overlap rule and bar-line splits.
 // ABOUTME: Every expected text is worked by hand from RULES.md; the sample sweep checks the invariants on every score.
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
@@ -10,6 +10,7 @@ import {
   type ScoreCommand,
   type Note as ScoreNote,
   type SongProject,
+  TICKS_PER_QUARTER,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 import { chainAround, parse, pitched, splitBars } from "./song2-support";
@@ -28,7 +29,7 @@ V: Vocal
 ${body}`;
 }
 
-/** A score with one note in the first bar and a whole note in the second, the shared base of the hand cases. */
+/** A score with four quarter notes in the first bar and a whole note in the second, the shared base of the hand cases. */
 const SCORE = scoreOf("C4D4E4F4|G16|");
 
 function move(
@@ -51,32 +52,9 @@ function resize(
   return { type: "resizeNotes", noteIds, edge, timeTicks, grid: { value, dotted } };
 }
 
-/** The notes of one chain from its first segment, following the tie flags the way RULES.md P9 does. */
-function chainFrom(score: Score, voice: string, start: number): ScoreNote[] {
-  const notes = score.notes.filter((note) => note.voice === voice).sort((left, right) => left.start - right.start);
-  const first = notes.findIndex((note) => note.start === start);
-  if (first < 0) return [];
-  const chain = [notes[first] as ScoreNote];
-  let at = first;
-  while ((notes[at] as ScoreNote).tie) {
-    at += 1;
-    const next = notes[at];
-    if (next === undefined) break;
-    chain.push(next);
-  }
-  return chain;
-}
-
-function lengthOf(chain: ReadonlyArray<ScoreNote>): number {
-  const first = chain[0];
-  const last = chain[chain.length - 1];
-  return first === undefined || last === undefined ? 0 : last.start + last.duration - first.start;
-}
-
-const STEP: Record<number, number> = { 4: 256, 8: 128, 16: 64, 32: 32 };
-
-function gridStep(value: number, dotted: boolean): number {
-  return ((STEP[value] as number) * (dotted ? 3 : 2)) / 2;
+function gridStep(value: GridValue, dotted: boolean): number {
+  const base = (4 * TICKS_PER_QUARTER) / value;
+  return dotted ? (base * 3) / 2 : base;
 }
 
 function snap(tick: number, step: number): number {
@@ -127,12 +105,21 @@ describe("moveNotes on a hand-worked score", () => {
     });
   });
 
-  it("shortens a note whose end the placed note covers, and leaves a rest where its tail was", () => {
+  it("shortens a note the placed note starts inside, and leaves a rest where its tail was", () => {
     // C (0-256) moves to 384, inside D (256-768): D is cut at 384 and its tail becomes a rest.
     const text = scoreOf("C4D8F4|G4z12|");
     expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 384, 0, 8))).toEqual({
       ok: true,
       text: scoreOf("z4D2C4z2F4|G4z12|"),
+    });
+  });
+
+  it("shortens a note whose end the placed note really covers", () => {
+    // D (512-1024) moves to 256-768: C starts before the placed note and ends inside it, so C is cut at 256.
+    const text = scoreOf("C8D8|G16|");
+    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:512"], -256, 0, 8))).toEqual({
+      ok: true,
+      text: scoreOf("C4D8z4|G16|"),
     });
   });
 
@@ -150,6 +137,14 @@ describe("moveNotes on a hand-worked score", () => {
     expect(applyScoreCommand(song2Dialect, text, move(["Vocal:512"], 256, 1, 4))).toEqual({
       ok: true,
       text: scoreOf("z4^C12-|^C4z12|"),
+    });
+  });
+
+  it("acts on a three-piece tie chain when its middle segment is the note it names", () => {
+    const text = scoreOf("C4-C4-C4z4|G16|");
+    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:256"], 128, 1, 8))).toEqual({
+      ok: true,
+      text: scoreOf("z2^C12z2|G16|"),
     });
   });
 
@@ -307,6 +302,14 @@ describe("resizeNotes on a hand-worked score", () => {
     });
   });
 
+  it("resizes a three-piece tie chain when its middle segment is the note it names", () => {
+    const text = scoreOf("C4-C4-C4z4|G16|");
+    expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:256"], "end", -512, 4))).toEqual({
+      ok: true,
+      text: scoreOf("C4z8z4|G16|"),
+    });
+  });
+
   it("resizes several notes as one command, one note at a time in the voice", () => {
     expect(applyScoreCommand(song2Dialect, SCORE, resize(["Vocal:0", "Vocal:512"], "end", 128, 8))).toEqual({
       ok: true,
@@ -323,6 +326,20 @@ describe("resizeNotes on a hand-worked score", () => {
 });
 
 describe("the refusals of the note commands", () => {
+  it("locates a refusal at the middle segment the command names, not at the chain's first one", () => {
+    const text = scoreOf("C4-C4-C4z4|G16|");
+    const result = applyScoreCommand(song2Dialect, text, move(["Vocal:256"], 0, -100));
+    expect(result).toEqual({
+      ok: false,
+      diagnostic: {
+        code: "pitch-out-of-range",
+        params: { midi: -40 },
+        at: { voice: "Vocal", bar: 1, beat: 2, noteId: "Vocal:256" },
+      },
+    });
+    expectUnchanged(text, move(["Vocal:256"], 0, -100));
+  });
+
   it("refuses a pitch outside MIDI 0-127 and leaves the text as it was", () => {
     const text = scoreOf("C4D4E4F4|G16|");
     const result = applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 0, -100));
@@ -358,11 +375,51 @@ describe("the refusals of the note commands", () => {
     expectUnchanged(text, move(["Vocal:1024"], 256, 0, 4));
   });
 
-  it("refuses a length shorter than one grid step", () => {
+  it("refuses a length shorter than one grid step and names an undotted grid as undotted", () => {
     const text = scoreOf("C4D4E4F4|G16|");
     const result = applyScoreCommand(song2Dialect, text, resize(["Vocal:0"], "end", -256, 4));
-    expect(refusedCode(result)).toBe("note-too-short");
+    expect(result).toEqual({
+      ok: false,
+      diagnostic: {
+        code: "note-too-short",
+        params: { grid: "1/4", dotted: false },
+        at: { voice: "Vocal", bar: 1, beat: 1, noteId: "Vocal:0" },
+      },
+    });
     expectUnchanged(text, resize(["Vocal:0"], "end", -256, 4));
+  });
+
+  it("carries the dotted flag when a dotted grid makes a resize too short", () => {
+    const text = scoreOf("C4D4E4F4|G16|");
+    const result = applyScoreCommand(song2Dialect, text, resize(["Vocal:0"], "end", -192, 8, true));
+    expect(result).toEqual({
+      ok: false,
+      diagnostic: {
+        code: "note-too-short",
+        params: { grid: "1/8", dotted: true },
+        at: { voice: "Vocal", bar: 1, beat: 1, noteId: "Vocal:0" },
+      },
+    });
+  });
+
+  it("refuses with unit-unknown when a score does not state its written unit", () => {
+    const parsed = song2Dialect.parse(SCORE);
+    if (parsed.score === null) throw new Error("the test score does not read");
+    const { unitTicks, ...withoutUnit } = parsed.score;
+    expect(unitTicks).toBe(64);
+    const dialect = {
+      ...song2Dialect,
+      parse: (_text: string) => ({ score: { ...withoutUnit }, diagnostics: [] as const }),
+    };
+    const result = applyScoreCommand(dialect, SCORE, move(["Vocal:0"], 0, 0));
+    expect(result).toEqual({
+      ok: false,
+      diagnostic: {
+        code: "unit-unknown",
+        params: {},
+        at: { voice: "Vocal", bar: 1, beat: 1, noteId: "Vocal:0" },
+      },
+    });
   });
 
   it("refuses a grid the score's written unit cannot express", () => {
@@ -483,8 +540,10 @@ const REFUSALS = new Set([
 
 /** The coarsest offered grid the score's written unit can express, so the sweep uses a grid the score has. */
 function gridFor(score: Score): { value: GridValue; dotted: boolean } | null {
+  const unitTicks = score.unitTicks;
+  if (unitTicks === undefined) return null;
   for (const value of [16, 8, 4, 32] as GridValue[]) {
-    const units = (STEP[value] as number) / score.unitTicks;
+    const units = gridStep(value, false) / unitTicks;
     if (Number.isInteger(units) && song2Dialect.constraints.durations.includes(units)) return { value, dotted: false };
   }
   return null;
@@ -502,11 +561,15 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
   const last = chain[chain.length - 1] as ScoreNote;
   const duration = last.start + last.duration - first.start;
   const step = gridStep(
-    (command as { grid: { value: number; dotted?: boolean } }).grid.value,
+    (command as { grid: { value: GridValue; dotted?: boolean } }).grid.value,
     (command as { grid: { value: number; dotted?: boolean } }).grid.dotted === true,
   );
   const isMove = command.type === "moveNotes";
-  const start = isMove ? snap(first.start + command.timeTicks, step) : first.start;
+  const start = isMove
+    ? command.timeTicks === 0
+      ? first.start
+      : snap(first.start + command.timeTicks, step)
+    : first.start;
   let end = start + duration;
   let newStart = start;
   let newEnd = end;
@@ -567,9 +630,7 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
     if (run === null) continue;
     const [runVoice = "", barText = ""] = key.split(":");
     const first = Number(barText);
-    wholeRestRuns.push(
-      Array.from({ length: Number(run[1]) }, (_item, offset) => `${runVoice}:${first + offset}`),
-    );
+    wholeRestRuns.push(Array.from({ length: Number(run[1]) }, (_item, offset) => `${runVoice}:${first + offset}`));
   }
   for (const run of wholeRestRuns) {
     if (!run.some((key) => touchedBars.has(key))) continue;
@@ -608,18 +669,31 @@ function exercise(label: string, text: string, command: ScoreCommand, target: Sc
     }
   }
 
-  const reached = chainFrom(output, voice, newStart);
+  const noteAtStart = output.notes.find((note) => note.voice === voice && note.start === newStart);
+  const reached = noteAtStart === undefined ? [] : chainAround(output, noteAtStart.id);
   const reachedFirst = reached[0];
   expect(reachedFirst, `${label}: the target starts at ${newStart}`).toBeDefined();
   if (reachedFirst === undefined) return false;
   expect(reachedFirst.midi, `${label}: the target pitch`).toBe(
     target.midi === null ? null : target.midi + (isMove ? command.semitones : 0),
   );
-  expect(lengthOf(reached), `${label}: the target length`).toBe(newEnd - newStart);
+  const reachedLast = reached[reached.length - 1];
+  const reachedLength =
+    reachedFirst === undefined || reachedLast === undefined
+      ? 0
+      : reachedLast.start + reachedLast.duration - reachedFirst.start;
+  expect(reachedLength, `${label}: the target length`).toBe(newEnd - newStart);
   expect(newStart % step, `${label}: the start is on the grid`).toBe(0);
   if (command.type === "resizeNotes") {
-    const movedEdge = command.edge === "start" ? newStart : newStart + lengthOf(reached);
+    const movedEdge = command.edge === "start" ? newStart : newStart + reachedLength;
     expect(movedEdge % step, `${label}: the moved edge is on the grid`).toBe(0);
+    const fixedEdge = command.edge === "start" ? newStart + reachedLength : newStart;
+    expect(fixedEdge, `${label}: the other edge stays`).toBe(
+      command.edge === "start" ? last.start + last.duration : first.start,
+    );
+  } else if (command.type === "moveNotes") {
+    expect(reachedLength, `${label}: a move keeps the length`).toBe(duration);
+    if (command.timeTicks === 0) expect(newStart, `${label}: a pitch-only move keeps its start`).toBe(first.start);
   }
   return true;
 }
@@ -643,9 +717,9 @@ function exerciseAll(label: string, text: string, requireSuccess: boolean): void
   if (requireSuccess) expect(succeeded, `${label}: at least one target was moved or resized`).toBeGreaterThan(0);
 }
 
-describe("note commands on every sample", () => {
+describe("move and resize on every sample: untouched bars, one note a time, target reached", () => {
   for (const fact of facts) {
-    it(`${fact.file}`, () => {
+    it(`${fact.file}: the sweep holds every invariant`, () => {
       exerciseAll(fact.file, readFileSync(new URL(`samples/${fact.file}`, directory), "utf8"), true);
     });
   }
@@ -659,21 +733,17 @@ describe("note commands on every sample", () => {
       expect(note, `${fact.file}: a pitched note`).toBeDefined();
       expect(grid, `${fact.file}: an offered grid`).not.toBeNull();
       if (note === undefined || grid === null) return;
-      const result = applyScoreCommand(
-        song2Dialect,
-        text,
-        move([note.id], gridStep(grid.value, false), 1, grid.value),
-      );
+      const result = applyScoreCommand(song2Dialect, text, move([note.id], gridStep(grid.value, false), 1, grid.value));
       expect(result.ok, `${fact.file}: ${result.ok ? "" : result.diagnostic.code}`).toBe(true);
       if (result.ok) expect(song2Dialect.check(parse(result.text)), `${fact.file}: check`).toEqual([]);
     });
   }
 });
 
-describe("note commands on every accepted vector with notes", () => {
+describe("move and resize on every accepted vector with notes", () => {
   for (const vector of vectors) {
     if (vector.expect !== "accept" || vector.notes === undefined) continue;
-    it(`${vector.id}`, () => {
+    it(`${vector.id}: the sweep holds every invariant`, () => {
       exerciseAll(vector.id, vector.text, false);
     });
   }

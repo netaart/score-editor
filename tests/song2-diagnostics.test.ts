@@ -68,6 +68,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "note-too-short",
   "grid-not-allowed",
   "offset-not-integer",
+  "unit-unknown",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = [
