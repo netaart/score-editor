@@ -66,19 +66,6 @@ function sourceOf(score: Score): Song2Source {
   return source as Song2Source;
 }
 
-/**
- * RULES.md W16: a boundary cut in Vocal cannot stand before a required Ins block when Ins has no
- * measure at or after it. The writer states that cut in Ins at the first measure Ins lacks.
- */
-function withWritableCut(score: Score): Score {
-  const cut = score.truncation;
-  if (cut === null || cut.voice !== "Vocal" || cut.short || !score.voices.includes("Ins")) return score;
-  let end = 0;
-  for (const note of score.notes) if (note.voice === "Ins" && note.bar + 1 > end) end = note.bar + 1;
-  if (end >= cut.bar) return score;
-  return { ...score, truncation: { voice: "Ins", bar: end, short: false } };
-}
-
 export function sameContent(left: BarContent, right: BarContent): boolean {
   if (
     left.start !== right.start ||
@@ -414,23 +401,20 @@ function writeHeader(score: Score, source: Song2Source, lines: string[]): void {
 
 /** Writes a score: untouched bars keep their read bytes, changed bars are rewritten whole. */
 export function serializeSong2(score: Score): string {
-  const target = withWritableCut(score);
-  const source = sourceOf(target);
-  if (barGridNeedsWriting(target, source) || cutWasRepaired(target, source)) {
-    return target.truncation !== null
-      ? serializeTruncatedBarsSong2(target, source)
-      : serializeBarsSong2(target, source);
+  const source = sourceOf(score);
+  if (barGridNeedsWriting(score, source) || cutWasRepaired(score, source)) {
+    return score.truncation !== null ? serializeTruncatedBarsSong2(score, source) : serializeBarsSong2(score, source);
   }
   const lines = source.text.split("\n");
-  writeHeader(target, source, lines);
+  writeHeader(score, source, lines);
   const dropped = new Set<number>();
   for (const musicLine of source.musicLines) {
     const tail = musicLine.cutTail;
-    const last = lastNoteOf(target, musicLine.voice);
+    const last = lastNoteOf(score, musicLine.voice);
     // RULES.md X17 and C8: an X4 remainder is kept byte for byte while it still belongs; an unfinished chord string
     // goes with the last chord. An X5 remainder is kept only while the note before it still ties into it; once that
     // tie is gone it would read as a finished note.
-    const keepTail = keepsCutTail(target, tail, last?.tie ?? false);
+    const keepTail = keepsCutTail(score, tail, last?.tie ?? false);
     const dropTail = tail !== null && !keepTail;
     const oldLast = sourceLastNote(source, musicLine.voice);
     const tailText =
@@ -438,21 +422,16 @@ export function serializeSong2(score: Score): string {
       keepTail &&
       tail.kind === "x5" &&
       last !== undefined &&
-      (oldLast?.midi !== last.midi || !tailStillUnfinished(target, tail.raw, last))
-        ? x5TailText(target, last)
+      (oldLast?.midi !== last.midi || !tailStillUnfinished(score, tail.raw, last))
+        ? x5TailText(score, last)
         : (tail?.raw ?? "");
     const lastSegment = musicLine.segments.length - 1;
-    // W16 moved the cut out of this voice; its old partial line becomes a closed complete line.
-    const movedCut =
-      !musicLine.endsWithBarline &&
-      source.truncation?.voice === musicLine.voice &&
-      target.truncation?.voice !== musicLine.voice;
     let changed = false;
     const pieces = musicLine.segments.map((segment, index) => {
       const partial = !musicLine.endsWithBarline && index === lastSegment;
-      const forced = (dropTail && partial) || (movedCut && partial);
+      const forced = dropTail && partial;
       const keySetAt = (bar: Song2SourceBar): ReadonlySet<number> | undefined =>
-        partial && target.truncation?.voice === bar.voice && target.truncation.bar === bar.bar
+        partial && score.truncation?.voice === bar.voice && score.truncation.bar === bar.bar
           ? new Set(bar.inlineKeys.map((change) => change.at))
           : undefined;
       const trim = (content: BarContent, keys: ReadonlySet<number>): BarContent => ({
@@ -460,7 +439,7 @@ export function serializeSong2(score: Score): string {
         keyChanges: content.keyChanges.filter((change) => keys.has(change.at)),
       });
       const matches = (bar: Song2SourceBar): boolean => {
-        const model = barContentOf(target, bar.voice, bar.bar);
+        const model = barContentOf(score, bar.voice, bar.bar);
         const keys = keySetAt(bar);
         return keys === undefined
           ? sameContent(bar.content, model)
@@ -469,14 +448,12 @@ export function serializeSong2(score: Score): string {
       const unchanged = !forced && segment.bars.every(matches);
       if (unchanged) return segment.raw;
       changed = true;
-      const rendered = segment.bars
-        .map((bar) => writeBar(target, bar, source.unitDenominator, keySetAt(bar)))
-        .join("|");
+      const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator, keySetAt(bar))).join("|");
       // A rewritten partial measure keeps its finished tokens and its cut remainder at their end.
       return partial && keepTail && tail !== null ? `${rendered}${tailText}` : rendered;
     });
     if (!changed) continue;
-    const rendered = `${pieces.join("|")}${musicLine.endsWithBarline || movedCut ? "|" : ""}`;
+    const rendered = `${pieces.join("|")}${musicLine.endsWithBarline ? "|" : ""}`;
     if (!musicLine.endsWithBarline && rendered === "") {
       dropped.add(musicLine.line);
       continue;
@@ -522,10 +499,9 @@ function writeMismatch(field?: string): Diagnostic {
 
 /** RULES.md writing check: write, read back, and compare every field of the model except its private source. */
 export function checkSong2(score: Score): ReadonlyArray<Diagnostic> {
-  const target = withWritableCut(score);
   let written: string;
   try {
-    written = serializeSong2(target);
+    written = serializeSong2(score);
   } catch {
     return [writeMismatch()];
   }
@@ -533,7 +509,7 @@ export function checkSong2(score: Score): ReadonlyArray<Diagnostic> {
   if (read.diagnostics.length > 0) return read.diagnostics;
   const reread = read.score;
   if (reread === null) return [writeMismatch()];
-  const field = firstDifferentField(target, reread);
+  const field = firstDifferentField(score, reread);
   if (field !== null) return [writeMismatch(field)];
   return [];
 }
