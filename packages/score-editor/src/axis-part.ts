@@ -1,4 +1,4 @@
-// ABOUTME: The shared body of the three view parts that draw on the time axis: the ruler, the chord track and a voice track.
+// ABOUTME: The shared body of the view parts that draw on the time axis: the ruler, the chord, voice and lyric tracks.
 // ABOUTME: It owns the part's root, redraws when the reading or the language changes, and leaves zoom and scroll to the axis controller.
 
 import { barLabelStep, type GridRun, gridTicks, MIN_BAR_LINE_PIXELS, MIN_BEAT_LINE_PIXELS } from "./arrangement";
@@ -33,7 +33,7 @@ export interface BuiltAxis {
 
 export interface AxisSpec {
   /** The part's name: its root's class suffix. */
-  readonly kind: "time-ruler" | "chord-track" | "voice-track";
+  readonly kind: "time-ruler" | "chord-track" | "voice-track" | "lyric-track";
   /** The public function that mounts it, named in the error where there is no DOM. */
   readonly who: string;
   /** What the part is called where it is its own focusable scroll surface. */

@@ -60,7 +60,7 @@ export interface LyricBoundaryPlan {
 }
 
 /** The start of the bar line `index`, the one after the last bar being the end of the score. */
-function barLineTick(score: Score, index: number): number {
+export function barLineTick(score: Score, index: number): number {
   const bar = score.bars[index];
   if (bar !== undefined) return bar.start;
   const last = score.bars[score.bars.length - 1];
