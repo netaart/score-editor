@@ -1299,6 +1299,9 @@ test.describe("editing in the default editor", () => {
   }) => {
     await harness.mount({ score: { text: vocalOnly("C16-|B") } });
     await press(noteNamed(page, /^C4,/));
+    // The chord track's keyboard cursor is the stop between the scroller and the notes.
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("button", { name: /^Chord place, / })).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(page.getByRole("region", { name: "Arrangement" })).toBeFocused();
 
@@ -1363,6 +1366,9 @@ test.describe("keyboard focus in a short editor", () => {
     await page.setViewportSize({ width: 600, height: 360 });
     await harness.mount({ score: { text: vocalOnly("c'4b4C,4z4|") } });
     await page.getByRole("region", { name: "Arrangement" }).focus();
+    // The chord track comes first in the Tab order, and has the one stop of its keyboard cursor.
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: /^Chord place, / })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("listitem", { name: /^C6, bar 1 beat 1/ })).toBeFocused();
 
