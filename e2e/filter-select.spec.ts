@@ -252,3 +252,90 @@ test.describe("the count condition", () => {
     expect(await harness.layout.selection()).toEqual([ID.E4, ID.A4, ID.E5]);
   });
 });
+
+const reapply = (page: Page) => panel(page).getByRole("button", { name: "Re-apply", exact: true });
+const STALE = "The score or the selection has changed since. Re-apply to select again.";
+
+test.describe("invert", () => {
+  test("selects the notes that do not match, a rest being no note, and unchecking it goes back", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    await pitchLowest(page).selectOption({ label: "E4" });
+    await pitchHighest(page).selectOption({ label: "A4" });
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4, ID.G4, ID.A4]);
+
+    await press(check(page, "Invert"));
+    // The other five notes, the tied D5 with both its parts, and not the rests.
+    expect(await harness.layout.selection()).toEqual([ID.C4, ID.D4, ID.C5, ID.D5, ID.D5tail, ID.E5]);
+    await expect(status(page)).toHaveText("5 of 9 notes selected");
+
+    await press(check(page, "Invert"));
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4, ID.G4, ID.A4]);
+    await expect(status(page)).toHaveText("4 of 9 notes selected");
+  });
+
+  test("alone selects nothing, and after conditions that take nothing selects every note", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+
+    await press(check(page, "Invert"));
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(status(page)).toHaveText("Pick a condition to select notes.");
+
+    // A lowest pitch above the highest one matches no note; inverted, every note is chosen.
+    await pitchLowest(page).selectOption({ label: "A4" });
+    await pitchHighest(page).selectOption({ label: "C4" });
+    expect(await harness.layout.selection()).toEqual(EVERY_NOTE);
+    await expect(status(page)).toHaveText("9 of 9 notes selected");
+  });
+});
+
+test.describe("re-apply", () => {
+  test("selects again from the conditions after the selection was changed by hand or the score was edited, as no step of the history", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    await pitchLowest(page).selectOption({ label: "E4" });
+    await pitchHighest(page).selectOption({ label: "A4" });
+    await expect(status(page)).toHaveText("4 of 9 notes selected");
+
+    await harness.layout.select([ID.C4]);
+    await expect(status(page)).toHaveText(STALE);
+    await press(reapply(page));
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.F4, ID.G4, ID.A4]);
+    await expect(status(page)).toHaveText("4 of 9 notes selected");
+
+    // F4 becomes a rest: the panel says its selection is out of date, and selecting again leaves it out.
+    await harness.layout.dispatch({ type: "toRest", noteId: ID.F4 });
+    await expect(status(page)).toHaveText(STALE);
+    await press(reapply(page));
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.G4, ID.A4]);
+    await expect(status(page)).toHaveText("3 of 8 notes selected");
+
+    // The one step of the history is the edit; selecting, inverting and selecting again added none.
+    await press(check(page, "Invert"));
+    await press(reapply(page));
+    await harness.layout.undo();
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("with no condition on selects nothing and says to pick one", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    await harness.layout.select([ID.C4, ID.D4]);
+    await press(reapply(page));
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(status(page)).toHaveText("Pick a condition to select notes.");
+  });
+});

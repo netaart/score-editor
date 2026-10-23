@@ -73,10 +73,12 @@ export const filterCss = `
   width: 4.5em;
 }
 .sce-root .sce-filter-invert {
-  display: block;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 8px;
 }
-.sce-root .sce-filter-hint {
-  display: block;
+.sce-root .sce-filter-invert .sce-filter-hint {
+  grid-column: 2;
   color: var(--sce-_muted);
 }
 .sce-root .sce-filter-status {

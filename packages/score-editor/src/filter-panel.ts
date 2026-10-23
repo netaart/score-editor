@@ -32,6 +32,8 @@ interface Conditions {
   length: { on: boolean; min: number | null; max: number | null };
   key: { on: boolean; mode: "in" | "out" };
   count: { on: boolean; every: number | null; skip: number | null };
+  /** Whether to select the notes the conditions do not pick. */
+  invert: boolean;
 }
 
 function gcd(a: number, b: number): number {
@@ -159,9 +161,21 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   const countSkip = number(count.fields, (t) => t.countSkip);
   word(count.fields, (t) => t.countSkipAfter);
 
+  const invertLabel = create(doc, "label", "sce-filter-check sce-filter-invert", rows);
+  const invert = create(doc, "input", "", invertLabel);
+  invert.type = "checkbox";
+  const invertName = create(doc, "span", "sce-filter-name", invertLabel);
+  const invertHint = create(doc, "span", "sce-filter-hint", invertLabel);
+  texts.push((t) => {
+    invertName.textContent = t.invert;
+    invertHint.textContent = t.invertHint;
+  });
+
   const status = create(doc, "div", "sce-filter-status", panel);
   status.setAttribute("role", "status");
   const actions = create(doc, "div", "sce-filter-actions", panel);
+  const reapply = create(doc, "button", "sce-button", actions);
+  reapply.type = "button";
   const done = create(doc, "button", "sce-button", actions);
   done.type = "button";
 
@@ -171,6 +185,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     length: { on: false, min: null, max: null },
     key: { on: false, mode: "in" },
     count: { on: false, every: 2, skip: 0 },
+    invert: false,
   };
   /** The reading the open panel was last filled from. */
   let rendered: ScoreReading | null = null;
@@ -184,6 +199,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     button.title = t.buttonTip;
     panel.setAttribute("aria-label", t.panel);
     title.textContent = t.panel;
+    reapply.textContent = t.reapply;
     done.textContent = t.done;
     for (const apply of texts) apply(t);
     const { reading } = session;
@@ -275,6 +291,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     countEvery.value = conditions.count.every === null ? "" : String(conditions.count.every);
     countSkip.value = conditions.count.skip === null ? "" : String(conditions.count.skip);
     count.check.checked = conditions.count.on;
+    invert.checked = conditions.invert;
   }
 
   /** Takes what the person set in a field of the panel into the conditions. */
@@ -293,6 +310,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     conditions.count.on = count.check.checked;
     conditions.count.every = countEvery.value === "" ? null : countEvery.valueAsNumber;
     conditions.count.skip = countSkip.value === "" ? null : countSkip.valueAsNumber;
+    conditions.invert = invert.checked;
   }
 
   function currentFilter(score: Score): { filter: NoteFilter; count: number } {
@@ -302,6 +320,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       duration?: { min: number; max: number };
       key?: "in" | "out";
       count?: { every: number; skip: number };
+      invert?: boolean;
     } = {};
     let conditionsOn = 0;
     const { pitch: p } = conditions;
@@ -327,6 +346,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       filter.count = { every: conditions.count.every, skip: conditions.count.skip };
       conditionsOn += 1;
     }
+    if (conditions.invert) filter.invert = true;
     return { filter, count: conditionsOn };
   }
 
@@ -384,6 +404,14 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       const check = row?.querySelector<HTMLInputElement>(".sce-filter-check input");
       // Changing a field of a condition turns the condition on; the checkbox itself turns it on or off.
       if (check && target !== check) check.checked = true;
+      read();
+      apply();
+    },
+    { signal },
+  );
+  reapply.addEventListener(
+    "click",
+    () => {
       read();
       apply();
     },
