@@ -269,3 +269,37 @@ noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once
   nothing plays. `PreviewStart` is the string union `start()` resolves.
 - `previewPlayer(session)` touches no audio until `start()`. Destroying the last control that holds the player stops it.
 - The headless half, `schedulePreview`, is in [headless-layer.md](headless-layer.md#the-preview-schedule).
+
+## The section menu
+
+While the session is editable, each section band of the time ruler opens a menu: Rename (the unnamed music before the
+first marker says "Name this section"), Start a section at a bar, Move earlier, Move later, Duplicate and Delete. Each
+choice is one command, so it is one undo step, and a screen reader hears what was done. A choice the commands would
+refuse stays in the menu, muted, with the refusal's words under it. The two choices that need a name open a small form
+under the band; a name the commands refuse stays in the form with the refusal under it, and the refusal also goes to
+`onRefused`. A read-only session draws the bands and no menu.
+
+The bands are not tab stops, because the Tab key walks from the Arrangement region straight to the notes. With the
+focus on the ruler's region (in the default editor, the Arrangement region), Shift and F10 or the Menu key opens the
+menu of the section at the insertion point, or of the first section when there is none. A band that has the focus
+(clicked, or given back when a menu closes) is walked with Left, Right, Home and End, and opened with Enter or Space.
+
+`sectionActions(session, section)` is the same answer for a control of your own: the six actions of one section, as
+`SectionAction`s named by `SectionActionName` in the menu's order, each with the command that does it and `unavailable`, a
+`SectionUnavailable` or `null` while it can be done. `rename` and
+`start` carry no command, because they need a name (and `start` a bar) first; send `renameSection` or `nameSection`
+with it. It asks the commands without applying them, so the project, the history and the listeners are untouched.
+
+```ts
+import { formatDiagnostic, sectionActions } from "@neta-art/score-editor";
+
+for (const action of sectionActions(session, 1) ?? []) {
+  if (action.unavailable === null) {
+    if (action.command !== null) button(action.name).onclick = () => session.dispatch(action.command);
+  } else if (action.unavailable.kind === "refused") {
+    mute(action.name, formatDiagnostic(action.unavailable.diagnostic, session.view.language));
+  } else {
+    mute(action.name, "This section has no second bar."); // kind: "single-bar"
+  }
+}
+```

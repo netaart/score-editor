@@ -50,6 +50,7 @@ change. The tests in the repository check that the list stays complete.
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
+| `sectionActions` | core | What one section offers a menu: rename, start a section at a bar, move earlier, move later, duplicate and delete, each with its command and, when the command layer would refuse it, the refusal. Asks without changing the session. |
 
 ## Constants and values
 
@@ -183,3 +184,11 @@ change. The tests in the repository check that the list stays complete.
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
 | `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
 | `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
+
+## Section menu types
+
+| Export | What it is |
+| --- | --- |
+| `SectionAction` | `{ name, command, unavailable }`: one action of a section, the command that does it (`null` for rename and start, which need a name first) and why it cannot be done now. |
+| `SectionActionName` | `"rename" | "start" | "move-earlier" | "move-later" | "duplicate" | "delete"`, in the order a menu lists them. |
+| `SectionUnavailable` | `{ kind: "refused", diagnostic }` with the command layer's own refusal, or `{ kind: "single-bar" }` for a section with no second bar to start another at. |
