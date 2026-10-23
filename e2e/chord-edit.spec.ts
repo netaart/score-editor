@@ -10,6 +10,7 @@ interface OpenOptions {
   dialect?: "song2" | "narrow" | "refusing";
   hostLayer?: boolean;
   width?: number;
+  top?: number;
   parts?: string[];
 }
 
@@ -755,5 +756,38 @@ test.describe("in Chinese", () => {
       "已在第 1 小节第 2 拍放上和弦 Am",
     );
     await expect(page.getByRole("button", { name: /^和弦位置，第 1 小节第 2 拍，Am$/ })).toBeVisible();
+  });
+});
+
+test.describe("a picker above the row", () => {
+  test("when there is no room below the chord row the picker stands above it, and opening the bass note does not clip its buttons", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    const size = page.viewportSize();
+    await page.setViewportSize({ width: size?.width ?? 1280, height: 1000 });
+    // The chord row is low in the window: the picker has more room above it than below.
+    await chords.openParts({ score: { text: QUARTERS }, top: 200 });
+    await pressAtTick(page, press, 0);
+    const open = picker(page, "Chord at bar 1 beat 1");
+    await expect(open).toBeVisible();
+    const row = await box(timeline(page));
+    const before = await box(open);
+    expect(before.y + before.height).toBeLessThanOrEqual(row.y + 1);
+
+    await press(open.getByRole("button", { name: /^Bass note/ }));
+    await open
+      .getByRole("radiogroup", { name: "Bass note", exact: true })
+      .getByRole("radio", { name: "G", exact: true })
+      .click();
+
+    const after = await box(open);
+    expect(after.y + after.height).toBeLessThanOrEqual(row.y + 1);
+    expect(after.y).toBeGreaterThanOrEqual(0);
+    const clipped = await open.evaluate((el) => el.scrollHeight - el.clientHeight);
+    expect(clipped).toBeLessThanOrEqual(1);
+    await press(open.getByRole("button", { name: "Place", exact: true }));
+    expect(await chords.scoreText()).toBe(twoVoices('"C/G"C4D4E4F4|G16|', "C16|C16|"));
   });
 });

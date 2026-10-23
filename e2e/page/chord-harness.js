@@ -67,7 +67,7 @@ function registry(variant) {
  * stacking context of its own, at the highest z-index, with a second layer over it (a host's toast or dialog) that covers
  * the whole window. Only a popover in the top layer can be seen and pressed through both.
  */
-function stage({ hostLayer, width }) {
+function stage({ hostLayer, width, top }) {
   host = document.createElement("div");
   host.id = "chord-host";
   if (hostLayer) {
@@ -82,16 +82,18 @@ function stage({ hostLayer, width }) {
   }
   const box = document.createElement("div");
   box.id = "chord-stage";
-  box.style.cssText = hostLayer ? "height:100%;" : `width:${width ?? 700}px;max-width:100%;margin:12px;`;
+  box.style.cssText = hostLayer
+    ? "height:100%;"
+    : `width:${width ?? 700}px;max-width:100%;margin:${top ?? 12}px 12px 12px;`;
   host.append(box);
   return box;
 }
 
-function open({ score, language = "en", editable = true, dialect, hostLayer = false, width }, build) {
+function open({ score, language = "en", editable = true, dialect, hostLayer = false, width, top }, build) {
   if (host) throw new Error("a chord page is already open");
   notices.length = 0;
   return scoreText(score).then((text) => {
-    const box = stage({ hostLayer, width });
+    const box = stage({ hostLayer, width, top });
     build(box, { project: { ...BLANK, score: text }, dialects: registry(dialect), language, editable });
   });
 }
