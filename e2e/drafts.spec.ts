@@ -707,3 +707,144 @@ test.describe("when nothing may be written", () => {
     await expect(page.getByRole("button", { name: "Restore original" })).toHaveCount(0);
   });
 });
+
+test.describe("update and destroy with drafts", () => {
+  /** A second song's score: the same as QUARTERS but for the last note. */
+  const OTHER = QUARTERS.replace("G16|", "A16|");
+  const a4 = (page: Page) => page.getByRole("listitem", { name: /^A4,/ });
+
+  test("a new score for the same key is a new original: the old draft is discarded and told, and nothing is saved for the new one", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    const [write] = await store.callsOf("write");
+
+    await harness.update({ score: { text: OTHER } });
+
+    await expect(a4(page)).toBeVisible();
+    await expect(noteNamed(page, D4)).toBeVisible();
+    await expect.poll(async () => (await store.callsOf("remove")).length).toBe(1);
+    expect((await store.callsOf("remove"))[0]).toMatchObject({ key: "test-page", expected: write?.result });
+    expect((await harness.notices()).map((notice) => notice.code)).toEqual(["draft-source-changed"]);
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toHaveLength(1);
+  });
+
+  test("a new song under another key saves what was pending for the old one, and opens the new one on its own key", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+
+    await harness.update({ project: { sourceKey: "other-song" }, score: { text: OTHER } });
+
+    await expect(a4(page)).toBeVisible();
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    const [write] = await store.callsOf("write");
+    expect(write?.key).toBe("test-page");
+    expect(write?.expected).toBeNull();
+    expect(draftOf(write).sourceHash).toBe(hashOf("", QUARTERS));
+    expect(draftOf(write).project.score).toBe(WITHOUT_D);
+    // The new keeper reads its own key, then looks through the listed drafts for one to inherit: the old song's draft, just written, is one of them and is not inherited.
+    await expect
+      .poll(async () => (await store.callsOf("read")).map((call) => call.key))
+      .toEqual(["test-page", "other-song", "test-page"]);
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toHaveLength(1);
+    expect(await harness.notices()).toEqual([]);
+  });
+
+  test("passing the same original again does not take the user's edits away or remove their draft", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+
+    await harness.update({ score: { text: QUARTERS } });
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    expect(await store.callsOf("remove")).toEqual([]);
+    expect(await store.fileOf("test-page")).not.toBeNull();
+  });
+
+  test("taking the store away saves what was pending, and nothing is saved afterwards", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+
+    await harness.update({ drafts: false });
+
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    await expect(page.getByRole("button", { name: "Restore original" })).toHaveCount(0);
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toHaveLength(1);
+    await expect(noteNamed(page, E4)).toHaveCount(0);
+  });
+
+  test("giving a store to an editor that had none opens the draft and saves from then on", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await store.seed("test-page", storedDraft({ source: { lyrics: "", score: QUARTERS }, score: WITHOUT_D }));
+    await page.clock.install();
+    await harness.mount({ score: { text: QUARTERS } });
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    expect(await store.calls()).toEqual([]);
+
+    await harness.update({ drafts: true });
+
+    await expect(page.getByRole("button", { name: "Restore original" })).toBeVisible();
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    expect((await store.callsOf("read")).map((call) => call.key)).toEqual(["test-page"]);
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+  });
+
+  test("destroying the editor saves what was pending, once, and the store is not called again", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+
+    await harness.destroy();
+
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    expect(draftOf((await store.callsOf("write"))[0]).project.score).toBe(WITHOUT_D);
+    const calls = (await store.calls()).length;
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect((await store.calls()).length).toBe(calls);
+  });
+});

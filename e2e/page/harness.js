@@ -34,7 +34,11 @@ let vectors = null;
 const notices = [];
 /** The host's draft store: what `drafts: true` in the options of `mount` and `update` stands for. */
 const drafts = createFakeDraftStore();
-const withDrafts = (options) => (options.drafts === true ? { ...options, drafts } : options);
+const withDrafts = (options) => {
+  if (options.drafts === true) return { ...options, drafts };
+  if (options.drafts === false) return { ...options, drafts: undefined };
+  return options;
+};
 
 /**
  * The score text a test asks for: `{ sample }` is a file of the dialect's samples, `{ vector }` the text of a
