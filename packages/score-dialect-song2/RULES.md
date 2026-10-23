@@ -364,6 +364,12 @@ A writer that implements these rules MUST produce text that reads back to the sa
 
 **W14 — complete scores only.** A writer that produces a new score MUST write a complete score with every block and closing barline; it MUST NOT emit a cut tail. A writer that edits a cut score keeps its cut: an unchanged cut tail is emitted byte for byte (X17); bars before it MAY be rewritten under W2–W13; a rewritten partial measure keeps its finished tokens and its X4 remainder, and keeps an X5 remainder only while the tie into it is unchanged. An edit after which the text would read with a different cut, or with none, is not writable.
 
+**W16 — a cut that cannot stay in its voice.** A cut at a measure boundary in `Vocal` cannot stand before a required `Ins` block when `Ins` has no measure at or after that boundary. The writer states the cut in `Ins` at the first measure `Ins` lacks; the finished `Vocal` measures before it keep their place.
+
+**W17 — a short final `Ins` block.** In the final group, the partial `Ins` measure and every later `Vocal` measure stay in one group: the `Vocal` block comes first, then the short `Ins` block that ends the text (X9). A short `Ins` block before any later group would be a `bar-count` error (V2).
+
+**W18 — an X5 tail whose tie moved.** When an edit changes the pitch of the note an X5 tail continues, the writer rewrites the tail's note so its computed pitch still differs from the tied note (P14). Keeping the old bytes would turn the tail into a finished continuation.
+
 **W15 — the two cut repairs end the cut.** A command that repairs a cut is not an ordinary edit under W14. `fill` pads every voice that stops before the score's last measure with rests, through that measure, so the text reads complete. `delete` removes the incomplete measure in every voice that has one, with its unfinished bytes, and removes the measure itself when no voice keeps material in it; it refuses when another voice still uses the measure. Both leave a complete score with no cut. Every rest is written in D1 values, splitting a longer length into consecutive rests.
 
 ## Reading diagnostic codes
