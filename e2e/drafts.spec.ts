@@ -120,7 +120,7 @@ function storedDraft(options: {
 }
 
 /** The draft a write carried, read back from its JSON text. */
-function draftOf(call: StoreCall | undefined) {
+function draftOf(call: { text?: string | undefined } | undefined) {
   if (call?.text === undefined) throw new Error("the call carries no text");
   return JSON.parse(call.text) as {
     version: number;
@@ -422,7 +422,7 @@ test.describe("a draft that another window changed first", () => {
     expect(write?.expected).toBe(theirs);
     expect(write?.result).toMatch(/^v\d+$/);
     expect(draftOf(write).project.score).toBe(OURS);
-    expect(draftOf({ method: "write", text: (await store.fileOf("test-page"))?.text }).project.score).toBe(OURS);
+    expect(draftOf({ text: (await store.fileOf("test-page"))?.text }).project.score).toBe(OURS);
     await expect(noteNamed(page, D4)).toHaveCount(0);
     await expect(noteNamed(page, F4)).toHaveCount(0);
     expect(await harness.notices()).toEqual([]);
