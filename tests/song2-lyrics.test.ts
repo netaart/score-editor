@@ -244,7 +244,8 @@ describe("note onsets and alignment", () => {
 
 describe("the legacy layout", () => {
   it("puts one line per bar into the matching section and the rest in the unaligned area", () => {
-    const lines = layoutLyrics(parse(SCORE), "[Verse]\nv1\nv2\nv3\nv4\nv5\n[Chorus]\nc1\n[Missing]\nm1\nm2");
+    const score = parse(SCORE);
+    const lines = layoutLyrics(score, "[Verse]\nv1\nv2\nv3\nv4\nv5\n[Chorus]\nc1\n[Missing]\nm1\nm2");
 
     expect(lines.slice(0, 5)).toEqual([
       { text: "v1", phrase: { firstBar: 2, barCount: 1 } },
@@ -253,7 +254,7 @@ describe("the legacy layout", () => {
       { text: "v4", phrase: { firstBar: 5, barCount: 1 } },
       { text: "c1", phrase: { firstBar: 6, barCount: 1 } },
     ]);
-    expect(unalignedLyricLines(lines).map((line) => line.text)).toEqual(["v5", "m1", "m2"]);
+    expect(unalignedLyricLines(lines, score).map((line) => line.text)).toEqual(["v5", "m1", "m2"]);
     expect(lines.filter((line) => line.phrase?.firstBar === 0 || line.phrase?.firstBar === 1)).toEqual([]);
   });
 
@@ -323,8 +324,8 @@ describe("joining the lyrics text", () => {
       { text: "loose", phrase: null },
     ];
     expect(joinLyrics(score, lines)).toBe("[Intro]\n[Verse]\n[Chorus]\nchorus");
-    expect(alignedLyricLines(lines).map((line) => line.text)).toEqual(["chorus"]);
-    expect(unalignedLyricLines(lines).map((line) => line.text)).toEqual(["loose"]);
+    expect(alignedLyricLines(lines, score).map((line) => line.text)).toEqual(["chorus"]);
+    expect(unalignedLyricLines(lines, score).map((line) => line.text)).toEqual(["loose"]);
   });
 
   it("counts characters as Unicode code points, line breaks included", () => {
@@ -671,7 +672,7 @@ describe("stored lines on every sample", () => {
   const facts = JSON.parse(readFileSync(new URL("samples.json", directory), "utf8")) as Array<{ file: string }>;
 
   function validLines(score: Score, lines: ReadonlyArray<LyricLine>): void {
-    for (const line of alignedLyricLines(lines)) {
+    for (const line of alignedLyricLines(lines, score)) {
       const phrase = line.phrase as LyricLine["phrase"];
       if (phrase === null) continue;
       expect(phrase.barCount, line.text).toBeGreaterThan(0);

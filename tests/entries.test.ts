@@ -36,6 +36,7 @@ describe("package entries in a node environment", () => {
       "contentHash",
       "draftText",
       "readDraft",
+      "applyCommandList",
       // What 0.1.0 exported.
       "mount",
       "applyProjectCommand",

@@ -23,12 +23,13 @@ change. The tests in the repository check that the list stays complete.
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
 | `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
 | `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
+| `applyCommandList` | core | Applies a list of score and project commands as one unit; returns `CommandListResult`, all applied or the untouched project. |
 | `checkProject` | core | Reports the song-project notices of a project as it stands, without changing it. |
 | `lyricLinesOf` | core | The stored lyric lines, or the layout computed from a legacy `lyrics` text. |
 | `layoutLyrics` | core | Lays a legacy `lyrics` text onto a score, one line per bar, with the unaligned area. |
 | `joinLyrics` | core | Writes the joined `lyrics` text from a score and its lyric lines; unaligned lines are left out. |
-| `alignedLyricLines` | core | The lines bound to a phrase. |
-| `unalignedLyricLines` | core | The lines in the unaligned area. |
+| `alignedLyricLines` | core | The lines bound to a phrase that fits the score; pass the score to leave a stale phrase out. |
+| `unalignedLyricLines` | core | The lines in the unaligned area: no phrase, or one that no longer fits the score. |
 | `lyricSyllables` | core | Splits a lyrics text into the syllable units the count uses. |
 | `syllableCount` | core | Counts syllables: Han and kana one each, Latin by vowel groups, `-` by hand. |
 | `noteOnsets` | core | The `Vocal` notes in a phrase that are not rests or tie continuations. |
@@ -86,7 +87,8 @@ change. The tests in the repository check that the list stays complete.
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
 | `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
 | `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. |
-| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`); each command is listed in the package README. |
+| `CommandListResult` | `{ ok, project, diagnostics }` from `applyCommandList`: the applied project, or the untouched one with the refusal. |
+| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`); each command is listed in the package README. |
 
 ## Score model types
 

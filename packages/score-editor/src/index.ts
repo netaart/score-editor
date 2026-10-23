@@ -100,6 +100,7 @@ export { mountTimeRuler } from "./time-ruler";
 export type {
   BooleanToolParameter,
   ChoiceToolParameter,
+  CommandListResult,
   NumberToolParameter,
   ScoreTool,
   TextToolParameter,
@@ -112,7 +113,7 @@ export type {
   ToolResult,
   ToolText,
 } from "./tool";
-export { createToolRegistry, previewTool, validateToolParameters } from "./tool";
+export { applyCommandList, createToolRegistry, previewTool, validateToolParameters } from "./tool";
 export type { ToolbarOptions } from "./toolbar";
 export { mountToolbar } from "./toolbar";
 export type {

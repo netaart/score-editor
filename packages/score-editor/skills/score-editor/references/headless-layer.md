@@ -72,6 +72,10 @@ command runs on the model (`Score`), then the dialect writes it and runs `check`
   returns the diagnostic and no new text. It refuses a `ProjectCommand`.
 - `applyProjectCommand(dialect, project, command)` returns `ApplyProjectResult`: `{ project, diagnostics }`. It takes
   either union; only the score text or the project's own fields can change, and nothing changes on a refusal.
+- `applyCommandList(dialect, project, commands)` returns a `CommandListResult`: `{ ok, project, diagnostics }`. It
+  applies the commands in order through the same path; a notice does not stop the list, but any other diagnostic
+  refuses all of it and returns the project it started from. A shared lyric boundary moves as two
+  `setLyricLinePhrase` commands in one list.
 
 `applyProjectCommand` also runs the song-project rules and can return a notice with the changed project. `checkProject`
 reports those notices for a project as it stands, `isNoticeDiagnostic` tells a notice from a refusal, and
@@ -122,7 +126,10 @@ whether the written text reads back as the same model.
 The call surface is `lyricLinesOf(project, score)` (the stored lines, or the legacy layout from `layoutLyrics`),
 `joinLyrics(score, lines)`, `alignedLyricLines` and `unalignedLyricLines`, `lyricSyllables` and `syllableCount`,
 `noteOnsets`, `alignLyricLine` (`LyricAlignment`, `LyricSyllableNote`), `lyricCharacterCount` and
-`LYRICS_MAX_CHARACTERS`. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`.
+`LYRICS_MAX_CHARACTERS`. `checkProject` reports `lyrics-unaligned` and `lyrics-too-long`. The lyric-line commands
+are `ProjectCommand`s: `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`,
+`mergeLyricLines` and `setLyricLinePhrase`; `applyCommandList` applies several of them as one step. Pass the score to
+`alignedLyricLines` or `unalignedLyricLines` to treat a phrase that no longer fits as unaligned.
 
 The rules — what a label matches, where unaligned lines go, what counts as a syllable, how a command carries the
 lines and when `lyrics` is rewritten — are the contract in the package README's

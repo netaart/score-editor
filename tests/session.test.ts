@@ -1050,3 +1050,86 @@ describe("text a view could not hand over", () => {
     expect(session.rejectedText).toBeNull();
   });
 });
+
+describe("lyric-line commands in a session", () => {
+  const LYRIC_SCORE = `${HEADER}
+K:C
+V: Vocal
+C16|D16|`;
+  const lyricProject: SongProject = {
+    ...project,
+    score: LYRIC_SCORE,
+    lyrics: "ab",
+    lyricLines: [
+      { text: "ab", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "loose", phrase: null },
+    ],
+  };
+
+  function openLyric(): EditingSession {
+    return createEditingSession({ project: lyricProject, dialects });
+  }
+
+  it("makes each lyric command one history step, and one undo brings the whole project back", () => {
+    const cases: ReadonlyArray<[string, Parameters<EditingSession["dispatch"]>[0], number]> = [
+      ["set text", { type: "setLyricLineText", line: 0, text: "cd" }, 1],
+      ["insert", { type: "insertLyricLine", line: 0, text: "new", phrase: null }, 1],
+      ["delete", { type: "deleteLyricLine", line: 1 }, 0],
+      ["split", { type: "splitLyricLine", line: 0, offset: 1, bar: 1 }, 1],
+      ["merge", { type: "mergeLyricLines", line: 0 }, 0],
+      ["set phrase", { type: "setLyricLinePhrase", line: 0, phrase: { firstBar: 0, barCount: 1 } }, 1],
+    ];
+
+    for (const [label, command, noticeCount] of cases) {
+      const session = openLyric();
+      const before = session.project;
+      const result = session.dispatch(command);
+
+      expect(result.ok, label).toBe(true);
+      expect(result.diagnostics, label).toHaveLength(noticeCount);
+      expect(session.canUndo, label).toBe(true);
+      expect(session.undo(), label).toBe(true);
+      expect(session.project, label).toEqual(before);
+      expect(session.canUndo, label).toBe(false);
+    }
+  });
+});
+
+describe("a stored lyric phrase that no longer fits after the score text is replaced", () => {
+  const THREE_BARS = `${HEADER}
+K:C
+V: Vocal
+C16|D16|E16|`;
+  const ONE_BAR = `${HEADER}
+K:C
+V: Vocal
+C16|`;
+  const lines = [
+    { text: "one", phrase: { firstBar: 0, barCount: 1 } },
+    { text: "two", phrase: { firstBar: 1, barCount: 1 } },
+    { text: "three", phrase: { firstBar: 2, barCount: 1 } },
+  ];
+
+  it("keeps the lines and reports the notice, and the next command touching a line turns it unaligned", () => {
+    const session = createEditingSession({
+      project: { ...project, score: THREE_BARS, lyrics: "one\ntwo\nthree", lyricLines: lines },
+      dialects,
+    });
+
+    const replaced = session.dispatch({ type: "replaceScoreText", text: ONE_BAR });
+    expect(replaced.ok).toBe(true);
+    expect(replaced.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.params])).toEqual([
+      ["lyrics-unaligned", { count: 2 }],
+    ]);
+    expect(session.project.lyricLines).toEqual(lines);
+
+    const changed = session.dispatch({ type: "setLyricLineText", line: 1, text: "changed" });
+    expect(changed.ok).toBe(true);
+    expect(session.project.lyricLines).toEqual([
+      { text: "one", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "changed", phrase: null },
+      { text: "three", phrase: { firstBar: 2, barCount: 1 } },
+    ]);
+    expect(session.project.lyrics).toBe("one");
+  });
+});

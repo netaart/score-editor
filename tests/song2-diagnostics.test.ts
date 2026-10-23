@@ -69,6 +69,12 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "grid-not-allowed",
   "offset-not-integer",
   "unit-unknown",
+  "lyric-line-out-of-range",
+  "lyric-phrase-invalid",
+  "lyric-phrase-overlap",
+  "lyric-text-invalid",
+  "lyric-lines-not-mergeable",
+  "lyric-split-invalid",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = [
