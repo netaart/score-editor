@@ -107,6 +107,8 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
   let chosen: number | null = null;
   /** The editor is open on a new line. */
   let adding = false;
+  /** The phrase that is the track's one tab stop: the chosen line, else the one the keys left off at, else the first. */
+  let stop: number | null = null;
 
   const linesNow = (score: Score) => lyricLinesOf(session.project, score);
 
@@ -117,6 +119,24 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const result = commands.length === 1 && only ? session.dispatch(only) : session.dispatchAll(commands);
     if (!result.ok) refuse?.(result.diagnostics);
     return result.ok;
+  }
+
+  /** Puts the focus on a line's phrase, or on its item in the unaligned area. */
+  function focusLine(line: number): void {
+    const view = drawn?.views.get(line);
+    if (view) view.element.focus();
+    else drawn?.items.get(line)?.text.focus();
+  }
+
+  /** Takes a line out, and leaves the focus on the line that takes its place, else on the one before. */
+  function removeLine(line: number): void {
+    const d = drawn;
+    if (!d || !run([{ type: "deleteLyricLine", line }])) return;
+    live?.say(d.t.lyricDeleted(line + 1));
+    choose(null);
+    const placed = lyricRows(d.score, linesNow(d.score)).filter((row) => row.phrase !== null);
+    const near = placed.find((row) => row.index >= line) ?? placed.at(-1);
+    if (near) focusLine(near.index);
   }
 
   function choose(line: number | null): void {
@@ -160,6 +180,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     }
     const first = drawn.shown === null;
     drawn.shown = { project, editable, chosen, adding };
+    if (chosen !== null) stop = chosen;
     root?.setAttribute("data-editable", String(editable));
 
     const placed = rows.filter((row) => row.phrase !== null && row.alignment !== null);
@@ -230,6 +251,11 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
       );
       drawHandles(d, view, row, phrase, editable);
       if (d.phrases.children[at] !== view.element) d.phrases.insertBefore(view.element, d.phrases.children[at] ?? null);
+    }
+    if (stop === null || !d.views.has(stop)) stop = placed[0]?.index ?? null;
+    for (const [line, view] of d.views) {
+      if (editable) view.element.setAttribute("tabindex", line === stop ? "0" : "-1");
+      else view.element.removeAttribute("tabindex");
     }
   }
 
@@ -399,12 +425,52 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     live?.say(d.t.lyricPlaced((placed < 0 ? line : placed) + 1, plan.phrase.firstBar + 1));
   }
 
+  /**
+   * The keys of a phrase: Left and Right (and Home and End) step to the neighbouring line and choose it, Enter and Space
+   * open its text, Delete and Backspace take the line out, Escape lets the line go.
+   */
+  function onPhraseKey(event: KeyboardEvent, d: Drawn, line: number): void {
+    const order = [...d.phrases.children].map((child) => Number((child as HTMLElement).dataset.line));
+    const at = order.indexOf(line);
+    const target =
+      event.key === "ArrowRight"
+        ? order[at + 1]
+        : event.key === "ArrowLeft"
+          ? order[at - 1]
+          : event.key === "Home"
+            ? order[0]
+            : event.key === "End"
+              ? order.at(-1)
+              : undefined;
+    if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) {
+      event.preventDefault();
+      if (target !== undefined) {
+        choose(target);
+        focusLine(target);
+      }
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      choose(line);
+      d.editor.focus();
+    } else if (event.key === "Delete" || event.key === "Backspace") {
+      event.preventDefault();
+      removeLine(line);
+    } else if (event.key === "Escape" && chosen !== null) {
+      event.preventDefault();
+      choose(null);
+    }
+  }
+
   /** The keys of a handle: Left and Right move its edge one bar line. */
   function onKeyDown(event: KeyboardEvent): void {
     const d = drawn;
     if (!d || !session.view.editable || event.defaultPrevented || event.isComposing) return;
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
     if (!(event.target instanceof HTMLElement)) return;
+    if (event.target.classList.contains("sce-lyric-phrase") && event.target.dataset.line !== undefined) {
+      onPhraseKey(event, d, Number(event.target.dataset.line));
+      return;
+    }
     const handle = event.target.closest<HTMLElement>(".sce-lyric-handle");
     const owner = handle?.closest<HTMLElement>("[data-line]");
     const edge = handle?.dataset.edge;
@@ -506,7 +572,11 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
             live?.say(t.lyricTextSet(line + 1));
             return true;
           },
-          cancel: () => choose(null),
+          cancel() {
+            const line = chosen;
+            choose(null);
+            if (line !== null) focusLine(line);
+          },
           split(offset) {
             const line = chosen;
             const command = line === null ? null : lyricSplitCommand(score, linesNow(score), { line, offset });
@@ -517,16 +587,14 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
             if (line !== null && run([{ type: "mergeLyricLines", line }])) live?.say(t.lyricMerged(line + 1));
           },
           remove() {
-            const line = chosen;
-            if (line === null || !run([{ type: "deleteLyricLine", line }])) return;
-            live?.say(t.lyricDeleted(line + 1));
-            choose(null);
+            if (chosen !== null) removeLine(chosen);
           },
           add(text) {
             const at = linesNow(score).length;
             if (!run([{ type: "insertLyricLine", line: at, text, phrase: null }])) return;
             live?.say(t.lyricAdded(at + 1));
-            choose(at);
+            choose(null);
+            focusLine(at);
           },
         });
         editor.element.hidden = true;

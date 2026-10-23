@@ -76,9 +76,13 @@ export function createLyricEditor(doc: Document, t: Messages, hooks: LyricEditor
     if (event.isComposing) return;
     if (event.key === "Enter") {
       event.preventDefault();
-      if (mode === "new") hooks.add(input.value);
-      else if (input.value !== stored) send();
-      else hooks.cancel();
+      if (mode === "new") {
+        hooks.add(input.value);
+        return;
+      }
+      send();
+      // The text is in the project, or it was never changed: the person is done with the line. A refused text stays to be mended.
+      if (input.value === stored) hooks.cancel();
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();

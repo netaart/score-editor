@@ -637,3 +637,84 @@ test.describe("dragging a line from the unaligned area onto bars", () => {
     await expect(lyrics(page).locator(".sce-lyric-grip")).toHaveCount(0);
   });
 });
+
+test.describe("the keyboard", () => {
+  test("Tab reaches the phrases as one stop, the arrows step from line to line and choose each, Enter edits the text, Escape comes back", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await lyrics(page).getByRole("region", { name: "Lyrics", exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(phrase(page, 1)).toBeFocused();
+
+    await page.keyboard.press("ArrowRight");
+    await expect(phrase(page, 2)).toBeFocused();
+    await expect(phrase(page, 2)).toHaveAccessibleName(/, selected: /);
+    await expect(textbox(page)).toHaveValue("甲乙丙丁戊己庚");
+
+    await page.keyboard.press("End");
+    await expect(phrase(page, 4)).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(phrase(page, 1)).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(textbox(page)).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(phrase(page, 1)).toBeFocused();
+    await expect(textbox(page)).toBeHidden();
+  });
+
+  test("Enter in the text sends it and comes back to the line", async ({ page, harness }) => {
+    await openTrack(harness);
+    await phrase(page, 1).focus();
+    await page.keyboard.press("Enter");
+    await textbox(page).fill("一二三四五六七");
+    await page.keyboard.press("Enter");
+    expect((await storedLines(page))?.[0]?.text).toBe("一二三四五六七");
+    await expect(phrase(page, 1)).toBeFocused();
+    await expect(textbox(page)).toBeHidden();
+  });
+
+  test("Delete on a line takes it out as one step, and the focus stays on the track", async ({ page, harness }) => {
+    await openTrack(harness);
+    await phrase(page, 4).focus();
+    await page.keyboard.press("Delete");
+    expect(await storedLines(page)).toEqual([...LINES.slice(0, 3), LINES[4]]);
+    await expect(phrase(page, 3)).toBeFocused();
+    expect(await harness.layout.undo()).toBe(true);
+    expect(await storedLines(page)).toEqual(LINES);
+  });
+
+  test("the handles of the chosen line are reached with Tab and step one bar with the arrows, a shared boundary moving both lines", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await phrase(page, 3).focus();
+    await page.keyboard.press("ArrowLeft");
+    await expect(phrase(page, 2)).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(handle(page, "Start", 2)).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(handle(page, "End", 2)).toBeFocused();
+    await expect(handle(page, "End", 2)).toHaveAttribute("aria-valuenow", "4");
+
+    await page.keyboard.press("ArrowRight");
+    expect((await storedLines(page))?.slice(1, 3)).toEqual([
+      { text: "甲乙丙丁戊己庚", phrase: { firstBar: 2, barCount: 3 } },
+      { text: "子丑寅卯辰巳午未", phrase: { firstBar: 5, barCount: 1 } },
+    ]);
+    await expect(handle(page, "End", 2)).toBeFocused();
+    await expect(handle(page, "End", 2)).toHaveAttribute("aria-valuenow", "5");
+    await expect(handle(page, "End", 2)).toHaveAttribute("aria-valuetext", "bar 5");
+
+    // The next bar line would leave the other line with no bar, so the key does nothing.
+    await page.keyboard.press("ArrowRight");
+    expect((await storedLines(page))?.[1]?.phrase).toEqual({ firstBar: 2, barCount: 3 });
+
+    expect(await harness.layout.undo()).toBe(true);
+    expect(await storedLines(page)).toEqual(LINES);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+});
