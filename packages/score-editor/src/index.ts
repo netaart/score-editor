@@ -40,6 +40,9 @@ export type { DraftProject, ScoreDraft } from "./drafts";
 export { contentHash, DRAFT_FORMAT_VERSION, draftText, readDraft } from "./drafts";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
+// Selecting notes by conditions.
+export type { NoteFilter } from "./filter-notes";
+export { filterNotes } from "./filter-notes";
 export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
 export {
   alignedLyricLines,
