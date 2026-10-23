@@ -87,7 +87,9 @@ The note edits are `MoveNotesCommand` and `ResizeNotesCommand`, both members of 
 They take several note ids and act on each note's whole tie chain. Their `grid` is a `Grid`: its `value` is a
 `GridValue`, one of 4, 8, 16 or 32, and `dotted` makes a step half as long again. A grid step is allowed only when the
 score's `unitTicks` and the dialect's `constraints.durations` can write it, and a step the score cannot write is
-refused with `grid-not-allowed`. Every refusal code is listed with the command in the package README.
+refused with `grid-not-allowed`. Every refusal code is listed with the command in the package README. The parts send them through
+the `move-notes` and `resize-notes` inputs of `handleEditingInput`, on `session.grid`, so a view of your own can do the same
+([view-parts.md](view-parts.md)).
 
 ```ts
 import { applyProjectCommand, isNoticeDiagnostic } from "@neta-art/score-editor";

@@ -12,7 +12,7 @@ added; calling it twice is harmless.
 
 | Function | Draws | Options |
 | --- | --- | --- |
-| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons and the Select menu; the read-only badge while it is not. | `ToolbarOptions` |
+| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons, the Select menu and the Grid menu; the read-only badge while it is not. | `ToolbarOptions` |
 | `mountZoomControl(el, session)` | The zoom-out, readout/menu and zoom-in buttons. Hidden while the session has no readable score. | — |
 | `mountCutNotice(el, session)` | The one sentence saying the score text stops before the song does, or nothing. | — |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
@@ -98,13 +98,16 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 | The user | Where | What happens |
 | --- | --- | --- |
 | Clicks or taps a note | A voice track | Selects it; a tied chain is selected as a whole. |
-| Clicks or taps empty lane space | A voice track | Puts the insertion point on the nearest beat line, and clears the selection. |
+| Clicks or taps empty lane space | A voice track | Puts the insertion point on the nearest line of the grid (`session.grid`), and clears the selection. |
 | Holds Shift while clicking or tapping a note | A voice track | Adds the note to the selection, or takes it and its tied chain out; on empty space nothing happens. |
 | Presses on empty lane space with a mouse and drags | A voice track | Draws a box. The notes it touches are framed while it is open and selected when it is let go; Shift at the press adds; Escape gives it up. |
 | Rests a finger on empty lane space for about 0.4 s, then slides | A voice track | Draws the same box (a swipe that starts at once still scrolls). Resting a finger on a note toggles it, as Shift does. |
 | Presses Ctrl or Cmd plus A, plus Shift, or Escape; or chooses an item of the Select menu | A part that hears the key; the toolbar | Selects every pitched note; inverts the selection; clears it (Escape clears whatever ids are selected, and is left to the host when none is). |
-| Presses Tab, then Left and Right, Home and End, Enter or Space | The notes of a voice track | The notes are one tab stop. With a note in focus, Left and Right step to the neighbour and select it, Home and End go to the first and last, Enter or Space selects the one in focus. With Ctrl or Cmd the four navigation keys move the focus without selecting, and Shift plus Space or Enter adds the note in focus or takes it out with its tie chain. |
-| Presses Left, Right, Home or End with the focus elsewhere in a part | Any time-axis part | Moves the insertion point; Left and Right keep scrolling while there is none. |
+| Presses on a selected note and drags, by its body or by an edge | A voice track | The body moves the whole selection in time and pitch (a row is a semitone); an edge (6 px wide for a mouse, 12 px for a finger, none on a note too narrow for three of them, or on the side of a tie) moves that edge of the note or of its tie chain. Dashed outlines show where the notes will land, in every track that holds one. Letting go sends one `move-notes` or `resize-notes` input, which is one history step and lands on the grid; Escape gives the drag up. A drag on a note that is not selected does nothing, and a finger's slide on one scrolls. |
+| Presses Tab, then Left and Right, Home and End, Enter or Space | The notes of a voice track | The notes are one tab stop. With a note in focus and no note selected, Left and Right step to the neighbour and select it; Home and End go to the first and last, Enter or Space selects the one in focus. With Ctrl or Cmd the four navigation keys move the focus without selecting, and Shift plus Space or Enter adds the note in focus or takes it out with its tie chain. |
+| Presses Left, Right, Up or Down with a pitched note selected | A part that hears the key | Left and Right move the selection one grid step, Up and Down a semitone; with Shift, Up and Down an octave, and Left and Right move the end edge one grid step. One history step each; nothing changes while the session is read-only, and a refusal (before the start, past the end) is said and changes nothing. |
+| Presses Left, Right, Home or End with the focus elsewhere in a part and no note selected | Any time-axis part | Moves the insertion point to the previous or next line of the grid, or the ends; Left and Right keep scrolling while there is none. |
+| Chooses a grid in the Grid menu | The toolbar | Sets `session.grid`: 1/4, 1/8 or 1/16, each also dotted, and 1/32 where the score's unit can write it. A step the score cannot write is muted. The grid is not part of the song and not an undo step. |
 | Presses Delete or Backspace, or the Delete button | A part that hears the key; the toolbar | Turns every selected pitched note into a rest as one history step. The button is muted until a pitched note is selected. |
 | Presses Ctrl or Cmd plus Z, plus Shift for redo, Ctrl plus Y, or the undo and redo buttons | A part that hears the key; the toolbar | Moves one history step. |
 
@@ -195,6 +198,8 @@ type EditingInput =
   | { type: "click-note"; noteId: string }
   | { type: "click-empty"; tick: number } // a position on the time axis, not necessarily whole
   | { type: "delete" } // what a Delete control sends; it does what the Delete key does
+  | { type: "move-notes"; timeTicks: number; semitones: number } // a drag of the selection: ticks are snapped to session.grid
+  | { type: "resize-notes"; edge: "start" | "end"; timeTicks: number } // a drag of one edge of the selection, snapped to session.grid
   | { type: "toggle-note"; noteId: string } // a click on a note with Shift held
   | { type: "select-notes"; noteIds: ReadonlyArray<string>; add?: boolean } // a box: select these, or add them
   | { type: "select-all" } // Ctrl or Cmd plus A

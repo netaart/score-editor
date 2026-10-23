@@ -2,7 +2,7 @@
 
 A browser score editor for song projects. A host app mounts it onto an element, maps its own theme through CSS variables, and receives one-time messages through a callback. No framework is exposed.
 
-Work in progress: today the package shows a song project's score as an arrangement: a ruler with bar numbers, section bands, key and meter marks, a chord track, and one piano-roll track per voice, with zoom and scrolling. The first edits are in: select a note (by pointer or by keyboard), turn it into a rest with the Delete key or the Delete button, undo and redo, and drop an insertion point on a beat line and move it with the keys. The score also has two more views, chosen by a switch at the end of the toolbar: the score on a staff, and the score text, which a person can edit as text. The rest of editing arrives in later versions.
+Work in progress: today the package shows a song project's score as an arrangement: a ruler with bar numbers, section bands, key and meter marks, a chord track, and one piano-roll track per voice, with zoom and scrolling. The first edits are in: select a note (by pointer or by keyboard), turn it into a rest with the Delete key or the Delete button, undo and redo, and drop an insertion point on the grid and move it with the keys. Selected notes move in time and pitch and change length by dragging them or their edges, or with the arrow keys and Shift, on a grid that the toolbar's Grid menu sets (1/4, 1/8, 1/16 and their dotted steps, and 1/32 where the score allows it). The score also has two more views, chosen by a switch at the end of the toolbar: the score on a staff, and the score text, which a person can edit as text. The rest of editing arrives in later versions.
 
 ## Mount
 
