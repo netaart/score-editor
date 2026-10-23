@@ -93,12 +93,12 @@ export const lyricCss = `
 }
 .sce-root .sce-lyric-phrase[data-state="equal"] {
   --sce-_hue: var(--sce-_equal);
-  --sce-_edge: color-mix(in srgb, var(--sce-_hue) 70%, var(--sce-_text));
+  --sce-_edge: color-mix(in srgb, var(--sce-_hue) 30%, var(--sce-_text));
 }
 /* The count that does not match is told by a broken line as well as by yellow, so no state rests on hue alone. */
 .sce-root .sce-lyric-phrase[data-state="differ"] {
   --sce-_hue: var(--sce-_unequal);
-  --sce-_edge: color-mix(in srgb, var(--sce-_hue) 70%, var(--sce-_text));
+  --sce-_edge: color-mix(in srgb, var(--sce-_hue) 30%, var(--sce-_text));
   border-style: dashed;
 }
 /* The frame is a solid 2px line inside the block's own line, so a chosen block whose counts differ keeps its broken line. */

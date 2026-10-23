@@ -100,7 +100,7 @@ test.describe("the phrases", () => {
     await expect(phrase(page, 1)).toContainText("8 / 8");
     await expect(phrase(page, 2)).toContainText("7 / 8");
 
-    // The two states differ in colour and, beside it, in the line round the block, so colour is never the only mark.
+    // The line round the block is solid or broken as well as green or yellow (the hues are checked under "the colours"), so colour is never the only mark.
     const state = (target: Locator) =>
       target.evaluate((el) => {
         const style = getComputedStyle(el);
@@ -108,7 +108,6 @@ test.describe("the phrases", () => {
       });
     const equal = await state(phrase(page, 1));
     const differ = await state(phrase(page, 2));
-    expect(equal.background).not.toBe(differ.background);
     expect(equal.border).toBe("solid");
     expect(differ.border).toBe("dashed");
     expect(await state(phrase(page, 3))).toEqual(equal);
@@ -1001,21 +1000,70 @@ test.describe("in Chinese", () => {
 });
 
 test.describe("the colours", () => {
-  /** The relative luminance of a colour the page reports as `rgb(...)` or `color(srgb ...)`, as WCAG defines it. */
-  function luminance(css: string): number {
+  /** The red, green and blue, each from 0 to 1, of a colour the page reports as `rgb(...)` or `color(srgb ...)`. */
+  function channelsOf(css: string): [number, number, number] {
     const numbers = css.match(/-?\d*\.?\d+/g)?.map(Number) ?? [];
-    const channels = css.startsWith("color(") ? numbers.slice(0, 3) : numbers.slice(0, 3).map((value) => value / 255);
-    const [r = 0, g = 0, b = 0] = channels.map((value) =>
+    const scale = css.startsWith("color(") ? 1 : 255;
+    const [r = 0, g = 0, b = 0] = numbers.slice(0, 3).map((value) => value / scale);
+    return [r, g, b];
+  }
+  /** The relative luminance of a colour, as WCAG defines it. */
+  function luminance(css: string): number {
+    const [r = 0, g = 0, b = 0] = channelsOf(css).map((value) =>
       value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
     );
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
+  /** The hue of a colour in degrees, 0 to 360, as HSL defines it. */
+  function hueOf(css: string): number {
+    const [r, g, b] = channelsOf(css);
+    const high = Math.max(r, g, b);
+    const span = high - Math.min(r, g, b);
+    if (span === 0) return Number.NaN;
+    const sector = high === r ? ((g - b) / span) % 6 : high === g ? (b - r) / span + 2 : (r - g) / span + 4;
+    return (sector * 60 + 360) % 360;
+  }
+  /** The wash and the line of a phrase, as the page paints them, with the text colour and the ground they derive from. */
+  const paint = (target: Locator) =>
+    target.evaluate((el) => {
+      const style = getComputedStyle(el);
+      const ground = getComputedStyle(el.closest(".sce-root") as HTMLElement).backgroundColor;
+      return { wash: style.backgroundColor, line: style.borderTopColor, text: style.color, ground };
+    });
+  /** `share` of one colour and the rest of another, mixed in sRGB as DESIGN.md states the derivations. */
+  const mixed = (share: number, colour: [number, number, number], other: [number, number, number]) =>
+    colour.map((channel, at) => share * channel + (1 - share) * (other[at] ?? 0));
+  const expectNear = (css: string, wanted: number[], message: string) => {
+    const got = channelsOf(css);
+    for (const [at, channel] of wanted.entries()) expect(got[at], `${message}, channel ${at}`).toBeCloseTo(channel, 2);
+  };
+  /** The hues a person calls green and yellow, in degrees of the colour wheel. */
+  const GREEN = [100, 170] as const;
+  const YELLOW = [35, 65] as const;
+  const within = (hue: number, [low, high]: readonly [number, number]) => hue >= low && hue <= high;
   const contrast = (a: string, b: string) => {
     const [high = 0, low = 0] = [luminance(a), luminance(b)].sort((x, y) => y - x);
     return (high + 0.05) / (low + 0.05);
   };
 
   for (const scheme of ["light", "dark"] as const) {
+    test(`an equal phrase is green and a phrase whose counts differ is yellow, in its wash and in its line, on a ${scheme} page`, async ({
+      page,
+      harness,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await harness.setColorScheme(scheme);
+      await openTrack(harness);
+      for (const line of [1, 3, 4]) {
+        const green = await paint(phrase(page, line));
+        expect(within(hueOf(green.wash), GREEN), `${scheme} wash of equal line ${line}`).toBe(true);
+        expect(within(hueOf(green.line), GREEN), `${scheme} line of equal line ${line}`).toBe(true);
+      }
+      const yellow = await paint(phrase(page, 2));
+      expect(within(hueOf(yellow.wash), YELLOW), `${scheme} wash of the unequal line`).toBe(true);
+      expect(within(hueOf(yellow.line), YELLOW), `${scheme} line of the unequal line`).toBe(true);
+    });
+
     test(`the text on each wash and the line round each block are readable on a ${scheme} page`, async ({
       page,
       harness,
@@ -1041,6 +1089,31 @@ test.describe("the colours", () => {
       }
     });
   }
+
+  test("each state takes its hue from its own variable: mapping one moves that state's wash and line and leaves the other", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    const equal = phrase(page, 1);
+    const differ = phrase(page, 2);
+    const unmapped = { equal: await paint(equal), differ: await paint(differ) };
+
+    // DESIGN.md, The two state hues: the wash is 20% of the hue over the ground, the line the hue pulled 70% toward the text.
+    const blue: [number, number, number] = [0, 0, 1];
+    await harness.layout.setTheme({ "--sce-color-equal": "rgb(0, 0, 255)" });
+    const mappedEqual = await paint(equal);
+    expectNear(mappedEqual.wash, mixed(0.2, blue, channelsOf(mappedEqual.ground)), "the wash of the equal phrase");
+    expectNear(mappedEqual.line, mixed(0.3, blue, channelsOf(mappedEqual.text)), "the line of the equal phrase");
+    expect(await paint(differ)).toEqual(unmapped.differ);
+
+    const red: [number, number, number] = [1, 0, 0];
+    await harness.layout.setTheme({ "--sce-color-unequal": "rgb(255, 0, 0)" });
+    const mappedDiffer = await paint(differ);
+    expectNear(mappedDiffer.wash, mixed(0.2, red, channelsOf(mappedDiffer.ground)), "the wash of the unequal phrase");
+    expectNear(mappedDiffer.line, mixed(0.3, red, channelsOf(mappedDiffer.text)), "the line of the unequal phrase");
+    expect(await paint(equal)).toEqual(mappedEqual);
+  });
 });
 
 test.describe("in the default editor", () => {
