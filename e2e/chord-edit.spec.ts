@@ -59,6 +59,10 @@ class Chords {
   setEditable(editable: boolean) {
     return this.page.evaluate((value) => window.chordPage.setEditable(value), editable);
   }
+
+  canUndo() {
+    return this.page.evaluate(() => window.chordPage.canUndo());
+  }
 }
 
 const test = base.extend<{ chords: Chords }>({
@@ -102,6 +106,34 @@ async function xOfTick(timelineBox: Locator, tick: number): Promise<number> {
   return area.x + (tick * 40) / 256;
 }
 
+/** The same score with Am already on the second quarter note. */
+const CHORDED = twoVoices('C4"Am"D4E4F4|G16|', "C16|C16|");
+
+/** Presses the chord track at `tick`, as a click on a mouse project and a tap on a touch project. */
+async function pressAtTick(
+  page: Page,
+  press: (target: Locator, position?: { x: number; y: number }) => Promise<void>,
+  tick: number,
+) {
+  const row = await box(timeline(page));
+  await press(timeline(page), { x: (tick * 40) / 256, y: row.height / 2 });
+}
+
+/** Chooses a chord in the open picker: a letter, a spelling when it has one, and a type by its full name. */
+async function choose(open: Locator, root: string, type: string) {
+  await open
+    .getByRole("radiogroup", { name: "Root" })
+    .getByRole("radio", { name: root.slice(0, 1), exact: true })
+    .click();
+  if (root.length > 1) {
+    await open
+      .getByRole("radiogroup", { name: "Sharp or flat" })
+      .getByRole("radio", { name: root, exact: true })
+      .click();
+  }
+  await open.getByRole("radiogroup", { name: "Type" }).getByRole("radio", { name: type, exact: true }).click();
+}
+
 test.describe("placing a chord", () => {
   test("a press on the chord track opens the picker at the nearest start; choosing a root and a type and pressing Place writes one chord, and one Undo takes it back", async ({
     page,
@@ -130,5 +162,132 @@ test.describe("placing a chord", () => {
     await press(undoButton(page));
     expect(await chords.scoreText()).toBe(QUARTERS);
     await expect(page.getByText("No chords in this score")).toBeVisible();
+  });
+
+  test("the start nearest the press is the one taken: a press left of the midpoint between two starts takes the earlier, right of it the later", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+
+    // Beats 1 and 2 start at ticks 0 and 256; their midpoint is tick 128.
+    await pressAtTick(page, press, 110);
+    await expect(picker(page, "Chord at bar 1 beat 1")).toBeVisible();
+    await press(picker(page, "Chord at bar 1 beat 1").getByRole("button", { name: "Cancel", exact: true }));
+    await expect(picker(page, /^Chord at/)).toBeHidden();
+
+    await pressAtTick(page, press, 146);
+    await expect(picker(page, "Chord at bar 1 beat 2")).toBeVisible();
+    expect(await chords.scoreText()).toBe(QUARTERS);
+  });
+
+  test("a press past the last start takes the last start, and a rest has a start like a note", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: twoVoices("C4z4E4F4|G16|", "C16|C16|") } });
+
+    await pressAtTick(page, press, 290);
+    await expect(picker(page, "Chord at bar 1 beat 2")).toBeVisible();
+    await press(picker(page, "Chord at bar 1 beat 2").getByRole("button", { name: "Cancel", exact: true }));
+
+    await pressAtTick(page, press, 2040);
+    await expect(picker(page, "Chord at bar 2 beat 1")).toBeVisible();
+  });
+
+  test("a start with no chord opens on the chord before it, so repeating a chord is one press", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: CHORDED } });
+
+    await pressAtTick(page, press, 520);
+    const open = picker(page, "Chord at bar 1 beat 3");
+    await expect(open.getByText("No chord yet")).toBeVisible();
+    await expect(
+      open.getByRole("radiogroup", { name: "Root" }).getByRole("radio", { name: "A", exact: true }),
+    ).toHaveAttribute("aria-checked", "true");
+    await expect(
+      open.getByRole("radiogroup", { name: "Type" }).getByRole("radio", { name: "Am", exact: true }),
+    ).toHaveAttribute("aria-checked", "true");
+    await press(open.getByRole("button", { name: "Place", exact: true }));
+
+    expect(await chords.scoreText()).toBe(twoVoices('C4"Am"D4"Am"E4F4|G16|', "C16|C16|"));
+  });
+});
+
+test.describe("changing and removing a chord", () => {
+  test("pressing a chord offers Change and Remove, opens on that chord, and Change writes the new chord as one step", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: CHORDED } });
+
+    await pressAtTick(page, press, 250);
+    const open = picker(page, "Chord at bar 1 beat 2");
+    await expect(open.getByText("Now Am")).toBeVisible();
+    await expect(open.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
+    await expect(
+      open.getByRole("radiogroup", { name: "Root" }).getByRole("radio", { name: "A", exact: true }),
+    ).toHaveAttribute("aria-checked", "true");
+    await choose(open, "D", "Dm");
+    await press(open.getByRole("button", { name: "Change", exact: true }));
+
+    await expect(open).toBeHidden();
+    expect(await chords.scoreText()).toBe(twoVoices('C4"Dm"D4E4F4|G16|', "C16|C16|"));
+    await expect(chordTrack(page).getByRole("listitem")).toHaveText(["Dm"]);
+
+    await press(undoButton(page));
+    expect(await chords.scoreText()).toBe(CHORDED);
+    await press(redoButton(page));
+    expect(await chords.scoreText()).toBe(twoVoices('C4"Dm"D4E4F4|G16|', "C16|C16|"));
+    await press(undoButton(page));
+    expect(await chords.scoreText()).toBe(CHORDED);
+    // The change was one step: nothing is left to undo before it.
+    expect(await chords.canUndo()).toBe(false);
+  });
+
+  test("Remove takes the chord away as one step, and Undo and Redo bring it back and take it away again", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: CHORDED } });
+
+    await pressAtTick(page, press, 250);
+    const open = picker(page, "Chord at bar 1 beat 2");
+    await press(open.getByRole("button", { name: "Remove", exact: true }));
+
+    await expect(open).toBeHidden();
+    expect(await chords.scoreText()).toBe(QUARTERS);
+    await expect(page.getByText("No chords in this score")).toBeVisible();
+
+    await press(undoButton(page));
+    expect(await chords.scoreText()).toBe(CHORDED);
+    await expect(chordTrack(page).getByRole("listitem")).toHaveText(["Am"]);
+    await press(redoButton(page));
+    expect(await chords.scoreText()).toBe(QUARTERS);
+    expect(await chords.canUndo()).toBe(true);
+  });
+
+  test("pressing the name of a chord takes that chord, even where a note starts nearer to the press", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    // The name is drawn from the start of the first quarter note; a press on its last letters is nearer to the next start.
+    await chords.openParts({ score: { text: twoVoices('"Cmaj7"C4D1E1F1G1A4B4|G16|', "C16|C16|") } });
+
+    const name = chordTrack(page).getByRole("listitem").filter({ hasText: "Cmaj7" });
+    const area = await box(name);
+    await press(name, { x: area.width - 6, y: 12 });
+
+    const open = picker(page, "Chord at bar 1 beat 1");
+    await expect(open.getByText("Now Cmaj7")).toBeVisible();
+    await expect(open.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
   });
 });
