@@ -147,7 +147,7 @@ function setText(
   if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
     return commandRefusal(
       "lyric-line-out-of-range",
-      { line: command.line + 1, lines: lines.length },
+      { line: lineAt(command.line).line, lines: lines.length },
       lineAt(command.line),
     );
   }
@@ -169,7 +169,7 @@ function insertLine(
   if (!Number.isInteger(command.index) || command.index < 0 || command.index > lines.length) {
     return commandRefusal(
       "lyric-line-out-of-range",
-      { line: command.index + 1, lines: lines.length },
+      { line: lineAt(command.index).line, lines: lines.length },
       lineAt(command.index),
     );
   }
@@ -197,7 +197,7 @@ function deleteLine(
   if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
     return commandRefusal(
       "lyric-line-out-of-range",
-      { line: command.line + 1, lines: lines.length },
+      { line: lineAt(command.line).line, lines: lines.length },
       lineAt(command.line),
     );
   }
@@ -217,7 +217,7 @@ function splitLine(
   if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
     return commandRefusal(
       "lyric-line-out-of-range",
-      { line: command.line + 1, lines: lines.length },
+      { line: lineAt(command.line).line, lines: lines.length },
       lineAt(command.line),
     );
   }
@@ -272,7 +272,7 @@ function mergeLines(
   if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
     return commandRefusal(
       "lyric-line-out-of-range",
-      { line: command.line + 1, lines: lines.length },
+      { line: lineAt(command.line).line, lines: lines.length },
       lineAt(command.line),
     );
   }
@@ -319,7 +319,7 @@ function setPhrase(
   if (!Number.isInteger(command.line) || command.line < 0 || command.line >= lines.length) {
     return commandRefusal(
       "lyric-line-out-of-range",
-      { line: command.line + 1, lines: lines.length },
+      { line: lineAt(command.line).line, lines: lines.length },
       lineAt(command.line),
     );
   }
