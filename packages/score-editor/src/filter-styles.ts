@@ -113,6 +113,9 @@ export const filterCss = `
     min-height: 40px;
     font-size: 1.25em;
   }
+  .sce-root .sce-filter-actions .sce-button {
+    min-height: 40px;
+  }
 }
 @media ${FILTER_SHEET_QUERY} {
   .sce-root .sce-filter-panel:popover-open {
