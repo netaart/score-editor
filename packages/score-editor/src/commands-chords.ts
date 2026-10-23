@@ -2,7 +2,7 @@
 // ABOUTME: A note id names the note or rest; an empty name removes its chord, and every other chord stays untouched.
 import { commandRefusal } from "./command-refusal";
 import type { ScoreCommandResult } from "./commands";
-import { hasChordsAfter, withoutUnfinishedChord } from "./commands-shared";
+import { hasChordsAfter, withoutEmptyCutBar, withoutUnfinishedChord } from "./commands-shared";
 import type { Score } from "./score";
 import type { ChordVocabulary, DialectConstraints } from "./types";
 
@@ -37,6 +37,16 @@ export function setChord(
   name: string,
   constraints: DialectConstraints,
 ): ScoreCommandResult {
+  if (noteId === undefined) {
+    if (name !== "") return commandRefusal("note-not-found", { noteId: "" }, { noteId: "" });
+    const trimmed = withoutEmptyCutBar(score, []);
+    if (trimmed !== null) {
+      const truncation = trimmed.truncation;
+      return { ok: true, score: { ...score, ...trimmed, chords: [], hasChords: hasChordsAfter([], truncation) } };
+    }
+    const truncation = withoutUnfinishedChord(score.truncation);
+    return { ok: true, score: { ...score, chords: [], truncation, hasChords: hasChordsAfter([], truncation) } };
+  }
   const target = score.notes.find((note) => note.id === noteId);
   if (target === undefined) return commandRefusal("note-not-found", { noteId }, { noteId });
 

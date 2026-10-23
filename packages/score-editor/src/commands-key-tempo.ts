@@ -2,7 +2,7 @@
 // ABOUTME: Key and chord spelling come from spelling.ts; the dialect writer writes the shifted model back.
 import { commandRefusal } from "./command-refusal";
 import type { ScoreCommandResult } from "./commands";
-import { hasChordsAfter, withoutUnfinishedChord } from "./commands-shared";
+import { hasChordsAfter, withoutEmptyCutBar, withoutUnfinishedChord } from "./commands-shared";
 import type { Chord, KeyChange, Note, Score } from "./score";
 import { isDeclaredKey, shortestShift, transposeChord, transposeKey } from "./spelling";
 import type { DialectConstraints } from "./types";
@@ -119,6 +119,11 @@ export function runSetTempo(score: Score, bpm: number, constraints: DialectConst
 export function runRemoveChords(score: Score): ScoreCommandResult {
   if (score.chords.length === 0 && !score.hasChords && score.truncation?.unfinishedChord !== true) {
     return { ok: true, score };
+  }
+  const trimmed = withoutEmptyCutBar(score, []);
+  if (trimmed !== null) {
+    const truncation = trimmed.truncation;
+    return { ok: true, score: { ...score, ...trimmed, chords: [], hasChords: hasChordsAfter([], truncation) } };
   }
   const truncation = withoutUnfinishedChord(score.truncation);
   return { ok: true, score: { ...score, chords: [], truncation, hasChords: hasChordsAfter([], truncation) } };
