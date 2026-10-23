@@ -18,7 +18,7 @@ Every layer is public and usable on its own. Pick the smallest one that serves t
 | Put only some parts in a layout of your own, or write a view that draws from the session's state and notifications | View parts | [references/view-parts.md](references/view-parts.md) |
 | Get a working editor in one call and choose only its language and project | `mount(el, options)` | [references/mount.md](references/mount.md) |
 | Let a person hear the score as a synthetic preview with a playhead, or sound one note | View parts, and the headless schedule | [references/view-parts.md](references/view-parts.md#the-synth-preview) |
-| Save edits as host-stored drafts, restore them on open, or inherit lyric lines into a regenerated song | Draft keeper | [references/drafts.md](references/drafts.md) |
+| Save edits as host-stored drafts, restore them on open, or inherit lyric lines into a regenerated song | Draft keeper, or `mount`'s `drafts` option | [references/drafts.md](references/drafts.md) |
 
 ## Choose an extension point
 

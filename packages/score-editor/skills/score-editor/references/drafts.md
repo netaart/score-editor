@@ -1,8 +1,9 @@
 # Drafts
 
-Use the draft keeper when a host wants edits to survive a reload or another device, and wants a regenerated song to
-inherit the lyric lines arranged on the previous one. It is headless: it binds one `EditingSession` to a host store
-and touches no DOM. `mount` does not wire it yet; a host using its own layout calls it directly.
+Use drafts when a host wants edits to survive a reload or another device, and wants a regenerated song to inherit the
+lyric lines arranged on the previous one. Two ways in: give `mount` a store (`MountOptions.drafts`) and the default
+editor does the rest, or, for a layout of your own, call the headless keeper, which binds one `EditingSession` to a host
+store and touches no DOM.
 
 ```ts
 import { createDraftKeeper } from "@neta-art/score-editor";
@@ -24,6 +25,28 @@ await keeper.handoff(); // "written" | "unchanged" | "conflict" | "failed"
 await keeper.restoreOriginal(); // original back, history reset, draft cleared
 keeper.destroy(); // stops the timer and subscription, starts one pending write
 ```
+
+## In the default editor
+
+```ts
+const editor = mount(el, { language, project, dialects, drafts: store, notify: (notice) => showToast(notice.message) });
+```
+
+- **What the host does.** Pass `drafts` (a `DraftStore`) and `notify`, and make `project.sourceKey` stable for the song:
+  the draft is kept under it. Show `draft-source-changed` and `draft-save-failed` in the host's own toast; the editor
+  draws nothing for them.
+- **What the editor does.** While editable it keeps one keeper, opens on the original until the draft is read (the badge
+  says "Opening draft…" and nothing can be edited), offers a Restore original button that asks once, and shows a conflict
+  strip with "Overwrite with my version" and "Load the other version" while the editor goes on editing and nothing is
+  written. Read-only, or without `drafts`, it has no keeper and never calls the store.
+- **`update`.** Another `sourceKey`, `lyrics` or score text is a new original and the keeper starts over (the old one writes
+  what it holds first); the same project passed again keeps the user's edits; `drafts` and `editable` are applied as given.
+- **A store that never answers** leaves the editor opening; there is no timeout, so the store should fail rather than hang.
+- **Parts.** For your own layout, bind `mountToolbar(el, session, { draftKeeper: keeper })` for the opening badge and
+  Restore original, and `mountDraftConflict(el, session, keeper)` for the strip.
+
+The wording, the question's text and the update rules are in the package README's
+[Drafts section](../../../README.md#in-the-default-editor).
 
 ## Decisions the host makes
 
