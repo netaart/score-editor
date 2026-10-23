@@ -25,7 +25,7 @@ export const songCss = `
   display: inline-flex;
   visibility: hidden;
 }
-.sce-root :is(.sce-tempo, .sce-key) {
+.sce-root :is(.sce-tempo, .sce-key, .sce-transposes) {
   display: inline-flex;
   flex: none;
   align-items: center;

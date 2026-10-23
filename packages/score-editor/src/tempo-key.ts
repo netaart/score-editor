@@ -61,8 +61,15 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
   const keys = create(doc, "select", "sce-field sce-key-select", keyLabel);
   const majorKeys = create(doc, "optgroup", "", keys);
   const minorKeys = create(doc, "optgroup", "", keys);
+  // The two buttons are one item of the group, so a narrow box never parts them.
+  const transposes = create(doc, "div", "sce-transposes", group);
   const transposeButton = (direction: "down" | "up") => {
-    const button = create(doc, "button", `sce-button sce-icon-button sce-transpose sce-transpose-${direction}`, group);
+    const button = create(
+      doc,
+      "button",
+      `sce-button sce-icon-button sce-transpose sce-transpose-${direction}`,
+      transposes,
+    );
     button.type = "button";
     button.appendChild(lineIcon(doc, direction === "up" ? CHEVRON_UP : CHEVRON_DOWN));
     button.addEventListener(
