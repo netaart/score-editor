@@ -14,6 +14,7 @@ export const filterCss = `
   flex-direction: column;
   gap: 8px;
   width: min(26em, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
   padding: 12px;
 }
 /*

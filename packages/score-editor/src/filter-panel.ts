@@ -31,6 +31,7 @@ interface Conditions {
   /** Lengths in ticks. */
   length: { on: boolean; min: number | null; max: number | null };
   key: { on: boolean; mode: "in" | "out" };
+  count: { on: boolean; every: number | null; skip: number | null };
 }
 
 function gcd(a: number, b: number): number {
@@ -150,6 +151,14 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   const key = conditionRow("key", (t) => t.key);
   const keyChoice = select(key.fields, (t) => t.keyChoice);
 
+  const count = conditionRow("count", (t) => t.count);
+  word(count.fields, (t) => t.countEveryBefore);
+  const countEvery = number(count.fields, (t) => t.countEvery);
+  word(count.fields, (t) => t.countEveryAfter);
+  word(count.fields, (t) => t.countSkipBefore);
+  const countSkip = number(count.fields, (t) => t.countSkip);
+  word(count.fields, (t) => t.countSkipAfter);
+
   const status = create(doc, "div", "sce-filter-status", panel);
   status.setAttribute("role", "status");
   const actions = create(doc, "div", "sce-filter-actions", panel);
@@ -161,6 +170,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     time: { on: false, first: null, last: null },
     length: { on: false, min: null, max: null },
     key: { on: false, mode: "in" },
+    count: { on: false, every: 2, skip: 0 },
   };
   /** The reading the open panel was last filled from. */
   let rendered: ScoreReading | null = null;
@@ -259,6 +269,12 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     );
     keyChoice.value = conditions.key.mode;
     key.check.checked = conditions.key.on;
+
+    countEvery.min = "1";
+    countSkip.min = "0";
+    countEvery.value = conditions.count.every === null ? "" : String(conditions.count.every);
+    countSkip.value = conditions.count.skip === null ? "" : String(conditions.count.skip);
+    count.check.checked = conditions.count.on;
   }
 
   /** Takes what the person set in a field of the panel into the conditions. */
@@ -274,6 +290,9 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     if (lengthLongest.value !== "") conditions.length.max = Number(lengthLongest.value);
     conditions.key.on = key.check.checked;
     if (keyChoice.value === "in" || keyChoice.value === "out") conditions.key.mode = keyChoice.value;
+    conditions.count.on = count.check.checked;
+    conditions.count.every = countEvery.value === "" ? null : countEvery.valueAsNumber;
+    conditions.count.skip = countSkip.value === "" ? null : countSkip.valueAsNumber;
   }
 
   function currentFilter(score: Score): { filter: NoteFilter; count: number } {
@@ -282,28 +301,33 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       time?: { from?: number; to?: number };
       duration?: { min: number; max: number };
       key?: "in" | "out";
+      count?: { every: number; skip: number };
     } = {};
-    let count = 0;
+    let conditionsOn = 0;
     const { pitch: p } = conditions;
     if (p.on && p.min !== null && p.max !== null) {
       filter.pitch = { min: p.min, max: p.max };
-      count += 1;
+      conditionsOn += 1;
     }
     if (conditions.time.on) {
       const from = barStart(score.bars, conditions.time.first);
       const to = barEnd(score.bars, conditions.time.last);
       filter.time = { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
-      count += 1;
+      conditionsOn += 1;
     }
     if (conditions.length.on && conditions.length.min !== null && conditions.length.max !== null) {
       filter.duration = { min: conditions.length.min, max: conditions.length.max };
-      count += 1;
+      conditionsOn += 1;
     }
     if (conditions.key.on) {
       filter.key = conditions.key.mode;
-      count += 1;
+      conditionsOn += 1;
     }
-    return { filter, count };
+    if (conditions.count.on && conditions.count.every !== null && conditions.count.skip !== null) {
+      filter.count = { every: conditions.count.every, skip: conditions.count.skip };
+      conditionsOn += 1;
+    }
+    return { filter, count: conditionsOn };
   }
 
   let applied: Applied | null = null;
@@ -399,6 +423,12 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
         const rect = panel.getBoundingClientRect();
         const overflow = rect.right - (view.innerWidth - 8);
         if (overflow > 0) panel.style.left = `${Math.max(8, rect.left - overflow)}px`;
+        // Under the button when there is room, else over it, else as high as the window allows.
+        const room = view.innerHeight - 8;
+        if (rect.bottom > room) {
+          const over = button.getBoundingClientRect().top - 4 - rect.height;
+          panel.style.top = `${over >= 8 ? over : Math.max(8, room - rect.height)}px`;
+        }
       }
       panel.querySelector<HTMLElement>("input, select, button")?.focus();
     },

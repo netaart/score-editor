@@ -66,6 +66,29 @@ test.describe("the Filter button and its panel", () => {
   });
 });
 
+test.describe("where the panel sits", () => {
+  for (const height of [720, 360]) {
+    test(`stays inside a window ${height} px high, over its button when there is no room below, every control reachable`, async ({
+      page,
+      harness,
+      press,
+      isMobile,
+    }) => {
+      test.skip(isMobile, "On a phone the panel is a sheet from the bottom edge, which has its own case.");
+      await page.setViewportSize({ width: 1280, height });
+      await openTrack(harness);
+      await openPanel(page, press);
+
+      const frame = await box(panel(page));
+      expect(frame.y).toBeGreaterThanOrEqual(0);
+      expect(frame.y + frame.height).toBeLessThanOrEqual(height);
+      // Its last control can be pressed, the panel scrolling if the window is too short to show it whole.
+      await press(panel(page).getByRole("button", { name: "Done", exact: true }));
+      await expect(panel(page)).toBeHidden();
+    });
+  }
+});
+
 test.describe("the pitch condition", () => {
   test("selects the notes from the lowest to the highest pitch, the pitches being those the score has", async ({
     page,
@@ -188,7 +211,44 @@ test.describe("the key condition", () => {
     await expect(status(page)).toHaveText("3 of 8 notes selected");
 
     await keyChoice(page).selectOption({ label: "In the key" });
-    expect(await harness.layout.selection()).toEqual(["Vocal:0", "Vocal:512", "Vocal:1024", "Vocal:1280", "Vocal:1792"]);
+    expect(await harness.layout.selection()).toEqual([
+      "Vocal:0",
+      "Vocal:512",
+      "Vocal:1024",
+      "Vocal:1280",
+      "Vocal:1792",
+    ]);
     await expect(status(page)).toHaveText("5 of 8 notes selected");
+  });
+});
+
+const countEvery = (page: Page) => panel(page).getByRole("spinbutton", { name: "One in every", exact: true });
+const countSkip = (page: Page) => panel(page).getByRole("spinbutton", { name: "Skip the first", exact: true });
+
+test.describe("the count condition", () => {
+  test("selects one note in every N, after skipping the first ones, a tie chain counting once", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+
+    await expect(countEvery(page)).toHaveValue("2");
+    await expect(countSkip(page)).toHaveValue("0");
+
+    // The numbers it opens with already ask for every second note, so the checkbox is what turns the condition on.
+    await press(check(page, "Count"));
+    expect(await harness.layout.selection()).toEqual([ID.C4, ID.E4, ID.G4, ID.C5, ID.E5]);
+    await expect(check(page, "Count")).toBeChecked();
+    await expect(status(page)).toHaveText("5 of 9 notes selected");
+
+    await type(countSkip(page), 1);
+    expect(await harness.layout.selection()).toEqual([ID.D4, ID.F4, ID.A4, ID.D5, ID.D5tail]);
+    await expect(status(page)).toHaveText("4 of 9 notes selected");
+
+    await type(countEvery(page), 3);
+    await type(countSkip(page), 2);
+    expect(await harness.layout.selection()).toEqual([ID.E4, ID.A4, ID.E5]);
   });
 });

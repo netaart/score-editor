@@ -26,10 +26,11 @@ export interface FilterMessages {
   keyIn: string;
   keyOut: string;
   count: string;
-  /** The words around the number of the count: "One in every" 2 "notes". */
+  /** The names of the two numbers of the count, and the words around each: "One in every" 2 "notes", "Skip the first" 0 "notes". */
+  countEvery: string;
   countEveryBefore: string;
   countEveryAfter: string;
-  /** The words around the number of notes to pass over: "Skip the first" 0 "notes". */
+  countSkip: string;
   countSkipBefore: string;
   countSkipAfter: string;
   invert: string;
@@ -63,8 +64,10 @@ const en: FilterMessages = {
   keyIn: "In the key",
   keyOut: "Out of the key",
   count: "Count",
+  countEvery: "One in every",
   countEveryBefore: "One in every",
   countEveryAfter: "notes",
+  countSkip: "Skip the first",
   countSkipBefore: "Skip the first",
   countSkipAfter: "notes",
   invert: "Invert",
@@ -97,8 +100,10 @@ const zh: FilterMessages = {
   keyIn: "调内",
   keyOut: "调外",
   count: "个数",
+  countEvery: "每几个取一个",
   countEveryBefore: "每",
   countEveryAfter: "个取一个",
+  countSkip: "跳过前几个",
   countSkipBefore: "跳过前",
   countSkipAfter: "个",
   invert: "反选",
