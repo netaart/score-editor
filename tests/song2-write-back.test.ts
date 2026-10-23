@@ -449,6 +449,42 @@ Z|
 V: Vocal`);
     roundTrip(output);
   });
+
+  it("removes the unfinished chord string with the last chord at one note", () => {
+    const header = H2.replace("Q:1/4=120", "Q:1/4=400");
+    const input = `${header}
+K:E
+% intro
+V: Vocal
+z12"A"e2e2|"`;
+    const output = succeed(input, { type: "setChord", noteId: "Vocal:768", name: "" });
+
+    expect(output).toBe(`${header}
+K:E
+% intro
+V: Vocal
+z12e2e2|`);
+    const score = roundTrip(output);
+    expect(score.hasChords).toBe(false);
+    expect(score.truncation).toEqual({ voice: "Ins", bar: 0, short: false });
+  });
+
+  it("keeps the unfinished chord string while another chord remains", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+"C"C8"D"D8|"`;
+    const output = succeed(input, { type: "setChord", noteId: "Vocal:0", name: "" });
+
+    expect(output).toBe(`${H2}
+K:C
+V: Vocal
+C8"D"D8|"`);
+    const score = roundTrip(output);
+    expect(score.chords.map((chord) => chord.name)).toEqual(["D"]);
+    expect(score.hasChords).toBe(true);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 1, short: true, unfinishedChord: true });
+  });
 });
 
 describe("fill pads a cut measure that ends in a chord", () => {
