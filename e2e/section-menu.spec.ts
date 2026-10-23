@@ -66,7 +66,14 @@ function pressMuted(target: Locator, isMobile: boolean) {
   return isMobile ? target.tap({ force: true }) : target.click({ force: true });
 }
 
-const MENU_ITEMS = ["Rename…", "Start a section at a bar…", "Move earlier", "Move later", "Duplicate", "Delete"];
+const MENU_ITEMS = [
+  "Rename…",
+  "Start a section at a bar…",
+  "Move earlier",
+  "Move later",
+  "Duplicate",
+  "Delete section",
+];
 
 test.describe("opening the menu of a section", () => {
   test("a band opens its menu with a click or a tap, and the first choice has the focus", async ({
@@ -133,6 +140,17 @@ test.describe("opening the menu of a section", () => {
     expect(Math.abs(open.x - name.x)).toBeLessThan(2);
   });
 
+  test("a menu near the right edge of the window is as wide as it is anywhere", async ({ page, harness, press }) => {
+    await openSong(harness);
+    await press(bandButton(page, "Section chorus"));
+    const near = await box(menu(page, "Section chorus"));
+    await menu(page, "Section chorus").evaluate((el) => {
+      el.style.left = "8px";
+    });
+    const roomy = await box(menu(page, "Section chorus"));
+    expect(Math.abs(near.width - roomy.width)).toBeLessThan(1);
+  });
+
   test("a band is not a Tab stop, so the Tab key still goes from the region to the notes", async ({
     page,
     harness,
@@ -148,7 +166,7 @@ test.describe("opening the menu of a section", () => {
     await openSong(harness, SONG, { language: "zh" });
     await press(bandButton(page, "段落 verse"));
     const items = menu(page, "段落 verse").getByRole("menuitem");
-    for (const [at, words] of ["重命名…", "从某个小节另起一段…", "往前移", "往后移", "复制", "删除"].entries()) {
+    for (const [at, words] of ["重命名…", "从某个小节另起一段…", "往前移", "往后移", "复制", "删除这一段"].entries()) {
       await expect(items.nth(at)).toHaveAccessibleName(words);
     }
     await page.keyboard.press("Escape");
@@ -164,7 +182,7 @@ test.describe("what the menu does to the score", () => {
   }) => {
     await openSong(harness);
     await press(bandButton(page, "Section verse"));
-    await press(choice(page, "Section verse", "Delete"));
+    await press(choice(page, "Section verse", "Delete section"));
 
     await expect(bandNames(page)).toHaveText(["Unnamed", "chorus"]);
     await expect(menu(page, "Section verse")).toBeHidden();
@@ -232,7 +250,7 @@ test.describe("what the menu does to the score", () => {
     await press(bandButton(page, "Section chorus"));
     await press(choice(page, "Section chorus", "Move earlier"));
     await press(bandButton(page, "Section chorus"));
-    await press(choice(page, "Section chorus", "Delete"));
+    await press(choice(page, "Section chorus", "Delete section"));
     await expect(bandNames(page)).toHaveText(["Unnamed", "verse", "verse"]);
 
     await harness.layout.undo();
@@ -436,13 +454,78 @@ test.describe("starting a section at a bar", () => {
     expect(await harness.layout.scoreText()).toBe(SONG);
   });
 
-  test("offers the bar the insertion point is in, when there is one", async ({ page, harness, press }) => {
+  test("offers the bar the insertion point is in when it is inside the section, and else the section's second bar", async ({
+    page,
+    harness,
+    press,
+  }) => {
     await openSong(harness);
-    // Five bars of 1024 ticks are before bar 6.
-    await page.evaluate(() => window.harness.layout.live().setInsertionPoint({ tick: 5 * 1024 }));
+    // Four bars of 1024 ticks are before bar 5, which is in the verse (bars 3 to 5) and does not start it.
+    await page.evaluate(() => window.harness.layout.live().setInsertionPoint({ tick: 4 * 1024 }));
     await press(bandButton(page, "Section verse"));
     await press(choice(page, "Section verse", `${title}…`));
-    await expect(barField(page, title)).toHaveValue("6");
+    await expect(barField(page, title)).toHaveValue("5");
+    await page.keyboard.press("Escape");
+
+    // Bar 6 starts the chorus, and the point at the start of the verse would only rename the verse: neither is offered.
+    for (const bars of [5, 2]) {
+      await page.evaluate((tick) => window.harness.layout.live().setInsertionPoint({ tick }), bars * 1024);
+      await press(bandButton(page, "Section verse"));
+      await press(choice(page, "Section verse", `${title}…`));
+      await expect(barField(page, title)).toHaveValue("4");
+      await page.keyboard.press("Escape");
+    }
+  });
+
+  test("says that a bar which starts a section renames it, before the form is sent", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+    await press(bandButton(page, "Section verse"));
+    await press(choice(page, "Section verse", `${title}…`));
+    const renames = form(page, title).getByText(/so this (re)?names it/);
+    await expect(renames).toBeHidden();
+
+    await barField(page, title).fill("6");
+    await expect(renames).toHaveText("Bar 6 starts “chorus”, so this renames it.");
+    await expect(barField(page, title)).toHaveAccessibleDescription(
+      "This section covers bars 3 to 5. Bar 6 starts “chorus”, so this renames it.",
+    );
+    await barField(page, title).fill("1");
+    await expect(renames).toHaveText("Bar 1 starts the unnamed section, so this names it.");
+    await barField(page, title).fill("5");
+    await expect(renames).toBeHidden();
+    await barField(page, title).fill("abc");
+    await expect(renames).toBeHidden();
+
+    // What the line says is what the command does.
+    await barField(page, title).fill("6");
+    await nameField(page, title).fill("bridge");
+    await page.keyboard.press("Enter");
+    await expect(bandNames(page)).toHaveText(["Unnamed", "verse", "bridge"]);
+  });
+
+  test("shows a refusal under the field it is about", async ({ page, harness, press }) => {
+    await openSong(harness);
+    await press(bandButton(page, "Section verse"));
+    await press(choice(page, "Section verse", `${title}…`));
+    await barField(page, title).fill("99");
+    await nameField(page, title).fill("bridge");
+    await page.keyboard.press("Enter");
+    const bar = await box(barField(page, title));
+    const name = await box(nameField(page, title));
+    const barRefusal = await box(refusalLine(page, title));
+    expect(barRefusal.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+    expect(barRefusal.y + barRefusal.height).toBeLessThanOrEqual(name.y + 1);
+
+    await barField(page, title).fill("4");
+    await nameField(page, title).fill("bridge ");
+    await page.keyboard.press("Enter");
+    const nameAfter = await box(nameField(page, title));
+    const nameRefusal = await box(refusalLine(page, title));
+    expect(nameRefusal.y).toBeGreaterThanOrEqual(nameAfter.y + nameAfter.height);
   });
 });
 
@@ -467,20 +550,21 @@ test.describe("a choice that cannot be done", () => {
     await expect(note).toBeVisible();
     const lastMuted = await box(choice(page, "Unnamed section", "Duplicate"));
     const noted = await box(note);
-    const deleting = await box(choice(page, "Unnamed section", "Delete"));
+    const deleting = await box(choice(page, "Unnamed section", "Delete section"));
     expect(noted.y).toBeGreaterThanOrEqual(lastMuted.y + lastMuted.height - 1);
     expect(noted.y + noted.height).toBeLessThanOrEqual(deleting.y + 1);
-    for (const label of ["Name this section…", "Start a section at a bar…", "Delete"]) {
+    for (const label of ["Name this section…", "Start a section at a bar…", "Delete section"]) {
       await expect(choice(page, "Unnamed section", label)).toHaveAttribute("aria-disabled", "false");
     }
 
     // Pressing a muted choice does nothing, and the menu stays open so that the reason can be read.
     await pressMuted(choice(page, "Unnamed section", "Duplicate"), isMobile);
     await expect(menu(page, "Unnamed section")).toBeVisible();
+    await expect(said(page)).toHaveText(`${why} (bar 1)`);
     expect(await harness.layout.canUndo()).toBe(false);
     expect(await harness.layout.scoreText()).toBe(SONG);
 
-    await press(choice(page, "Unnamed section", "Delete"));
+    await press(choice(page, "Unnamed section", "Delete section"));
     await expect(bandNames(page)).toHaveText(["verse", "chorus"]);
     await expect(said(page)).toHaveText("Deleted the unnamed section");
     expect(await harness.layout.undo()).toBe(true);
@@ -530,15 +614,15 @@ test.describe("a choice that cannot be done", () => {
     await expect(cut).toHaveCount(2);
     await expect(cut.first()).toBeVisible();
     await expect(cut.last()).toBeVisible();
-    await expect(choice(page, "Section chorus", "Delete")).toHaveAttribute("aria-disabled", "false");
-    await press(choice(page, "Section chorus", "Delete"));
+    await expect(choice(page, "Section chorus", "Delete section")).toHaveAttribute("aria-disabled", "false");
+    await press(choice(page, "Section chorus", "Delete section"));
     await expect(bandNames(page)).toHaveText(["verse"]);
   });
 
   test("the only section cannot be deleted, because no bar would remain", async ({ page, harness, press }) => {
     await openSong(harness, ONLY);
     await press(bandButton(page, "Section a"));
-    await expect(choice(page, "Section a", "Delete")).toHaveAttribute("aria-disabled", "true");
+    await expect(choice(page, "Section a", "Delete section")).toHaveAttribute("aria-disabled", "true");
     await expect(menu(page, "Section a").getByText("The score would have no bars left.")).toBeVisible();
   });
 });
@@ -601,7 +685,7 @@ test.describe("the section menu from the keyboard", () => {
     // The menu gives its first choice the focus a moment after it opens; keys pressed before that would go to the band.
     await expect(choice(page, "Unnamed section", "Name this section…")).toBeFocused();
     await page.keyboard.press("End");
-    await expect(choice(page, "Unnamed section", "Delete")).toBeFocused();
+    await expect(choice(page, "Unnamed section", "Delete section")).toBeFocused();
     await page.keyboard.press("Enter");
 
     await expect(bandNames(page)).toHaveText(["verse", "chorus"]);
@@ -708,7 +792,7 @@ test.describe("in the assembled editor", () => {
   }) => {
     await harness.mount({ score: { text: SONG } });
     await press(page.getByRole("button", { name: "Section chorus", exact: true }));
-    await press(page.getByRole("menuitem", { name: "Delete", exact: true }));
+    await press(page.getByRole("menuitem", { name: "Delete section", exact: true }));
     await expect(sections(page)).toHaveText(["Unnamed", "verse"]);
 
     await press(page.getByRole("button", { name: "Undo", exact: true }));

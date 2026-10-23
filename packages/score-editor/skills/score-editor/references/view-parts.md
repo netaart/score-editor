@@ -273,7 +273,7 @@ noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once
 ## The section menu
 
 While the session is editable, each section band of the time ruler opens a menu: Rename (the unnamed music before the
-first marker says "Name this section"), Start a section at a bar, Move earlier, Move later, Duplicate and Delete. Each
+first marker says "Name this section"), Start a section at a bar, Move earlier, Move later, Duplicate and Delete section. Each
 choice is one command, so it is one undo step, and a screen reader hears what was done. A choice the commands would
 refuse stays in the menu, muted, with the refusal's words under it; choices side by side that are refused in the same
 words share one note. The two choices that need a name open a small form under the band; a name the commands refuse

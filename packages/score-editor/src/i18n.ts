@@ -91,6 +91,8 @@ export interface Messages {
   sectionFormName: string;
   sectionFormBar: string;
   sectionFormCovers(firstBar: number, lastBar: number): string;
+  /** Said under the bar field while the bar typed is the first bar of a section, which the command renames and does not split. */
+  sectionFormRenames(name: string | null, bar: number): string;
   sectionFormCancel: string;
   sectionConfirmName: string;
   sectionConfirmStart: string;
@@ -189,11 +191,15 @@ const en: Messages = {
   sectionMoveEarlier: "Move earlier",
   sectionMoveLater: "Move later",
   sectionDuplicate: "Duplicate",
-  sectionDelete: "Delete",
+  sectionDelete: "Delete section",
   sectionFormName: "Name",
   sectionFormBar: "Bar",
   sectionFormCovers: (first, last) =>
     first === last ? `This section is bar ${first}.` : `This section covers bars ${first} to ${last}.`,
+  sectionFormRenames: (name, bar) =>
+    name === null
+      ? `Bar ${bar} starts the unnamed section, so this names it.`
+      : `Bar ${bar} starts “${name}”, so this renames it.`,
   sectionFormCancel: "Cancel",
   sectionConfirmName: "Name",
   sectionConfirmStart: "Start section",
@@ -285,11 +291,15 @@ const zh: Messages = {
   sectionMoveEarlier: "往前移",
   sectionMoveLater: "往后移",
   sectionDuplicate: "复制",
-  sectionDelete: "删除",
+  sectionDelete: "删除这一段",
   sectionFormName: "名称",
   sectionFormBar: "小节",
   sectionFormCovers: (first, last) =>
     first === last ? `这一段是第 ${first} 小节。` : `这一段是第 ${first} 到 ${last} 小节。`,
+  sectionFormRenames: (name, bar) =>
+    name === null
+      ? `第 ${bar} 小节是未命名段落的开头，所以这会给它命名。`
+      : `第 ${bar} 小节是段落“${name}”的开头，所以这会重命名它。`,
   sectionFormCancel: "取消",
   sectionConfirmName: "命名",
   sectionConfirmStart: "另起一段",

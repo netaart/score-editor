@@ -130,6 +130,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     const covers = create(doc, "p", "sce-form-hint", form);
     const bar = field(t.sectionFormBar);
     bar.input.inputMode = "numeric";
+    const renames = create(doc, "p", "sce-form-hint", form);
     const name = field(t.sectionFormName);
     const error = create(doc, "p", "sce-form-error", form);
     error.setAttribute("role", "alert");
@@ -146,6 +147,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     function showError(words: string, input: HTMLInputElement): void {
       error.textContent = words;
       error.hidden = false;
+      input.closest("label")?.after(error);
       for (const each of [bar.input, name.input]) each.removeAttribute("aria-invalid");
       input.setAttribute("aria-invalid", "true");
       input.focus();
@@ -155,7 +157,22 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
       error.textContent = "";
       for (const each of [bar.input, name.input]) each.removeAttribute("aria-invalid");
     }
+    /** The section that starts at the bar typed, for which a command renames and does not split; the line says so before the form is sent. */
+    function showRenames(): void {
+      const typed = bar.input.value.trim();
+      const wanted = typed === "" ? Number.NaN : Number(typed);
+      const hit = Number.isInteger(wanted)
+        ? score.sections.find((each) => each.barCount > 0 && each.firstBar === wanted - 1)
+        : undefined;
+      renames.hidden = current?.how !== "start" || hit === undefined;
+      renames.textContent = renames.hidden || hit === undefined ? "" : t.sectionFormRenames(hit.name, wanted);
+      // A description and not an id, since ids come from a counter that two editors on a page would share.
+      if (current?.how !== "start") bar.input.removeAttribute("aria-description");
+      else
+        bar.input.setAttribute("aria-description", [covers.textContent, renames.textContent].filter(Boolean).join(" "));
+    }
     bar.input.addEventListener("input", clearError, { signal });
+    bar.input.addEventListener("input", showRenames, { signal });
     name.input.addEventListener("input", clearError, { signal });
     cancel.addEventListener("click", () => element.hidePopover(), { signal });
 
@@ -239,16 +256,16 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
         bar.wrap.hidden = how !== "start";
         covers.hidden = how !== "start";
         covers.textContent = t.sectionFormCovers(found.firstBar + 1, found.firstBar + found.barCount);
-        // A description and not an id, since ids come from a counter that two editors on a page would share.
-        if (how === "start") bar.input.setAttribute("aria-description", covers.textContent);
-        else bar.input.removeAttribute("aria-description");
         name.input.value = how === "rename" ? (found.name ?? "") : "";
         const point = session.insertionPoint;
-        // A bar the user has not picked is never defaulted to the start of another section, which would rename that one.
+        // A bar offered by default is inside this section and does not start it, since a bar that starts a section renames it:
+        // the insertion point's bar when it is such a bar, else the section's second bar.
         const second = found.barCount >= 2 ? found.firstBar + 2 : null;
-        const fromPoint = point === null ? null : barIndexAt(score.bars, point.tick) + 1;
-        const start = fromPoint ?? second;
+        const at = point === null ? -1 : barIndexAt(score.bars, point.tick);
+        const inside = at > found.firstBar && at < found.firstBar + found.barCount;
+        const start = inside ? at + 1 : second;
         bar.input.value = start === null ? "" : String(start);
+        showRenames();
         element.showPopover();
         const view = doc.defaultView;
         if (view) {
@@ -331,8 +348,11 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     menu.element.addEventListener(
       "click",
       (event) => {
-        if (event.target instanceof Element && event.target.closest('.sce-menu-item[aria-disabled="true"]')) {
+        const muted =
+          event.target instanceof Element ? event.target.closest('.sce-menu-item[aria-disabled="true"]') : null;
+        if (muted) {
           event.stopPropagation();
+          speak(muted.getAttribute("aria-description") ?? "");
         }
       },
       { capture: true, signal },

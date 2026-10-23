@@ -56,6 +56,17 @@ export const sectionMenuCss = `
   color: var(--sce-_muted);
   font-size: 0.92em;
 }
+/* As wide as its text wants, and not as wide as the room left of it, so a menu near the right edge is not squeezed. */
+.sce-root .sce-section-menus .sce-popover:not(.sce-section-form) {
+  width: max-content;
+  max-width: calc(100vw - 16px);
+}
+.sce-root :is(.sce-menu-note, .sce-form-hint, .sce-form-error, .sce-form-input) {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.sce-root :is(.sce-menu-note, .sce-form-hint, .sce-form-error) {
+  text-wrap: pretty;
+}
 
 /* The name form hangs under the band like the menu, and holds one or two text fields. */
 .sce-root .sce-section-form {
