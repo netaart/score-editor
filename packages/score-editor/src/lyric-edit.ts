@@ -86,7 +86,8 @@ function nearestBarLine(score: Score, tick: number): number {
   return nearest;
 }
 
-const phraseEnd = (phrase: LyricPhrase): number => phrase.firstBar + phrase.barCount;
+/** The bar line after the phrase's last bar, as the 0-based index of the bar that would follow it. */
+export const phraseEnd = (phrase: LyricPhrase): number => phrase.firstBar + phrase.barCount;
 
 function setPhrase(line: number, phrase: LyricPhrase): ProjectCommand {
   return { type: "setLyricLinePhrase", line, phrase };

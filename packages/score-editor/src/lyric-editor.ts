@@ -1,6 +1,6 @@
 // ABOUTME: The small editor the lyric track opens on a line: a text input and the buttons for splitting, merging, deleting and adding.
 // ABOUTME: It owns its elements and says what the person asked for through hooks; the track decides what that does to the project.
-import { create } from "./dom";
+import { create, uniqueId } from "./dom";
 import type { Messages } from "./i18n";
 
 /** What the person asked for in the editor. Each hook is one user action. */
@@ -36,8 +36,6 @@ export function codePointsBefore(text: string, index: number): number {
   return Array.from(text.slice(0, index)).length;
 }
 
-let problems = 0;
-
 export function createLyricEditor(
   doc: Document,
   t: Messages,
@@ -54,7 +52,7 @@ export function createLyricEditor(
   input.autocomplete = "off";
   input.spellcheck = false;
   const problem = create(doc, "p", "sce-lyric-problem", element);
-  problem.id = `sce-lyric-problem-${++problems}`;
+  problem.id = uniqueId("sce-lyric-problem");
   problem.hidden = true;
   const actions = create(doc, "div", "sce-lyric-actions", element);
   const button = (label: string, run: () => void): HTMLButtonElement => {

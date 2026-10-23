@@ -4,7 +4,7 @@ import { gridRunsOf, gridTicks } from "./arrangement";
 import { type BuiltAxis, type Grid, mountAxisPart } from "./axis-part";
 import type { ProjectCommand } from "./commands-project";
 import { formatDiagnostic } from "./diagnostics";
-import { create } from "./dom";
+import { create, uniqueId } from "./dom";
 import type { Messages } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
 import {
@@ -17,6 +17,7 @@ import {
   lyricDropPlan,
   lyricRows,
   lyricSplitCommand,
+  phraseEnd,
 } from "./lyric-edit";
 import { createLyricEditor, type LyricEditor } from "./lyric-editor";
 import { installLyricPointer, type LyricPreview } from "./lyric-track-pointer";
@@ -25,13 +26,10 @@ import type { LyricPhrase, Score } from "./score";
 import type { EditingSession } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
 
-/** Gives each track's hint an id of its own, since several tracks can share one page. */
-let hints = 0;
-
 /** The start of a phrase's first bar and the end of its last, in ticks. The phrase is one the score holds. */
 function phraseTicks(score: Score, phrase: LyricPhrase): { start: number; end: number } {
   const first = score.bars[phrase.firstBar];
-  const last = score.bars[phrase.firstBar + phrase.barCount - 1];
+  const last = score.bars[phraseEnd(phrase) - 1];
   const start = first?.start ?? 0;
   return { start, end: last ? last.start + last.length : start };
 }
@@ -302,7 +300,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
           line: row.index + 1,
           text: row.line.text,
           first: phrase.firstBar + 1,
-          last: phrase.firstBar + phrase.barCount,
+          last: phraseEnd(phrase),
           syllables: alignment.syllables.length,
           starts: alignment.onsets.length,
           equal: alignment.equal,
@@ -347,7 +345,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     for (const edge of ["start", "end"] as const) {
       const handle = view.handles[edge];
       // A start edge sits on the bar that begins the phrase; an end edge on the bar that ends it. Both read as bar numbers.
-      const now = edge === "start" ? phrase.firstBar + 1 : phrase.firstBar + phrase.barCount;
+      const now = edge === "start" ? phrase.firstBar + 1 : phraseEnd(phrase);
       const { lowest, highest } = limits(edge);
       const shift = edge === "start" ? 1 : 0;
       handle.setAttribute("aria-valuemin", String(lowest + shift));
@@ -479,7 +477,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const d = drawn;
     const moved = plan.moves.find((move) => move.line === line)?.phrase;
     if (!d || !moved || !run(plan.commands)) return;
-    live?.say(d.t.lyricMoved(line + 1, moved.firstBar + 1, moved.firstBar + moved.barCount));
+    live?.say(d.t.lyricMoved(line + 1, moved.firstBar + 1, phraseEnd(moved)));
   }
 
   /** Gives a line a phrase and says where it stands now: the project keeps lines on bars in the order of their bars. */
@@ -557,7 +555,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const line = Number(owner.dataset.line);
     const row = lyricRows(d.score, linesNow(d.score))[line];
     if (!row?.phrase) return;
-    const now = edge === "start" ? row.phrase.firstBar : row.phrase.firstBar + row.phrase.barCount;
+    const now = edge === "start" ? row.phrase.firstBar : phraseEnd(row.phrase);
     // The plan clamps a tick to what is allowed, so the ends of the score reach the ends of the handle's range.
     const tick = event.key === "Home" ? 0 : event.key === "End" ? d.ticks : barLineTick(d.score, now + step);
     const plan = lyricBoundaryPlan(d.score, linesNow(d.score), { line, edge, tick });
@@ -660,7 +658,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         const note = create(doc, "p", "sce-lyric-note", panel);
         note.textContent = t.lyricUnalignedHint;
         const hint = create(doc, "div", "sce-sr-only", group);
-        hint.id = `sce-lyric-hint-${++hints}`;
+        hint.id = uniqueId("sce-lyric-hint");
         hint.textContent = t.lyricHint;
         const editor = createLyricEditor(
           doc,

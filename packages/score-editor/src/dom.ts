@@ -13,6 +13,14 @@ export function create<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+let issued = 0;
+
+/** An id for an element that needs one, which no other the package makes has: several parts and editors can share one page. */
+export function uniqueId(prefix: string): string {
+  issued += 1;
+  return `${prefix}-${issued}`;
+}
+
 /** Throws the package's clear error where there is no DOM, so a server render fails with a reason and not a reference error. */
 export function requireDom(who: string): void {
   if (typeof document === "undefined") {
