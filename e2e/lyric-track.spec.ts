@@ -645,6 +645,9 @@ test.describe("the keyboard", () => {
   }) => {
     await openTrack(harness);
     await lyrics(page).getByRole("region", { name: "Lyrics", exact: true }).focus();
+    // The button that adds a line comes first, in the track head; then the phrases are one stop.
+    await page.keyboard.press("Tab");
+    await expect(button(page, "New line")).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(phrase(page, 1)).toBeFocused();
 
@@ -765,5 +768,254 @@ test.describe("placing a line on a bar by its number", () => {
     await expect(barField(page)).toBeHidden();
     await press(unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ }));
     await expect(barField(page)).toBeVisible();
+  });
+});
+
+const region = (page: Page) => lyrics(page).getByRole("region", { name: "Lyrics", exact: true });
+
+test.describe("on a touch screen", () => {
+  test("a slide on empty track space, and one that starts on a phrase, scroll the track and change nothing", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "a slide is a touch gesture");
+    await openTrack(harness);
+    const area = await box(phrases(page));
+    const surface = await box(region(page));
+
+    // Below the phrases, in the row the syllables stand in, there is no element that takes a press.
+    await harness.swipe(
+      { x: surface.x + 250, y: area.y + area.height + 6 },
+      { x: surface.x + 60, y: area.y + area.height + 6 },
+    );
+    await expect.poll(async () => (await harness.scrollOf(region(page))).left).toBeGreaterThan(100);
+
+    await harness.layout.setView({ scrollLeft: 0 });
+    await expect.poll(async () => (await harness.scrollOf(region(page))).left).toBe(0);
+    const body = await box(phrase(page, 1));
+    await harness.swipe({ x: surface.x + 200, y: body.y + 10 }, { x: surface.x + 60, y: body.y + 10 });
+    await expect.poll(async () => (await harness.scrollOf(region(page))).left).toBeGreaterThan(100);
+
+    expect(await storedLines(page)).toEqual(LINES);
+    expect(await harness.layout.canUndo()).toBe(false);
+    await expect(textbox(page)).toBeHidden();
+  });
+
+  test("a slide that starts on a handle moves the edge and leaves the scroll where it was", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "a slide is a touch gesture");
+    await openTrack(harness, GAPPED);
+    await harness.layout.setView({ scrollLeft: 300 });
+    await expect.poll(async () => (await harness.scrollOf(region(page))).left).toBe(300);
+    const start = await centreOf(handle(page, "End", 1));
+    const finger = await harness.finger();
+    try {
+      await finger.down(start);
+      await finger.move({ x: start.x + 160, y: start.y });
+      await finger.up();
+    } finally {
+      await finger.close();
+    }
+    expect((await storedLines(page))?.[0]?.phrase).toEqual({ firstBar: 2, barCount: 2 });
+    expect((await harness.scrollOf(region(page))).left).toBe(300);
+  });
+
+  test("the handle and the grip are the size of a fingertip", async ({ page, harness, isMobile }) => {
+    test.skip(!isMobile, "the sizes are for a coarse pointer");
+    await openTrack(harness, WITH_LOOSE);
+    const edge = await box(handle(page, "End", 1));
+    expect(edge.width).toBeGreaterThanOrEqual(44);
+    expect(edge.height).toBeGreaterThanOrEqual(36);
+    const handleArea = await box(grip(page));
+    expect(handleArea.width).toBeGreaterThanOrEqual(44);
+    expect(handleArea.height).toBeGreaterThanOrEqual(36);
+    // A field below 16 pixels makes a phone's browser zoom the page when the field takes the focus.
+    const picked = unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ });
+    await picked.tap();
+    expect(await textbox(page).evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+  });
+});
+
+test.describe("the track on the axis the other tracks share", () => {
+  test("follows their zoom and their scroll", async ({ page, harness }) => {
+    await harness.layout.open({
+      score: { text: SCORE },
+      project: { lyricLines: LINES },
+      parts: ["vocal", "lyrics"],
+    });
+    const vocalList = slot(page, "vocal").getByRole("list", { name: "Vocal", exact: true });
+    for (const zoom of [1, 0.5, 2]) {
+      await harness.layout.setView({ zoom });
+      await expect
+        .poll(async () => Math.round((await box(phrases(page))).width))
+        .toBe(Math.round((await box(vocalList)).width));
+    }
+    await harness.layout.setView({ zoom: 1, scrollLeft: 220 });
+    const vocalRegion = slot(page, "vocal").getByRole("region", { name: "Vocal", exact: true });
+    await expect.poll(async () => (await harness.scrollOf(region(page))).left).toBe(220);
+    await expect.poll(async () => (await harness.scrollOf(vocalRegion)).left).toBe(220);
+  });
+});
+
+test.describe("when the song changes under the track", () => {
+  test("a section command moves the lines with their section and the track follows", async ({ page, harness }) => {
+    await openTrack(harness);
+    expect((await harness.layout.dispatch({ type: "deleteSection", section: 1 })).ok).toBe(true);
+    await expect(phrases(page).getByRole("listitem")).toHaveCount(2);
+    await expect(phrase(page, 2)).toHaveAccessibleName(
+      "Line 2, bars 3 to 4, 8 syllables and 8 note starts, equal: 天地玄黄宇宙洪荒",
+    );
+    expect(await harness.layout.undo()).toBe(true);
+    await expect(phrases(page).getByRole("listitem")).toHaveCount(4);
+
+    expect((await harness.layout.dispatch({ type: "duplicateSection", section: 2 })).ok).toBe(true);
+    await expect(phrases(page).getByRole("listitem")).toHaveCount(5);
+  });
+
+  test("a line the new score has no bars for falls into the unaligned area", async ({ page, harness }) => {
+    await openTrack(harness, [...LINES.slice(0, 3), { text: "最后一句", phrase: { firstBar: 6, barCount: 2 } }]);
+    await expect(phrases(page).getByRole("listitem")).toHaveCount(4);
+    // A shorter song, as the score text of an edit made elsewhere: the Chorus is gone, and the line that stood on its bars is read as not on bars.
+    const lines = SCORE.split("\n");
+    const shorter = lines.slice(0, lines.indexOf("% Chorus")).join("\n");
+    expect((await harness.layout.dispatch({ type: "replaceScoreText", text: shorter })).ok).toBe(true);
+    await expect(phrases(page).getByRole("listitem")).toHaveCount(3);
+    await expect(unaligned(page).getByRole("listitem")).toHaveText(["最后一句"]);
+  });
+
+  test("a song that has lyrics only as text is laid out one line to a bar, and an edit names the right line", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.layout.open({
+      score: { text: SCORE },
+      project: { lyrics: "[Intro]\n甲乙丙丁\n戊己庚辛\n[Verse]\n壬癸子丑" },
+      parts: ["lyrics"],
+    });
+    await expect(phrases(page).getByRole("listitem")).toHaveCount(3);
+    await expect(phrase(page, 2)).toHaveAccessibleName(
+      /^Line 2, bar 2, 4 syllables and 4 note starts, equal: 戊己庚辛$/,
+    );
+    await press(phrase(page, 2));
+    await textbox(page).fill("戊己庚辛壬");
+    await textbox(page).press("Enter");
+    expect((await storedLines(page))?.map((line) => line.text)).toEqual(["甲乙丙丁", "戊己庚辛壬", "壬癸子丑"]);
+    expect(await page.evaluate(() => window.harness.layout.live().project.lyrics)).toBe(
+      "[Intro]\n甲乙丙丁\n戊己庚辛壬\n[Verse]\n壬癸子丑\n[Chorus]",
+    );
+  });
+});
+
+test.describe("in Chinese", () => {
+  test("names, sentences and refusals are in the editor's language", async ({ page, harness, press }) => {
+    await openTrack(harness, LINES, { language: "zh" });
+    await expect(lyrics(page).getByRole("region", { name: "歌词", exact: true })).toBeVisible();
+    const first = lyrics(page).getByRole("listitem", { name: /^第 1 行/ });
+    await expect(first).toHaveAccessibleName("第 1 行，第 1 至 2 小节，8 个音节、8 个音符起点，相等：一二三四五六七八");
+    await expect(lyrics(page).getByRole("list", { name: "未对齐", exact: true })).toBeVisible();
+    await press(first);
+    const input = lyrics(page).getByRole("textbox", { name: "歌词行文字", exact: true });
+    await input.fill("[Verse]");
+    await input.press("Enter");
+    await expect(lyrics(page).getByRole("status")).toContainText("歌词行不能只有 [段落] 标签");
+  });
+});
+
+test.describe("the colours", () => {
+  /** The relative luminance of a colour the page reports as `rgb(...)` or `color(srgb ...)`, as WCAG defines it. */
+  function luminance(css: string): number {
+    const numbers = css.match(/-?\d*\.?\d+/g)?.map(Number) ?? [];
+    const channels = css.startsWith("color(") ? numbers.slice(0, 3) : numbers.slice(0, 3).map((value) => value / 255);
+    const [r = 0, g = 0, b = 0] = channels.map((value) =>
+      value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+    );
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+  const contrast = (a: string, b: string) => {
+    const [high = 0, low = 0] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (high + 0.05) / (low + 0.05);
+  };
+
+  for (const scheme of ["light", "dark"] as const) {
+    test(`the text on each wash and the line round each block are readable on a ${scheme} page`, async ({
+      page,
+      harness,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await harness.setColorScheme(scheme);
+      await openTrack(harness);
+      for (const line of [1, 2]) {
+        const look = await phrase(page, line).evaluate((el) => {
+          const style = getComputedStyle(el);
+          const root = el.closest(".sce-root") as HTMLElement;
+          return {
+            wash: style.backgroundColor,
+            text: style.color,
+            edge: style.borderTopColor,
+            page: getComputedStyle(root).backgroundColor,
+          };
+        });
+        expect(contrast(look.text, look.wash), `${scheme} text on the wash of line ${line}`).toBeGreaterThanOrEqual(
+          4.5,
+        );
+        expect(contrast(look.edge, look.page), `${scheme} line round line ${line}`).toBeGreaterThanOrEqual(3);
+      }
+    });
+  }
+});
+
+test.describe("in the default editor", () => {
+  test("is the bottom track of the arrangement, and a refused edit reaches the host's notice", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { text: SCORE }, project: { lyricLines: LINES } });
+    const scroller = page.locator(".sce-scroller");
+    const lyricList = scroller.getByRole("list", { name: "Lyrics", exact: true });
+    const insList = scroller.getByRole("list", { name: "Ins", exact: true });
+    await expect(lyricList.getByRole("listitem")).toHaveCount(4);
+    const lyricBox = await box(lyricList);
+    const insBox = await box(insList);
+    expect(lyricBox.y).toBeGreaterThan(insBox.y + insBox.height);
+
+    await press(scroller.getByRole("listitem", { name: /^Line 1,/ }));
+    const input = scroller.getByRole("textbox", { name: "Lyric line text", exact: true });
+    await input.fill("[Verse]");
+    await input.press("Enter");
+    await expect.poll(async () => (await harness.notices()).map((notice) => notice.code)).toContain("command-refused");
+    expect((await harness.notices()).at(-1)?.message).toContain("A lyric line cannot be only a [section] label");
+  });
+
+  test("shows the counts and offers no editing while read-only", async ({ page, harness }) => {
+    await harness.mount({ score: { text: SCORE }, project: { lyricLines: LINES }, editable: false });
+    const scroller = page.locator(".sce-scroller");
+    await expect(scroller.getByRole("listitem", { name: /^Line 2, .*they differ/ })).toContainText("7 / 8");
+    await expect(scroller.getByRole("slider")).toHaveCount(0);
+    await expect(scroller.getByRole("textbox")).toHaveCount(0);
+    await expect(scroller.getByRole("button", { name: "New line" })).toBeHidden();
+  });
+});
+
+test.describe("the life of the part", () => {
+  test("destroying it twice is harmless, it leaves nothing behind, and a later change does not reach what it drew", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness);
+    await harness.layout.retain("lyrics");
+    const drawn = await harness.layout.retainedHtml();
+    await harness.layout.destroyPart("lyrics", 2);
+    await expect(lyrics(page).locator("*")).toHaveCount(0);
+    expect((await harness.layout.sheets()).document).toBe(0);
+
+    await harness.layout.dispatch({ type: "setLyricLineText", line: 0, text: "别的词" });
+    await harness.layout.setView({ zoom: 2, language: "zh", editable: false });
+    expect(await harness.layout.retainedHtml()).toBe(drawn);
   });
 });
