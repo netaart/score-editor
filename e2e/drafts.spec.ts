@@ -942,6 +942,24 @@ test.describe("the host changes a field that is not part of the original", () =>
     expect(project.score).toBe(WITHOUT_D);
   });
 
+  test("a value that the project commands refuse is told to the host, and the fields beside it are still carried", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = await editedAndSaved(page, harness, press);
+
+    await harness.update({ project: { style: "jazz", seed: 1.5 } });
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+
+    await expectCount(() => harness.notices(), 1);
+    expect((await harness.notices())[0]).toMatchObject({ code: "command-refused", level: "warning" });
+    await expectCount(() => store.callsOf("write"), 2);
+    const { project } = draftOf((await store.callsOf("write"))[1]);
+    expect(project.style).toBe("jazz");
+    expect(project.seed).toBeNull();
+  });
+
   test("a draft that was opened is not restored over the host's new style", async ({ page, harness, press }) => {
     const store = new Store(page);
     await store.seed(

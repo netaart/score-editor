@@ -4,12 +4,14 @@
 import { notesByVoice, pitchRangeOf } from "./arrangement";
 import { installZoomGestures } from "./axis";
 import { mountChordTrack } from "./chord-track";
+import type { ProjectCommand } from "./commands-project";
 import { mountCutNotice } from "./cut-notice";
 import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
-import { createDraftBinding, type DraftBinding, type DraftTarget, sameOriginal } from "./draft-binding";
+import { createDraftBinding, type DraftBinding } from "./draft-binding";
 import { mountDraftConflict } from "./draft-conflict";
 import { installEditKeys } from "./edit-keys";
+import { hostChanges } from "./host-changes";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import { mountProblemView } from "./problem-view";
@@ -26,7 +28,7 @@ import { acquireStyles } from "./styles";
 import { mountTextView } from "./text-view";
 import { mountTimeRuler } from "./time-ruler";
 import { mountToolbar } from "./toolbar";
-import type { Language, MountedEditor, MountOptions, ViewPart } from "./types";
+import type { DraftStore, Language, MountedEditor, MountOptions, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountVoiceTrack } from "./voice-track";
 
@@ -84,7 +86,7 @@ export class Editor implements MountedEditor {
     });
     // A keeper opening keeps the session read-only until it is ready, so no edit can start before the restore has run.
     this.drafts = createDraftBinding(this.session, (notice) => this.options.notify?.(notice));
-    this.drafts.follow(this.draftTarget());
+    this.drafts.follow(this.draftStore(), options.project);
     this.applyEditable();
     this.reading = this.session.reading;
     this.language = this.session.view.language;
@@ -145,12 +147,12 @@ export class Editor implements MountedEditor {
     if (patch.language !== undefined) this.session.setView({ language: patch.language });
     if (this.options.editable !== before.editable) this.applyEditable();
     if (patch.dialects !== undefined) this.session.replaceDialects(patch.dialects);
-    const target = this.draftTarget();
-    this.drafts.follow(target, () => {
+    const store = this.draftStore();
+    this.drafts.follow(store, this.options.project, (sameOriginal) => {
       if (patch.project === undefined) return;
-      // While drafts are kept, the host passing its original again is not news: the editor holds the user's edits.
-      if (target !== null && sameOriginal(before.project, patch.project)) return;
-      this.session.replaceProject(patch.project);
+      // While drafts are kept, the original the user is editing stays in the session; the host's other fields come in as commands.
+      if (store !== null && sameOriginal) this.carry(hostChanges(before.project, patch.project));
+      else this.session.replaceProject(patch.project);
     });
   }
 
@@ -178,17 +180,30 @@ export class Editor implements MountedEditor {
     this.scroller.setAttribute("aria-label", t.title);
   }
 
-  /** The keeper the options call for: one while the editor is editable and the host gave a store. */
-  private draftTarget(): DraftTarget | null {
-    const { drafts, project } = this.options;
-    return drafts !== undefined && this.editable ? { store: drafts, original: project } : null;
+  /** The store the keeper is made for: the host's, while the editor is editable; none otherwise. */
+  private draftStore(): DraftStore | null {
+    return this.options.drafts !== undefined && this.editable ? this.options.drafts : null;
+  }
+
+  /**
+   * Puts the fields the host changed into the session, once a draft being read has been put there: the draft holds the
+   * fields of an older project, and what the host passed after it is newer. A value a command refuses goes to the host.
+   */
+  private carry(commands: ReadonlyArray<ProjectCommand>): void {
+    if (commands.length === 0) return;
+    this.drafts.afterOpening(() => {
+      for (const command of commands) {
+        const result = this.session.dispatch(command);
+        if (!result.ok) this.refused(result.diagnostics);
+      }
+    });
   }
 
   private applyEditable(): void {
     this.session.setView({ editable: this.editable && this.drafts.status !== "opening" });
   }
 
-  /** A command the user's keys caused was refused and nothing changed: tell the host once, in the current language. */
+  /** A command was refused and nothing changed (the user's keys caused it, or a value the host passed): tell the host once, in the current language. */
   private refused(diagnostics: ReadonlyArray<Diagnostic>): void {
     const first = diagnostics[0];
     if (first === undefined) return;
