@@ -9,6 +9,7 @@ import { mountPopoverMenu } from "./popover-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
+import { arrangementShown } from "./view-rules";
 
 /**
  * Mounts the zoom control on `el`. It shows the session's zoom and changes it for every part bound to the session. It
@@ -75,7 +76,7 @@ export function mountZoomControl(el: HTMLElement, session: EditingSession): View
     for (const [preset, item] of menuItems) item.setAttribute("aria-checked", String(Math.abs(preset - zoom) < 1e-6));
     zoomOut.setAttribute("aria-disabled", String(stepZoom(zoom, "out") === null));
     zoomIn.setAttribute("aria-disabled", String(stepZoom(zoom, "in") === null));
-    group.hidden = session.reading.kind !== "score";
+    group.hidden = session.reading.kind !== "score" || !arrangementShown(session);
   }
 
   draw();

@@ -2,6 +2,7 @@
 // ABOUTME: The host maps nothing here: it passes "zh" or "en" and the package speaks for itself.
 import type { BarPosition, Cut } from "./arrangement";
 import type { Meter } from "./score";
+import type { ViewName } from "./session";
 import type { Language } from "./types";
 
 export interface Messages {
@@ -49,6 +50,20 @@ export interface Messages {
   /** What a live region says when an undo brought back one deleted note, and when it brought back several. */
   restoredNote(pitch: string, position: BarPosition): string;
   restoredNotes(count: number): string;
+  /** The text view: the name of its box and of its list of problems, and the sentence under the box. */
+  scoreText: string;
+  problems: string;
+  noProblems: string;
+  /** `kept`: the text is not in the project, which still has the last score that read. */
+  problemCount(count: number, kept: boolean): string;
+  /** The view switch: the name of its group, the name of the staff view, and the stale notice. */
+  viewSwitch: string;
+  staff: string;
+  staleNotice: string;
+  /** The staff view: what its drawing is, and what it says while abcjs is on its way and when abcjs fails. */
+  staffDrawing: string;
+  staffLoading: string;
+  staffFailed: string;
   /** The synth preview control: the two words on its button, the caption that says what the sound is, and what it says aloud. */
   previewPlay: string;
   previewStop: string;
@@ -114,6 +129,18 @@ const en: Messages = {
   deletedNotes: (count) => `Deleted ${count} notes`,
   restoredNote: (pitch, { bar, beat }) => `Restored ${pitch}, bar ${bar} beat ${beat}`,
   restoredNotes: (count) => `Restored ${count} notes`,
+  scoreText: "Score text",
+  problems: "Problems",
+  noProblems: "No problems",
+  problemCount: (count, kept) =>
+    `${count} ${count === 1 ? "problem" : "problems"}${kept ? ". The other views still show the last readable score." : ""}`,
+  viewSwitch: "View",
+  staff: "Staff",
+  staleNotice:
+    "The score text has a problem, so this view still shows the last score that could be read. Fix it in the text view.",
+  staffDrawing: "The score drawn on a staff",
+  staffLoading: "Loading the staff…",
+  staffFailed: "The staff couldn't be drawn. The other views still work.",
   previewPlay: "Preview",
   previewStop: "Stop",
   previewCaption: "Synthetic preview, not the final sound",
@@ -178,6 +205,16 @@ const zh: Messages = {
   deletedNotes: (count) => `已删除 ${count} 个音符`,
   restoredNote: (pitch, { bar, beat }) => `已恢复 ${pitch}，第 ${bar} 小节第 ${beat} 拍`,
   restoredNotes: (count) => `已恢复 ${count} 个音符`,
+  scoreText: "乐谱文本",
+  problems: "问题",
+  noProblems: "没有问题",
+  problemCount: (count, kept) => `${count} 个问题${kept ? "。其他视图显示的仍是上一份能读的乐谱。" : ""}`,
+  viewSwitch: "视图",
+  staff: "五线谱",
+  staleNotice: "乐谱文本里有问题，所以这个视图显示的仍是上一份能读的乐谱。请在文本视图中修正。",
+  staffDrawing: "用五线谱画出的乐谱",
+  staffLoading: "正在载入五线谱…",
+  staffFailed: "五线谱画不出来。其他视图不受影响。",
   previewPlay: "试听",
   previewStop: "停止",
   previewCaption: "合成试听，不代表成品效果",
@@ -189,6 +226,11 @@ const zh: Messages = {
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
+
+/** What a view is called: in the switch, as its tooltip, and as the toolbar's title while it is shown. */
+export function viewName(t: Messages, view: ViewName): string {
+  return { arrangement: t.title, staff: t.staff, text: t.scoreText }[view];
+}
 
 export function messagesFor(language: Language): Messages {
   return catalogs[language] ?? en;

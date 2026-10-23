@@ -17,6 +17,7 @@ host maps nothing. Set the variables on the editor's root or on a wrapper; set t
 | `--sce-color-accent` | Focus ring, checked menu dot | `#2457d6` light, `#7da3ff` dark |
 | `--sce-color-note` | Note fill | the accent value |
 | `--sce-font-family` | Font family | the host's inherited font |
+| `--sce-font-family-mono` | Font family of the score text view and its line numbers | `ui-monospace`, `Cascadia Mono`, `SF Mono`, `Menlo`, `Consolas`, `monospace` |
 | `--sce-radius` | Base corner radius | `4px` |
 | `--sce-row-height` | One pitch row, and a note's height | `14px` fine pointer, `24px` coarse pointer |
 | `--sce-beat-width` | Width of one quarter note at 100% zoom | `40px` |

@@ -13,7 +13,18 @@ const port = Number(process.env.E2E_PORT ?? 4312);
 
 const server = spawn("node", ["e2e/serve.mjs"], { env: { ...process.env, E2E_PORT: String(port) }, stdio: "ignore" });
 console.error(`static server pid ${server.pid} on port ${port}`);
-await new Promise((resolve) => setTimeout(resolve, 800));
+// A run that throws still stops the server it started.
+process.on("exit", () => server.kill());
+// The server bundles abcjs before it listens, so wait until it answers instead of for a fixed time.
+for (let tries = 0; ; tries++) {
+  const answered = await fetch(`http://127.0.0.1:${port}/`).then(
+    (response) => response.ok,
+    () => false,
+  );
+  if (answered) break;
+  if (tries > 200) throw new Error(`the static server did not answer on port ${port}`);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
 
 /** Page-side recorder: frame gaps, long tasks and the delay from a pointer event to the frame that follows it. */
 function installRecorder() {
