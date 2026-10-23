@@ -65,6 +65,15 @@ class Store {
     return this.page.evaluate((name) => (window as unknown as PageWithStore).harness.drafts.file(name), key);
   }
 
+  /** Makes reads wait until `release`, as a slow network does. */
+  hold(): Promise<void> {
+    return this.page.evaluate(() => (window as unknown as PageWithStore).harness.drafts.hold());
+  }
+
+  release(): Promise<void> {
+    return this.page.evaluate(() => (window as unknown as PageWithStore).harness.drafts.release());
+  }
+
   /** The next calls of one kind fail. */
   failNext(method: StoreCall["method"], count = 1): Promise<void> {
     return this.page.evaluate(
@@ -286,6 +295,38 @@ test.describe("opening", () => {
       },
     ]);
     expect(await store.callsOf("list")).toEqual([]);
+  });
+});
+
+test.describe("while the draft is being read", () => {
+  test("the original is shown, nothing can be edited, and the badge says what is going on", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await store.seed("test-page", storedDraft({ source: { lyrics: "", score: QUARTERS }, score: WITHOUT_D }));
+    await store.hold();
+    await page.clock.install();
+    await stopClock(page);
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+
+    await expect(page.getByText("Opening draft…", { exact: true })).toBeVisible();
+    await expect(page.getByText("Read only", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Delete", exact: true })).toBeHidden();
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await expect(noteNamed(page, D4)).toBeVisible();
+
+    await store.release();
+
+    await expect(page.getByText("Opening draft…")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    await expect(noteNamed(page, E4)).toBeVisible();
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toEqual([]);
   });
 });
 
