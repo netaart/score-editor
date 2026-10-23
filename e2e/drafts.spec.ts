@@ -707,7 +707,10 @@ test.describe("a new song inherits the lyric lines of the draft it was regenerat
 });
 
 test.describe("when nothing may be written", () => {
-  test("a read-only editor never calls the store, and a press of Delete changes nothing in it", async ({ page, harness }) => {
+  test("a read-only editor never calls the store, and a press of Delete changes nothing in it", async ({
+    page,
+    harness,
+  }) => {
     const store = new Store(page);
     await store.seed("test-page", storedDraft({ source: { lyrics: "", score: QUARTERS }, score: WITHOUT_D }));
     await page.clock.install();
