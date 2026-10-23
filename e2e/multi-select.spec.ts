@@ -1242,6 +1242,9 @@ test.describe("the assembled editor", () => {
     const scroller = page.getByRole("region", { name: "Arrangement" });
     const vocal = page.getByRole("list", { name: "Vocal" });
     await expect(vocal).toBeVisible();
+    // The toolbar takes three rows at a phone's width, which leaves the lane little height: the verse is brought into the
+    // frame first, so the box reaches notes whatever the height of the toolbar is.
+    await scroller.evaluate((el) => el.scrollTo({ left: 400 }));
     const position = () => harness.scrollOf(scroller);
     const before = await position();
     const frame = await box(scroller);

@@ -1,9 +1,10 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
+
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
-import { messagesFor } from "./i18n";
+import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import { mountSelectionMenu } from "./selection-menu";
@@ -11,6 +12,8 @@ import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import { mountSynthControl } from "./synth-preview";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
+import { arrangementShown } from "./view-rules";
+import { mountViewSwitch } from "./view-switch";
 import { mountZoomControl } from "./zoom-control";
 
 export interface ToolbarOptions extends EditingPartOptions {
@@ -19,6 +22,12 @@ export interface ToolbarOptions extends EditingPartOptions {
    * this option the toolbar draws no hint, since a hint nothing refers to would only be noise.
    */
   hintId?: string;
+  /**
+   * Whether to end the row with the view switch (`mountViewSwitch`), as the default editor does. The title then names the
+   * view that is shown, and the controls that only mean something on the arrangement are left out of the others. Without
+   * it the toolbar has no switch and keeps its own title.
+   */
+  viewSwitch?: boolean;
   /**
    * Whether the toolbar holds the synth preview control. On by default, so a toolbar alone lets a person listen; a host
    * that mounts `mountSynthPreview` in a place of its own turns it off, so the control is not there twice.
@@ -34,8 +43,9 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
 
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
- * read-only badge (while it is not), the synth preview control, which is there either way unless `synthPreview` is off,
- * and, when asked, the screen-reader hint. It follows the session's language.
+ * read-only badge (while the session is not editable), the view switch when asked, the synth preview control, which is
+ * there either way unless `synthPreview` is off, and, when asked, the screen-reader hint. The controls are in that order
+ * in the row and in the tab order, the preview control last. It follows the session's language.
  */
 export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
   requireDom("mountToolbar");
@@ -45,6 +55,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   el.appendChild(root);
 
   const row = create(doc, "div", "sce-toolbar", root);
+  if (options.viewSwitch) row.dataset.views = "";
   const title = create(doc, "span", "sce-title", row);
   const zoom = mountZoomControl(row, session);
   const history = create(doc, "div", "sce-history", row);
@@ -63,7 +74,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
   create(doc, "span", "sce-spacer", row);
-  const badge = create(doc, "span", "sce-badge", row);
+  // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
+  // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
+  // (it is there only while the score reads), and what comes after the switch cannot push it to the next line between a
+  // person's typing and the tap that follows. Its place is kept while it is not there, so it cannot move the switch along
+  // the line either (styles.ts).
+  const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
+  const badge = create(doc, "span", "sce-badge", end ?? row);
+  const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const live = createLiveRegion(root);
@@ -89,11 +107,18 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   let drawn = "";
   let language: Language | null = null;
   let t = messagesFor(session.view.language);
+  /** The title is the shown view's name; its tooltip holds the whole name, for where the row cuts it short. */
+  function setTitle(): void {
+    const name = options.viewSwitch ? viewName(t, session.activeView) : t.title;
+    title.textContent = name;
+    title.title = name;
+  }
+
   function applyLanguage(): void {
     language = session.view.language;
     t = messagesFor(language);
     root.lang = language;
-    title.textContent = t.title;
+    setTitle();
     badge.textContent = t.readOnly;
     history.setAttribute("aria-label", t.history);
     for (const [button, label, keys] of [
@@ -112,12 +137,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
     const deletable = canDeleteSelection(session);
-    const shown = [editable, readable, session.canUndo, session.canRedo, deletable].join();
+    const arrangement = !options.viewSwitch || arrangementShown(session);
+    const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView].join();
     if (shown === drawn) return;
     drawn = shown;
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
+    if (options.viewSwitch) setTitle();
     history.hidden = !editable || !readable;
-    remove.hidden = history.hidden;
+    remove.hidden = history.hidden || !arrangement;
     badge.hidden = editable;
     undo.setAttribute("aria-disabled", String(!session.canUndo));
     redo.setAttribute("aria-disabled", String(!session.canRedo));
@@ -134,6 +161,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       abort.abort();
       unsubscribe();
       zoom.destroy();
+      views?.destroy();
       select.destroy();
       synth?.destroy();
       root.remove();

@@ -18,10 +18,11 @@ const session = createEditingSession({
   dialects: createDialectRegistry([song2Dialect]),
   language: "en", // optional, "en" by default
   editable: true, // optional, true by default
+  activeView: "arrangement", // optional, "arrangement" by default
 });
 ```
 
-`SessionOptions` is `{ project, dialects, language?, editable? }`. `createEditingSession` returns an `EditingSession`.
+`SessionOptions` is `{ project, dialects, language?, editable?, activeView? }`. `createEditingSession` returns an `EditingSession`.
 
 ## What it holds
 
@@ -32,6 +33,8 @@ const session = createEditingSession({
 | `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
 | `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |
 | `view` | `ViewState`: `{ zoom, scrollLeft, language, editable }`, shared by all parts. `editable` says whether the user may change the score: parts offer editing controls and take selection and editing keys only while it is true. It does not stop `dispatch`; whoever drives the session directly decides what it sends. |
+| `activeView` | `ViewName` (`"arrangement"`, `"staff"` or `"text"`, listed in `VIEW_NAMES`): which view is shown. UI state like the selection, outside the history and not a field of `view`. The default editor shows this view; a host with its own layout reads it, or sets it from its own switch. |
+| `rejectedText` | `RejectedText \| null` (`{ text, diagnostics }`): text the text view holds that cannot be read, so the project kept the last score that could. Any change of the project, and `replaceProject`, drops it. |
 | `canUndo`, `canRedo` | Whether the history has a step in that direction. |
 
 `ScoreReading` is one of `{ kind: "score", score }`, `{ kind: "unreadable", diagnostics }`, or
@@ -41,8 +44,11 @@ const session = createEditingSession({
 
 | Method | Effect |
 | --- | --- |
-| `dispatch(command: ScoreCommand)` | Applies one command as one history step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. |
-| `runTool(tool, values?)` | Validates a tool's parameters, builds its commands once and applies them as one history step. Returns `ToolResult`. One failing step refuses the whole run. |
+| `dispatch(command: ScoreCommand \| ProjectCommand)` | Applies one command as one history step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. A command that comes back with notices only (`isNoticeDiagnostic`) is taken: the result is `ok` with the notices in `diagnostics`. |
+| `checkScoreText(text)` | What `dispatch` of `replaceScoreText` with `text` would say: the diagnostics it would be refused with, or the notices it would be taken with, the song-project rules included; a result with no diagnostic that `isNoticeDiagnostic` rejects is a text the session takes. Changes and announces nothing. |
+| `setActiveView(name)` | Shows another view. Throws `RangeError` for a name outside `VIEW_NAMES`. |
+| `setRejectedText(next \| null)` | Says which unreadable text the text view holds, or that it holds none. No-op for the same text. |
+| `runTool(tool, values?)` | Validates a tool's parameters, builds its commands once and applies them as one history step. Returns `ToolResult`. One failing step refuses the whole run; a step that comes back with a notice does not, and the notices are in the result. |
 | `previewTool(tool, values?)` | Returns what the tool would produce without dispatching, changing the history or notifying anyone. |
 | `undo()` / `redo()` | Move one whole project step. Return false when there is none. |
 | `select(noteIds)` | Selects exactly these notes; ids that name no note are left out. It works while the session is read-only, so a host's own control can select when the parts refuse to. |
@@ -52,13 +58,16 @@ const session = createEditingSession({
 | `replaceDialects(next)` | Reads the project with another registry. The history stays. No-op for the same registry. |
 | `subscribe(listener)` | Calls `listener(change)` after every change and returns the unsubscribe function. |
 
-`SessionChange` is `{ cause, project, selection, insertionPoint, view }`. The four booleans say which state the change
-touched; `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"` or
-`"replace"`. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
+`SessionChange` is `{ cause, project, selection, insertionPoint, view, command? }`. The four booleans say which state the change
+touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,
+`"replace"`, `"active-view"` or `"rejected-text"`; the last two touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
 of the change; its error goes to `reportError`.
 
-`DispatchResult` is either `{ ok: true, project, diagnostics: [] }` or `{ ok: false, project, diagnostics }`. The
-project is the one the session is left with: the untouched project for a refusal.
+`DispatchResult` is either `{ ok: true, project, diagnostics }` or `{ ok: false, project, diagnostics }`. The
+project is the one the session is left with: the untouched project for a refusal. A successful dispatch may carry
+notices in `diagnostics` (`isNoticeDiagnostic`; for example `style-no-bpm` after a tempo change, or
+`melody-with-chords` in a melody project that has chords): the project is changed and usable, so show a notice as a
+notice, and do not undo the change or treat it as an error. Test `ok`, not `diagnostics.length`, to tell a refusal.
 
 ## Usage
 

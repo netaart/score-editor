@@ -10,6 +10,7 @@ import {
   type SongProject,
 } from "@neta-art/score-editor";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { UNREADABLE_SCORE } from "./scores";
 
 const HEADER = `X:1
 T:
@@ -138,6 +139,91 @@ C5|`;
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["no-dialect"]);
     expect(result.diagnostics[0]?.params).toEqual({ modelId: "other-model" });
     expect(session.project.score).toBe(SCORE);
+  });
+});
+
+describe("a command that comes back with a notice", () => {
+  /** The score of the tests above, with the chord C on the first note. Chords are for the full score mode only. */
+  const WITH_CHORDS = `${HEADER}
+K:C
+V: Vocal
+"C"C4D4E4F4|G16|`;
+  const AT_100 = SCORE.replace("Q:1/4=120", "Q:1/4=100");
+
+  it("takes a tempo change for a style without a BPM as one step and carries the notice", () => {
+    const session = open({ style: "warm pop" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "setTempo", bpm: 100 });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+    expect(result.project).toBe(session.project);
+    expect(session.project).toEqual({ ...project, style: "warm pop", score: AT_100 });
+    expect(changes.map((change) => [change.cause, change.project])).toEqual([["dispatch", true]]);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("takes a replacement of the score text into a melody project that has chords, and carries the notice", () => {
+    const session = open({ scoreMode: "melody" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "replaceScoreText", text: WITH_CHORDS });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
+    expect(session.project.score).toBe(WITH_CHORDS);
+    expect(session.rejectedText).toBeNull();
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({
+      cause: "dispatch",
+      project: true,
+      command: { type: "replaceScoreText", text: WITH_CHORDS },
+    });
+
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("carries the notice of a command that leaves the project as it was, and adds no step", () => {
+    const session = open({ style: "warm pop" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "setTempo", bpm: 120 });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["style-no-bpm"]);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("refuses with the refusal alone when the project would otherwise carry a notice", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+
+    const result = session.dispatch({ type: "toRest", noteId: "Vocal:999" });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["note-not-found"]);
+    expect(session.project.score).toBe(WITH_CHORDS);
+  });
+
+  it("lets an ordinary edit of a melody project that holds chords through, with the notice", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+
+    const result = session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
+    expect(session.project.score).toBe(`${HEADER}
+K:C
+V: Vocal
+"C"C4z4E4F4|G16|`);
+    expect(session.canUndo).toBe(true);
   });
 });
 
@@ -630,5 +716,337 @@ describe("a listener that throws", () => {
     expect(session.canUndo).toBe(true);
     expect(microtasks).toHaveLength(1);
     expect(() => microtasks[0]?.()).toThrow("a view broke");
+  });
+});
+
+describe("a project command through the session", () => {
+  it("is one step of the history that undo takes back, told with the command it was", () => {
+    const session = open();
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "setStyle", style: "jazz" });
+
+    expect(result).toMatchObject({ ok: true, diagnostics: [] });
+    expect(session.project).toEqual({ ...project, style: "jazz" });
+    expect(changes).toEqual([
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        command: { type: "setStyle", style: "jazz" },
+      },
+    ]);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual(project);
+    expect(session.canUndo).toBe(false);
+  });
+});
+
+describe("replacing the score text", () => {
+  const typed = `${HEADER}
+K:C
+V: Vocal
+C4D4E4F4|G16|C16|`;
+  const broken = UNREADABLE_SCORE;
+
+  it("is one step of the history that undo and redo carry, and the project's other fields stay", () => {
+    const session = open();
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "replaceScoreText", text: typed });
+
+    expect(result).toMatchObject({ ok: true, diagnostics: [] });
+    expect(session.project).toEqual({ ...project, score: typed });
+    expect(session.reading.kind === "score" && session.reading.score.bars.length).toBe(3);
+    expect(changes).toEqual([
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        command: { type: "replaceScoreText", text: typed },
+      },
+    ]);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual(project);
+    expect(session.canUndo).toBe(false);
+    expect(session.redo()).toBe(true);
+    expect(session.project.score).toBe(typed);
+  });
+
+  it("is told by the change it made, with the command, so a log can call it a direct edit of the score text", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.dispatch({ type: "replaceScoreText", text: typed });
+    session.undo();
+    session.redo();
+
+    expect(changes.map((change) => change.cause)).toEqual(["dispatch", "undo", "redo"]);
+    expect(changes[0]?.command).toEqual({ type: "replaceScoreText", text: typed });
+    expect(changes[1]).not.toHaveProperty("command");
+    expect(changes[2]).not.toHaveProperty("command");
+  });
+
+  it("is checked with the song-project rules too, and the check says what the dispatch says", () => {
+    const withChords = `${HEADER}
+K:C
+V: Vocal
+"C"C16|`;
+    const session = open({ scoreMode: "melody" });
+
+    const checked = session.checkScoreText(withChords);
+    const result = session.dispatch({ type: "replaceScoreText", text: withChords });
+
+    expect(checked.map((diagnostic) => diagnostic.code)).toEqual(["melody-with-chords"]);
+    expect(result.diagnostics).toEqual(checked);
+    // The text carries a notice, not a refusal: the session took it.
+    expect(result.ok).toBe(true);
+    expect(session.project.score).toBe(withChords);
+  });
+
+  it("names its command on the change, which a command on the notes does not: that is told by the project alone", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).not.toHaveProperty("command");
+  });
+
+  it("is refused for an unreadable text: nothing changes, no step, nothing is announced", () => {
+    const session = open();
+    const changes = listen(session);
+    const before = session.project;
+
+    const result = session.dispatch({ type: "replaceScoreText", text: broken });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["duration"]);
+    expect(result.project).toBe(before);
+    expect(session.project).toBe(before);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("adds no step when the text is the one the project already has", () => {
+    const session = open();
+    const changes = listen(session);
+
+    expect(session.dispatch({ type: "replaceScoreText", text: SCORE }).ok).toBe(true);
+
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("is also no step when the text is the same but for its line endings", () => {
+    const session = open();
+
+    session.dispatch({ type: "replaceScoreText", text: SCORE.replace(/\n/g, "\r\n") });
+
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("drops a selected note that the new text no longer has, as any edit does", () => {
+    const session = open();
+    session.select(["Vocal:256", "Vocal:768"]);
+
+    session.dispatch({ type: "replaceScoreText", text: `${HEADER}\nK:C\nV: Vocal\nC8D8|G16|` });
+
+    expect(session.selection).toEqual([]);
+  });
+
+  it("lets a project whose own score cannot be read be fixed from the text", () => {
+    const session = open({ score: broken });
+    expect(session.reading.kind).toBe("unreadable");
+
+    expect(session.dispatch({ type: "replaceScoreText", text: typed }).ok).toBe(true);
+
+    expect(session.reading.kind).toBe("score");
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(broken);
+  });
+});
+
+describe("replacing the score text of a project that has lyrics", () => {
+  const bars = (count: number) =>
+    `${HEADER}
+K:C
+V: Vocal
+${["C16", "D16", "E16"].slice(0, count).join("|")}|`;
+  const THREE_BARS = bars(3);
+  const ONE_BAR = bars(1);
+
+  it("keeps the lyrics as they are, and the lines that no longer fit the new bars come back as the notice", () => {
+    const session = open({ score: THREE_BARS, lyrics: "la\nla\nla" });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "replaceScoreText", text: ONE_BAR });
+
+    // One line fits the one bar; the other two are in the unaligned area. That is a notice, so the text is taken.
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => [diagnostic.code, diagnostic.params])).toEqual([
+      ["lyrics-unaligned", { count: 2 }],
+    ]);
+    expect(session.project).toEqual({ ...project, score: ONE_BAR, lyrics: "la\nla\nla" });
+    expect(session.project.lyricLines).toBeUndefined();
+    expect(changes).toHaveLength(1);
+
+    expect(session.undo()).toBe(true);
+    expect(session.project.score).toBe(THREE_BARS);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("keeps stored lyric lines as they are: the command writes no lyric field", () => {
+    const lyricLines = [
+      { text: "la", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "la", phrase: { firstBar: 1, barCount: 1 } },
+      { text: "la", phrase: { firstBar: 2, barCount: 1 } },
+    ];
+    const session = open({ score: THREE_BARS, lyrics: "la\nla\nla", lyricLines });
+
+    const result = session.dispatch({ type: "replaceScoreText", text: ONE_BAR });
+
+    expect(result.ok).toBe(true);
+    expect(session.project.score).toBe(ONE_BAR);
+    expect(session.project.lyrics).toBe("la\nla\nla");
+    expect(session.project.lyricLines).toEqual(lyricLines);
+  });
+});
+
+describe("checking a text without taking it", () => {
+  it("says what the dialect finds wrong with an unreadable text and where, and nothing for a readable one", () => {
+    const session = open();
+    const changes = listen(session);
+
+    expect(session.checkScoreText(SCORE_WITHOUT_D)).toEqual([]);
+    const found = session.checkScoreText(UNREADABLE_SCORE);
+
+    expect(found.map((diagnostic) => [diagnostic.code, diagnostic.at.line])).toEqual([["duration", 9]]);
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("names the missing dialect for a model nothing reads", () => {
+    const session = open({ modelId: "other-model" });
+
+    expect(session.checkScoreText(SCORE).map((diagnostic) => diagnostic.code)).toEqual(["no-dialect"]);
+  });
+});
+
+describe("which view is shown", () => {
+  it("is the arrangement view until a host or the user says otherwise, and starts from the option", () => {
+    expect(open().activeView).toBe("arrangement");
+    expect(createEditingSession({ project, dialects, activeView: "text" }).activeView).toBe("text");
+  });
+
+  it("changes like the rest of the UI state: one announcement, none when it stays, and nothing in the history", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.setActiveView("staff");
+    session.setActiveView("staff");
+    session.setActiveView("text");
+
+    expect(session.activeView).toBe("text");
+    expect(changes).toEqual([
+      { cause: "active-view", project: false, selection: false, insertionPoint: false, view: false },
+      { cause: "active-view", project: false, selection: false, insertionPoint: false, view: false },
+    ]);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("is not a field of the view state, which keeps the four it had", () => {
+    const session = open();
+    session.setActiveView("staff");
+
+    expect(session.view).toEqual({ zoom: 1, scrollLeft: 0, language: "en", editable: true });
+  });
+
+  it("stays when the project is replaced from outside, and refuses a name no view has", () => {
+    const session = open();
+    session.setActiveView("text");
+
+    session.replaceProject({ ...project, sourceKey: "another-song", score: SCORE_WITHOUT_D });
+
+    expect(session.activeView).toBe("text");
+    expect(() => session.setActiveView("lyrics" as never)).toThrow(RangeError);
+    expect(session.activeView).toBe("text");
+  });
+
+  it("is listed for hosts that draw their own switcher", async () => {
+    const { VIEW_NAMES } = await import("@neta-art/score-editor");
+
+    expect([...VIEW_NAMES]).toEqual(["arrangement", "staff", "text"]);
+  });
+});
+
+describe("text a view could not hand over", () => {
+  const broken = UNREADABLE_SCORE;
+
+  it("is none at first, is set with the text and what is wrong with it, and is announced", () => {
+    const session = open();
+    const changes = listen(session);
+    expect(session.rejectedText).toBeNull();
+
+    const diagnostics = session.checkScoreText(broken);
+    session.setRejectedText({ text: broken, diagnostics });
+
+    expect(session.rejectedText).toEqual({ text: broken, diagnostics });
+    expect(session.project.score).toBe(SCORE);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([
+      { cause: "rejected-text", project: false, selection: false, insertionPoint: false, view: false },
+    ]);
+
+    session.setRejectedText(null);
+    expect(session.rejectedText).toBeNull();
+    session.setRejectedText(null);
+    expect(changes.map((change) => change.cause)).toEqual(["rejected-text", "rejected-text"]);
+  });
+
+  it("says nothing when it is set to what it already is", () => {
+    const session = open();
+    const diagnostics = session.checkScoreText(broken);
+    session.setRejectedText({ text: broken, diagnostics });
+    const changes = listen(session);
+
+    session.setRejectedText({ text: broken, diagnostics });
+
+    expect(changes).toEqual([]);
+  });
+
+  it("goes when the project changes under it: an edit, an undo, a redo, new data or new dialects", () => {
+    const hold = (session: EditingSession) =>
+      session.setRejectedText({ text: broken, diagnostics: session.checkScoreText(broken) });
+    const session = open();
+
+    hold(session);
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.undo();
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.redo();
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.replaceProject({ ...project, sourceKey: "another-song" });
+    expect(session.rejectedText).toBeNull();
+
+    hold(session);
+    session.replaceDialects(createDialectRegistry([song2Dialect]));
+    expect(session.rejectedText).toBeNull();
   });
 });

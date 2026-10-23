@@ -42,7 +42,11 @@ importers:
         specifier: workspace:*
         version: link:../score-editor
 
-  packages/score-editor: {}
+  packages/score-editor:
+    dependencies:
+      abcjs:
+        specifier: 6.7.1
+        version: 6.7.1
 
 packages:
 
@@ -601,6 +605,9 @@ packages:
 
   '@vitest/utils@3.2.4':
     resolution: {integrity: sha512-fB2V0JFrQSMsCo9HiSq3Ezpdv4iYaXRG1Sx8edX3MwxfyNn83mKiGzOcH+Fkxt4MHxr3y42fQi1oeAInqgX2QA==}
+
+  abcjs@6.7.1:
+    resolution: {integrity: sha512-H9fnuhSSP3tbcJf4K3a/sgX8lM2M5cx8drlXEsPNrsRca/MGxhSb6HcT0ICFVoNW7Izx3kMHf7PExarC+5LUJw==}
 
   ansis@4.4.0:
     resolution: {integrity: sha512-9k3v7xcHwgdO/DruxGIg4HtjvlAZlcnsX/mzqUb1t3NkYnl9kK2UJ+Gq0io+vQf7iT//BD/HB/NBkUR1LWxoeA==}
@@ -1342,6 +1349,8 @@ snapshots:
       '@vitest/pretty-format': 3.2.4
       loupe: 3.2.1
       tinyrainbow: 2.0.0
+
+  abcjs@6.7.1: {}
 
   ansis@4.4.0: {}
 

@@ -642,6 +642,71 @@ test.describe("destroying parts", () => {
   });
 });
 
+/** A score of four quarter notes and a whole note, and the same with one duration the format does not allow. */
+const QUARTERS = vocalOnly("C4D4E4F4|G16|");
+const BROKEN = QUARTERS.replace("C4D4E4F4|", "C5D4E4F4|");
+const QUARTERS_WITHOUT_D = QUARTERS.replace("C4D4E4F4|", "C4z4E4F4|");
+const staffNotes = (page: Page) => slot(page, "staff").locator("svg .abcjs-note");
+const scoreTextBox = (page: Page) => slot(page, "text").getByRole("textbox", { name: "Score text" });
+
+test.describe("destroying the view parts", () => {
+  test("each one, destroyed on its own, leaves no node, no listener and no style sheet, and does not answer the session any more", async ({
+    page,
+    harness,
+    partNames,
+  }) => {
+    // abcjs puts two resize listeners on the window when its module is loaded, and has no way to take them off. They are
+    // its, not the staff view's: the module is loaded once before the baseline is taken, so that what is measured is what
+    // the parts leave behind.
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"] });
+    await expect(staffNotes(page)).toHaveCount(5);
+    await harness.layout.close();
+    const baseline = await leakBaseline(page, harness);
+
+    for (const name of partNames.views) {
+      await harness.layout.open({ score: { text: QUARTERS }, parts: [name] });
+      expect((await harness.layout.sheets()).document, `${name} adds the one style sheet`).toBe(baseline.sheets + 1);
+      await harness.layout.retain(name);
+      // The notice and the staff only draw (the staff watches its size with an observer, which is no event listener).
+      if (!["stale", "staff"].includes(name))
+        expect(await baseline.listeners.onRetained(), `${name} has listeners`).toBeGreaterThan(0);
+
+      await harness.layout.destroyPart(name, 2);
+      expect(await baseline.listeners.onRetained(), `${name} leaves listeners`).toBe(0);
+      await expect(slot(page, name).locator("*")).toHaveCount(0);
+      const retained = await harness.layout.retainedHtml();
+
+      // Everything that would redraw the part, and the part must not hear of it.
+      await harness.layout.setView({ language: "zh", editable: false });
+      await harness.layout.setActiveView("staff");
+      await harness.layout.setRejectedText(BROKEN);
+      await harness.layout.replace({ score: { vector: "reject-duration-five" } });
+      expect(await harness.layout.retainedHtml(), name).toBe(retained);
+
+      await harness.layout.close();
+      expect((await harness.layout.sheets()).document, `${name} gives its style sheet back`).toBe(baseline.sheets);
+    }
+    await baseline.expectRestored();
+    await baseline.detach();
+  });
+
+  test("the text view destroyed with text it had not handed over hands nothing over afterwards", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["text", "vocal"] });
+    await page.clock.install();
+    await scoreTextBox(page).fill(QUARTERS_WITHOUT_D);
+
+    await harness.layout.destroyPart("text", 2);
+    await page.clock.runFor(800);
+
+    await expect(slot(page, "text")).toBeEmpty();
+    expect(await harness.layout.scoreText()).toBe(QUARTERS);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+});
+
 test.describe("style isolation of parts", () => {
   test.skip(({ isMobile }) => isMobile, "styling is checked once, on the desktop project");
   const score = { text: vocalOnly("C4z4D8|C16|C16|") };

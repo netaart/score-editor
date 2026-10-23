@@ -10,9 +10,13 @@ import {
   mountChordTrack,
   mountCutNotice,
   mountProblemView,
+  mountStaffView,
+  mountStaleNotice,
   mountSynthPreview,
+  mountTextView,
   mountTimeRuler,
   mountToolbar,
+  mountViewSwitch,
   mountVoiceTrack,
   mountZoomControl,
   previewNote,
@@ -71,6 +75,20 @@ const LAYOUT_PARTS = {
   synth: (el, session) => mountSynthPreview(el, session),
 };
 
+/**
+ * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for
+ * them, and the lists of the parts the older specs walk through do not include them.
+ */
+const VIEW_PARTS = {
+  text: (el, session) => mountTextView(el, session),
+  staff: (el, session) => mountStaffView(el, session),
+  stale: (el, session) => mountStaleNotice(el, session),
+  switch: (el, session) => mountViewSwitch(el, session),
+  "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+};
+
+const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };
+
 /** The parts that draw on the time axis. */
 const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
 
@@ -78,7 +96,22 @@ const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
  * A layout of the host's own, nothing like the editor's: parts in cards of different widths, one slot for each. It is
  * styled by classes of host.css, since a strict style policy refuses inline style attributes.
  */
-function buildLayout(container) {
+function viewCards(names) {
+  return names
+    .filter((name) => name in VIEW_PARTS)
+    .map(
+      (name) => `<div class="layout-card layout-card-wide"><div class="layout-slot" data-slot="${name}"></div></div>`,
+    )
+    .join("");
+}
+
+/** The slots for view parts that are mounted after the layout was built, added at the end of its grid. */
+function buildSlots(container, names) {
+  container.querySelector(".layout-grid").insertAdjacentHTML("beforeend", viewCards(names));
+  return Object.fromEntries(names.map((name) => [name, container.querySelector(`[data-slot="${name}"]`)]));
+}
+
+function buildLayout(container, names = []) {
   container.innerHTML = `
     <div class="layout-grid">
       <div class="layout-slot" data-slot="zoom"></div>
@@ -90,6 +123,7 @@ function buildLayout(container) {
       <div class="layout-card layout-card-medium"><div class="layout-slot" data-slot="vocal"></div></div>
       <div class="layout-card layout-card-wide" data-card="ins"><div class="layout-slot" data-slot="ins"></div></div>
       <div class="layout-slot" data-slot="problem"></div>
+      ${viewCards(names)}
       <div class="layout-slot" data-slot="synth"></div>
     </div>`;
   return Object.fromEntries([...container.querySelectorAll("[data-slot]")].map((el) => [el.dataset.slot, el]));
@@ -123,7 +157,7 @@ const SCENES = {
 };
 
 function mountLayoutParts(slots, session, names) {
-  return Object.fromEntries(names.map((name) => [name, LAYOUT_PARTS[name](slots[name], session)]));
+  return Object.fromEntries(names.map((name) => [name, PART_FACTORIES[name](slots[name], session)]));
 }
 
 const layout = {
@@ -132,7 +166,7 @@ const layout = {
   slots: {},
   shadowRoot: null,
   host: null,
-  partNames: { all: Object.keys(LAYOUT_PARTS), axis: AXIS_PART_NAMES },
+  partNames: { all: Object.keys(LAYOUT_PARTS), axis: AXIS_PART_NAMES, views: Object.keys(VIEW_PARTS) },
   /** The session of the open layout. */
   live() {
     if (!layout.session) throw new Error("no layout is open");
@@ -169,7 +203,8 @@ const layout = {
       await new Promise((resolve) => styles.addEventListener("load", resolve, { once: true }));
     }
     layout.host = host;
-    layout.slots = buildLayout(container);
+    const names = parts ?? Object.keys(LAYOUT_PARTS);
+    layout.slots = buildLayout(container, names);
     if (scene) SCENES[scene](container, layout.slots);
     layout.session = createEditingSession({
       project: base,
@@ -177,15 +212,28 @@ const layout = {
       language,
       ...(editable === undefined ? {} : { editable }),
     });
-    layout.parts = mountLayoutParts(layout.slots, layout.session, parts ?? Object.keys(LAYOUT_PARTS));
+    layout.parts = mountLayoutParts(layout.slots, layout.session, names);
   },
   /** Replaces the project from outside, the way update does for the editor. */
   async replace({ score, project: fields }) {
     layout.session.replaceProject(await projectFrom(layout.session.project, score, fields));
   },
-  /** Mounts one more part on the open session, as a host does that adds a view later. */
-  mountPart(name) {
-    layout.parts[name] = LAYOUT_PARTS[name](layout.slots[name], layout.session);
+  /** Reads the project with a new registry of the same dialects, the way a host that swaps its dialects does. */
+  replaceDialects() {
+    layout.session.replaceDialects(createDialectRegistry([song2Dialect]));
+  },
+  /** Mounts one more part on the open session, as a host does that adds a view later; `hidden` mounts it in a slot that is not shown. */
+  mountPart(name, hidden = false) {
+    if (!layout.slots[name]) {
+      const container = layout.host.shadowRoot ?? layout.host;
+      layout.slots[name] = buildSlots(container, [name])[name];
+    }
+    layout.slots[name].closest(".layout-card").style.display = hidden ? "none" : "";
+    layout.parts[name] = PART_FACTORIES[name](layout.slots[name], layout.session);
+  },
+  /** Shows or hides the box a mounted part stands in, as a host with tabs does. */
+  setSlotHidden(name, hidden) {
+    layout.slots[name].closest(".layout-card").style.display = hidden ? "none" : "";
   },
   /** Destroys one part, `times` times over: a second destroy must be harmless. */
   destroyPart(name, times = 1) {
@@ -202,7 +250,7 @@ const layout = {
     const host = document.createElement("div");
     host.className = "layout-offscreen";
     document.body.append(host);
-    const slots = buildLayout(host);
+    const slots = buildLayout(host, Object.keys(layout.parts));
     const { project, view } = layout.session;
     const session = createEditingSession({ project, dialects, language: view.language, editable: view.editable });
     session.setView({ zoom: view.zoom });
@@ -241,6 +289,9 @@ const layout = {
 };
 
 const HOST_RULES = {
+  // A page with a rule for every svg, drawn over everything with !important.
+  "hostile-svg":
+    "svg, svg *, svg path, svg text { fill: red !important; stroke: red !important; font: italic 40px cursive !important; } svg { max-width: 50px !important; }",
   // A page with an !important rule on every element in the layout.
   important: "#layout-host span, #layout-host div { padding: 9px !important; color: red !important; }",
   // A page whose rules on plain elements are careless: they touch everything on the page that has no rule of its own.
@@ -252,10 +303,11 @@ const HOST_RULES = {
 
 /** Things a host page does to the document around the editor and its parts. */
 const hostPage = {
-  addRules(kind) {
+  /** `inShadowRoot` puts the rules inside the open shadow root the editor or the layout was mounted in, instead of in the page. */
+  addRules(kind, inShadowRoot = false) {
     const rules = document.createElement("style");
     rules.textContent = HOST_RULES[kind];
-    document.head.append(rules);
+    (inShadowRoot ? (layout.shadowRoot ?? window.harness.shadowRoot) : document.head).append(rules);
   },
   setColorScheme(scheme) {
     document.documentElement.style.colorScheme = scheme;

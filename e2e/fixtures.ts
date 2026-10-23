@@ -27,6 +27,8 @@ interface PageSession {
   insertionPoint: { tick: number } | null;
   view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
   reading: { kind: string; score?: { notes: Array<{ id: string; voice: string; midi: number | null }> } };
+  activeView: string;
+  rejectedText: { text: string; diagnostics: Array<{ code: string }> } | null;
   canUndo: boolean;
   dispatch(command: unknown): { ok: boolean; diagnostics: Array<{ code: string }> };
   undo(): boolean;
@@ -34,6 +36,9 @@ interface PageSession {
   select(noteIds: string[]): void;
   setInsertionPoint(point: { tick: number } | null): void;
   setView(patch: Record<string, unknown>): void;
+  setActiveView(name: string): void;
+  setRejectedText(next: { text: string; diagnostics: Array<{ code: string }> } | null): void;
+  checkScoreText(text: string): Array<{ code: string }>;
 }
 
 interface PageLayout {
@@ -44,11 +49,13 @@ interface PageLayout {
   slots: Record<string, HTMLElement>;
   shadowRoot: ShadowRoot | null;
   host: HTMLElement | null;
-  partNames: { all: string[]; axis: string[] };
+  partNames: { all: string[]; axis: string[]; views: string[] };
   retained: { root: Element; nodes: Node[] } | null;
   open(options?: Record<string, unknown>): Promise<void>;
   replace(options: Record<string, unknown>): Promise<void>;
-  mountPart(name: string): void;
+  replaceDialects(): void;
+  mountPart(name: string, hidden?: boolean): void;
+  setSlotHidden(name: string, hidden: boolean): void;
   destroyPart(name: string, times?: number): void;
   roots(): Record<string, string>;
   freshRoots(): Record<string, string>;
@@ -78,7 +85,11 @@ interface PageHarness {
   notices: PageNotice[];
   probes?: Partial<PageProbes>;
   layout: PageLayout;
-  host: { addRules(kind: "important" | "hostile"): void; addProbe(): void; setColorScheme(scheme: string): void };
+  host: {
+    addRules(kind: "important" | "hostile" | "hostile-svg", inShadowRoot?: boolean): void;
+    addProbe(): void;
+    setColorScheme(scheme: string): void;
+  };
   shadowRoot: ShadowRoot | null;
   previewNote(midi: number, options?: { duration?: number }): Promise<boolean>;
   previewPlayer(): {
@@ -118,6 +129,16 @@ export class Layout {
   /** Replaces the project from outside, the way a host does with new data. */
   replace(options: Record<string, unknown>) {
     return this.page.evaluate((o) => window.harness.layout.replace(o), options);
+  }
+
+  /** Mounts a part in a box that is not shown, as a host does whose tab is not the open one. */
+  mountHiddenPart(name: string) {
+    return this.page.evaluate((n) => window.harness.layout.mountPart(n, true), name);
+  }
+
+  /** Shows or hides the box a mounted part stands in. */
+  setSlotHidden(name: string, hidden: boolean) {
+    return this.page.evaluate(([n, value]) => window.harness.layout.setSlotHidden(n, value), [name, hidden] as const);
   }
 
   mountPart(...names: string[]) {
@@ -202,6 +223,42 @@ export class Layout {
     return this.page.evaluate(() => window.harness.layout.live().project.score);
   }
 
+  /** Which view the session says is shown. */
+  activeView() {
+    return this.page.evaluate(() => window.harness.layout.live().activeView);
+  }
+
+  /** Says, as a host's own switcher does, which view is shown. */
+  setActiveView(name: string) {
+    return this.page.evaluate((value) => window.harness.layout.live().setActiveView(value), name);
+  }
+
+  /** The text the text view holds that the session did not take, with the codes of what is wrong with it; null when none. */
+  rejectedText() {
+    return this.page.evaluate(() => {
+      const { rejectedText } = window.harness.layout.live();
+      return rejectedText === null
+        ? null
+        : { text: rejectedText.text, codes: rejectedText.diagnostics.map((diagnostic) => diagnostic.code) };
+    });
+  }
+
+  /**
+   * Says that the text view holds this text and the session did not take it, with what the dialect finds wrong with it; null
+   * says it holds none.
+   */
+  setRejectedText(text: string | null) {
+    return this.page.evaluate((value) => {
+      const session = window.harness.layout.live();
+      session.setRejectedText(value === null ? null : { text: value, diagnostics: session.checkScoreText(value) });
+    }, text);
+  }
+
+  /** Reads the project with a new registry of the same dialects, the way a host that swaps its dialects does. */
+  replaceDialects() {
+    return this.page.evaluate(() => window.harness.layout.replaceDialects());
+  }
+
   /** Says, as a host does with its permissions, whether the user may edit. */
   setEditable(editable: boolean) {
     return this.page.evaluate((value) => window.harness.layout.live().setView({ editable: value }), editable);
@@ -257,9 +314,12 @@ export class Harness {
     return this.page.evaluate(() => window.harness.destroy());
   }
 
-  /** Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones. */
-  addHostRules(kind: "important" | "hostile") {
-    return this.page.evaluate((k) => window.harness.host.addRules(k), kind);
+  /**
+   * Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones; `inShadowRoot`
+   * adds them to the open shadow root the editor or the layout stands in.
+   */
+  addHostRules(kind: "important" | "hostile" | "hostile-svg", inShadowRoot = false) {
+    return this.page.evaluate(([k, inside]) => window.harness.host.addRules(k, inside), [kind, inShadowRoot] as const);
   }
 
   /** Switches the page's `color-scheme`, as a host with a dark mode does. */
@@ -485,7 +545,7 @@ export class Finger {
 export const test = base.extend<{
   harness: Harness;
   press: (target: Locator, position?: Point) => Promise<void>;
-  partNames: { all: string[]; axis: string[] };
+  partNames: { all: string[]; axis: string[]; views: string[] };
 }>({
   harness: async ({ page }, use) => {
     await page.goto("/");

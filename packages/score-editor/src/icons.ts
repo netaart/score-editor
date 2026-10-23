@@ -1,5 +1,5 @@
 // ABOUTME: Line icons for the toolbar's buttons: a 16 by 16 drawing built of polylines, styled by the stylesheet.
-// ABOUTME: Shared by the toolbar and the controls it assembles, so every icon is drawn the same way.
+// ABOUTME: Shared by the toolbar, the view switch and the controls the toolbar assembles, so every icon is drawn the same way.
 
 const SVG = "http://www.w3.org/2000/svg";
 

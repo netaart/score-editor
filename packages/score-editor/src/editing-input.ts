@@ -1,5 +1,6 @@
 // ABOUTME: The editing input layer: what a key or a click means for an editing session, with no DOM and no event objects.
 // ABOUTME: The view parts turn their events into these inputs, so a host's own views get the same keys and clicks.
+
 import { beatLineAfter, beatLineBefore, gridTicks, nearestBeatLine } from "./arrangement";
 import type { Diagnostic } from "./diagnostics";
 import type { Score } from "./score";
@@ -13,6 +14,7 @@ import {
 } from "./selection-input";
 import type { EditingSession, InsertionPoint } from "./session";
 import type { ScoreTool } from "./tool";
+import { arrangementShown } from "./view-rules";
 
 /** A key press with the modifiers that were held. */
 export interface EditingKeyInput {
@@ -59,10 +61,13 @@ export interface EditingInputResult {
 const IGNORED: EditingInputResult = { handled: false, refused: [] };
 const HANDLED: EditingInputResult = { handled: true, refused: [] };
 
-/** The score the session reads, or null while its project cannot be read: then no input has anything to act on. */
+/**
+ * The score the session reads, or null while its project cannot be read or a view other than the arrangement is shown:
+ * then no selection, insertion point or delete has anything to act on, since the notes they name are not on screen.
+ */
 function readableScore(session: EditingSession): Score | null {
   const { reading } = session;
-  return reading.kind === "score" ? reading.score : null;
+  return reading.kind === "score" && arrangementShown(session) ? reading.score : null;
 }
 
 /** Ctrl or Cmd with Z undoes and with Shift redoes; Ctrl with Y redoes. Null for any other key. */
@@ -124,7 +129,7 @@ function deleteSelection(session: EditingSession): EditingInputResult {
   const score = readableScore(session);
   if (score === null || pitchedSelection(score, session.selection).length === 0) return IGNORED;
   const result = session.runTool(deleteTool(score));
-  return { handled: true, refused: result.diagnostics };
+  return { handled: true, refused: result.ok ? [] : result.diagnostics };
 }
 
 function clickNote(session: EditingSession, noteId: string): EditingInputResult {
