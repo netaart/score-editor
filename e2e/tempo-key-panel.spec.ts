@@ -329,6 +329,26 @@ test.describe("the song project panel's fields", () => {
     expect((await project(page)).scoreMode).toBe("full");
   });
 
+  test("the history keys in the style box are the browser's, and leave the project's history alone", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { style: "warm pop, 100 BPM" });
+    await tempoField(page).fill("140");
+    await tempoField(page).press("Enter");
+    await expect.poll(() => scoreText(page)).toContain("\nQ:1/4=140\n");
+    await openPanel(page, press);
+    await styleBox(page).focus();
+    await page.keyboard.type(" mellow");
+
+    await page.keyboard.press("ControlOrMeta+z");
+
+    expect(await scoreText(page)).toContain("\nQ:1/4=140\n");
+    expect(await harness.layout.canUndo()).toBe(true);
+    expect((await project(page)).style).toBe("warm pop, 140 BPM");
+  });
+
   test("a popover that is closed from outside while the style box has the focus still takes what was typed", async ({
     page,
     harness,
