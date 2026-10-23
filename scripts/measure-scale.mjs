@@ -5,6 +5,7 @@ import { chromium } from "@playwright/test";
 
 const args = new Map(process.argv.slice(2).map((arg) => arg.replace(/^--/, "").split("=")));
 const headed = args.has("headed");
+const selectAll = args.has("select-all");
 const throttle = Number(args.get("throttle") ?? 1);
 const bars = Number(args.get("bars") ?? 128);
 const notes = Number(args.get("notes") ?? 1500);
@@ -172,6 +173,41 @@ try {
     domNodes: mounts.at(-1).nodes,
     jsHeapMB: mounts.at(-1).heapMB,
   };
+
+  // With --select-all every note is selected before the gestures below, and the key press that selects them is timed
+  // from the key to the second frame after it, three times (Escape clears the selection between the presses).
+  if (selectAll) {
+    await page.locator(".sce-note").first().click();
+    const presses = [];
+    for (let run = 0; run < 3; run++) {
+      await page.evaluate(() => {
+        window.__selectAll = null;
+        document.addEventListener(
+          "keydown",
+          () => {
+            const t0 = performance.now();
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                window.__selectAll = performance.now() - t0;
+              }),
+            );
+          },
+          { capture: true, once: true },
+        );
+      });
+      await page.keyboard.press("Control+a");
+      await page.waitForFunction(() => window.__selectAll !== null);
+      presses.push(await page.evaluate(() => window.__selectAll));
+      if (run < 2) {
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(200);
+      }
+    }
+    result.selectAll = {
+      selectedNotes: await page.locator(".sce-note[data-selected]").count(),
+      keyToSecondFrameMs: stats(presses),
+    };
+  }
 
   // The repeated mounts above leave garbage; collect it now so a collection does not land inside a measured gesture.
   await cdp.send("HeapProfiler.collectGarbage");
