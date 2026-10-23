@@ -3,6 +3,7 @@
 
 import { create, requireDom } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
+import { mountRestoreControl } from "./draft-restore";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor, viewName } from "./i18n";
@@ -35,8 +36,9 @@ export interface ToolbarOptions extends EditingPartOptions {
    */
   synthPreview?: boolean;
   /**
-   * The draft keeper of this editor. While it is opening, the badge says so in place of "Read only"; a host that keeps
-   * the session read-only until `keeper.ready` gets the right word that way.
+   * The draft keeper of this editor. With it the toolbar offers Restore original, after Select, while the keeper is
+   * ready and the session editable; and while the keeper is opening the badge says so in place of "Read only", which is
+   * the right word for a host that keeps the session read-only until `keeper.ready`.
    */
   draftKeeper?: DraftKeeper;
 }
@@ -79,6 +81,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
+  const restore = options.draftKeeper
+    ? mountRestoreControl(row, session, options.draftKeeper, (words) => live.say(words))
+    : null;
   create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -172,6 +177,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      restore?.destroy();
       synth?.destroy();
       root.remove();
       releaseStyles();

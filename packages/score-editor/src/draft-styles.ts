@@ -33,4 +33,36 @@ export const draftCss = `
   color: var(--sce-_muted);
   font-size: 0.92em;
 }
+
+/*
+ * Restore original: a word button like Select, and the question it opens in a native popover of the same make as the menus,
+ * so it stacks above a host's full-screen layer. The question is a sentence and what it costs, then the two answers with the
+ * one that does it last and heavier; there is no danger colour in the contract, and the focus starts on Cancel.
+ */
+.sce-root .sce-restore-popover {
+  width: 22em;
+  max-width: calc(100vw - 16px);
+  padding: 12px;
+}
+.sce-root .sce-restore-popover:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sce-root .sce-restore-question {
+  margin: 0;
+  font-weight: 600;
+}
+.sce-root .sce-restore-warning {
+  margin: 0;
+}
+.sce-root .sce-restore-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.sce-root .sce-restore-confirm {
+  font-weight: 600;
+}
 `;

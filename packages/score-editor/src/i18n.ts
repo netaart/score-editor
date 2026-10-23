@@ -86,6 +86,12 @@ export interface Messages {
   draftOverwriteNote: string;
   draftLoadTheirs: string;
   draftLoadTheirsNote: string;
+  /** Restore original: the button, the question it asks and what that costs, the two answers, and what is said once it is done. */
+  restoreOriginal: string;
+  restoreQuestion: string;
+  restoreWarning: string;
+  restoreCancel: string;
+  restoreDone: string;
 }
 
 const en: Messages = {
@@ -174,6 +180,11 @@ const en: Messages = {
   draftOverwriteNote: "The other version is replaced by yours.",
   draftLoadTheirs: "Load the other version",
   draftLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
+  restoreOriginal: "Restore original",
+  restoreQuestion: "Go back to the original score?",
+  restoreWarning: "Every change you made is discarded and the saved draft is deleted. You can't undo this.",
+  restoreCancel: "Cancel",
+  restoreDone: "The original score is back",
 };
 
 const zh: Messages = {
@@ -254,6 +265,11 @@ const zh: Messages = {
   draftOverwriteNote: "对方的版本会被你的版本替换。",
   draftLoadTheirs: "载入对方的版本",
   draftLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
+  restoreOriginal: "恢复原谱",
+  restoreQuestion: "恢复到原来的乐谱？",
+  restoreWarning: "你做过的所有修改都会丢弃，已保存的草稿也会删除，之后无法撤销。",
+  restoreCancel: "取消",
+  restoreDone: "已恢复原谱",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
