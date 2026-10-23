@@ -27,6 +27,14 @@ export interface NoteFilter {
    * A minor key counts as its natural minor. A note whose key cannot be read is neither in nor out.
    */
   readonly key?: "in" | "out";
+  /**
+   * One note in every `every` (a whole number, 1 or more) of the notes the other conditions let through, counted along
+   * each voice on its own in time order, after passing over the first `skip` (a whole number, 0 or more; default 0). Numbers
+   * that are not those take nothing, as an empty range does; nothing is refused.
+   */
+  readonly count?: { readonly every: number; readonly skip?: number };
+  /** Takes the pitched notes that the conditions above do not take, all of them together, instead of those they take. */
+  readonly invert?: boolean;
 }
 
 /** One note as the filter sees it: a tie chain, or a single note that is tied to nothing. */
@@ -90,19 +98,34 @@ function startsIn(start: number, time: { readonly from?: number; readonly to?: n
   return (time.from === undefined || start >= time.from) && (time.to === undefined || start < time.to);
 }
 
+/** The chains at the places `skip`, `skip + every`, `skip + 2 * every` and so on of their own voice, in the order given. */
+function oneInEvery(chains: ReadonlyArray<Chain>, count: { readonly every: number; readonly skip?: number }): Chain[] {
+  const skip = count.skip ?? 0;
+  if (!Number.isInteger(count.every) || count.every < 1 || !Number.isInteger(skip) || skip < 0) return [];
+  const seen = new Map<string, number>();
+  return chains.filter((chain) => {
+    const place = seen.get(chain.voice) ?? 0;
+    seen.set(chain.voice, place + 1);
+    return place >= skip && (place - skip) % count.every === 0;
+  });
+}
+
 /**
  * The ids of the notes that satisfy `filter`, in the order of `score.notes`. A tie chain that satisfies it contributes
  * the id of each of its segments, as selecting all notes does, so the result can go straight to `session.select`.
  */
 export function filterNotes(score: Score, filter: NoteFilter): string[] {
-  const picked = new Set<string>();
   const scales = new Map<string, ReadonlySet<number> | null>();
-  for (const chain of chainsOf(score)) {
-    if (filter.pitch !== undefined && !within(chain.midi, filter.pitch)) continue;
-    if (filter.time !== undefined && !startsIn(chain.start, filter.time)) continue;
-    if (filter.duration !== undefined && !within(chain.duration, filter.duration)) continue;
-    if (filter.key !== undefined && inKey(score, chain, scales) !== (filter.key === "in")) continue;
-    for (const member of chain.members) picked.add(member.id);
-  }
+  const chains = chainsOf(score);
+  const passing = chains.filter(
+    (chain) =>
+      (filter.pitch === undefined || within(chain.midi, filter.pitch)) &&
+      (filter.time === undefined || startsIn(chain.start, filter.time)) &&
+      (filter.duration === undefined || within(chain.duration, filter.duration)) &&
+      (filter.key === undefined || inKey(score, chain, scales) === (filter.key === "in")),
+  );
+  const taken = new Set(filter.count === undefined ? passing : oneInEvery(passing, filter.count));
+  const chosen = chains.filter((chain) => taken.has(chain) !== (filter.invert === true));
+  const picked = new Set(chosen.flatMap((chain) => chain.members.map((member) => member.id)));
   return score.notes.filter((note) => picked.has(note.id)).map((note) => note.id);
 }

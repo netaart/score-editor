@@ -144,3 +144,129 @@ describe("the key condition", () => {
     expect(filterNotes(tied, { key: "out" })).toEqual([]);
   });
 });
+
+describe("the count condition", () => {
+  // The nine notes of MELODY in order, numbered from 0: C4 D4 E4 F4 G4 A4 C5 D5 (a chain of two ids) E5.
+  it("takes one note in every N, starting with the first", () => {
+    expect(filterNotes(MELODY, { count: { every: 2 } })).toEqual([ID.C4, ID.E4, ID.G4, ID.C5, ID.E5]);
+  });
+
+  it("passes over the first notes named by skip before it starts counting", () => {
+    expect(filterNotes(MELODY, { count: { every: 2, skip: 1 } })).toEqual([ID.D4, ID.F4, ID.A4, ID.D5, ID.D5tail]);
+    expect(filterNotes(MELODY, { count: { every: 3, skip: 2 } })).toEqual([ID.E4, ID.A4, ID.E5]);
+  });
+
+  it("takes every note when N is 1, and nothing when skip is past the last note", () => {
+    expect(filterNotes(MELODY, { count: { every: 1 } })).toEqual(EVERY_NOTE);
+    expect(filterNotes(MELODY, { count: { every: 1, skip: 9 } })).toEqual([]);
+  });
+
+  it("counts a tie chain once, and takes all of its ids when it is the one", () => {
+    // Note number 7 is D5, the chain of two segments; number 8 is E5, so skipping 7 of 9 and taking every 2nd leaves D5 alone.
+    expect(filterNotes(MELODY, { count: { every: 2, skip: 7 } })).toEqual([ID.D5, ID.D5tail]);
+  });
+
+  it("counts among the notes the other conditions let through, not among all the notes", () => {
+    // From F4 up the notes are F4 G4 A4 C5 D5 E5: every 2nd from the first is F4, A4, D5. Counted among all nine notes
+    // and then narrowed to F4 and above, the even-numbered notes would give G4, C5 and E5.
+    expect(filterNotes(MELODY, { pitch: { min: 65 }, count: { every: 2 } })).toEqual([ID.F4, ID.A4, ID.D5, ID.D5tail]);
+  });
+
+  it("counts each voice on its own", () => {
+    const two = read(`${HEADER}
+V: Ins clef=treble name="Ins Melody" snm="Inst."
+K:C
+% a
+V: Vocal
+C4D4E8|
+V: Ins
+G,4A,4B,8|
+`);
+    // Counted along Vocal and then Ins as one line, every 2nd would be Vocal:0, Vocal:512 and Ins:256. Each voice has its own count.
+    expect(filterNotes(two, { count: { every: 2 } })).toEqual(["Vocal:0", "Vocal:512", "Ins:0", "Ins:512"]);
+  });
+});
+
+describe("a count that cannot be made", () => {
+  // No condition is refused and none throws: numbers that mean no place in the line take nothing, as an empty range does.
+  it("takes nothing when N is not a whole number of 1 or more, or skip is not a whole number of 0 or more", () => {
+    for (const count of [
+      { every: 0 },
+      { every: -2 },
+      { every: 1.5 },
+      { every: 2, skip: -1 },
+      { every: 2, skip: 0.5 },
+    ]) {
+      expect(filterNotes(MELODY, { count }), JSON.stringify(count)).toEqual([]);
+    }
+  });
+});
+
+describe("invert", () => {
+  it("takes the pitched notes that the conditions do not take, and no rest", () => {
+    expect(filterNotes(MELODY, { pitch: { min: 64, max: 69 }, invert: true })).toEqual([
+      ID.C4,
+      ID.D4,
+      ID.C5,
+      ID.D5,
+      ID.D5tail,
+      ID.E5,
+    ]);
+  });
+
+  it("inverts the result of every condition together, the count included", () => {
+    // The even-numbered notes are C4 E4 G4 C5 E5, so the others are D4 F4 A4 and the two ids of D5.
+    expect(filterNotes(MELODY, { count: { every: 2 }, invert: true })).toEqual([ID.D4, ID.F4, ID.A4, ID.D5, ID.D5tail]);
+  });
+
+  it("takes nothing when there is no condition to invert, and everything when the conditions take nothing", () => {
+    expect(filterNotes(MELODY, { invert: true })).toEqual([]);
+    expect(filterNotes(MELODY, { pitch: { min: 70, max: 60 }, invert: true })).toEqual(EVERY_NOTE);
+  });
+
+  it("is off when it is false", () => {
+    expect(filterNotes(MELODY, { pitch: { max: 60 }, invert: false })).toEqual([ID.C4]);
+  });
+});
+
+describe("conditions together", () => {
+  it("take only the notes that satisfy all of them", () => {
+    // F4 or higher, and a quarter note: F4, A4 and E5. G4 and C5 are half notes and D5 is a whole note.
+    expect(filterNotes(MELODY, { pitch: { min: 65 }, duration: { max: 256 } })).toEqual([ID.F4, ID.A4, ID.E5]);
+  });
+
+  it("combine pitch, time and length", () => {
+    // Up to A4, starting from tick 512 and before 3072, and exactly a quarter note: E4, F4 and A4.
+    expect(
+      filterNotes(MELODY, { pitch: { max: 69 }, time: { from: 512, to: 3072 }, duration: { min: 256, max: 256 } }),
+    ).toEqual([ID.E4, ID.F4, ID.A4]);
+  });
+
+  it("combine the key with a pitch range", () => {
+    const changing = vocal("C4^D4[K:G]F4_B4|G4F4=F4A4|");
+    // Out of the key and D#4 (63) or higher: D#4, Bb4 and F4 natural, which are all of the notes out of the key.
+    expect(filterNotes(changing, { key: "out", pitch: { min: 63 } })).toEqual(["Vocal:256", "Vocal:768", "Vocal:1536"]);
+    // In the key and G4 (67) or higher: G4 and A4. The two F#4 at 66 are below.
+    expect(filterNotes(changing, { key: "in", pitch: { min: 67 } })).toEqual(["Vocal:1024", "Vocal:1792"]);
+  });
+
+  it("take the notes of both voices, in the order of the score", () => {
+    const two = read(`${HEADER}
+V: Ins clef=treble name="Ins Melody" snm="Inst."
+K:C
+% a
+V: Vocal
+C4D4E8|
+V: Ins
+G,4A,4B,8|
+`);
+    // From A3 (57) up: all of Vocal, and A3 and B3 of Ins; the G3 (55) of Ins is below. Vocal comes first, then Ins.
+    expect(filterNotes(two, { pitch: { min: 57 } })).toEqual([
+      "Vocal:0",
+      "Vocal:256",
+      "Vocal:512",
+      "Ins:256",
+      "Ins:512",
+    ]);
+  });
+});
