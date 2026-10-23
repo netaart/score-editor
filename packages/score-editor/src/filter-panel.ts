@@ -6,7 +6,8 @@ import { create, requireDom } from "./dom";
 import { type FilterMessages, filterMessagesFor } from "./filter-messages";
 import { countNotes, filterNotes, type NoteFilter, type NoteSummary, summarizeNotes } from "./filter-notes";
 import { FILTER_SHEET_QUERY } from "./filter-styles";
-import type { Score } from "./score";
+import type { Bar, Score } from "./score";
+import { TICKS_PER_QUARTER } from "./score";
 import type { EditingSession, ScoreReading } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
@@ -25,6 +26,36 @@ interface Applied {
 /** The conditions as the panel holds them: what each one is set to, and whether it counts. */
 interface Conditions {
   pitch: { on: boolean; min: number | null; max: number | null };
+  /** Bar numbers as the ruler counts them, from 1; a bar that is not given leaves that end of the range open. */
+  time: { on: boolean; first: number | null; last: number | null };
+  /** Lengths in ticks. */
+  length: { on: boolean; min: number | null; max: number | null };
+}
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b);
+}
+
+/** A length in ticks as a part of a whole note, the way a grid names a note value: 256 is 1/4, 384 is 3/8, 1024 is 1/1. */
+function lengthName(ticks: number): string {
+  const whole = 4 * TICKS_PER_QUARTER;
+  const divisor = gcd(ticks, whole);
+  return `${ticks / divisor}/${whole / divisor}`;
+}
+
+/** The tick a bar number starts at; a number past the last bar is the end of the score, one below 1 leaves the range open. */
+function barStart(bars: ReadonlyArray<Bar>, number: number | null): number | undefined {
+  if (number === null || number < 1) return undefined;
+  const bar = bars[number - 1];
+  const last = bars[bars.length - 1];
+  return bar !== undefined ? bar.start : last !== undefined ? last.start + last.length : 0;
+}
+
+/** The tick a bar number ends at; a number past the last bar leaves the range open, one below 1 ends it at the start. */
+function barEnd(bars: ReadonlyArray<Bar>, number: number | null): number | undefined {
+  if (number === null || number > bars.length) return undefined;
+  const bar = bars[number - 1];
+  return bar === undefined ? 0 : bar.start + bar.length;
 }
 
 function sameIds(a: ReadonlySet<string>, b: ReadonlyArray<string>): boolean {
@@ -84,6 +115,14 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     return field;
   }
 
+  function number(parent: HTMLElement, label: (t: FilterMessages) => string): HTMLInputElement {
+    const field = create(doc, "input", "sce-filter-number", parent);
+    field.type = "number";
+    field.inputMode = "numeric";
+    texts.push((t) => field.setAttribute("aria-label", label(t)));
+    return field;
+  }
+
   function word(parent: HTMLElement, label: (t: FilterMessages) => string): void {
     const span = create(doc, "span", "sce-filter-word", parent);
     texts.push((t) => {
@@ -96,13 +135,28 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   word(pitch.fields, (t) => t.to);
   const pitchHighest = select(pitch.fields, (t) => t.pitchHighest);
 
+  const time = conditionRow("time", (t) => t.time);
+  word(time.fields, (t) => t.timeBars);
+  const timeFirst = number(time.fields, (t) => t.timeFirst);
+  word(time.fields, (t) => t.to);
+  const timeLast = number(time.fields, (t) => t.timeLast);
+
+  const length = conditionRow("length", (t) => t.length);
+  const lengthShortest = select(length.fields, (t) => t.lengthShortest);
+  word(length.fields, (t) => t.to);
+  const lengthLongest = select(length.fields, (t) => t.lengthLongest);
+
   const status = create(doc, "div", "sce-filter-status", panel);
   status.setAttribute("role", "status");
   const actions = create(doc, "div", "sce-filter-actions", panel);
   const done = create(doc, "button", "sce-button", actions);
   done.type = "button";
 
-  const conditions: Conditions = { pitch: { on: false, min: null, max: null } };
+  const conditions: Conditions = {
+    pitch: { on: false, min: null, max: null },
+    time: { on: false, first: null, last: null },
+    length: { on: false, min: null, max: null },
+  };
   /** The reading the open panel was last filled from. */
   let rendered: ScoreReading | null = null;
   let language: Language | null = null;
@@ -153,6 +207,40 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       if (kept !== null) field.value = String(kept);
     }
     pitch.check.checked = conditions.pitch.on;
+
+    const bars = score.bars.length;
+    if (conditions.time.first === null) conditions.time.first = 1;
+    if (conditions.time.last === null) conditions.time.last = bars;
+    for (const [field, kept] of [
+      [timeFirst, conditions.time.first],
+      [timeLast, conditions.time.last],
+    ] as const) {
+      field.min = "1";
+      field.max = String(bars);
+      field.value = String(kept);
+    }
+    time.check.checked = conditions.time.on;
+
+    const { durations } = summaryOf(score);
+    if (conditions.length.min === null) conditions.length.min = durations[0] ?? null;
+    if (conditions.length.max === null) conditions.length.max = durations[durations.length - 1] ?? null;
+    for (const [field, kept] of [
+      [lengthShortest, conditions.length.min],
+      [lengthLongest, conditions.length.max],
+    ] as const) {
+      const values =
+        kept !== null && !durations.includes(kept) ? [...durations, kept].sort((a, b) => a - b) : durations;
+      field.replaceChildren(
+        ...values.map((ticks) => {
+          const option = doc.createElement("option");
+          option.value = String(ticks);
+          option.textContent = lengthName(ticks);
+          return option;
+        }),
+      );
+      if (kept !== null) field.value = String(kept);
+    }
+    length.check.checked = conditions.length.on;
   }
 
   /** Takes what the person set in a field of the panel into the conditions. */
@@ -160,14 +248,34 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     conditions.pitch.on = pitch.check.checked;
     if (pitchLowest.value !== "") conditions.pitch.min = Number(pitchLowest.value);
     if (pitchHighest.value !== "") conditions.pitch.max = Number(pitchHighest.value);
+    conditions.time.on = time.check.checked;
+    conditions.time.first = timeFirst.value === "" ? null : timeFirst.valueAsNumber;
+    conditions.time.last = timeLast.value === "" ? null : timeLast.valueAsNumber;
+    conditions.length.on = length.check.checked;
+    if (lengthShortest.value !== "") conditions.length.min = Number(lengthShortest.value);
+    if (lengthLongest.value !== "") conditions.length.max = Number(lengthLongest.value);
   }
 
-  function currentFilter(): { filter: NoteFilter; count: number } {
-    const filter: { pitch?: { min: number; max: number } } = {};
+  function currentFilter(score: Score): { filter: NoteFilter; count: number } {
+    const filter: {
+      pitch?: { min: number; max: number };
+      time?: { from?: number; to?: number };
+      duration?: { min: number; max: number };
+    } = {};
     let count = 0;
     const { pitch: p } = conditions;
     if (p.on && p.min !== null && p.max !== null) {
       filter.pitch = { min: p.min, max: p.max };
+      count += 1;
+    }
+    if (conditions.time.on) {
+      const from = barStart(score.bars, conditions.time.first);
+      const to = barEnd(score.bars, conditions.time.last);
+      filter.time = { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
+      count += 1;
+    }
+    if (conditions.length.on && conditions.length.min !== null && conditions.length.max !== null) {
+      filter.duration = { min: conditions.length.min, max: conditions.length.max };
       count += 1;
     }
     return { filter, count };
@@ -180,7 +288,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   function apply(): void {
     const { reading } = session;
     if (reading.kind !== "score") return;
-    const { filter, count } = currentFilter();
+    const { filter, count } = currentFilter(reading.score);
     applying = true;
     try {
       session.select(count === 0 ? [] : filterNotes(reading.score, filter));
