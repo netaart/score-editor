@@ -169,12 +169,12 @@ const ownerGroups = {
     "mountStaleNotice",
     "mountViewSwitch",
     "mountSynthPreview",
-    "mountLyricTrack",
     "previewPlayer",
     "previewNote",
     "PreviewPlayer",
     "PreviewStart",
     "PreviewNoteOptions",
+    "mountLyricTrack",
   ],
   "references/mount.md": ["mount", "MountedEditor", "MountOptions"],
   "references/custom-tools.md": [

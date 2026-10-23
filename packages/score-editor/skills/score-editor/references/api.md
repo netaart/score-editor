@@ -43,7 +43,6 @@ change. The tests in the repository check that the list stays complete.
 | `previewTool` | core | Computes a `ToolResult` without a session. |
 | `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete, a toggle, a box, select all, invert, clear) to a session; returns `EditingInputResult`. |
 | `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
-| `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions`. |
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
 | `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
@@ -56,6 +55,7 @@ change. The tests in the repository check that the list stays complete.
 | `lyricDropPlan` | core | The one-bar phrase, and its command, for a line let go of over a tick; says whether the bar is free. |
 | `lyricSplitCommand` | core | The `splitLyricLine` command for a caret in a line's text, with the bar when the phrase has two bars or more. |
 | `barLineTick` | core | The tick of a bar line, which is what a `LyricBoundaryPlan`'s `boundary` names; a line before the first bar is the start of the score, one past the last bar its end. |
+| `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions`. |
 
 ## Constants and values
 
