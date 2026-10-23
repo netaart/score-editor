@@ -62,6 +62,7 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "cut-other-voice-short",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -150,6 +151,7 @@ interface Catalog {
   readonly melodyWithChords: Text;
   readonly lyricsUnaligned: Text;
   readonly lyricsTooLong: Text;
+  readonly cutOtherVoiceShort: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -780,6 +782,16 @@ function chineseLyricsTooLong(params: DiagnosticParams): string {
   return `拼回的 lyrics 有 ${value(params, "count")} 字，超过 song2 生成接受的 ${value(params, "max")} 字上限。`;
 }
 
+function englishCutOtherVoiceShort(params: DiagnosticParams): string {
+  const voice = quoted(value(params, "voice"));
+  return `Another voice${voice === "" ? "" : ` (${value(params, "voice")})`} is short of whole bars, so this cut cannot be deleted; fill the cut bar instead.`;
+}
+
+function chineseCutOtherVoiceShort(params: DiagnosticParams): string {
+  const voice = quoted(value(params, "voice"));
+  return `另一个声部${voice === "" ? "" : `（${value(params, "voice")}）`}缺少完整小节，不能删除这个小节；请改用填充截断小节。`;
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -832,6 +844,7 @@ const en: Catalog = {
   melodyWithChords: englishMelodyWithChords,
   lyricsUnaligned: englishLyricsUnaligned,
   lyricsTooLong: englishLyricsTooLong,
+  cutOtherVoiceShort: englishCutOtherVoiceShort,
 };
 
 const zh: Catalog = {
@@ -886,6 +899,7 @@ const zh: Catalog = {
   melodyWithChords: chineseMelodyWithChords,
   lyricsUnaligned: chineseLyricsUnaligned,
   lyricsTooLong: chineseLyricsTooLong,
+  cutOtherVoiceShort: chineseCutOtherVoiceShort,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -995,6 +1009,8 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.lyricsUnaligned(diagnostic.params);
     case "lyrics-too-long":
       return catalog.lyricsTooLong(diagnostic.params);
+    case "cut-other-voice-short":
+      return catalog.cutOtherVoiceShort(diagnostic.params);
     default:
       return "";
   }
