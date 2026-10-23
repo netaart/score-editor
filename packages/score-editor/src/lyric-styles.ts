@@ -12,13 +12,41 @@ export const lyricCss = `
   --sce-_equal: var(--sce-color-equal, light-dark(#2e8b4f, #4cc27a));
   --sce-_unequal: var(--sce-color-unequal, light-dark(#c79100, #f0c040));
   --sce-_phrase: round(2.3em, 1px);
-  --sce-_syllable: round(1.8em, 1px);
+  --sce-_syllable: round(1.6em, 1px);
+}
+/* The track head is the voice tracks' head under a class of its own, so a count of heads in a page stays a count of voices. */
+.sce-root .sce-lyric-head {
+  position: sticky;
+  top: var(--sce-_head-top, 0px);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  min-height: var(--sce-_band);
+  background: var(--sce-_surface);
+  border-bottom: 1px solid var(--sce-_line);
+}
+.sce-root .sce-lyric-head-items {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  background: var(--sce-_surface);
+}
+/* The button is as high as the head, which has no room for a taller one; a finger's button makes the head taller. */
+.sce-root .sce-lyric-new {
+  min-height: 0;
+  height: calc(var(--sce-_band) - 4px);
+  padding: 0 8px;
+  font-size: 0.92em;
 }
 .sce-root .sce-lyric-lane {
   position: relative;
   flex: none;
   width: calc(var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
-  height: calc(var(--sce-_phrase) + var(--sce-_syllable) + 6px);
+  height: calc(var(--sce-_phrase) + var(--sce-_syllable) + 5px);
 }
 .sce-root .sce-lyric-lane .sce-empty {
   position: sticky;
@@ -161,12 +189,22 @@ export const lyricCss = `
   outline-offset: 0;
 }
 @media (pointer: coarse) {
+  .sce-root {
+    --sce-_phrase: round(3em, 1px);
+  }
+  .sce-root .sce-lyric-new {
+    height: auto;
+    min-height: 36px;
+  }
   .sce-root .sce-lyric-handle {
+    top: 50%;
+    bottom: auto;
     width: 44px;
-    margin: 0 -22px;
+    height: 44px;
+    margin: -22px -22px 0;
   }
   .sce-root .sce-lyric-handle::after {
-    inset: 4px 19px;
+    inset: 6px 19px;
   }
 }
 /* While a drag is on, the blocks it moves follow the pointer and the bar line it will land on is drawn through the lane. */
@@ -181,7 +219,7 @@ export const lyricCss = `
   left: calc(var(--t) / var(--sce-ticks) * 100%);
   width: 2px;
   margin-left: -1px;
-  background: var(--sce-_accent);
+  background: var(--sce-_text);
   pointer-events: none;
 }
 .sce-root .sce-lyric-drop {
@@ -192,8 +230,8 @@ export const lyricCss = `
   left: calc(var(--t) / var(--sce-ticks) * 100%);
   width: calc(var(--d) / var(--sce-ticks) * 100%);
   box-sizing: border-box;
-  border: 2px solid var(--sce-_accent);
-  background: color-mix(in srgb, var(--sce-_accent) 14%, transparent);
+  border: 2px solid var(--sce-_text);
+  background: color-mix(in srgb, var(--sce-_text) 10%, transparent);
   pointer-events: none;
 }
 /* A bar that already has a line is no place to drop: the outline breaks, so it is not told from a free bar by hue alone. */
@@ -217,14 +255,10 @@ export const lyricCss = `
   width: min(36em, calc(100vw - var(--sce-_keys)));
   padding: 6px 8px 8px;
 }
-.sce-root .sce-lyric-panel-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 8px;
-  min-height: 28px;
-}
 .sce-root .sce-lyric-title {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
   font-size: 0.92em;
   font-weight: 600;
 }

@@ -36,7 +36,12 @@ export function codePointsBefore(text: string, index: number): number {
   return Array.from(text.slice(0, index)).length;
 }
 
-export function createLyricEditor(doc: Document, t: Messages, hooks: LyricEditorHooks): LyricEditor {
+export function createLyricEditor(
+  doc: Document,
+  t: Messages,
+  hooks: LyricEditorHooks,
+  signal: AbortSignal,
+): LyricEditor {
   const element = create(doc, "div", "sce-lyric-editor");
   element.setAttribute("role", "group");
   const input = create(doc, "input", "sce-lyric-input", element);
@@ -48,7 +53,7 @@ export function createLyricEditor(doc: Document, t: Messages, hooks: LyricEditor
     const made = create(doc, "button", "sce-button sce-lyric-button", actions);
     made.type = "button";
     made.textContent = label;
-    made.addEventListener("click", run);
+    made.addEventListener("click", run, { signal });
     return made;
   };
 
@@ -85,34 +90,42 @@ export function createLyricEditor(doc: Document, t: Messages, hooks: LyricEditor
   const placeButton = create(doc, "button", "sce-button sce-lyric-button", place);
   placeButton.type = "button";
   placeButton.textContent = t.lyricPlace;
-  placeButton.addEventListener("click", () => hooks.place(bar.valueAsNumber));
+  placeButton.addEventListener("click", () => hooks.place(bar.valueAsNumber), { signal });
 
-  input.addEventListener("keydown", (event) => {
-    if (event.isComposing) return;
-    if (event.key === "Enter") {
-      event.preventDefault();
-      if (mode === "new") {
-        hooks.add(input.value);
+  input.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.isComposing) return;
+      if (event.key === "Enter") {
+        event.preventDefault();
+        if (mode === "new") {
+          hooks.add(input.value);
+          return;
+        }
+        send();
+        // The text is in the project, or it was never changed: the person is done with the line. A refused text stays to be mended.
+        if (input.value === stored) hooks.cancel();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        cancelled = true;
+        input.value = stored;
+        hooks.cancel();
+      }
+    },
+    { signal },
+  );
+  input.addEventListener(
+    "blur",
+    () => {
+      if (cancelled) {
+        cancelled = false;
         return;
       }
-      send();
-      // The text is in the project, or it was never changed: the person is done with the line. A refused text stays to be mended.
-      if (input.value === stored) hooks.cancel();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      cancelled = true;
-      input.value = stored;
-      hooks.cancel();
-    }
-  });
-  input.addEventListener("blur", () => {
-    if (cancelled) {
-      cancelled = false;
-      return;
-    }
-    if (mode === "line") send();
-  });
+      if (mode === "line") send();
+    },
+    { signal },
+  );
 
   return {
     element,

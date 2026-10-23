@@ -101,6 +101,8 @@ interface Drawn {
 export function mountLyricTrack(el: HTMLElement, session: EditingSession, options?: AxisPartOptions): ViewPart {
   let drawn: Drawn | null = null;
   let root: HTMLElement | null = null;
+  /** Ends the listeners the track put on its own elements when the part is destroyed. */
+  let lifetime: AbortSignal = new AbortController().signal;
   let live: LiveRegion | null = null;
   let refuse: ReturnType<typeof sayRefusals> | null = null;
   /** The line the person chose, by its place in the project's lines. Part-local: it is not in the session or its history. */
@@ -193,7 +195,8 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     drawn.empty.hidden = placed.length > 0;
     drawn.phrases.hidden = placed.length === 0;
     setText(drawn.empty, rows.length === 0 ? t.noLyrics : t.noLyricsOnBars);
-    drawn.panel.hidden = !editable && loose.length === 0;
+    // The panel is there while it has something to show, so a song with every line on bars costs the track no room under its lane.
+    drawn.panel.hidden = loose.length === 0 && chosen === null && !adding;
     drawn.newLine.hidden = !editable;
     drawn.editor.element.hidden = chosen === null && !adding;
     const row = chosen === null ? undefined : rows[chosen];
@@ -512,6 +515,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
       region: (t) => t.lyrics,
       attach(own, signal, region) {
         root = own;
+        lifetime = signal;
         live = region;
         refuse = sayRefusals(region, session, options?.onRefused);
         own.setAttribute("data-editable", String(session.view.editable));
@@ -546,8 +550,14 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
       build(canvas, score, t): BuiltAxis {
         const doc = canvas.ownerDocument;
         const group = create(doc, "div", "sce-track-group", canvas);
-        const head = create(doc, "div", "sce-track-head", group);
-        create(doc, "span", "sce-track-name", head).textContent = t.lyrics;
+        const head = create(doc, "div", "sce-lyric-head", group);
+        // The name and the button that adds a line stay at the pitch column's edge while the lane is scrolled past them.
+        const items = create(doc, "div", "sce-lyric-head-items", head);
+        create(doc, "span", "sce-track-name", items).textContent = t.lyrics;
+        const newLine = create(doc, "button", "sce-button sce-lyric-new", items);
+        newLine.type = "button";
+        newLine.textContent = t.lyricNewLine;
+        newLine.addEventListener("click", startAdding, { signal: lifetime });
         const track = create(doc, "div", "sce-track", group);
         const keys = create(doc, "div", "sce-keys", track);
         const lane = create(doc, "div", "sce-lyric-lane", track);
@@ -566,49 +576,49 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         syllables.setAttribute("aria-hidden", "true");
 
         const panel = create(doc, "div", "sce-lyric-panel", group);
-        const panelHead = create(doc, "div", "sce-lyric-panel-head", panel);
-        const title = create(doc, "span", "sce-lyric-title", panelHead);
+        const title = create(doc, "span", "sce-lyric-title", panel);
         title.append(t.lyricUnaligned);
         const badge = create(doc, "span", "sce-badge", title);
-        const newLine = create(doc, "button", "sce-button sce-lyric-new", panelHead);
-        newLine.type = "button";
-        newLine.textContent = t.lyricNewLine;
-        newLine.addEventListener("click", startAdding);
-        const editor = createLyricEditor(doc, t, {
-          commit(text) {
-            const line = chosen;
-            if (line === null || !run([{ type: "setLyricLineText", line, text }])) return false;
-            live?.say(t.lyricTextSet(line + 1));
-            return true;
+        const editor = createLyricEditor(
+          doc,
+          t,
+          {
+            commit(text) {
+              const line = chosen;
+              if (line === null || !run([{ type: "setLyricLineText", line, text }])) return false;
+              live?.say(t.lyricTextSet(line + 1));
+              return true;
+            },
+            cancel() {
+              const line = chosen;
+              choose(null);
+              if (line !== null) focusLine(line);
+            },
+            split(offset) {
+              const line = chosen;
+              const command = line === null ? null : lyricSplitCommand(score, linesNow(score), { line, offset });
+              if (line !== null && command && run([command])) live?.say(t.lyricSplitDone(line + 1));
+            },
+            merge() {
+              const line = chosen;
+              if (line !== null && run([{ type: "mergeLyricLines", line }])) live?.say(t.lyricMerged(line + 1));
+            },
+            remove() {
+              if (chosen !== null) removeLine(chosen);
+            },
+            place(bar) {
+              if (chosen !== null) placeLine(chosen, { firstBar: bar - 1, barCount: 1 });
+            },
+            add(text) {
+              const at = linesNow(score).length;
+              if (!run([{ type: "insertLyricLine", line: at, text, phrase: null }])) return;
+              live?.say(t.lyricAdded(at + 1));
+              choose(null);
+              focusLine(at);
+            },
           },
-          cancel() {
-            const line = chosen;
-            choose(null);
-            if (line !== null) focusLine(line);
-          },
-          split(offset) {
-            const line = chosen;
-            const command = line === null ? null : lyricSplitCommand(score, linesNow(score), { line, offset });
-            if (line !== null && command && run([command])) live?.say(t.lyricSplitDone(line + 1));
-          },
-          merge() {
-            const line = chosen;
-            if (line !== null && run([{ type: "mergeLyricLines", line }])) live?.say(t.lyricMerged(line + 1));
-          },
-          remove() {
-            if (chosen !== null) removeLine(chosen);
-          },
-          place(bar) {
-            if (chosen !== null) placeLine(chosen, { firstBar: bar - 1, barCount: 1 });
-          },
-          add(text) {
-            const at = linesNow(score).length;
-            if (!run([{ type: "insertLyricLine", line: at, text, phrase: null }])) return;
-            live?.say(t.lyricAdded(at + 1));
-            choose(null);
-            focusLine(at);
-          },
-        });
+          lifetime,
+        );
         editor.element.hidden = true;
         panel.appendChild(editor.element);
         const unaligned = create(doc, "ul", "sce-lyric-unaligned", panel);
