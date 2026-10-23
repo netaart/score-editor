@@ -38,13 +38,6 @@ export function mountProjectControl(
   button.popoverTargetAction = "toggle";
   const panel = drawProjectPanel(popover, session, live, onRefused);
 
-  function focusIsInside(): boolean {
-    const scope = popover.getRootNode();
-    const active = scope instanceof Document || scope instanceof ShadowRoot ? scope.activeElement : null;
-    return active !== null && popover.contains(active);
-  }
-  /** Whether the focus was inside the popover as it closed: then, and only then, the button takes it back. */
-  let focusWasInside = false;
   popover.addEventListener(
     "beforetoggle",
     (event) => {
@@ -59,7 +52,6 @@ export function mountProjectControl(
         popover.style.maxHeight = `${Math.max(room, 0)}px`;
         return;
       }
-      focusWasInside = focusIsInside();
       panel.commit();
     },
     { signal },
@@ -69,11 +61,7 @@ export function mountProjectControl(
     (event) => {
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
-      if (!open) {
-        if (focusWasInside) button.focus();
-        focusWasInside = false;
-        return;
-      }
+      if (!open) return;
       const view = doc.defaultView;
       if (view && !popover.hasAttribute("data-narrow")) {
         const rect = popover.getBoundingClientRect();
