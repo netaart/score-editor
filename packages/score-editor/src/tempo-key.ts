@@ -4,11 +4,16 @@ import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { messagesFor } from "./i18n";
+import { lineIcon } from "./icons";
 import type { LiveRegion } from "./live-region";
 import { newsOf } from "./project-notices";
 import type { Score } from "./score";
 import type { EditingSession } from "./session";
 import type { Language, ViewPart } from "./types";
+
+/** A chevron pointing up, and one pointing down: the song moves a semitone that way. */
+const CHEVRON_UP = ["3.5,10 8,5.5 12.5,10"];
+const CHEVRON_DOWN = ["3.5,6 8,10.5 12.5,6"];
 
 export interface TempoKeyHooks {
   /** A command the user asked for was refused and nothing changed: say why, and tell whoever asked to hear of refusals. */
@@ -56,6 +61,22 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
   const keys = create(doc, "select", "sce-field sce-key-select", keyLabel);
   const majorKeys = create(doc, "optgroup", "", keys);
   const minorKeys = create(doc, "optgroup", "", keys);
+  const transposeButton = (direction: "down" | "up") => {
+    const button = create(doc, "button", `sce-button sce-icon-button sce-transpose sce-transpose-${direction}`, group);
+    button.type = "button";
+    button.appendChild(lineIcon(doc, direction === "up" ? CHEVRON_UP : CHEVRON_DOWN));
+    button.addEventListener(
+      "click",
+      () => {
+        const semitones = direction === "up" ? 1 : -1;
+        run({ type: "transpose", semitones }, () => messagesFor(session.view.language).transposed(semitones));
+      },
+      { signal },
+    );
+    return button;
+  };
+  const down = transposeButton("down");
+  const up = transposeButton("up");
   /** The key the menu was last filled for, with the dialect's lists: it is filled again when either changes. */
   let filled: { lists: unknown; extra: string | undefined } | null = null;
 
@@ -107,6 +128,13 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
     keyName.textContent = t.key;
     majorKeys.label = t.keyMajor;
     minorKeys.label = t.keyMinor;
+    for (const [button, label] of [
+      [down, t.transposeDown],
+      [up, t.transposeUp],
+    ] as const) {
+      button.setAttribute("aria-label", label);
+      button.title = label;
+    }
   }
 
   /** The menu lists the dialect's keys; a key the score has that the list lacks is added, so the menu never says another. */

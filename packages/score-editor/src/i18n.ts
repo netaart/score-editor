@@ -85,6 +85,10 @@ export interface Messages {
   keyMajor: string;
   keyMinor: string;
   keySet(key: string): string;
+  transposeDown: string;
+  transposeUp: string;
+  /** Said when the whole song moved by a semitone; `semitones` is -1 or 1. */
+  transposed(semitones: number): string;
 }
 
 const en: Messages = {
@@ -172,6 +176,9 @@ const en: Messages = {
   keyMajor: "Major",
   keyMinor: "Minor",
   keySet: (key) => `Key set to ${key}`,
+  transposeDown: "Transpose down a semitone",
+  transposeUp: "Transpose up a semitone",
+  transposed: (semitones) => `Transposed ${semitones < 0 ? "down" : "up"} a semitone`,
 };
 
 const zh: Messages = {
@@ -252,6 +259,9 @@ const zh: Messages = {
   keyMajor: "大调",
   keyMinor: "小调",
   keySet: (key) => `已改为 ${key} 调`,
+  transposeDown: "降半音",
+  transposeUp: "升半音",
+  transposed: (semitones) => (semitones < 0 ? "整首已降半音" : "整首已升半音"),
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
