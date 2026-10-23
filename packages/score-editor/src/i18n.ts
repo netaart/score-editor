@@ -81,6 +81,10 @@ export interface Messages {
   songControls: string;
   tempo: string;
   tempoSet(bpm: number): string;
+  key: string;
+  keyMajor: string;
+  keyMinor: string;
+  keySet(key: string): string;
 }
 
 const en: Messages = {
@@ -164,6 +168,10 @@ const en: Messages = {
   songControls: "Tempo and key",
   tempo: "Tempo (BPM)",
   tempoSet: (bpm) => `Tempo set to ${bpm} BPM`,
+  key: "Key",
+  keyMajor: "Major",
+  keyMinor: "Minor",
+  keySet: (key) => `Key set to ${key}`,
 };
 
 const zh: Messages = {
@@ -240,6 +248,10 @@ const zh: Messages = {
   songControls: "速度和调",
   tempo: "速度（BPM）",
   tempoSet: (bpm) => `速度已设为 ${bpm} BPM`,
+  key: "调",
+  keyMajor: "大调",
+  keyMinor: "小调",
+  keySet: (key) => `已改为 ${key} 调`,
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

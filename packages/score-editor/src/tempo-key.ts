@@ -6,6 +6,7 @@ import { create } from "./dom";
 import { messagesFor } from "./i18n";
 import type { LiveRegion } from "./live-region";
 import { newsOf } from "./project-notices";
+import type { Score } from "./score";
 import type { EditingSession } from "./session";
 import type { Language, ViewPart } from "./types";
 
@@ -24,8 +25,15 @@ function hasFocus(field: HTMLElement): boolean {
   return (scope instanceof Document || scope instanceof ShadowRoot) && scope.activeElement === field;
 }
 
+/** The key in force at the start of the score: the last key stated at tick 0, as the marks row shows it. */
+function startKeyOf(score: Score): string | undefined {
+  let key = score.keys[0]?.key;
+  for (const change of score.keys) if (change.at === 0) key = change.key;
+  return key;
+}
+
 /**
- * The tempo field, drawn into `parent`, which must sit in a `.sce-root`. It is there while the session is editable and
+ * The tempo field and the key menu, drawn into `parent`, which must sit in a `.sce-root`. It is there while the session is editable and
  * its score reads, and it shows the score's BPM. A value that is taken is one `setTempo`; the song-project rules decide
  * what happens to the style text, and this control only shows the result.
  */
@@ -43,6 +51,14 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
   tempo.step = "1";
   create(doc, "span", "sce-tempo-unit", tempoLabel).textContent = "BPM";
 
+  const keyLabel = create(doc, "label", "sce-key", group);
+  const keyName = create(doc, "span", "sce-key-label", keyLabel);
+  const keys = create(doc, "select", "sce-field sce-key-select", keyLabel);
+  const majorKeys = create(doc, "optgroup", "", keys);
+  const minorKeys = create(doc, "optgroup", "", keys);
+  /** The key the menu was last filled for, with the dialect's lists: it is filled again when either changes. */
+  let filled: { lists: unknown; extra: string | undefined } | null = null;
+
   /**
    * Dispatches one command. A refusal is said; a taken command is told in `done`, with what it had to say itself. The
    * controls go back to the project's values either way.
@@ -58,6 +74,15 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
     const sentence = news.length > 0 ? hooks.noticed(news) : "";
     hooks.live.say(sentence === "" ? done() : `${done()} ${sentence}`);
   }
+
+  keys.addEventListener(
+    "change",
+    () => {
+      const key = keys.value;
+      run({ type: "setKey", key }, () => messagesFor(session.view.language).keySet(key));
+    },
+    { signal },
+  );
 
   tempo.addEventListener(
     "change",
@@ -79,6 +104,29 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
     group.lang = language;
     group.setAttribute("aria-label", t.songControls);
     tempo.setAttribute("aria-label", t.tempo);
+    keyName.textContent = t.key;
+    majorKeys.label = t.keyMajor;
+    minorKeys.label = t.keyMinor;
+  }
+
+  /** The menu lists the dialect's keys; a key the score has that the list lacks is added, so the menu never says another. */
+  function fillKeys(
+    lists: { major: ReadonlyArray<string>; minor: ReadonlyArray<string> },
+    current: string | undefined,
+  ) {
+    const extra = current !== undefined && ![...lists.major, ...lists.minor].includes(current) ? current : undefined;
+    if (filled?.lists === lists && filled.extra === extra) return;
+    filled = { lists, extra };
+    const option = (key: string) => {
+      const item = create(doc, "option", "");
+      item.value = key;
+      item.textContent = key;
+      return item;
+    };
+    majorKeys.replaceChildren(...lists.major.map(option));
+    minorKeys.replaceChildren(...lists.minor.map(option));
+    keys.querySelector(":scope > option")?.remove();
+    if (extra !== undefined) keys.prepend(option(extra));
   }
 
   /** `force` puts the project's values back even into a field that has the focus. */
@@ -92,6 +140,9 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
     tempo.min = String(range.min);
     tempo.max = String(range.max);
     if (force || !hasFocus(tempo)) tempo.value = String(reading.score.tempo.bpm);
+    const current = startKeyOf(reading.score);
+    fillKeys(dialect.constraints.keys, current);
+    if (current !== undefined) keys.value = current;
   }
 
   draw();

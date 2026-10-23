@@ -17,13 +17,13 @@ export const songCss = `
   flex: none;
   flex-wrap: nowrap;
 }
-.sce-root .sce-tempo {
+.sce-root :is(.sce-tempo, .sce-key) {
   display: inline-flex;
   flex: none;
   align-items: center;
   gap: 4px;
 }
-.sce-root .sce-tempo-unit {
+.sce-root :is(.sce-tempo-unit, .sce-key-label) {
   color: var(--sce-_muted);
   font-size: 0.92em;
 }
