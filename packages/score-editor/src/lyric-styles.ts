@@ -317,6 +317,18 @@ export const lyricCss = `
   outline: 2px solid var(--sce-_accent);
   outline-offset: 2px;
 }
+.sce-root .sce-lyric-place {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+.sce-root .sce-lyric-place[hidden] {
+  display: none;
+}
+.sce-root .sce-lyric-bar {
+  flex: 0 0 6em;
+}
 .sce-root .sce-lyric-actions {
   display: flex;
   flex-wrap: wrap;

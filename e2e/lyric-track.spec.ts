@@ -718,3 +718,52 @@ test.describe("the keyboard", () => {
     expect(await harness.layout.canUndo()).toBe(false);
   });
 });
+
+test.describe("placing a line on a bar by its number", () => {
+  const barField = (page: Page) => lyrics(page).getByRole("spinbutton", { name: "Bar number", exact: true });
+
+  test("gives the line a one-bar phrase on that bar, in one step that one undo takes back", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await press(unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ }));
+    await barField(page).fill("4");
+    await press(button(page, "Place on bar"));
+    expect(await storedLines(page)).toEqual([
+      GAPPED[0],
+      { text: "尚未对齐的一行", phrase: { firstBar: 3, barCount: 1 } },
+      GAPPED[1],
+    ]);
+    await expect(lyrics(page).getByRole("status")).toHaveText("Line 2 placed on bar 4");
+    expect(await harness.layout.undo()).toBe(true);
+    expect(await storedLines(page)).toEqual(WITH_LOOSE);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("a bar that has a line, and a bar the score does not have, are refused and change nothing", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await press(unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ }));
+    await barField(page).fill("3");
+    await press(button(page, "Place on bar"));
+    await expect(lyrics(page).getByRole("status")).toContainText("overlaps line 1");
+    await barField(page).fill("99");
+    await press(button(page, "Place on bar"));
+    await expect(lyrics(page).getByRole("status")).toContainText("outside this score");
+    expect(await storedLines(page)).toEqual(WITH_LOOSE);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  test("is offered for a line that is not on bars and for no other", async ({ page, harness, press }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await press(phrase(page, 1));
+    await expect(barField(page)).toBeHidden();
+    await press(unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ }));
+    await expect(barField(page)).toBeVisible();
+  });
+});

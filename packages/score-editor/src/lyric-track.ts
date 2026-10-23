@@ -146,7 +146,8 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const lines = linesNow(drawn.score);
     const picked = line === null ? undefined : lines[line];
     if (picked && line !== null) {
-      drawn.editor.show("line", picked.text, { canMerge: line + 1 < lines.length, line: line + 1 });
+      const canPlace = lyricRows(drawn.score, lines)[line]?.phrase === null;
+      drawn.editor.show("line", picked.text, { canMerge: line + 1 < lines.length, line: line + 1, canPlace });
     }
     draw();
   }
@@ -156,7 +157,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     if (!drawn || !session.view.editable) return;
     chosen = null;
     adding = true;
-    drawn.editor.show("new", "", { canMerge: false, line: 0 });
+    drawn.editor.show("new", "", { canMerge: false, line: 0, canPlace: false });
     draw();
     drawn.editor.focus();
   }
@@ -197,7 +198,11 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     drawn.editor.element.hidden = chosen === null && !adding;
     const row = chosen === null ? undefined : rows[chosen];
     if (row && first) {
-      drawn.editor.show("line", row.line.text, { canMerge: row.index + 1 < rows.length, line: row.index + 1 });
+      drawn.editor.show("line", row.line.text, {
+        canMerge: row.index + 1 < rows.length,
+        line: row.index + 1,
+        canPlace: row.phrase === null,
+      });
     } else if (row) {
       drawn.editor.sync(row.line.text, row.index + 1 < rows.length);
     }
@@ -413,16 +418,20 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     live?.say(d.t.lyricMoved(line + 1, moved.firstBar + 1, moved.firstBar + moved.barCount));
   }
 
-  function sendDrop(line: number, plan: LyricDropPlan): void {
+  /** Gives a line a phrase and says where it stands now: the project keeps lines on bars in the order of their bars. */
+  function placeLine(line: number, phrase: LyricPhrase): void {
     const d = drawn;
-    if (!d || plan.commands.length === 0) return;
+    if (!d) return;
     const text = linesNow(d.score)[line]?.text;
-    if (!run(plan.commands)) return;
-    // The project keeps lines on bars in the order of their bars, so the line may have moved up the list.
-    const placed = linesNow(d.score).findIndex(
-      (found) => found.text === text && found.phrase?.firstBar === plan.phrase.firstBar,
+    if (!run([{ type: "setLyricLinePhrase", line, phrase }])) return;
+    const now = linesNow(d.score).findIndex(
+      (found) => found.text === text && found.phrase?.firstBar === phrase.firstBar,
     );
-    live?.say(d.t.lyricPlaced((placed < 0 ? line : placed) + 1, plan.phrase.firstBar + 1));
+    live?.say(d.t.lyricPlaced((now < 0 ? line : now) + 1, phrase.firstBar + 1));
+  }
+
+  function sendDrop(line: number, plan: LyricDropPlan): void {
+    if (plan.commands.length > 0) placeLine(line, plan.phrase);
   }
 
   /**
@@ -588,6 +597,9 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
           },
           remove() {
             if (chosen !== null) removeLine(chosen);
+          },
+          place(bar) {
+            if (chosen !== null) placeLine(chosen, { firstBar: bar - 1, barCount: 1 });
           },
           add(text) {
             const at = linesNow(score).length;

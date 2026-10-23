@@ -13,6 +13,8 @@ export interface LyricEditorHooks {
   split(offset: number): void;
   merge(): void;
   remove(): void;
+  /** The place button, for a line that is not on bars; `bar` is the number typed, 1-based. */
+  place(bar: number): void;
   /** Enter, or the add button, in a box for a new line. */
   add(text: string): void;
 }
@@ -23,7 +25,7 @@ export type LyricEditorMode = "line" | "new";
 export interface LyricEditor {
   readonly element: HTMLElement;
   /** Shows the editor for a line (`text` is its text, `line` its 1-based place) or for a new one, with the buttons that apply. */
-  show(mode: LyricEditorMode, text: string, options: { canMerge: boolean; line: number }): void;
+  show(mode: LyricEditorMode, text: string, options: { canMerge: boolean; line: number; canPlace: boolean }): void;
   /** Takes the text the line now has, and whether it has a next line, unless the person is typing in the box. */
   sync(text: string, canMerge: boolean): void;
   focus(): void;
@@ -72,6 +74,19 @@ export function createLyricEditor(doc: Document, t: Messages, hooks: LyricEditor
   const remove = button(t.lyricDelete, () => hooks.remove());
   const add = button(t.lyricAdd, () => hooks.add(input.value));
 
+  // A line that is not on bars can be put on a bar without a drag: type the bar's number and press the button.
+  const place = create(doc, "div", "sce-lyric-place", element);
+  const bar = create(doc, "input", "sce-lyric-input sce-lyric-bar", place);
+  bar.type = "number";
+  bar.min = "1";
+  bar.step = "1";
+  bar.inputMode = "numeric";
+  bar.setAttribute("aria-label", t.lyricBarField);
+  const placeButton = create(doc, "button", "sce-button sce-lyric-button", place);
+  placeButton.type = "button";
+  placeButton.textContent = t.lyricPlace;
+  placeButton.addEventListener("click", () => hooks.place(bar.valueAsNumber));
+
   input.addEventListener("keydown", (event) => {
     if (event.isComposing) return;
     if (event.key === "Enter") {
@@ -112,6 +127,7 @@ export function createLyricEditor(doc: Document, t: Messages, hooks: LyricEditor
       input.setAttribute("aria-label", name);
       split.hidden = merge.hidden = remove.hidden = next === "new";
       add.hidden = next === "line";
+      place.hidden = !options.canPlace;
       merge.setAttribute("aria-disabled", String(!options.canMerge));
     },
     sync(text, canMerge) {

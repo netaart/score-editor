@@ -101,6 +101,9 @@ export interface Messages {
   lyricSplit: string;
   lyricMerge: string;
   lyricDelete: string;
+  /** The way to put a line that is not on bars on a bar without dragging: a bar number and the button that places it. */
+  lyricBarField: string;
+  lyricPlace: string;
   /** What the track tells a person who selects a line, in a sentence its lists are described by. */
   lyricHint: string;
   /** What a live region says after an edit of a line. */
@@ -225,6 +228,8 @@ const en: Messages = {
   lyricSplit: "Split at caret",
   lyricMerge: "Merge with next",
   lyricDelete: "Delete line",
+  lyricBarField: "Bar number",
+  lyricPlace: "Place on bar",
   lyricHint:
     "Select a line to edit its text. The start and end handles of a selected line move it one bar with the Left and Right keys. Delete removes the line.",
   lyricMoved: (line, first, last) =>
@@ -328,6 +333,8 @@ const zh: Messages = {
   lyricSplit: "在光标处拆开",
   lyricMerge: "与下一行合并",
   lyricDelete: "删除这一行",
+  lyricBarField: "小节号",
+  lyricPlace: "放到这一小节",
   lyricHint: "选中一行即可改它的文字。选中行的起点和终点手柄可以用左、右键按小节移动。按 Delete 删除这一行。",
   lyricMoved: (line, first, last) =>
     `第 ${line} 行现在占 ${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}`,
