@@ -42,6 +42,7 @@ change. The tests in the repository check that the list stays complete.
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
 | `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete, a toggle, a box, select all, invert, clear) to a session; returns `EditingInputResult`. |
+| `mountProjectPanel` | core | Mounts the song project panel: the style text, the score mode, the seed, the joined lyrics with their count and the notices the project carries; takes `EditingPartOptions`. |
 | `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |

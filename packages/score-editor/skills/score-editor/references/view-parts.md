@@ -269,3 +269,29 @@ noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once
   nothing plays. `PreviewStart` is the string union `start()` resolves.
 - `previewPlayer(session)` touches no audio until `start()`. Destroying the last control that holds the player stops it.
 - The headless half, `schedulePreview`, is in [headless-layer.md](headless-layer.md#the-preview-schedule).
+
+## Tempo, key and the song project panel
+
+`mountToolbar` can hold three controls that act on the whole song, there while the session is editable and its score
+reads: a tempo field (a whole number inside the dialect's `constraints.tempo`), a key menu (the dialect's
+`constraints.keys`) and two buttons that transpose a semitone. Pass `tempoKey: true`; `mount` does. Each change is one
+command (`setTempo`, `setKey`, `transpose`) and one undo step, and the toolbar adds no rule of its own: a tempo change
+rewrites the style text's BPM or, when the style has none, the toolbar says so under its row (`style-no-bpm`), and a
+transposition out of range is refused as a whole and reaches `onRefused`.
+
+`projectPanel: true` adds a Project button that opens the song project panel in a popover under it (`mount` does). A
+host that wants the panel somewhere of its own mounts it and leaves the option off:
+
+```ts
+import { mountProjectPanel, mountToolbar } from "@neta-art/score-editor";
+
+mountToolbar(toolbarEl, session, { tempoKey: true, onRefused });
+const panel = mountProjectPanel(panelEl, session, { onRefused }); // a ViewPart
+```
+
+The panel edits the style text, the score mode and the seed in place (a text box is taken when it loses the focus, a
+radio or a seed when it is chosen or confirmed; each is one undo step; the seed can be cleared), shows the lyrics as
+`joinLyrics` writes them with their length against `LYRICS_MAX_CHARACTERS`, and shows the notices `checkProject`
+finds. For `melody-with-chords` it offers two fixes, `removeChords` and `setScoreMode` to `full`. While the session
+is read-only it shows the values and edits nothing. A field the host did not give is empty and says it is not set.
+`session.dialect` is the dialect both read the project with; without one the controls and the button are hidden.

@@ -30,6 +30,7 @@ const session = createEditingSession({
 | --- | --- |
 | `project` | The current `SongProject`. The only document state. |
 | `reading` | A `ScoreReading`, cached until the score text, model or dialects change. |
+| `dialect` | The `ScoreDialect` that reads `project`, or `undefined` when the registry has none for its model. Its `constraints` (the tempo range, the keys) are what the toolbar's tempo and key controls offer. |
 | `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
 | `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |
 | `view` | `ViewState`: `{ zoom, scrollLeft, language, editable }`, shared by all parts. `editable` says whether the user may change the score: parts offer editing controls and take selection and editing keys only while it is true. It does not stop `dispatch`; whoever drives the session directly decides what it sends. |
