@@ -9,7 +9,7 @@ import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
-import type { Language } from "./types";
+import type { DialectConstraints, Language } from "./types";
 
 /** What reading the project's score came to: a score, or the reason there is none. */
 export type ScoreReading =
@@ -117,6 +117,12 @@ export interface EditingSession {
    * same object until the score text, the model or the dialects change.
    */
   readonly reading: ScoreReading;
+  /**
+   * What the dialect that reads the project's model declares about itself, or null when the host imported none for it.
+   * A part that offers choices narrows them by this, such as the chord picker by the chord vocabulary, so the user cannot
+   * build what the dialect would refuse.
+   */
+  readonly constraints: DialectConstraints | null;
   /**
    * The ids of the selected notes. The selection is UI state: it is not in the history. An id that names no note of
    * the current score is dropped, so the selection always names notes that exist.
@@ -324,6 +330,12 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get reading() {
       return read();
+    },
+    get constraints() {
+      return withDialect(
+        (dialect) => dialect.constraints,
+        () => null,
+      );
     },
     get selection() {
       return selection;
