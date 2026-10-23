@@ -94,16 +94,23 @@ test.describe("opening the menu of a section", () => {
     await expect(menu(page, "Section chorus")).toBeVisible();
   });
 
-  test("a band is a target of at least 24px where the pointer is coarse, and a mouse keeps the compact row", async ({
+  test("a finger can press 12px above a band, which makes a target of 36px, and a mouse cannot", async ({
     page,
     harness,
     isMobile,
   }) => {
     await openSong(harness);
     const band = await box(bandButton(page, "Section verse"));
-    // WCAG 2.5.8 (AA) asks for a target of at least 24 by 24 CSS pixels.
+    // WCAG 2.5.8 (AA) asks for 24 by 24 CSS pixels; DESIGN.md asks 36px of a control on a coarse pointer. The row is 25px.
     if (isMobile) expect(band.height).toBeGreaterThanOrEqual(24);
-    else expect(band.height).toBeLessThan(30);
+    const above = (offset: number) =>
+      page.evaluate(
+        ({ x, y }) => document.elementFromPoint(x, y)?.closest(".sce-section-open")?.getAttribute("aria-label") ?? null,
+        { x: band.x + band.width / 2, y: band.y - offset },
+      );
+    expect(await above(-4)).toBe("Section verse");
+    expect(await above(10)).toBe(isMobile ? "Section verse" : null);
+    expect(await above(14)).toBeNull();
   });
 
   test("the menu hangs under the pinned name of a band whose start is scrolled away", async ({
@@ -336,6 +343,7 @@ test.describe("naming a section", () => {
     await press(choice(page, "Section verse", "Rename…"));
     await press(formButton(page, "Rename", "Cancel"));
     await expect(form(page, "Rename")).toBeHidden();
+    await expect(bandButton(page, "Section verse")).toBeFocused();
 
     await press(bandButton(page, "Section verse"));
     await press(choice(page, "Section verse", "Rename…"));
@@ -364,6 +372,7 @@ test.describe("starting a section at a bar", () => {
     // Nothing was picked, so the bar after the section's first is offered: it is inside the section, and starts nothing.
     await expect(barField(page, title)).toHaveValue("4");
     await expect(barField(page, title)).toBeFocused();
+    await expect(barField(page, title)).toHaveAccessibleDescription("This section covers bars 3 to 5.");
     await nameField(page, title).fill("bridge");
     await press(formButton(page, title, "Start section"));
 

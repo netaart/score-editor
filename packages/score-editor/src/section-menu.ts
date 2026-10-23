@@ -239,6 +239,9 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
         bar.wrap.hidden = how !== "start";
         covers.hidden = how !== "start";
         covers.textContent = t.sectionFormCovers(found.firstBar + 1, found.firstBar + found.barCount);
+        // A description and not an id, since ids come from a counter that two editors on a page would share.
+        if (how === "start") bar.input.setAttribute("aria-description", covers.textContent);
+        else bar.input.removeAttribute("aria-description");
         name.input.value = how === "rename" ? (found.name ?? "") : "";
         const point = session.insertionPoint;
         // A bar the user has not picked is never defaulted to the start of another section, which would rename that one.
@@ -284,9 +287,9 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     const choices = new Map<SectionActionName, { item: HTMLButtonElement; note: HTMLElement }>();
     const choice = (name: SectionActionName, words: string, choose: () => void): void => {
       const item = menu.item("menuitem", choose);
-      item.setAttribute("aria-label", words);
       item.textContent = words;
-      // The note is for the eye: each muted item already carries the same words as its description.
+      // The note is for the eye and is hidden from assistive technology, so it adds no child to the menu there: each muted
+      // item already carries the same words as its description.
       const note = create(doc, "div", "sce-menu-note", menu.element);
       note.setAttribute("aria-hidden", "true");
       note.hidden = true;

@@ -20,11 +20,13 @@ export const sectionMenuCss = `
   font: inherit;
   cursor: pointer;
 }
-.sce-root .sce-section-open:hover {
-  background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
+@media (hover: hover) {
+  .sce-root .sce-section-open:hover {
+    background: color-mix(in srgb, var(--sce-_text) 6%, transparent);
+  }
 }
 .sce-root .sce-section-open[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--sce-_text) 12%, transparent);
+  background: color-mix(in srgb, var(--sce-_text) 10%, transparent);
 }
 .sce-root .sce-section-open:focus-visible {
   outline: 2px solid var(--sce-_accent);
@@ -33,8 +35,8 @@ export const sectionMenuCss = `
 .sce-root[data-editable="true"] .sce-section-name::after {
   content: "";
   display: inline-block;
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   margin: 0 0 3px 6px;
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
@@ -89,7 +91,7 @@ export const sectionMenuCss = `
 }
 .sce-root .sce-form-input:focus-visible {
   outline: 2px solid var(--sce-_accent);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 .sce-root .sce-form-input[aria-invalid="true"] {
   border-width: 2px;
@@ -113,10 +115,12 @@ export const sectionMenuCss = `
   font-weight: 600;
 }
 /*
- * WCAG 2.5.8 asks a target of at least 24px, and a band is 22px tall, so on a coarse pointer the row of bands is 25px: a
- * 24px control and the 1px rule under it. It stops there because a phone's frame has little height to give: at the 36px of
- * a toolbar button, the finger-drawn selection box of the multi-select spec no longer found empty lane to start on. Only
- * this row grows, and the offset the tracks hang from follows it; the bar numbers and the key and meter row stay as they are.
+ * A band is 22px tall, under the 24px WCAG 2.5.8 asks of a target and the 36px DESIGN.md asks of a control on a coarse
+ * pointer. So on a coarse pointer the row of bands is 25px (a 24px control and the 1px rule under it), and the control
+ * reaches 12px up into the row of bar numbers, which takes no press, for 36px in all. The row does not grow further because
+ * a phone's frame has little height to give: at 36px the finger-drawn selection box of the multi-select spec no longer found
+ * empty lane to start on. Nothing reaches down into the row of key and meter marks. Only the row of bands grows, and the
+ * offset the tracks hang from follows it.
  */
 @media (pointer: coarse) {
   .sce-root.sce-root {
@@ -125,6 +129,14 @@ export const sectionMenuCss = `
   }
   .sce-root .sce-sections {
     height: var(--sce-_sections);
+  }
+  .sce-root .sce-section-open::before {
+    content: "";
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    left: 0;
+    height: 12px;
   }
   .sce-root .sce-form-input {
     min-height: 36px;
