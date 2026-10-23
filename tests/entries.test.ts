@@ -32,6 +32,7 @@ describe("package entries in a node environment", () => {
       "mountViewSwitch",
       "mountVoiceTrack",
       "mountZoomControl",
+      "applyCommandList",
       // What 0.1.0 exported.
       "mount",
       "applyProjectCommand",

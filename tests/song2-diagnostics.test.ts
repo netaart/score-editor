@@ -63,6 +63,12 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "lyric-line-out-of-range",
+  "lyric-phrase-invalid",
+  "lyric-phrase-overlap",
+  "lyric-text-invalid",
+  "lyric-lines-not-mergeable",
+  "lyric-split-invalid",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = [

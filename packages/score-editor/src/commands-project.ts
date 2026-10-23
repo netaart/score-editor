@@ -2,24 +2,53 @@
 // ABOUTME: Only replaceScoreText reads or writes the score text, and only through the dialect; applyProjectCommand is the one entry that runs the rules.
 
 import type { ScoreCommand } from "./commands";
+import { runLyricLineCommand } from "./commands-lyric-lines";
 import type { Diagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import { joinLyrics, LYRICS_MAX_CHARACTERS, lyricCharacterCount, lyricLinesOf, unalignedLyricLines } from "./lyrics";
-import type { SongProject } from "./score";
+import type { LyricPhrase, SongProject } from "./score";
 import { fallbackDiagnostic, readScoreText } from "./score-text";
 
-const PROJECT_COMMAND_TYPES = ["setStyle", "setScoreMode", "setSeed", "replaceScoreText"] as const;
+const PROJECT_COMMAND_TYPES = [
+  "setStyle",
+  "setScoreMode",
+  "setSeed",
+  "replaceScoreText",
+  "setLyricLineText",
+  "insertLyricLine",
+  "deleteLyricLine",
+  "splitLyricLine",
+  "mergeLyricLines",
+  "setLyricLinePhrase",
+] as const;
 
 /**
  * A song-project edit that is not a score edit. The name is one word so the two command kinds stay apart.
  * `replaceScoreText` replaces the whole score text with another one, and is how a person's typing reaches the project: a
- * readable text is taken, an unreadable one is refused with its first diagnostic.
+ * readable text is taken, an unreadable one is refused with its first diagnostic. The lyric-line commands name a line by
+ * its index in the project's lines, and each keeps the lyric invariants or is refused with its own code.
  */
 export type ProjectCommand =
   | { readonly type: "setStyle"; readonly style: string }
   | { readonly type: "setScoreMode"; readonly scoreMode: "full" | "melody" }
   | { readonly type: "setSeed"; readonly seed: number | null }
-  | { readonly type: "replaceScoreText"; readonly text: string };
+  | { readonly type: "replaceScoreText"; readonly text: string }
+  | { readonly type: "setLyricLineText"; readonly line: number; readonly text: string }
+  | {
+      readonly type: "insertLyricLine";
+      readonly index: number;
+      readonly text: string;
+      readonly phrase: LyricPhrase | null;
+    }
+  | { readonly type: "deleteLyricLine"; readonly line: number }
+  | {
+      readonly type: "splitLyricLine";
+      readonly line: number;
+      readonly offset: number;
+      readonly bar?: number;
+    }
+  | { readonly type: "mergeLyricLines"; readonly line: number }
+  | { readonly type: "setLyricLinePhrase"; readonly line: number; readonly phrase: LyricPhrase | null };
 
 export type ProjectCommandResult =
   | { readonly ok: true; readonly project: SongProject }
@@ -60,6 +89,13 @@ export function runProjectCommand(
       if (!read.ok) return { ok: false, diagnostic: read.diagnostics[0] ?? fallbackDiagnostic() };
       return { ok: true, project: { ...project, score: read.text } };
     }
+    case "setLyricLineText":
+    case "insertLyricLine":
+    case "deleteLyricLine":
+    case "splitLyricLine":
+    case "mergeLyricLines":
+    case "setLyricLinePhrase":
+      return runLyricLineCommand(dialect, project, command);
   }
 }
 
@@ -96,7 +132,7 @@ export function checkProject(dialect: ScoreDialect, project: SongProject): Reado
   }
   if (parsed !== null) {
     const lines = lyricLinesOf(project, parsed);
-    const unaligned = unalignedLyricLines(lines).length;
+    const unaligned = unalignedLyricLines(lines, parsed).length;
     if (unaligned > 0) diagnostics.push({ code: "lyrics-unaligned", params: { count: unaligned }, at: {} });
     const characters = lyricCharacterCount(joinLyrics(parsed, lines));
     if (characters > LYRICS_MAX_CHARACTERS) {
