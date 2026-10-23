@@ -6,6 +6,7 @@ import { song2Dialect } from "/packages/score-dialect-song2/dist/index.js";
 import {
   createDialectRegistry,
   createEditingSession,
+  formatDiagnostic,
   mount,
   mountChordTrack,
   mountCutNotice,
@@ -85,6 +86,20 @@ const VIEW_PARTS = {
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+  // The default editor's toolbar: the view switch, and the tempo, key, transpose and Project controls. A refusal is told
+  // to the host as the editor tells it, so the notices list shows what a host would be sent.
+  "toolbar-song": (el, session) =>
+    mountToolbar(el, session, {
+      viewSwitch: true,
+      tempoKey: true,
+      projectPanel: true,
+      onRefused: (diagnostics) =>
+        notices.push({
+          code: "command-refused",
+          level: "warning",
+          message: formatDiagnostic(diagnostics[0], session.view.language),
+        }),
+    }),
 };
 
 const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };
