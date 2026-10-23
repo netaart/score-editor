@@ -603,6 +603,77 @@ export async function pointerOf(
   };
 }
 
+/** A quarter note is 256 ticks and a beat is a quarter. */
+export const BEAT = 256;
+/** Middle C, the pitch most notes in these scores start from. */
+export const MIDDLE_C = 60;
+
+export const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
+export const toolbar = (page: Page) => slot(page, "toolbar");
+export const laneOf = (page: Page) => slot(page, "vocal").locator(".sce-lane");
+export const ghosts = (page: Page) => slot(page, "vocal").locator(".sce-ghost");
+export const said = (page: Page) => slot(page, "vocal").getByRole("status");
+export const trackRegion = (page: Page) => slot(page, "vocal").getByRole("region", { name: "Vocal" });
+/** A note by the start of its name, which holds whether it is selected or not. */
+export const block = (page: Page, label: string) => slot(page, "vocal").getByRole("listitem", { name: label });
+export const gridButton = (page: Page) => toolbar(page).getByRole("button", { name: /^(Grid|网格): / });
+export const gridItem = (page: Page, name: string) => toolbar(page).getByRole("menuitemradio", { name, exact: true });
+
+/** One note of C4 at the first beat, then rests, and a whole note in the second bar: eight beats. */
+export const LEAD = vocalOnly("C4z12|G16|");
+/** Four quarter notes, then a whole note: at 40 pixels a beat they start 0, 40, 80 and 120 pixels into the lane. */
+export const QUARTERS = vocalOnly("C4D4E4F4|G16|");
+
+/** Opens the toolbar and the Vocal track on one session, in the page's layout. */
+export async function openTrack(harness: Harness, score: string = QUARTERS, options: Record<string, unknown> = {}) {
+  await harness.layout.open({ score: { text: score }, parts: ["toolbar", "vocal"], ...options });
+}
+
+export async function centreOf(target: Locator): Promise<Point> {
+  const area = await box(target);
+  return { x: area.x + area.width / 2, y: area.y + area.height / 2 };
+}
+
+/** How wide a beat and how high a row are on this project, in pixels, for a score of `beats` beats. */
+export async function metrics(page: Page, beats: number) {
+  const lane = await box(laneOf(page));
+  const row = (await box(slot(page, "vocal").getByRole("listitem").first())).height;
+  return { lane, beat: lane.width / beats, row };
+}
+
+/** Presses at `from`, slides to `to`, and lets `during` look at the page before the release. */
+export async function drag(
+  page: Page,
+  harness: Harness,
+  isMobile: boolean,
+  from: Point,
+  to: Point,
+  during: () => Promise<void> = async () => {},
+) {
+  const pointer = await pointerOf(page, harness, isMobile, { holdMs: 0 });
+  try {
+    await pointer.down(from);
+    await pointer.move(to);
+    await during();
+    await pointer.up();
+  } finally {
+    await pointer.close();
+  }
+}
+
+/** Runs a gesture with one pointer and always lets the pointer go, even when the gesture fails. */
+export async function withPointer<T>(pointer: { close(): Promise<void> }, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } finally {
+    await pointer.close();
+  }
+}
+
+/** The notes the session holds, as the voice, start tick, length in ticks and MIDI number of each. */
+export const noteList = (harness: Harness) => harness.layout.pitchedNotes();
+export const vocal = (start: number, duration: number, midi: number) => ({ voice: "Vocal", start, duration, midi });
+
 export const test = base.extend<{
   harness: Harness;
   press: (target: Locator, position?: Point) => Promise<void>;

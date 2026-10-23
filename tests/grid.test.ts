@@ -131,6 +131,94 @@ describe("what a score allows of the grid", () => {
   });
 });
 
+const THIRTY_SECONDS = scoreAt("1/32", "C8D8E8F8|G32|");
+
+describe("a grid the score cannot write", () => {
+  it("goes back to 1/4 when the project is replaced by a score that cannot write it, in the change that replaces it", () => {
+    const session = open({ score: THIRTY_SECONDS, grid: { value: 32 } });
+    const changes = listen(session);
+
+    session.replaceProject({ ...session.project, score: scoreAt("1/16"), sourceKey: "other" });
+
+    expect(session.grid).toEqual({ value: 4 });
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ cause: "replace", project: true, gridDropped: { value: 32 } });
+    expect(session.allowsGrid(session.grid)).toBe(true);
+  });
+
+  it("keeps a grid the new score can write, and says nothing of the grid", () => {
+    const session = open({ score: THIRTY_SECONDS, grid: { value: 16 } });
+    const changes = listen(session);
+
+    session.replaceProject({ ...session.project, score: scoreAt("1/16"), sourceKey: "other" });
+
+    expect(session.grid).toEqual({ value: 16 });
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).not.toHaveProperty("gridDropped");
+  });
+
+  it("goes back when the score text is changed to a unit that cannot write it, and stays back after an undo", () => {
+    const session = open({ score: THIRTY_SECONDS, grid: { value: 32, dotted: true } });
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "replaceScoreText", text: scoreAt("1/16") });
+
+    expect(result.ok).toBe(true);
+    expect(session.grid).toEqual({ value: 4 });
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toMatchObject({ cause: "dispatch", project: true, gridDropped: { value: 32, dotted: true } });
+
+    session.undo();
+    expect(session.grid).toEqual({ value: 4 });
+    expect(changes[1]).not.toHaveProperty("gridDropped");
+  });
+
+  it("goes back when the dialects are replaced by ones that cannot write it", () => {
+    const session = open({ grid: { value: 16 } });
+    const narrow = {
+      ...song2Dialect,
+      constraints: { ...song2Dialect.constraints, durations: [2, 4, 8, 16] },
+    };
+    const changes = listen(session);
+
+    session.replaceDialects(createDialectRegistry([narrow]));
+
+    expect(session.grid).toEqual({ value: 4 });
+    expect(changes[0]).toMatchObject({ cause: "replace", gridDropped: { value: 16 } });
+  });
+
+  it("is not taken back while the score cannot be read, since nothing says it cannot be written", () => {
+    const session = open({ grid: { value: 16 } });
+    const changes = listen(session);
+
+    session.replaceProject({ ...session.project, score: scoreAt("1/16", "C5|"), sourceKey: "other" });
+
+    expect(session.grid).toEqual({ value: 16 });
+    expect(changes[0]).not.toHaveProperty("gridDropped");
+  });
+
+  it("says the drop once: the default grid, which a score may not write either, stays in force", () => {
+    // At L:1/2 a written unit is 512 ticks, so no step of the grid but a whole note's is a whole number of units.
+    const session = open({ score: scoreAt("1/2", "C1D1|G2|"), grid: { value: 8 } });
+    const changes = listen(session);
+
+    session.replaceProject({ ...session.project, score: scoreAt("1/2", "C1D1|G1G1|"), sourceKey: "other" });
+    session.replaceProject({ ...session.project, score: scoreAt("1/2", "C1D1|G2|"), sourceKey: "again" });
+
+    expect(session.grid).toEqual({ value: 4 });
+    expect(changes.filter((change) => change.gridDropped !== undefined)).toHaveLength(1);
+  });
+
+  it("reports a grid the host sets as a change of its own, without a drop", () => {
+    const session = open();
+    const changes = listen(session);
+
+    session.setGrid({ value: 8 });
+
+    expect(changes[0]).not.toHaveProperty("gridDropped");
+  });
+});
+
 const click = (tick: number) => ({ type: "click-empty", tick }) as const;
 const key = (name: string) =>
   ({ type: "key", key: name, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false }) as const;

@@ -1,12 +1,31 @@
-// ABOUTME: Seam 5 for editing in view parts: select, delete, undo, redo and the insertion point, by mouse, touch and keyboard.
+// ABOUTME: Seam 5 for editing in view parts: select, delete, undo, the Grid menu, the insertion point, the toolbar and what is said.
 // ABOUTME: Parts are mounted on one session in the page's own layout; tests act as a user does and read what the session holds.
 import type { Locator, Page } from "@playwright/test";
-import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
+import {
+  BEAT,
+  block,
+  box,
+  centreOf,
+  drag,
+  expect,
+  gridButton,
+  gridItem,
+  laneOf,
+  LEAD,
+  metrics,
+  MIDDLE_C,
+  noteList,
+  openTrack,
+  type Point,
+  QUARTERS,
+  slot,
+  test,
+  toolbar,
+  trackRegion,
+  vocal,
+  vocalOnly,
+} from "./fixtures";
 
-const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
-
-/** Four quarter notes, then a whole note: at 40 pixels a beat they start 0, 40, 80 and 120 pixels into the lane. */
-const QUARTERS = vocalOnly("C4D4E4F4|G16|");
 const C4 = "C4, bar 1 beat 1, length 1 beat";
 const D4 = "D4, bar 1 beat 2, length 1 beat";
 const E4 = "E4, bar 1 beat 3, length 1 beat";
@@ -16,13 +35,6 @@ const G4 = "G4, bar 2 beat 1, length 4 beats";
 const note = (page: Page, name: string) => slot(page, "vocal").getByRole("listitem", { name, exact: true });
 const selected = (page: Page, name: string) => note(page, `${name}, selected`);
 const lane = (page: Page) => slot(page, "vocal").getByRole("list", { name: "Vocal" });
-/** The Vocal track as a keyboard user reaches it: a focusable, named region that scrolls itself. */
-const trackRegion = (page: Page) => slot(page, "vocal").getByRole("region", { name: "Vocal" });
-
-/** Opens the toolbar and the Vocal track on one session, in the page's layout. */
-async function openTrack(harness: Harness, score: string = QUARTERS, options: Record<string, unknown> = {}) {
-  await harness.layout.open({ score: { text: score }, parts: ["toolbar", "vocal"], ...options });
-}
 
 test.describe("selecting a note in a voice track", () => {
   test("a click or a tap selects the note: it is named as selected, framed with a 2px border (visual), and the session holds its id", async ({
@@ -120,7 +132,6 @@ test.describe("selecting a note in a voice track", () => {
   });
 });
 
-const toolbar = (page: Page) => slot(page, "toolbar");
 const undoButton = (page: Page) => toolbar(page).getByRole("button", { name: "Undo", exact: true });
 const redoButton = (page: Page) => toolbar(page).getByRole("button", { name: "Redo", exact: true });
 const deleteButton = (page: Page) => toolbar(page).getByRole("button", { name: "Delete", exact: true });
@@ -133,9 +144,9 @@ test.describe("the toolbar part", () => {
     press,
   }) => {
     await openTrack(harness);
-    // On a phone's width the row is full of controls: the title gives way to them, and the row scrolls.
+    // The row wraps when it holds the preview control, so the title keeps its place on a phone's width too.
     const title = toolbar(page).getByText("Arrangement", { exact: true });
-    await (isMobile ? expect(title).toBeAttached() : expect(title).toBeVisible());
+    await expect(title).toBeVisible();
     await expect(toolbar(page).getByRole("group", { name: "Zoom" })).toBeVisible();
     const history = toolbar(page).getByRole("group", { name: "History" });
     await expect(history.getByRole("button")).toHaveCount(2);
@@ -210,9 +221,8 @@ test.describe("the toolbar part", () => {
     await expect(toolbar(page).getByText("Read only", { exact: true })).toBeVisible();
   });
 
-  test("speaks the session's language", async ({ page, harness, isMobile }) => {
-    // On a phone's width the title gives way to the controls (see above), so it is attached there and visible elsewhere.
-    const shown = (title: Locator) => (isMobile ? expect(title).toBeAttached() : expect(title).toBeVisible());
+  test("speaks the session's language", async ({ page, harness }) => {
+    const shown = (title: Locator) => expect(title).toBeVisible();
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["toolbar", "vocal"], language: "zh" });
     await expect(toolbar(page).getByRole("group", { name: "历史" })).toBeVisible();
     await expect(toolbar(page).getByRole("button", { name: "撤销", exact: true })).toBeVisible();
@@ -952,5 +962,206 @@ test.describe("selecting a note by keyboard", () => {
     await page.keyboard.press("ArrowRight");
     await expect(note(page, "C4, bar 2 beat 1, length 4 beats, selected")).toBeFocused();
     await expect(note(page, "C4, bar 1 beat 1, length 4 beats, tied to the next note, selected")).toBeVisible();
+  });
+});
+
+test.describe("the Grid menu", () => {
+  test("shows the grid in force, and a choice sets it for the keys and the drag", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    await openTrack(harness, vocalOnly("z4C8z4|G16|"));
+    await expect(gridButton(page)).toHaveAccessibleName("Grid: 1/4");
+    await expect(gridButton(page)).toHaveText("1/4");
+    expect(await harness.layout.grid()).toEqual({ value: 4 });
+
+    await press(gridButton(page));
+    await expect(gridItem(page, "1/4")).toBeFocused();
+    await expect(gridItem(page, "1/4")).toHaveAttribute("aria-checked", "true");
+    await press(gridItem(page, "1/8"));
+    expect(await harness.layout.grid()).toEqual({ value: 8 });
+    await expect(gridButton(page)).toHaveAccessibleName("Grid: 1/8");
+    // The grid is a matter of the view, not of the song: nothing was written and nothing can be undone.
+    expect(await harness.layout.canUndo()).toBe(false);
+    expect(await harness.layout.scoreText()).toBe(vocalOnly("z4C8z4|G16|"));
+
+    // The keys take an eighth now.
+    await press(block(page, "C4, bar 1 beat 2"));
+    await page.keyboard.press("ArrowRight");
+    expect((await noteList(harness))[0]).toEqual(vocal(BEAT + BEAT / 2, 2 * BEAT, MIDDLE_C));
+    await harness.layout.undo();
+
+    // So does a drag: half a beat of pointer is one step.
+    const from = await centreOf(block(page, "C4, bar 1 beat 2, length 2 beats, selected"));
+    const { beat } = await metrics(page, 8);
+    await drag(page, harness, isMobile, from, { x: from.x + beat / 2, y: from.y });
+    expect((await noteList(harness))[0]).toEqual(vocal(BEAT + BEAT / 2, 2 * BEAT, MIDDLE_C));
+  });
+
+  test("offers the dotted values after the plain ones, and a dotted choice sets a dotted step", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, vocalOnly("z4C8z4|G16|"));
+    await press(gridButton(page));
+    const names = await toolbar(page).getByRole("menuitemradio").allTextContents();
+    expect(names).toEqual(["1/4", "1/8", "1/16", "Dotted 1/4", "Dotted 1/8", "Dotted 1/16"]);
+    // Dotted 1/16 is a sixteenth and a half: this score counts in sixteenths and cannot write it.
+    await expect(gridItem(page, "Dotted 1/16")).toHaveAttribute("aria-disabled", "true");
+    await expect(gridItem(page, "Dotted 1/4")).toHaveAttribute("aria-disabled", "false");
+
+    await press(gridItem(page, "Dotted 1/4"));
+    expect(await harness.layout.grid()).toEqual({ value: 4, dotted: true });
+    await expect(gridButton(page)).toHaveAccessibleName("Grid: Dotted 1/4");
+    await expect(gridButton(page).locator(".sce-grid-dot")).toBeVisible();
+
+    await press(block(page, "C4, bar 1 beat 2"));
+    await page.keyboard.press("ArrowRight");
+    // A dotted quarter is a beat and a half, so the lines are at 0, 1.5, 3 beats. One step on from 1 beat (256 ticks)
+    // is 640, which is nearer the line at 3 beats (768) than the one at 1.5 (384). The half note then reaches over the
+    // bar line, and over the start of the whole note in the second bar, which it covers.
+    expect(await noteList(harness)).toEqual([vocal(3 * BEAT, BEAT, MIDDLE_C), vocal(4 * BEAT, BEAT, MIDDLE_C)]);
+  });
+
+  test("mutes a step the score cannot write: choosing it changes nothing", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    const forced = (target: Locator) => (isMobile ? target.tap({ force: true }) : target.click({ force: true }));
+    await openTrack(harness, vocalOnly("z4C8z4|G16|"));
+    await press(gridButton(page));
+    await expect(gridItem(page, "Dotted 1/16")).toHaveAttribute("title", "This score cannot write this step");
+    await forced(gridItem(page, "Dotted 1/16"));
+    expect(await harness.layout.grid()).toEqual({ value: 4 });
+    await expect(gridButton(page)).toHaveAccessibleName("Grid: 1/4");
+  });
+
+  test("offers 1/32 only where the unit of the score can write it", async ({ page, harness, press }) => {
+    await openTrack(harness, vocalOnly("C4z12|G16|"));
+    await press(gridButton(page));
+    await expect(gridItem(page, "1/32")).toBeHidden();
+    await expect(gridItem(page, "Dotted 1/32")).toBeHidden();
+    await page.keyboard.press("Escape");
+    await harness.layout.close();
+
+    await openTrack(harness, vocalOnly("C8z24|G32|").replace("L:1/16", "L:1/32"));
+    await press(gridButton(page));
+    await expect(gridItem(page, "1/32")).toBeVisible();
+    await expect(gridItem(page, "1/32")).toHaveAttribute("aria-disabled", "false");
+    // The step after it, a dotted 1/32, is a 32nd and a half.
+    await expect(gridItem(page, "Dotted 1/32")).toHaveAttribute("aria-disabled", "true");
+    await press(gridItem(page, "1/32"));
+    expect(await harness.layout.grid()).toEqual({ value: 32 });
+    await expect(gridButton(page)).toHaveText("1/32");
+  });
+
+  test("goes back to 1/4 when the project is replaced by a score that cannot write the grid, says so, and offers no 1/32", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, vocalOnly("C8z24|G32|").replace("L:1/16", "L:1/32"));
+    await press(gridButton(page));
+    await press(gridItem(page, "1/32"));
+    await expect(gridButton(page)).toHaveAccessibleName("Grid: 1/32");
+
+    await harness.layout.replace({ score: LEAD });
+
+    expect(await harness.layout.grid()).toEqual({ value: 4 });
+    await expect(gridButton(page)).toHaveAccessibleName("Grid: 1/4");
+    await expect(toolbar(page).getByRole("status")).toHaveText(
+      "The grid went back to 1/4: this score cannot write 1/32",
+    );
+    await press(gridButton(page));
+    await expect(gridItem(page, "1/32")).toBeHidden();
+    await expect(gridItem(page, "Dotted 1/32")).toBeHidden();
+    await expect(gridItem(page, "1/4")).toHaveAttribute("aria-checked", "true");
+  });
+
+  test("says the same in Chinese, and says nothing when the grid stays", async ({ page, harness, press }) => {
+    await openTrack(harness, vocalOnly("C8z24|G32|").replace("L:1/16", "L:1/32"), { language: "zh" });
+    await press(gridButton(page));
+    await press(gridItem(page, "附点 1/16"));
+    await harness.layout.replace({ score: vocalOnly("C8D8z16|G32|").replace("L:1/16", "L:1/32") });
+    await expect(gridButton(page)).toHaveAccessibleName("网格: 附点 1/16");
+    await expect(toolbar(page).getByRole("status")).toHaveText("");
+
+    await harness.layout.replace({ score: LEAD });
+    await expect(toolbar(page).getByRole("status")).toHaveText(
+      "网格已回到 1/4：这份乐谱写不出 附点 1/16",
+    );
+  });
+
+  test("walks its choices with the arrow keys and skips the ones that are left out", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, vocalOnly("C4z12|G16|"));
+    await press(gridButton(page));
+    await expect(gridItem(page, "1/4")).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(gridItem(page, "Dotted 1/16")).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(gridItem(page, "1/4")).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(gridItem(page, "Dotted 1/16")).toBeFocused();
+  });
+
+  test("is there while the editor can edit, and gone while it is read-only", async ({ page, harness }) => {
+    await openTrack(harness, LEAD);
+    await expect(gridButton(page)).toBeVisible();
+    await harness.layout.setEditable(false);
+    await expect(gridButton(page)).toBeHidden();
+    await harness.layout.setEditable(true);
+    await expect(gridButton(page)).toBeVisible();
+  });
+
+  test("is named in the language of the editor", async ({ page, harness, press }) => {
+    await openTrack(harness, LEAD, { language: "zh" });
+    await expect(gridButton(page)).toHaveAccessibleName("网格: 1/4");
+    await press(gridButton(page));
+    await expect(gridItem(page, "附点 1/4")).toBeVisible();
+  });
+});
+
+test.describe("the insertion point on the grid", () => {
+  /** A point of the empty lane, `beats` beats from its left edge, near the top where no note is drawn; relative to the lane. */
+  async function emptySpot(page: Page, beats: number): Promise<Point> {
+    const { beat } = await metrics(page, 8);
+    return { x: beats * beat, y: 3 };
+  }
+
+  test("a click on empty space lands on the nearest line of the grid", async ({ page, harness, press }) => {
+    await openTrack(harness, LEAD);
+    const spot = await emptySpot(page, 2.4);
+    await press(laneOf(page), spot);
+    // Nearest quarter to 2.4 beats is 2 beats.
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 2 * BEAT });
+
+    await press(gridButton(page));
+    await press(gridItem(page, "1/8"));
+    await press(laneOf(page), spot);
+    // And to 2.4 beats the nearest eighth is 2.5.
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 2.5 * BEAT });
+  });
+
+  test("the keys move it from line to line of the grid in force", async ({ page, harness, press }) => {
+    await openTrack(harness, LEAD);
+    await press(gridButton(page));
+    await press(gridItem(page, "Dotted 1/4"));
+    await trackRegion(page).focus();
+    await page.keyboard.press("Home");
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 0 });
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 3 * BEAT });
+    await page.keyboard.press("ArrowLeft");
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 1.5 * BEAT });
   });
 });
