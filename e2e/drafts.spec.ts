@@ -1,7 +1,7 @@
 // ABOUTME: Seam 5 for drafts in the mounted editor: a fake host store records every call, and the tests read what the editor sent it.
 // ABOUTME: The debounce runs on the page's faked clock; the conflict, the failure and the inheritance are caused by what the store holds.
 import { createHash } from "node:crypto";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, type Harness, test, vocalOnly } from "./fixtures";
 
 /** Four quarter notes, then a whole note. */
@@ -56,6 +56,14 @@ class Store {
   seed(key: string, text: string): Promise<string> {
     return this.page.evaluate(
       ([name, body]) => (window as unknown as PageWithStore).harness.drafts.seed(name as string, body as string),
+      [key, text] as const,
+    );
+  }
+
+  /** Another window writes the file: a version the editor has not seen. */
+  external(key: string, text: string): Promise<string> {
+    return this.page.evaluate(
+      ([name, body]) => (window as unknown as PageWithStore).harness.drafts.external(name as string, body as string),
       [key, text] as const,
     );
   }
@@ -327,6 +335,127 @@ test.describe("while the draft is being read", () => {
     await expect(noteNamed(page, E4)).toBeVisible();
     await page.clock.runFor(5 * DEBOUNCE_MS);
     expect(await store.callsOf("write")).toEqual([]);
+  });
+});
+
+test.describe("a draft that another window changed first", () => {
+  /** The score of the other window's draft: its E turned into a rest, and the D left as it is. */
+  const THEIRS = QUARTERS.replace("C4D4E4F4|", "C4D4z4F4|");
+  /** The score here after the D and the F are turned into rests. */
+  const OURS = QUARTERS.replace("C4D4E4F4|", "C4z4E4z4|");
+  const overwrite = (page: Page) => page.getByRole("button", { name: "Overwrite with my version" });
+  const loadTheirs = (page: Page) => page.getByRole("button", { name: "Load the other version" });
+
+  /** Our first edit is saved; another window then writes the draft; our next edit is refused as a conflict. */
+  async function conflict(page: Page, press: (target: Locator) => Promise<void>) {
+    const store = new Store(page);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(1);
+    const theirs = await store.external(
+      "test-page",
+      storedDraft({ source: { lyrics: "", score: QUARTERS }, score: THEIRS }),
+    );
+    await press(noteNamed(page, F4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(2);
+    return { store, theirs };
+  }
+
+  test("is told to the user inside the editor, with two ways out, and not to the host", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openEditor(page, harness);
+    const { store } = await conflict(page, press);
+
+    await expect(page.getByRole("alert")).toHaveText(
+      "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
+    );
+    await expect(overwrite(page)).toBeVisible();
+    await expect(overwrite(page)).toHaveAccessibleDescription("The other version is replaced by yours.");
+    await expect(loadTheirs(page)).toBeVisible();
+    await expect(loadTheirs(page)).toHaveAccessibleDescription(
+      "It opens here, and your changes in this window are dropped.",
+    );
+    expect((await store.callsOf("write")).map((call) => call.result)).toEqual([
+      expect.stringMatching(/^v\d+$/),
+      "conflict",
+    ]);
+    expect(await harness.notices()).toEqual([]);
+  });
+
+  test("the editor goes on editing while it stands, and writes nothing until the user chooses", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openEditor(page, harness);
+    const { store } = await conflict(page, press);
+    await expect(overwrite(page)).toBeVisible();
+
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await expect(noteNamed(page, E4)).toHaveCount(0);
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+
+    expect(await store.callsOf("write")).toHaveLength(2);
+    await expect(overwrite(page)).toBeVisible();
+  });
+
+  test("overwriting writes the user's project over the other version, which the editor reads first", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openEditor(page, harness);
+    const { store, theirs } = await conflict(page, press);
+
+    await press(overwrite(page));
+
+    await expect(overwrite(page)).toBeHidden();
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(3);
+    const write = (await store.callsOf("write"))[2];
+    expect(write?.expected).toBe(theirs);
+    expect(write?.result).toMatch(/^v\d+$/);
+    expect(draftOf(write).project.score).toBe(OURS);
+    expect(draftOf({ method: "write", text: (await store.fileOf("test-page"))?.text }).project.score).toBe(OURS);
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    await expect(noteNamed(page, F4)).toHaveCount(0);
+    expect(await harness.notices()).toEqual([]);
+
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(4);
+    expect((await store.callsOf("write"))[3]?.expected).toBe(write?.result);
+  });
+
+  test("loading the other version shows it in the editor and writes nothing", async ({ page, harness, press }) => {
+    await openEditor(page, harness);
+    const { store, theirs } = await conflict(page, press);
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+
+    await press(loadTheirs(page));
+
+    await expect(loadTheirs(page)).toBeHidden();
+    await expect(noteNamed(page, D4)).toBeVisible();
+    await expect(noteNamed(page, E4)).toHaveCount(0);
+    await expect(noteNamed(page, F4)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveAttribute("aria-disabled", "true");
+    await page.clock.runFor(5 * DEBOUNCE_MS);
+    expect(await store.callsOf("write")).toHaveLength(2);
+    expect(await store.callsOf("remove")).toEqual([]);
+    expect((await store.fileOf("test-page"))?.version).toBe(theirs);
+
+    await press(noteNamed(page, F4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expect.poll(async () => (await store.callsOf("write")).length).toBe(3);
+    expect((await store.callsOf("write"))[2]?.expected).toBe(theirs);
   });
 });
 
