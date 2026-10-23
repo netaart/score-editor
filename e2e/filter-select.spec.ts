@@ -534,6 +534,10 @@ test.describe("the panel's place and size", () => {
         })),
       );
       expect(sizes.length).toBeGreaterThan(10);
+      // The fields sit beside the name of their condition, not under it, so the sheet is short enough to leave the roll in view.
+      const pitchRow = await box(check(page, "Pitch"));
+      expect((await box(pitchLowest(page))).x).toBeGreaterThan(pitchRow.x + pitchRow.width);
+      expect(frame.height).toBeLessThan(view.height * 0.6);
       for (const size of sizes) {
         expect(size.height).toBeGreaterThanOrEqual(40);
         // A field set in text under 16 px makes a phone zoom the page when it is focused.
@@ -590,5 +594,20 @@ test.describe("what the status line says when no note matches", () => {
     await countEvery(page).press("Enter");
     await expect(status(page)).toHaveText(REASON);
     expect(await harness.layout.selection()).toEqual([]);
+  });
+});
+test.describe("a condition that is not counted", () => {
+  test("shows its fields in the muted colour until it is turned on", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    const colour = (field: Locator) => field.evaluate((element) => getComputedStyle(element).color);
+    const resting = await colour(pitchLowest(page));
+
+    await press(check(page, "Pitch"));
+    const counted = await colour(pitchLowest(page));
+
+    expect(resting).not.toBe(counted);
+    await press(check(page, "Pitch"));
+    expect(await colour(pitchLowest(page))).toBe(resting);
   });
 });
