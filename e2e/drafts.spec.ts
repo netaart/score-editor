@@ -886,6 +886,114 @@ test.describe("update and destroy with drafts", () => {
   });
 });
 
+test.describe("the host changes a field that is not part of the original", () => {
+  /** The fields a host can change that a project command carries, each with a value other than the page's own. */
+  const FIELDS = [
+    { field: "style", value: "jazz" },
+    { field: "seed", value: 7 },
+    { field: "scoreMode", value: "melody" },
+  ] as const;
+
+  /** The D is turned into a rest, and the draft with that is saved. */
+  async function editedAndSaved(page: Page, harness: Harness, press: (target: Locator) => Promise<void>) {
+    const store = new Store(page);
+    await openEditor(page, harness);
+    await press(noteNamed(page, D4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+    await expectCount(() => store.callsOf("write"), 1);
+    return store;
+  }
+
+  for (const { field, value } of FIELDS) {
+    test(`a new ${field} keeps the user's edits, and the draft is saved with the edits and the new ${field}`, async ({
+      page,
+      harness,
+      press,
+    }) => {
+      const store = await editedAndSaved(page, harness, press);
+      const [first] = await store.callsOf("write");
+
+      await harness.update({ project: { [field]: value } });
+      await page.clock.runFor(DEBOUNCE_MS + 100);
+
+      await expect(noteNamed(page, D4)).toHaveCount(0);
+      await expectCount(() => store.callsOf("write"), 2);
+      const second = (await store.callsOf("write"))[1];
+      expect(second?.expected).toBe(first?.result);
+      expect(draftOf(second).project.score).toBe(WITHOUT_D);
+      expect(draftOf(second).project[field]).toBe(value);
+      expect((await store.callsOf("read")).map((call) => call.key)).toEqual(["test-page"]);
+      expect(await store.callsOf("remove")).toEqual([]);
+      expect(await harness.notices()).toEqual([]);
+    });
+  }
+
+  test("two fields changed in one update are both carried", async ({ page, harness, press }) => {
+    const store = await editedAndSaved(page, harness, press);
+
+    await harness.update({ project: { style: "jazz", seed: 7 } });
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+
+    await expectCount(() => store.callsOf("write"), 2);
+    const { project } = draftOf((await store.callsOf("write"))[1]);
+    expect(project.style).toBe("jazz");
+    expect(project.seed).toBe(7);
+    expect(project.score).toBe(WITHOUT_D);
+  });
+
+  test("a draft that was opened is not restored over the host's new style", async ({ page, harness, press }) => {
+    const store = new Store(page);
+    await store.seed(
+      "test-page",
+      storedDraft({ source: { lyrics: "", score: QUARTERS }, score: WITHOUT_D, style: "stored" }),
+    );
+    await openEditor(page, harness);
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+
+    await harness.update({ project: { style: "jazz" } });
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+
+    await expectCount(() => store.callsOf("write"), 1);
+    const { project } = draftOf((await store.callsOf("write"))[0]);
+    expect(project.style).toBe("jazz");
+    expect(project.score).toBe(QUARTERS.replace("C4D4E4F4|", "C4z4z4F4|"));
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    expect((await store.callsOf("read")).map((call) => call.key)).toEqual(["test-page"]);
+  });
+
+  test("a style that arrives while the draft is still being read is carried after it, and not lost to it", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const store = new Store(page);
+    await store.seed(
+      "test-page",
+      storedDraft({ source: { lyrics: "", score: QUARTERS }, score: WITHOUT_D, style: "stored" }),
+    );
+    await store.hold();
+    await page.clock.install();
+    await stopClock(page);
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    await expect(page.getByText("Opening draft…", { exact: true })).toBeVisible();
+
+    await harness.update({ project: { style: "jazz" } });
+    await store.release();
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await page.clock.runFor(DEBOUNCE_MS + 100);
+
+    await expectCount(() => store.callsOf("write"), 1);
+    const { project } = draftOf((await store.callsOf("write"))[0]);
+    expect(project.style).toBe("jazz");
+    expect(project.score).toBe(QUARTERS.replace("C4D4E4F4|", "C4z4z4F4|"));
+  });
+});
+
 test.describe("other changes to the options with drafts", () => {
   test("new lyrics for the same key and score are a new original: the old draft is discarded and told", async ({
     page,
