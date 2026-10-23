@@ -51,7 +51,7 @@ function keyOf(voice: string, bar: number): string {
 }
 
 function parseMeter(text: string): Meter {
-  const match = /^M:([1-9][0-9]{0,5})\/([1-9][0-9]{0,5})$/.exec(text);
+  const match = /^M:([1-9][0-9]{0,5})\/([1-9][0-9]{0,5})$/.exec(text.replace(/[ \t]+$/, ""));
   if (match === null) throw new Error("song2: the header meter cannot be read back");
   return { numerator: Number(match[1]), denominator: Number(match[2]) };
 }
@@ -222,29 +222,32 @@ function segmentMatches(
   return true;
 }
 
-function coverageAll(score: Score, oldBarCount: number): Map<string, Set<number>> {
+function coverageAll(score: Score, barCount: number): Map<string, Set<number>> {
   const coverage = new Map<string, Set<number>>();
-  for (const voice of score.voices)
-    coverage.set(voice, new Set(Array.from({ length: oldBarCount }, (_item, index) => index)));
+  for (const voice of score.voices) {
+    coverage.set(voice, new Set(Array.from({ length: barCount }, (_item, index) => index)));
+  }
   return coverage;
 }
 
-function sourceCoverage(facts: SourceFacts, score: Score): Map<string, Set<number>> {
+/**
+ * The bars each voice still writes. A voice stops at its last note; the cut voice also keeps its
+ * partial bar, even when the cut happened before any finished token.
+ */
+function modelCoverage(score: Score): Map<string, Set<number>> {
   const coverage = new Map<string, Set<number>>();
   for (const voice of score.voices) {
     const bars = new Set<number>();
-    for (const line of facts.musicLines) {
-      if (line.voice !== voice) continue;
-      for (const segment of line.segments) for (const bar of segment.bars) bars.add(bar.bar);
-    }
+    for (const note of score.notes) if (note.voice === voice) bars.add(note.bar);
+    const cut = score.truncation;
+    if (cut !== null && cut.voice === voice && cut.short && cut.bar < score.bars.length) bars.add(cut.bar);
     coverage.set(voice, bars);
   }
   return coverage;
 }
 
-function coveredAt(alignment: Alignment, coverage: Map<string, Set<number>>, voice: string, index: number): boolean {
-  const old = alignment.oldAt[index];
-  return old === undefined || (coverage.get(voice)?.has(old) ?? false);
+function coveredAt(coverage: Map<string, Set<number>>, voice: string, index: number): boolean {
+  return coverage.get(voice)?.has(index) ?? false;
 }
 
 function cutTailAt(score: Score, facts: SourceFacts, voice: string, index: number): string {
@@ -285,7 +288,7 @@ function buildPieces(
     const pieces = new Map<number, Piece>();
     let index = 0;
     while (index < newEnd) {
-      if (!coveredAt(alignment, coverage, voice, index)) {
+      if (!coveredAt(coverage, voice, index)) {
         index += 1;
         continue;
       }
@@ -304,7 +307,7 @@ function buildPieces(
             const count = Math.min(available, sectionLimit, newEnd - index);
             let usable = count > 0;
             for (let offset = 0; usable && offset < count; offset += 1) {
-              if (!coveredAt(alignment, coverage, voice, index + offset)) usable = false;
+              if (!coveredAt(coverage, voice, index + offset)) usable = false;
             }
             if (usable && segmentMatches(score, facts, voice, old, count, index)) {
               const text = reusedText(sourceBar, old, count);
@@ -393,7 +396,8 @@ function writeGroup(
   pieces: Map<string, Map<number, Piece>>,
   sections: Map<number, string[]>,
   coverage: Map<string, Set<number>>,
-  alignment: Alignment,
+  lastGroup: boolean,
+  allowCutAtNext: boolean,
 ): string[] {
   const lines: string[] = [];
   for (const name of sections.get(group.from) ?? []) lines.push(`% ${name}`);
@@ -404,11 +408,11 @@ function writeGroup(
     const voicePieces: string[] = [];
     let lastCovered = -1;
     for (let index = group.from; index <= group.to; index += 1) {
-      if (!coveredAt(alignment, coverage, voice, index)) continue;
+      if (!coveredAt(coverage, voice, index)) continue;
       const piece = pieces.get(voice)?.get(index);
       if (piece === undefined) throw new Error(`song2: bar ${index} of ${voice} has no piece`);
       voicePieces.push(piece.text);
-      lastCovered = index;
+      lastCovered = index + piece.count - 1;
       index += piece.count - 1;
     }
     if (voicePieces.length === 0) continue;
@@ -420,9 +424,39 @@ function writeGroup(
       (lastBar.incomplete ||
         (score.truncation?.voice === voice && score.truncation.short && lastCovered === score.truncation.bar)) ??
       false;
-    lines.push(`${voicePieces.join("|")}${incomplete ? "" : "|"}`);
+    // RULES.md X10/X9: a cut at the next measure is written without the closing barline, so it reads
+    // as the same cut instead of a complete score.
+    const cutAtNext =
+      allowCutAtNext &&
+      lastGroup &&
+      score.truncation !== null &&
+      score.truncation.voice === voice &&
+      lastCovered + 1 === score.truncation.bar;
+    lines.push(`${voicePieces.join("|")}${incomplete || cutAtNext ? "" : "|"}`);
   }
   return lines;
+}
+
+function splitAtCoverage(
+  units: ReadonlyArray<Unit>,
+  coverage: Map<string, Set<number>>,
+  voices: ReadonlyArray<string>,
+): Unit[] {
+  const key = (index: number): string => voices.filter((voice) => coverage.get(voice)?.has(index) ?? false).join(",");
+  const split: Unit[] = [];
+  for (const unit of units) {
+    let from = unit.from;
+    let current = key(from);
+    for (let index = from + 1; index < unit.end; index += 1) {
+      const next = key(index);
+      if (next === current) continue;
+      split.push({ from, end: index });
+      from = index;
+      current = next;
+    }
+    split.push({ from, end: unit.end });
+  }
+  return split;
 }
 
 function groupsOf(
@@ -430,10 +464,14 @@ function groupsOf(
   score: Score,
   pieces: Map<string, Map<number, Piece>>,
   sections: Map<number, string[]>,
+  coverage: Map<string, Set<number>>,
+  splitByCoverage: boolean,
 ): Group[] {
   const groups: Group[] = [];
   let from = 0;
   let size = 0;
+  const voicesAt = (index: number): string =>
+    score.voices.filter((voice) => coverage.get(voice)?.has(index) ?? false).join(",");
   for (const unit of units) {
     const length = unit.end - unit.from;
     if (size > 0) {
@@ -441,7 +479,14 @@ function groupsOf(
       const previous = score.bars[unit.from - 1] as Bar;
       const meterChanged =
         bar.meter.numerator !== previous.meter.numerator || bar.meter.denominator !== previous.meter.denominator;
-      if (meterChanged || keyFieldAt(score, pieces, unit.from) || sections.has(unit.from) || size + length > 4) {
+      const voicesChanged = splitByCoverage && voicesAt(from) !== voicesAt(unit.from);
+      if (
+        voicesChanged ||
+        meterChanged ||
+        keyFieldAt(score, pieces, unit.from) ||
+        sections.has(unit.from) ||
+        size + length > 4
+      ) {
         groups.push({ from, to: unit.from - 1 });
         size = 0;
       }
@@ -459,14 +504,29 @@ function writeBody(
   facts: SourceFacts,
   pieces: Map<string, Map<number, Piece>>,
   coverage: Map<string, Set<number>>,
-  alignment: Alignment,
+  allowCutAtNext = true,
+  splitByCoverage = true,
 ): string[] {
-  const units = buildUnits(pieces, score.bars.length);
+  const merged = buildUnits(pieces, score.bars.length);
+  const units = splitByCoverage ? splitAtCoverage(merged, coverage, score.voices) : merged;
   const sections = sectionStarts(score);
-  const groups = groupsOf(units, score, pieces, sections);
+  let groups = groupsOf(units, score, pieces, sections, coverage, splitByCoverage);
+  const cut = score.truncation;
+  if (cut !== null && cut.voice === "Ins" && cut.short && cut.bar < score.bars.length) {
+    // RULES.md X9: the final Ins block starts at the cut measure; every later Vocal bar is written
+    // before that block, so one final group carries the cut and the bars after it.
+    const before: Group[] = [];
+    for (const group of groups) {
+      if (group.to < cut.bar) before.push(group);
+      else if (group.from < cut.bar) before.push({ from: group.from, to: cut.bar - 1 });
+    }
+    groups = [...before, { from: cut.bar, to: score.bars.length - 1 }];
+  }
   const body: string[] = [];
-  for (const group of groups) {
-    body.push(...writeGroup(score, facts, group, pieces, sections, coverage, alignment));
+  for (const [index, group] of groups.entries()) {
+    body.push(
+      ...writeGroup(score, facts, group, pieces, sections, coverage, index === groups.length - 1, allowCutAtNext),
+    );
   }
   return body;
 }
@@ -475,9 +535,9 @@ function writeBody(
 export function serializeBarsSong2(score: Score, source: Song2Source): string {
   const facts = factsOf(score, source);
   const alignment = align(score, facts, score.bars.length, facts.oldBarCount);
-  const coverage = coverageAll(score, facts.oldBarCount);
+  const coverage = coverageAll(score, score.bars.length);
   const pieces = buildPieces(score, facts, alignment, score.bars.length, coverage, source.unitDenominator);
-  const lines = [...facts.lines.slice(0, facts.keyIndex + 1), ...writeBody(score, facts, pieces, coverage, alignment)];
+  const lines = [...facts.lines.slice(0, facts.keyIndex + 1), ...writeBody(score, facts, pieces, coverage)];
   return `${lines.join("\n")}${facts.trailingNewline ? "\n" : ""}`;
 }
 
@@ -485,11 +545,46 @@ export function serializeBarsSong2(score: Score, source: Song2Source): string {
 export function serializeTruncatedBarsSong2(score: Score, source: Song2Source): string {
   const facts = factsOf(score, source);
   const alignment = align(score, facts, score.bars.length, facts.oldBarCount);
-  const coverage = sourceCoverage(facts, score);
+  const coverage = modelCoverage(score);
   const pieces = buildPieces(score, facts, alignment, score.bars.length, coverage, source.unitDenominator);
-  const body = writeBody(score, facts, pieces, coverage, alignment);
   let lastMusicLine = facts.keyIndex;
   for (const line of facts.musicLines) lastMusicLine = Math.max(lastMusicLine, line.line);
-  const lines = [...facts.lines.slice(0, facts.keyIndex + 1), ...body, ...facts.lines.slice(lastMusicLine + 1)];
+  // RULES.md X8: when the empty partial measure is dropped, its block opening still states the cut.
+  const cutBlock: string[] = [];
+  const cut = score.truncation;
+  const lastSource = facts.musicLines.find((line) => line.line === lastMusicLine);
+  const lastSourceBar = lastSource?.segments[lastSource.segments.length - 1]?.bars.at(-1)?.bar;
+  const sourceLastKept = lastSourceBar !== undefined && alignment.oldAt.includes(lastSourceBar);
+  if (
+    cut !== null &&
+    !cut.short &&
+    cut.bar === score.bars.length &&
+    lastSource !== undefined &&
+    lastSource.voice === cut.voice &&
+    cut.voice !== "Ins" &&
+    lastSourceBar !== undefined &&
+    lastSourceBar >= score.bars.length &&
+    !sourceLastKept
+  ) {
+    let start = lastMusicLine - 1;
+    while (
+      start > facts.keyIndex &&
+      (facts.lines[start] === `V: ${cut.voice}` ||
+        facts.lines[start]?.startsWith("M:") ||
+        facts.lines[start]?.startsWith("K:"))
+    ) {
+      start -= 1;
+    }
+    cutBlock.push(...facts.lines.slice(start + 1, lastMusicLine));
+  }
+  const trailing = facts.lines.slice(lastMusicLine + 1).some((line) => line.trim() !== "");
+  const splitByCoverage = cut === null || cut.voice !== "Ins" || !cut.short || trailing;
+  const body = writeBody(score, facts, pieces, coverage, cutBlock.length === 0, splitByCoverage);
+  const lines = [
+    ...facts.lines.slice(0, facts.keyIndex + 1),
+    ...body,
+    ...cutBlock,
+    ...facts.lines.slice(lastMusicLine + 1),
+  ];
   return lines.join("\n");
 }

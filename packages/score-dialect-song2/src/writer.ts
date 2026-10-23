@@ -177,7 +177,12 @@ function noteText(
 }
 
 /** Writes one bar from the model, including its chords and inline key changes at their offsets. */
-export function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominator: number): string {
+export function writeBar(
+  score: Score,
+  sourceBar: Song2SourceBar,
+  unitDenominator: number,
+  allowedKeys?: ReadonlySet<number>,
+): string {
   const bar = score.bars[sourceBar.bar];
   if (bar === undefined) throw new Error(`song2: bar ${sourceBar.bar} has no model record`);
   const events = score.notes
@@ -187,8 +192,9 @@ export function writeBar(score: Score, sourceBar: Song2SourceBar, unitDenominato
     sourceBar.voice === "Vocal"
       ? score.chords.filter((chord) => chord.start >= bar.start && chord.start < bar.start + bar.length)
       : [];
-  const changes = [...bar.keyChanges];
+  const changes = [...bar.keyChanges].filter((change) => allowedKeys === undefined || allowedKeys.has(change.at));
   for (const inline of sourceBar.inlineKeys) {
+    if (allowedKeys !== undefined && !allowedKeys.has(inline.at)) continue;
     // The timeline is the authority, so a transposed inline key is written at its new spelling.
     const key = score.keys[inline.timelineIndex]?.key ?? inline.key;
     if (!changes.some((change) => change.at === inline.at && change.key === key)) {
@@ -246,6 +252,36 @@ function lastNoteOf(score: Score, voice: string): Note | undefined {
   return notes[notes.length - 1];
 }
 
+function sourceLastNote(source: Song2Source, voice: string): BarContent["notes"][number] | undefined {
+  let last: BarContent["notes"][number] | undefined;
+  for (const line of source.musicLines) {
+    if (line.voice !== voice) continue;
+    for (const segment of line.segments) {
+      for (const bar of segment.bars) {
+        for (const note of bar.content.notes) if (last === undefined || note.start >= last.start) last = note;
+      }
+    }
+  }
+  return last;
+}
+
+function keyAt(score: Score, at: number): string {
+  let key = score.keys[0]?.key ?? "C";
+  for (const change of score.keys) {
+    if (change.at > at) break;
+    key = change.key;
+  }
+  return key;
+}
+
+/** RULES.md P14: a rewritten X5 tail must still compute a pitch different from the tied note. */
+export function x5TailText(score: Score, last: Note): string {
+  if (last.midi === null) return "";
+  const midi = last.midi === 0 ? 1 : last.midi - 1;
+  const key = keyAt(score, last.start + last.duration);
+  return pitchText(midi, KEY_FIFTHS.get(key) ?? 0, signatureOf(key), {});
+}
+
 function sourceContentByBar(source: Song2Source): Map<number, BarContent> {
   const byBar = new Map<number, BarContent>();
   for (const line of source.musicLines) {
@@ -273,17 +309,6 @@ function cutWasRepaired(score: Score, source: Song2Source): boolean {
   return source.truncation !== null && score.truncation === null;
 }
 
-function barsFill(score: Score): boolean {
-  return score.bars.every((bar, index) =>
-    score.voices.every((voice) => {
-      const total = score.notes
-        .filter((note) => note.voice === voice && note.bar === index)
-        .reduce((sum, note) => sum + note.duration, 0);
-      return total === bar.length;
-    }),
-  );
-}
-
 function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
   if (!sectionsMatchSource(score, source)) return true;
   const content = sourceContentByBar(source);
@@ -301,7 +326,9 @@ function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
   const lengthsFit = score.bars.every(
     (bar) => bar.length === (4 * bar.meter.numerator * TICKS_PER_QUARTER) / bar.meter.denominator,
   );
-  return lengthsFit && barsFill(score);
+  // A same-length meter change still needs the grid writer to state the new M: lines; whether the
+  // bars fill is a property of the cut, not of the writer that can express it.
+  return lengthsFit;
 }
 
 function headerValue(line: string | undefined): string {
@@ -347,22 +374,41 @@ export function serializeSong2(score: Score): string {
     // tie is gone it would read as a finished note.
     const keepTail = keepsCutTail(score, tail, last?.tie ?? false);
     const dropTail = tail !== null && !keepTail;
+    const oldLast = sourceLastNote(source, musicLine.voice);
+    const tailText =
+      tail !== null && keepTail && tail.kind === "x5" && last !== undefined && oldLast?.midi !== last.midi
+        ? x5TailText(score, last)
+        : (tail?.raw ?? "");
     const lastSegment = musicLine.segments.length - 1;
     let changed = false;
     const pieces = musicLine.segments.map((segment, index) => {
       const partial = !musicLine.endsWithBarline && index === lastSegment;
       const forced = dropTail && partial;
-      const unchanged =
-        !forced && segment.bars.every((bar) => sameContent(bar.content, barContentOf(score, bar.voice, bar.bar)));
+      const keySetAt = (bar: Song2SourceBar): ReadonlySet<number> | undefined =>
+        partial && score.truncation?.voice === bar.voice && score.truncation.bar === bar.bar
+          ? new Set(bar.inlineKeys.map((change) => change.at))
+          : undefined;
+      const trim = (content: BarContent, keys: ReadonlySet<number>): BarContent => ({
+        ...content,
+        keyChanges: content.keyChanges.filter((change) => keys.has(change.at)),
+      });
+      const matches = (bar: Song2SourceBar): boolean => {
+        const model = barContentOf(score, bar.voice, bar.bar);
+        const keys = keySetAt(bar);
+        return keys === undefined
+          ? sameContent(bar.content, model)
+          : sameContent(trim(bar.content, keys), trim(model, keys));
+      };
+      const unchanged = !forced && segment.bars.every(matches);
       if (unchanged) return segment.raw;
       changed = true;
-      const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator)).join("|");
+      const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator, keySetAt(bar))).join("|");
       // A rewritten partial measure keeps its finished tokens and its cut remainder at their end.
-      return partial && keepTail && tail !== null ? `${rendered}${tail.raw}` : rendered;
+      return partial && keepTail && tail !== null ? `${rendered}${tailText}` : rendered;
     });
     if (!changed) continue;
     const rendered = `${pieces.join("|")}${musicLine.endsWithBarline ? "|" : ""}`;
-    if (dropTail && rendered === "") {
+    if (!musicLine.endsWithBarline && rendered === "") {
       dropped.add(musicLine.line);
       continue;
     }
