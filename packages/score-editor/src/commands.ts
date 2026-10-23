@@ -1,12 +1,12 @@
 // ABOUTME: Pure edit commands. A score command changes a Score and leaves writing to the dialect.
 // ABOUTME: Every edit, from any view or tool, ends here, so there is one place that decides what a command means.
-import { positionOf } from "./arrangement";
 import { commandRefusal } from "./command-refusal";
 import { runBarCommand } from "./commands-bars";
 import { setChord } from "./commands-chords";
 import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./commands-key-tempo";
 import { type MoveNotesCommand, type ResizeNotesCommand, runNoteCommand } from "./commands-notes";
 import { runSectionCommand } from "./commands-sections";
+import { noteAt, tieChain } from "./commands-shared";
 import { runTruncationCommand } from "./commands-truncation";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
@@ -45,14 +45,6 @@ export type ScoreCommandResult =
   | { readonly ok: true; readonly score: Score }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
-/** Where a note is, in the voice, bar and beat a person counts; only its id when the score has no such note. */
-function noteAt(score: Score, noteId: string): DiagnosticAt {
-  const note = score.notes.find((found) => found.id === noteId);
-  if (note === undefined) return { noteId };
-  const { bar, beat } = positionOf(score.bars, note.bar, note.start);
-  return { voice: note.voice, bar, beat, noteId: note.id };
-}
-
 /**
  * Where a command acts, in the voice, bar and beat a person counts: the note it names, the first of them when it names
  * several, or nothing for a command without one.
@@ -64,17 +56,6 @@ export function commandAt(score: Score, command: ScoreCommand): DiagnosticAt {
 
 function commandFailure(code: "note-not-found" | "not-a-note", score: Score, noteId: string): ScoreCommandResult {
   return commandRefusal(code, { noteId }, noteAt(score, noteId));
-}
-
-/** The whole tie chain around a note: every note tied into it and every note it ties into. */
-export function tieChain(notes: ReadonlyArray<ScoreNote>, target: ScoreNote): ScoreNote[] {
-  const voiceNotes = notes.filter((note) => note.voice === target.voice).sort((a, b) => a.start - b.start);
-  const index = voiceNotes.findIndex((note) => note.id === target.id);
-  let first = index;
-  while (first > 0 && (voiceNotes[first - 1] as ScoreNote).tie) first -= 1;
-  let last = index;
-  while (last < voiceNotes.length - 1 && (voiceNotes[last] as ScoreNote).tie) last += 1;
-  return voiceNotes.slice(first, last + 1);
 }
 
 /**

@@ -67,6 +67,7 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "note-too-short",
   "grid-not-allowed",
   "offset-not-integer",
+  "unit-unknown",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -156,6 +157,7 @@ interface Catalog {
   readonly noteTooShort: Text;
   readonly gridNotAllowed: Text;
   readonly offsetNotInteger: Text;
+  readonly unitUnknown: Text;
   readonly styleNoBpm: Text;
   readonly melodyWithChords: Text;
   readonly lyricsUnaligned: Text;
@@ -772,12 +774,16 @@ function chineseNotePastEnd(): string {
   return "音符的结尾会超出乐谱的末尾。";
 }
 
+function gridName(params: DiagnosticParams): string {
+  return `${value(params, "grid")}${value(params, "dotted") === "true" ? " dotted" : ""}`;
+}
+
 function englishNoteTooShort(params: DiagnosticParams): string {
-  return `A note cannot be shorter than one grid step of ${value(params, "grid")}.`;
+  return `A note cannot be shorter than one grid step of ${gridName(params)}.`;
 }
 
 function chineseNoteTooShort(params: DiagnosticParams): string {
-  return `音符不能短于 ${value(params, "grid")} 网格的一步。`;
+  return `音符不能短于 ${gridName(params)} 网格的一步。`;
 }
 
 function englishGridNotAllowed(params: DiagnosticParams): string {
@@ -794,6 +800,14 @@ function englishOffsetNotInteger(params: DiagnosticParams): string {
 
 function chineseOffsetNotInteger(params: DiagnosticParams): string {
   return `${value(params, "field") === "pitch" ? "音高" : "时间"}偏移必须是整数。`;
+}
+
+function englishUnitUnknown(): string {
+  return "This score does not state its written duration unit, so its notes cannot be moved on a grid.";
+}
+
+function chineseUnitUnknown(): string {
+  return "这份乐谱没有写明时值单位，所以不能按网格移动音符。";
 }
 
 function englishStyleNoBpm(): string {
@@ -883,6 +897,7 @@ const en: Catalog = {
   noteTooShort: englishNoteTooShort,
   gridNotAllowed: englishGridNotAllowed,
   offsetNotInteger: englishOffsetNotInteger,
+  unitUnknown: englishUnitUnknown,
   styleNoBpm: englishStyleNoBpm,
   melodyWithChords: englishMelodyWithChords,
   lyricsUnaligned: englishLyricsUnaligned,
@@ -942,6 +957,7 @@ const zh: Catalog = {
   noteTooShort: chineseNoteTooShort,
   gridNotAllowed: chineseGridNotAllowed,
   offsetNotInteger: chineseOffsetNotInteger,
+  unitUnknown: chineseUnitUnknown,
   styleNoBpm: chineseStyleNoBpm,
   melodyWithChords: chineseMelodyWithChords,
   lyricsUnaligned: chineseLyricsUnaligned,
@@ -1057,6 +1073,8 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.gridNotAllowed(diagnostic.params);
     case "offset-not-integer":
       return catalog.offsetNotInteger(diagnostic.params);
+    case "unit-unknown":
+      return catalog.unitUnknown(diagnostic.params);
     case "style-no-bpm":
       return catalog.styleNoBpm(diagnostic.params);
     case "melody-with-chords":

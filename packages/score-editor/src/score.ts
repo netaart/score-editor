@@ -93,10 +93,12 @@ export interface Score {
   readonly hasChords: boolean;
   readonly source: unknown;
   /**
-   * The score's written duration unit in ticks: one number after a note lasts this many ticks. A command that writes a
-   * new length takes the duration numbers from the dialect's constraints and this unit from the score it edits.
+   * The score's written duration unit in ticks: one number after a note lasts this many ticks. It is optional so a
+   * caller that builds a 0.1.0-shaped Score still type-checks; a note command that needs it refuses with
+   * `unit-unknown` when the dialect did not state it. A command writing a new length also takes the duration numbers
+   * from the dialect's constraints.
    */
-  readonly unitTicks: number;
+  readonly unitTicks?: number;
 }
 
 /** A phrase: a run of consecutive bars, inside one section. `firstBar` is a 0-based bar index. */
