@@ -18,6 +18,8 @@ import { handleEditingInput } from "./editing-input";
 import type { Messages } from "./i18n";
 import { createInsertionPointLine, type InsertionPointLine } from "./insertion-point";
 import { installLanePointer } from "./lane-pointer";
+import { sayRefusals } from "./live-region";
+import { dragChannel, ghostsOf } from "./note-drag";
 import { mountNoteFocus, type NoteFocus } from "./note-focus";
 import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from "./playhead";
 import { previewPlayer } from "./preview-player";
@@ -92,6 +94,27 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     block.setAttribute("aria-label", labelOf(drawn, note, selected));
   }
 
+  /**
+   * Draws a ghost for each tie chain of this voice's selected notes where the drag in progress would put it, and takes
+   * the ghosts of the last frame down. A ghost is an outline over the lane: the notes themselves stay where they are
+   * until the release, and the bar lines show through the outline where a note would cross one.
+   */
+  function drawGhosts(): void {
+    if (!drawn) return;
+    const { lane, notes, top, ticks } = drawn;
+    for (const old of lane.querySelectorAll(".sce-ghost")) old.remove();
+    const preview = dragChannel(session).current;
+    if (preview === null) return;
+    const doc = lane.ownerDocument;
+    for (const ghost of ghostsOf(notes, session.selection, preview, session.grid)) {
+      const { start, end, midi } = ghost.lands;
+      if (!(end > start) || end < 0 || start > ticks) continue;
+      const el = create(doc, "div", "sce-ghost", lane);
+      el.setAttribute("aria-hidden", "true");
+      el.style.cssText = `--t:${start};--d:${end - start};--r:${top - midi}`;
+    }
+  }
+
   function refresh(): void {
     const editable = session.view.editable;
     const { selection, insertionPoint: point } = session;
@@ -122,6 +145,9 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         });
         noteFocus = focus;
         announceVoice(session, voice, live, signal, () => focus.stepping);
+        const channel = dragChannel(session);
+        const unsubscribeGhosts = channel.subscribe(drawGhosts);
+        signal.addEventListener("abort", unsubscribeGhosts, { once: true });
         const player = previewPlayer(session);
         const follower = createPlayheadFollower(session);
         const unsubscribePlayer = player.subscribe(() => {
@@ -130,7 +156,12 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         });
         signal.addEventListener("abort", unsubscribePlayer, { once: true });
         own.setAttribute("data-editable", String(session.view.editable));
-        installLanePointer(own, session, signal, { lane: () => drawn, focus: (noteId) => focus.focus(noteId) });
+        installLanePointer(own, session, signal, {
+          lane: () => drawn,
+          focus: (noteId) => focus.focus(noteId),
+          preview: channel,
+          refused: sayRefusals(live, session, options.onRefused),
+        });
       },
       refresh,
       build(canvas, score, t): BuiltAxis | null {

@@ -2,6 +2,7 @@
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
 import { boxCss } from "./box-styles";
+import { dragCss } from "./drag-styles";
 import { TICKS_PER_QUARTER } from "./score";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
@@ -255,7 +256,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-grid-button)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -268,6 +269,20 @@ const css = `
 .sce-root .sce-select-button {
   gap: 4px;
   padding: 0 8px;
+}
+/* The Grid button is a drawing, a fraction and a chevron; the dot after the fraction is the dot of a dotted note. */
+.sce-root .sce-grid-button {
+  gap: 6px;
+  padding: 0 8px;
+}
+.sce-root .sce-grid-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
 }
 /* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
 .sce-root .sce-step {
@@ -1055,7 +1070,8 @@ ${labelThinning()}
   background: linear-gradient(to right, var(--sce-_bg) 0 1px, var(--sce-_text) 1px 2px, var(--sce-_bg) 2px 3px);
   pointer-events: none;
 }
-${boxCss}`;
+${boxCss}
+${dragCss}`;
 
 interface Injection {
   remove(): void;
