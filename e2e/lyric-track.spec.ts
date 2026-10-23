@@ -1094,6 +1094,74 @@ test.describe("the life of the part", () => {
   });
 });
 
+test.describe("the listeners of the part", () => {
+  /** Every element the page has gained since this ran, kept so one that left the page can still be asked what it listens to. */
+  async function watchElements(page: Page) {
+    await page.evaluate(() => {
+      const seen = new Set<Element>();
+      new MutationObserver((records) => {
+        for (const record of records)
+          for (const node of record.addedNodes)
+            if (node instanceof Element) for (const element of [node, ...node.querySelectorAll("*")]) seen.add(element);
+      }).observe(document, { childList: true, subtree: true });
+      Object.assign(window, { seen });
+    });
+    const cdp = await page.context().newCDPSession(page);
+    return {
+      /** The listeners on all of those elements, as the browser's debugger counts them. */
+      async listeners() {
+        const { result: list } = await cdp.send("Runtime.evaluate", { expression: "Array.from(window.seen)" });
+        if (!list.objectId) throw new Error("no list of elements");
+        const { result: items } = await cdp.send("Runtime.getProperties", {
+          objectId: list.objectId,
+          ownProperties: true,
+        });
+        let total = 0;
+        for (const item of items) {
+          const objectId = /^\d+$/.test(item.name) ? item.value?.objectId : undefined;
+          if (!objectId) continue;
+          total += (await cdp.send("DOMDebugger.getEventListeners", { objectId })).listeners.length;
+        }
+        return total;
+      },
+      detach: () => cdp.detach(),
+    };
+  }
+
+  test("score edits do not add any: what an earlier drawing of the track held is let go with it", async ({
+    page,
+    harness,
+  }) => {
+    const watch = await watchElements(page);
+    await openTrack(harness);
+    const drawn = await watch.listeners();
+    expect(drawn).toBeGreaterThan(0);
+
+    const noteId = await harness.layout.firstVocalNoteId();
+    for (let edit = 0; edit < 6; edit++) {
+      expect((await harness.layout.dispatch({ type: "toRest", noteId })).ok).toBe(true);
+      expect(await harness.layout.undo()).toBe(true);
+    }
+    expect(await watch.listeners()).toBe(drawn);
+    await watch.detach();
+  });
+
+  test("a score the track cannot draw leaves none of the drawing it replaced, and the next one starts again", async ({
+    page,
+    harness,
+  }) => {
+    const watch = await watchElements(page);
+    await openTrack(harness);
+    const drawn = await watch.listeners();
+
+    await harness.layout.replace({ score: { vector: "reject-duration-five" } });
+    expect(await watch.listeners()).toBeLessThan(drawn);
+    await harness.layout.replace({ score: { text: SCORE } });
+    expect(await watch.listeners()).toBe(drawn);
+    await watch.detach();
+  });
+});
+
 test.describe("the room the track has", () => {
   test("a syllable that does not fit its cell is left out whole, never cut in the middle of a glyph", async ({
     page,

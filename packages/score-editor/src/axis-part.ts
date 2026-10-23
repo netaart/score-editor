@@ -50,6 +50,11 @@ export interface AxisSpec {
    * other change of the session, so it must be cheap when nothing it shows has changed.
    */
   refresh?(): void;
+  /**
+   * Ends what `build` set going outside the canvas it made, such as listeners on its elements. It runs before the part builds
+   * again, when the score can no longer be drawn, and when the part is destroyed.
+   */
+  release?(): void;
 }
 
 /** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
@@ -131,6 +136,7 @@ export function mountAxisPart(
     reading = session.reading;
     language = session.view.language;
     root.lang = language;
+    spec.release?.();
     canvas?.remove();
     delete root.dataset.labelStep;
     canvas = null;
@@ -182,6 +188,7 @@ export function mountAxisPart(
       if (destroyed) return;
       destroyed = true;
       abort.abort();
+      spec.release?.();
       unsubscribe();
       axis.leave();
       root.remove();

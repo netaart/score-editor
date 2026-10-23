@@ -126,8 +126,8 @@ function followViewWidth(root: HTMLElement, surface: HTMLElement, signal: AbortS
 export function mountLyricTrack(el: HTMLElement, session: EditingSession, options?: AxisPartOptions): ViewPart {
   let drawn: Drawn | null = null;
   let root: HTMLElement | null = null;
-  /** Ends the listeners the track put on its own elements when the part is destroyed. */
-  let lifetime: AbortSignal = new AbortController().signal;
+  /** Ends the listeners on the elements one drawing of the track made: the button that adds a line and the editor's fields and buttons. */
+  let drawing: AbortController | null = null;
   let live: LiveRegion | null = null;
   let refuse: ReturnType<typeof sayRefusals> | null = null;
   /** The line the person chose, by its place in the project's lines. Part-local: it is not in the session or its history. */
@@ -582,7 +582,6 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
       region: (t) => t.lyrics,
       attach(own, signal, region) {
         root = own;
-        lifetime = signal;
         live = region;
         refuse = sayRefusals(region, session, options?.onRefused);
         own.setAttribute("data-editable", String(session.view.editable));
@@ -615,8 +614,15 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         });
       },
       refresh: draw,
+      release() {
+        drawing?.abort();
+        drawing = null;
+        drawn = null;
+      },
       build(canvas, score, t): BuiltAxis {
         const doc = canvas.ownerDocument;
+        const ends = new AbortController();
+        drawing = ends;
         const group = create(doc, "div", "sce-track-group", canvas);
         const head = create(doc, "div", "sce-lyric-head", group);
         // The name and the button that adds a line stay at the pitch column's edge while the lane is scrolled past them.
@@ -625,7 +631,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
         const newLine = create(doc, "button", "sce-button sce-lyric-new", items);
         newLine.type = "button";
         newLine.textContent = t.lyricNewLine;
-        newLine.addEventListener("click", startAdding, { signal: lifetime });
+        newLine.addEventListener("click", startAdding, { signal: ends.signal });
         // What the two numbers in a block are: the block's name says it in words for a screen reader, and a screen has no tooltip.
         const legend = create(doc, "span", "sce-lyric-legend", items);
         legend.setAttribute("aria-hidden", "true");
@@ -697,7 +703,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
               return null;
             },
           },
-          lifetime,
+          ends.signal,
         );
         editor.element.hidden = true;
         panel.insertBefore(editor.element, title);
