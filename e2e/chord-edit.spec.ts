@@ -484,3 +484,276 @@ test.describe("a refusal", () => {
     ]);
   });
 });
+
+test.describe("from the keyboard", () => {
+  test("the cursor is the track's tab stop; arrows, Home and End move it and say where; the insertion point does not move", async ({
+    page,
+    chords,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+
+    await chordTrack(page).focus();
+    await page.keyboard.press("Tab");
+    await expect(cursor(page)).toBeFocused();
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 1, no chord");
+    await expect(cursor(page)).toHaveAttribute("aria-haspopup", "dialog");
+
+    await page.keyboard.press("ArrowRight");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 2, no chord");
+    await expect(live(page)).toHaveText("Chord place, bar 1 beat 2, no chord");
+    await page.keyboard.press("End");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 2 beat 1, no chord");
+    await page.keyboard.press("Home");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 1, no chord");
+    await page.keyboard.press("ArrowLeft");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 1, no chord");
+
+    expect(await chords.insertionPoint()).toBeNull();
+    expect(await chords.canUndo()).toBe(false);
+  });
+
+  test("Enter opens the picker at the cursor, the arrows and Enter choose and place, the focus comes back to the cursor, and Ctrl+Z undoes", async ({
+    page,
+    chords,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    await chordTrack(page).focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("ArrowRight");
+
+    await page.keyboard.press("Enter");
+    const open = picker(page, "Chord at bar 1 beat 2");
+    await expect(open).toBeVisible();
+    await expect(cursor(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      open.getByRole("radiogroup", { name: "Root" }).getByRole("radio", { name: "C", exact: true }),
+    ).toBeFocused();
+
+    // Right picks the next letter, two Tabs reach the types, Right picks the next type; Enter places.
+    await page.keyboard.press("ArrowRight");
+    await expect(open.locator(".sce-picker-name")).toHaveText("D");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("ArrowRight");
+    await expect(open.locator(".sce-picker-name")).toHaveText("Dm");
+    await page.keyboard.press("Enter");
+
+    await expect(open).toBeHidden();
+    expect(await chords.scoreText()).toBe(twoVoices('C4"Dm"D4E4F4|G16|', "C16|C16|"));
+    await expect(cursor(page)).toBeFocused();
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 2, Dm");
+    await expect(cursor(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(live(page)).toHaveText("Chord Dm placed at bar 1 beat 2");
+
+    await page.keyboard.press("Control+z");
+    expect(await chords.scoreText()).toBe(QUARTERS);
+    await expect(cursor(page)).toBeFocused();
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 2, no chord");
+    await expect(live(page)).toHaveText("No chord at bar 1 beat 2");
+  });
+
+  test("Delete removes the chord under the cursor, and Ctrl+Z brings it back", async ({ page, chords }) => {
+    await chords.openParts({ score: { text: CHORDED } });
+    await chordTrack(page).focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("ArrowRight");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 2, Am");
+
+    await page.keyboard.press("Delete");
+    expect(await chords.scoreText()).toBe(QUARTERS);
+    await expect(cursor(page)).toBeFocused();
+    await expect(live(page)).toHaveText("Chord removed at bar 1 beat 2");
+
+    // A place with no chord has nothing to remove: Delete there changes nothing and says nothing.
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Delete");
+    expect(await chords.scoreText()).toBe(QUARTERS);
+    await expect(live(page)).toHaveText("Chord place, bar 1 beat 3, no chord");
+    await page.keyboard.press("ArrowLeft");
+
+    await page.keyboard.press("Control+z");
+    expect(await chords.scoreText()).toBe(CHORDED);
+    await expect(cursor(page)).toBeFocused();
+    await expect(live(page)).toHaveText("Chord Am at bar 1 beat 2");
+    await page.keyboard.press("Control+z");
+    expect(await chords.canUndo()).toBe(false);
+  });
+
+  test("Escape closes the picker, changes nothing, and gives the focus back to the cursor", async ({
+    page,
+    chords,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    await chordTrack(page).focus();
+    await page.keyboard.press("Tab");
+
+    await page.keyboard.press("Space");
+    const open = picker(page, "Chord at bar 1 beat 1");
+    await expect(open).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await expect(open).toBeHidden();
+    await expect(cursor(page)).toBeFocused();
+    await expect(cursor(page)).toHaveAttribute("aria-expanded", "false");
+    expect(await chords.scoreText()).toBe(QUARTERS);
+    expect(await chords.canUndo()).toBe(false);
+  });
+
+  test("Ctrl+Right and Ctrl+Left jump from chord to chord", async ({ page, chords }) => {
+    await chords.openParts({ score: { text: twoVoices('C4"Am"D4E4"G"F4|G16|', "C16|C16|") } });
+    await chordTrack(page).focus();
+    await page.keyboard.press("Tab");
+
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 2, Am");
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 4, G");
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 4, G");
+    await page.keyboard.press("Control+ArrowLeft");
+    await expect(cursor(page)).toHaveAccessibleName("Chord place, bar 1 beat 2, Am");
+  });
+
+  test("in the whole editor the cursor and the picker work the same, and the cursor keeps the focus through the redraw", async ({
+    page,
+    chords,
+  }) => {
+    await chords.mountEditor({ score: { text: QUARTERS } });
+    const stop = page.locator(".sce-chord-cursor");
+
+    await stop.focus();
+    await page.keyboard.press("Enter");
+    const open = picker(page, "Chord at bar 1 beat 1");
+    await expect(open).toBeVisible();
+    await page.keyboard.press("Enter");
+
+    await expect(open).toBeHidden();
+    await expect(page.locator(".sce-chords .sce-chord")).toHaveText(["C"]);
+    await expect(stop).toBeFocused();
+  });
+});
+
+test.describe("while the picker is open", () => {
+  test("pressing another place on the track moves the picker there, and pressing outside closes it and changes nothing", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+
+    await pressAtTick(page, press, 250);
+    await expect(picker(page, "Chord at bar 1 beat 2")).toBeVisible();
+    await pressAtTick(page, press, 520);
+    await expect(picker(page, "Chord at bar 1 beat 3")).toBeVisible();
+    await expect(picker(page, /^Chord at/)).toHaveCount(1);
+
+    await press(page.locator('[data-slot="vocal"]').getByRole("list", { name: "Vocal" }), { x: 200, y: 200 });
+    await expect(picker(page, /^Chord at/)).toBeHidden();
+    await expect(cursor(page)).toHaveAttribute("aria-expanded", "false");
+    expect(await chords.scoreText()).toBe(QUARTERS);
+    expect(await chords.canUndo()).toBe(false);
+  });
+});
+
+test.describe("what the user sees", () => {
+  test("the frame of the taken start: solid and 2px while the picker is open, on that start's stretch, and gone when it closes", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    const frame = page.locator(".sce-chord-cursor");
+    await expect(frame).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+
+    await pressAtTick(page, press, 250);
+    await expect(picker(page, "Chord at bar 1 beat 2")).toBeVisible();
+    await expect(frame).toHaveCSS("border-top-width", "2px");
+    await expect(frame).toHaveCSS("border-top-style", "solid");
+    await expect(frame).not.toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+    // D4 starts one quarter note (40 pixels) in and lasts one quarter note.
+    const area = await box(timeline(page));
+    const drawn = await box(frame);
+    expect(Math.abs(drawn.x - (area.x + 40))).toBeLessThan(1.5);
+    expect(Math.abs(drawn.width - 40)).toBeLessThan(1.5);
+
+    await press(picker(page, "Chord at bar 1 beat 2").getByRole("button", { name: "Cancel", exact: true }));
+    await expect(frame).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+  });
+
+  test("a mouse over the track frames, dashed, the start a press would take; the frame is gone when it leaves", async ({
+    page,
+    chords,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "a touch screen has no pointer to hover with");
+    await chords.openParts({ score: { text: QUARTERS } });
+    const hover = page.locator(".sce-chord-hover");
+    const area = await box(timeline(page));
+
+    await page.mouse.move(area.x + 44, area.y + area.height / 2);
+    await expect(hover).toBeVisible();
+    await expect(hover).toHaveCSS("border-top-style", "dashed");
+    const drawn = await box(hover);
+    expect(Math.abs(drawn.x - (area.x + 40))).toBeLessThan(1.5);
+
+    await page.mouse.move(area.x + 4, area.y + area.height + 200);
+    await expect(hover).toBeHidden();
+  });
+
+  test("the picker fits the window with every section open, and its choices are as tall as a finger needs", async ({
+    page,
+    chords,
+    press,
+    isMobile,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS } });
+    await pressAtTick(page, press, 0);
+    const open = picker(page, "Chord at bar 1 beat 1");
+    await choose(open, "A", "Am");
+    await press(open.getByRole("button", { name: /^Bass note/ }));
+    await open
+      .getByRole("radiogroup", { name: "Bass note", exact: true })
+      .getByRole("radio", { name: "G", exact: true })
+      .click();
+
+    const size = page.viewportSize();
+    const panel = await box(open);
+    expect(panel.x).toBeGreaterThanOrEqual(0);
+    expect(panel.y).toBeGreaterThanOrEqual(0);
+    expect(panel.x + panel.width).toBeLessThanOrEqual((size?.width ?? 0) + 0.5);
+    expect(panel.y + panel.height).toBeLessThanOrEqual((size?.height ?? 0) + 0.5);
+    for (const name of ["Place", "Cancel"]) {
+      expect((await box(open.getByRole("button", { name, exact: true }))).height).toBeGreaterThanOrEqual(
+        isMobile ? 36 : 28,
+      );
+    }
+    expect((await box(open.getByRole("radio", { name: "G", exact: true }).first())).height).toBeGreaterThanOrEqual(
+      isMobile ? 36 : 28,
+    );
+  });
+});
+
+test.describe("in Chinese", () => {
+  test("the picker, the cursor and the live region speak Chinese, and the chord is the same", async ({
+    page,
+    chords,
+    press,
+  }) => {
+    await chords.openParts({ score: { text: QUARTERS }, language: "zh" });
+
+    await pressAtTick(page, press, 250);
+    const open = picker(page, "第 1 小节第 2 拍的和弦");
+    await expect(open).toBeVisible();
+    await expect(open.getByText("第 1 小节，第 2 拍")).toBeVisible();
+    await expect(open.getByText("还没有和弦")).toBeVisible();
+    await open.getByRole("radiogroup", { name: "根音" }).getByRole("radio", { name: "A", exact: true }).click();
+    await open.getByRole("radiogroup", { name: "类型" }).getByRole("radio", { name: "Am", exact: true }).click();
+    await press(open.getByRole("button", { name: "放上", exact: true }));
+
+    expect(await chords.scoreText()).toBe(twoVoices('C4"Am"D4E4F4|G16|', "C16|C16|"));
+    await expect(page.getByRole("region", { name: "和弦" }).getByRole("status")).toHaveText(
+      "已在第 1 小节第 2 拍放上和弦 Am",
+    );
+    await expect(page.getByRole("button", { name: /^和弦位置，第 1 小节第 2 拍，Am$/ })).toBeVisible();
+  });
+});
