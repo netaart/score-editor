@@ -27,9 +27,8 @@ keeper.destroy(); // stops the timer and subscription, starts one pending write
 
 ## Decisions the host makes
 
-- **Store.** Implement `DraftStore` with `read`, versioned `write`, versioned `remove` and `list`. Versions are
-  opaque strings and are only handed back; a host without deletion may keep a tombstone if `read` answers null and
-  `list` omits the key.
+- **Store.** Implement `DraftStore` and decide where a source key maps (a file, a path, a record). Versions are
+  the host's; the package only hands them back. The exact contract is in the README.
 - **Conflict prompt.** `status` is `"opening" | "ready" | "conflict" | "destroyed"`, and `DraftKeeperChange` carries
   the new status. Show the prompt on `"conflict"` and call `overwrite()` or `loadTheirs()`; a text the package cannot
   read leaves the conflict for overwrite.
