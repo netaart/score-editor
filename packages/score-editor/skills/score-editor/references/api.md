@@ -84,6 +84,8 @@ change. The tests in the repository check that the list stays complete.
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
+| `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
+| `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. |
 | `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`); each command is listed in the package README. |
 
 ## Score model types
@@ -91,7 +93,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`. |
-| `Score` | A parsed score: tempo, voices, bars, keys, sections, notes, chords, truncation, hasChords, source. |
+| `Score` | A parsed score: tempo, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |

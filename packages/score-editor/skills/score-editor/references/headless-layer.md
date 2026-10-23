@@ -26,8 +26,10 @@ the unaligned area. Only that binding is stored; syllables, note onsets and whet
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, `voices`, `bars`, `keys`, `sections`, `notes`, `chords`, `truncation`,
-`hasChords`, and a dialect-private `source` the core never reads. `noteId(voice, start)` builds the stable id the
-model uses.
+`hasChords`, an optional `unitTicks`, and a dialect-private `source` the core never reads. `unitTicks` is how many
+ticks one written duration number lasts, so a command can ask the dialect's `constraints.durations` what it can
+write; a score that does not state it is refused by the note commands with `unit-unknown`.
+`noteId(voice, start)` builds the stable id the model uses.
 
 `Bar`, `Note`, `Chord`, `Section`, `Tempo`, `Meter`, `KeyChange` and `Truncation` describe those parts. `Meter` is a
 fraction of a whole note; `Note.midi` is 0-127 or `null` for a rest; `Note.tie` continues into the next note of the
@@ -76,6 +78,12 @@ reports those notices for a project as it stands, `isNoticeDiagnostic` tells a n
 `NOTICE_DIAGNOSTIC_CODES` lists the notice codes. A result whose diagnostics are all notices is a command that was taken;
 the session does that for you (`dispatch` returns `ok: true` with the notices), and a host that calls this function itself
 should do the same.
+
+The note edits are `MoveNotesCommand` and `ResizeNotesCommand`, both members of `MoveResizeCommand` and of `ScoreCommand`.
+They take several note ids and act on each note's whole tie chain. Their `grid` is a `Grid`: its `value` is a
+`GridValue`, one of 4, 8, 16 or 32, and `dotted` makes a step half as long again. A grid step is allowed only when the
+score's `unitTicks` and the dialect's `constraints.durations` can write it, and a step the score cannot write is
+refused with `grid-not-allowed`. Every refusal code is listed with the command in the package README.
 
 ```ts
 import { applyProjectCommand, isNoticeDiagnostic } from "@neta-art/score-editor";

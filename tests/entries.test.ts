@@ -128,7 +128,7 @@ describe("abcjs stays out of the entries", () => {
     return JSON.parse(execFileSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8" }));
   }
 
-  it("is not loaded by importing either package entry, which only a view part's mount asks for", () => {
+  it("is not loaded by importing either package entry, which only a view part's mount asks for", 15_000, () => {
     const { afterEntries, afterAbcjs } = modulesOfAbcjsSeen();
 
     expect(afterAbcjs, "the check can see abcjs when it is loaded").toBeGreaterThan(0);

@@ -175,6 +175,8 @@ function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPl
     case "removeChords":
     case "renameSection":
     case "nameSection":
+    case "moveNotes":
+    case "resizeNotes":
       return identityPlacements(score);
     default:
       return assertNever(command);

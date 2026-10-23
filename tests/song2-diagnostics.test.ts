@@ -63,6 +63,12 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "section-name-blank",
   "section-name-line-break",
   "section-name-trailing-space",
+  "note-before-start",
+  "note-past-end",
+  "note-too-short",
+  "grid-not-allowed",
+  "offset-not-integer",
+  "unit-unknown",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = [

@@ -1,8 +1,33 @@
-// ABOUTME: Small model helpers shared by the command files: ticks, ordering, sections, keys and writable lengths.
-// ABOUTME: Keeping them here means insert, meter and truncation split and order notes the same way.
+// ABOUTME: Small model helpers shared by the command files: note places, tie chains, ticks, ordering, sections and keys.
+// ABOUTME: Keeping them here means insert, meter, note and truncation commands read and order notes the same way.
+import { positionOf } from "./arrangement";
+import type { DiagnosticAt } from "./diagnostics";
 import type { Chord, KeyChange, Meter, Note, Score, Truncation } from "./score";
 import { TICKS_PER_QUARTER } from "./score";
 import type { DurationSet } from "./types";
+
+/** Where a note is, in the voice, bar and beat a person counts; only its id when the score has no such note. */
+export function noteAt(score: Score, noteId: string): DiagnosticAt {
+  const note = score.notes.find((found) => found.id === noteId);
+  if (note === undefined) return { noteId };
+  const { bar, beat } = positionOf(score.bars, note.bar, note.start);
+  return { voice: note.voice, bar, beat, noteId: note.id };
+}
+
+/**
+ * The whole tie chain around a note: every note tied into it and every note it ties into. A caller that already has
+ * the target voice's notes sorted may pass them to keep the lookup from sorting the whole voice again.
+ */
+export function tieChain(notes: ReadonlyArray<Note>, target: Note, orderedVoiceNotes?: ReadonlyArray<Note>): Note[] {
+  const voiceNotes =
+    orderedVoiceNotes ?? notes.filter((note) => note.voice === target.voice).sort((a, b) => a.start - b.start);
+  const index = voiceNotes.findIndex((note) => note.id === target.id);
+  let first = index;
+  while (first > 0 && (voiceNotes[first - 1] as Note).tie) first -= 1;
+  let last = index;
+  while (last < voiceNotes.length - 1 && (voiceNotes[last] as Note).tie) last += 1;
+  return voiceNotes.slice(first, last + 1);
+}
 
 /** True when chord material remains: a finished chord, or an unfinished chord string at the cut (RULES.md C8). */
 export function hasChordsAfter(chords: ReadonlyArray<Chord>, truncation: Truncation | null): boolean {
