@@ -1225,3 +1225,16 @@ test.describe("the head of the track", () => {
     });
   }
 });
+
+test.describe("after a line is placed on a bar by its number", () => {
+  test("the editor closes, and the focus is on the line where it now stands", async ({ page, harness, press }) => {
+    await openTrack(harness, WITH_LOOSE);
+    await press(unaligned(page).getByRole("button", { name: /^Line 3, not aligned/ }));
+    await lyrics(page).getByRole("spinbutton", { name: "Bar number", exact: true }).fill("4");
+    await press(button(page, "Place on bar"));
+    // The line is now the second of the lines on bars, so the list moved under the choice: nothing stays chosen.
+    await expect(textbox(page)).toBeHidden();
+    await expect(phrase(page, 2)).toHaveAccessibleName(/^Line 2, bar 4,.*: 尚未对齐的一行$/);
+    await expect(phrase(page, 2)).toBeFocused();
+  });
+});
