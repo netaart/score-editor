@@ -1238,3 +1238,14 @@ test.describe("after a line is placed on a bar by its number", () => {
     await expect(phrase(page, 2)).toBeFocused();
   });
 });
+
+test.describe("the end of a drag", () => {
+  test("is not a click: letting go on a handle does not choose its line", async ({ page, harness, isMobile }) => {
+    await openTrack(harness, GAPPED);
+    await harness.layout.setView({ zoom: FIT_ZOOM });
+    await dragEdge(page, harness, isMobile, 3, 5);
+    expect((await storedLines(page))?.[0]?.phrase).toEqual({ firstBar: 2, barCount: 3 });
+    await expect(textbox(page)).toBeHidden();
+    await expect(phrase(page, 1)).not.toHaveAccessibleName(/selected/);
+  });
+});
