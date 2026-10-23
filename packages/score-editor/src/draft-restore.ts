@@ -10,22 +10,24 @@ import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
 
 /**
- * Mounts the Restore original button and its question on `el`. The restore resets the history, so the edits it drops cannot
- * be undone; the question, a native popover so that it stacks above a host's full-screen layer, says so and starts with
- * the focus on Cancel. `say` is how the toolbar tells a screen reader that the original is back.
+ * Mounts the Restore original button and its question on `el`, before `before` when the toolbar has a later control to
+ * place it ahead of. The restore resets the history, so the edits it drops cannot be undone; the question, a native
+ * popover so that it stacks above a host's full-screen layer, says so and starts with the focus on Cancel. `say` is how
+ * the toolbar tells a screen reader that the original is back.
  */
 export function mountRestoreControl(
   el: HTMLElement,
   session: EditingSession,
   keeper: DraftKeeper,
   say: (words: string) => void,
+  before?: ChildNode | null,
 ): ViewPart {
   const doc = el.ownerDocument;
   const abort = new AbortController();
   const { signal } = abort;
   const releaseStyles = acquireStyles(el);
   const root = create(doc, "div", "sce-root sce-part sce-part-restore");
-  el.appendChild(root);
+  el.insertBefore(root, before ?? null);
 
   const button = create(doc, "button", "sce-button sce-restore-button", root);
   button.type = "button";

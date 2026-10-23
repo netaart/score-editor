@@ -55,6 +55,9 @@ export class Editor implements MountedEditor {
   private readonly staffPane: HTMLElement;
   private readonly textPane: HTMLElement;
   private readonly parts: ViewPart[] = [];
+  /** Where the draft conflict strip goes, between the toolbar and the cut notice; a comment so it takes no box. */
+  private readonly draftAnchor: Comment;
+  private conflict: ViewPart | null = null;
   private staffMounted = false;
   private textMounted = false;
   private shownView: ViewName = "arrangement";
@@ -103,7 +106,9 @@ export class Editor implements MountedEditor {
     this.parts.push(
       mountToolbar(this.root, this.session, { hintId, onRefused, viewSwitch: true, draftKeeper: this.drafts }),
     );
-    this.parts.push(mountDraftConflict(this.root, this.session, this.drafts));
+    this.draftAnchor = doc.createComment("draft conflict");
+    this.root.appendChild(this.draftAnchor);
+    this.syncDraftParts();
     this.parts.push(mountCutNotice(this.root, this.session));
     this.stalePane = pane(this.root);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));
@@ -155,6 +160,7 @@ export class Editor implements MountedEditor {
       if (store !== null && sameOriginal) this.carry(hostChanges(before.project, patch.project));
       else this.session.replaceProject(patch.project);
     });
+    this.syncDraftParts();
   }
 
   destroy(): void {
@@ -184,6 +190,24 @@ export class Editor implements MountedEditor {
   /** The store the keeper is made for: the host's, while the editor is editable; none otherwise. */
   private draftStore(): DraftStore | null {
     return this.options.drafts !== undefined && this.editable ? this.options.drafts : null;
+  }
+
+  /** Builds the conflict strip only while a keeper exists, so an editor without a store has no draft DOM. */
+  private syncDraftParts(): void {
+    if (this.draftStore() !== null) {
+      if (this.conflict === null) {
+        const part = mountDraftConflict(this.root, this.session, this.drafts);
+        const node = this.root.lastElementChild;
+        if (node !== null) this.root.insertBefore(node, this.draftAnchor);
+        this.conflict = part;
+        this.parts.push(part);
+      }
+    } else if (this.conflict !== null) {
+      this.conflict.destroy();
+      const at = this.parts.indexOf(this.conflict);
+      if (at >= 0) this.parts.splice(at, 1);
+      this.conflict = null;
+    }
   }
 
   /**
