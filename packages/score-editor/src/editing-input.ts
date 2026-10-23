@@ -171,15 +171,25 @@ function resizeSelection(session: EditingSession, edge: "start" | "end", timeTic
 }
 
 /**
+ * Whether a key press is one of the note editing keys: an arrow with no Ctrl, Cmd or Alt. Shift is allowed, since it
+ * makes Up and Down an octave and Left and Right a resize. The note focus and the editing input ask this one predicate,
+ * so the key that steps from note to note and the key that edits one cannot be told apart in two places.
+ */
+export function isNoteEditKey(input: Pick<EditingKeyInput, "key" | "ctrlKey" | "metaKey" | "altKey">): boolean {
+  if (input.ctrlKey === true || input.metaKey === true || input.altKey === true) return false;
+  return (
+    input.key === "ArrowLeft" || input.key === "ArrowRight" || input.key === "ArrowUp" || input.key === "ArrowDown"
+  );
+}
+
+/**
  * What an arrow key does to the selected notes. Left and Right move them by a grid step, Up and Down by a semitone and
  * with Shift by an octave; Shift with Left and Right moves the end edge by a grid step. Ctrl, Cmd and Alt are left to the
  * keys that walk the focus and to the system.
  */
-function pressNoteKey(session: EditingSession, input: EditingKeyInput): EditingInputResult {
-  if (input.ctrlKey === true || input.metaKey === true || input.altKey === true) return IGNORED;
-  const step = gridStepOf(session.grid);
+function pressNoteKey(session: EditingSession, input: EditingKeyInput, step: number | null): EditingInputResult {
+  if (!isNoteEditKey(input) || step === null) return IGNORED;
   const shift = input.shiftKey === true;
-  if (step === null) return IGNORED;
   switch (input.key) {
     case "ArrowLeft":
     case "ArrowRight": {
@@ -198,17 +208,12 @@ function pressNoteKey(session: EditingSession, input: EditingKeyInput): EditingI
 
 /**
  * Whether the editing keys have a note to act on: the session is editable, the arrangement is shown and a pitched note
- * is selected. Then the arrow keys move and resize the selection, and no key steps from note to note or moves the
- * insertion point.
+ * is selected. Then the arrow keys move and resize the selection, no key steps from note to note or moves the insertion
+ * point, and Delete has the same notes to turn into rests.
  */
 export function canEditSelection(session: EditingSession): boolean {
   const score = readableScore(session);
   return session.view.editable && score !== null && pitchedSelection(score, session.selection).length > 0;
-}
-
-/** Whether Delete has a note to act on: the same notes the editing keys act on. */
-export function canDeleteSelection(session: EditingSession): boolean {
-  return canEditSelection(session);
 }
 
 /** Turns the selected notes into rests, as one edit. Nothing is handled when no selected note is pitched. */
@@ -226,11 +231,10 @@ function clickNote(session: EditingSession, noteId: string): EditingInputResult 
   return HANDLED;
 }
 
-function clickEmpty(session: EditingSession, tick: number): EditingInputResult {
+function clickEmpty(session: EditingSession, tick: number, step: number): EditingInputResult {
   const score = readableScore(session);
   if (score === null || !Number.isFinite(tick)) return IGNORED;
   session.select([]);
-  const step = gridStepOf(session.grid) ?? 1;
   session.setInsertionPoint({ tick: snapToGrid(tick, step, gridTicks(score)) });
   return HANDLED;
 }
@@ -241,7 +245,7 @@ function selectWith(session: EditingSession, act: (score: Score) => EditingInput
   return score === null ? IGNORED : act(score);
 }
 
-function pressKey(session: EditingSession, input: EditingKeyInput): EditingInputResult {
+function pressKey(session: EditingSession, input: EditingKeyInput, step: number | null): EditingInputResult {
   if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(session);
   const history = historyActionOf(input);
   if (history !== null) {
@@ -250,11 +254,11 @@ function pressKey(session: EditingSession, input: EditingKeyInput): EditingInput
   }
   const selecting = selectionActionOf(input);
   if (selecting !== null) return handleEditingInput(session, { type: selecting });
-  const editing = pressNoteKey(session, input);
+  const editing = pressNoteKey(session, input, step);
   if (editing.handled) return editing;
   const score = readableScore(session);
-  const step = gridStepOf(session.grid) ?? 1;
-  const tick = score === null ? null : insertionPointTargetOf(score, step, session.insertionPoint, input);
+  const tick =
+    score === null ? null : insertionPointTargetOf(score, step ?? 1, session.insertionPoint, input);
   if (tick === null) return IGNORED;
   session.setInsertionPoint({ tick });
   return HANDLED;
@@ -265,11 +269,13 @@ function pressKey(session: EditingSession, input: EditingKeyInput): EditingInput
  */
 export function handleEditingInput(session: EditingSession, input: EditingInput): EditingInputResult {
   if (!session.view.editable) return IGNORED;
+  // One reading of the grid for the whole input, so a key and a click cannot see two different steps.
+  const step = gridStepOf(session.grid);
   switch (input.type) {
     case "click-note":
       return clickNote(session, input.noteId);
     case "click-empty":
-      return clickEmpty(session, input.tick);
+      return clickEmpty(session, input.tick, step ?? 1);
     case "delete":
       return deleteSelection(session);
     case "toggle-note":
@@ -287,6 +293,6 @@ export function handleEditingInput(session: EditingSession, input: EditingInput)
     case "resize-notes":
       return resizeSelection(session, input.edge, input.timeTicks);
     case "key":
-      return pressKey(session, input);
+      return pressKey(session, input, step);
   }
 }

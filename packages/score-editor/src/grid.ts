@@ -1,6 +1,6 @@
 // ABOUTME: The editor's side of the time grid: the grid a session starts with, the grids the control offers, and snapping a tick to a line.
 // ABOUTME: One step is worked out by the note commands (gridStepOf); this file adds no second reading of a grid, only where its lines are.
-import { GRID_VALUES, type Grid, gridStepOf } from "./commands-notes";
+import { GRID_VALUES, type Grid, gridStepOf, snap } from "./commands-notes";
 
 /** The grid a session starts with: a quarter note, the beat line of a bar in 4/4. */
 export const DEFAULT_GRID: Grid = { value: 4 };
@@ -27,13 +27,13 @@ export function sameGrid(a: Grid, b: Grid): boolean {
 /**
  * The grid line nearest `tick`, counted from the start of the score as the note commands count them, and kept inside
  * the score: the end of the score is a line of every grid, whether or not a step divides it. Halfway goes later, as the
- * commands round.
+ * commands round. The nearest line is the commands' own `snap`, so this adds only the ends to it.
  */
 export function snapToGrid(tick: number, step: number, end: number): number {
-  const before = Math.floor(tick / step) * step;
-  const after = before + step;
-  const lines = [before, after].map((line) => Math.min(end, Math.max(0, line)));
-  const [low = 0, high = 0] = lines;
+  const nearest = snap(tick, step);
+  const before = Math.min(end, Math.max(0, tick < nearest ? nearest - step : nearest));
+  const after = Math.min(end, Math.max(0, tick < nearest ? nearest : nearest + step));
+  const [low = 0, high = 0] = [before, after];
   return tick - low < high - tick ? low : high;
 }
 

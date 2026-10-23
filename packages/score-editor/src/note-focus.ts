@@ -1,6 +1,6 @@
 // ABOUTME: Keyboard focus on the notes of one voice track: a single tab stop, stepping from note to note, and keeping the focus through a redraw.
 // ABOUTME: Only one note carries a tabindex at a time (a roving tabindex); the track tells this module what it drew and what is selected.
-import { canEditSelection } from "./editing-input";
+import { canEditSelection, isNoteEditKey } from "./editing-input";
 import type { EditingSession } from "./session";
 
 /** `focusVisible` is in the browsers' `FocusOptions` but not yet in the type library. */
@@ -75,9 +75,9 @@ export function mountNoteFocus(
   }
 
   /** Puts the focus on a note. A key that walked there asks for the ring too, whatever moved the focus before it. */
-  const focus = (noteId: string, byKey = false): void => {
+  const focus = (noteId: string, options: { byKey?: boolean } = {}): void => {
     setStop(noteId);
-    drawn?.blocks.get(noteId)?.focus(byKey ? FOCUS_RING : undefined);
+    drawn?.blocks.get(noteId)?.focus(options.byKey === true ? FOCUS_RING : undefined);
   };
 
   root.addEventListener(
@@ -88,9 +88,8 @@ export function mountNoteFocus(
       if (event.altKey || (command && event.shiftKey)) return;
       const noteId = noteIn(event.target);
       if (noteId === undefined) return;
-      // With a note selected the plain arrow keys edit the selection; the stepping below is for walking with none selected.
-      const arrow = event.key === "ArrowLeft" || event.key === "ArrowRight";
-      if (arrow && !command && !event.shiftKey && canEditSelection(session)) return;
+      // With a note selected the editing keys edit the selection; the stepping below is for walking with none selected.
+      if (isNoteEditKey(event) && canEditSelection(session)) return;
       const { order } = drawn;
       const at = order.indexOf(noteId);
       let to: string | undefined;
@@ -108,7 +107,7 @@ export function mountNoteFocus(
       if (to === undefined || event.shiftKey) return;
       event.preventDefault();
       if (command) {
-        focus(to, true);
+        focus(to, { byKey: true });
         return;
       }
       stepping = true;
@@ -117,7 +116,7 @@ export function mountNoteFocus(
       } finally {
         stepping = false;
       }
-      focus(to, true);
+      focus(to, { byKey: true });
     },
     { signal },
   );

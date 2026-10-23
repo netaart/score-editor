@@ -61,8 +61,12 @@ interface Placement {
   readonly order: number;
 }
 
-/** The grid line nearest `tick`. Adding zero turns the -0 that rounding a small negative gives into 0, which the read-back compares with Object.is. */
-function snap(tick: number, step: number): number {
+/**
+ * The grid line nearest `tick`, counted from the start of the score. Adding zero turns the -0 that rounding a small
+ * negative gives into 0, which the read-back compares with Object.is. `snapToGrid` is this line with the score's ends in
+ * view, so the two cannot round differently.
+ */
+export function snap(tick: number, step: number): number {
   return Math.round(tick / step) * step + 0;
 }
 
