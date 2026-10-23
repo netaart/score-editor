@@ -696,6 +696,24 @@ test.describe("in the assembled editor", () => {
     await expect(page.getByRole("listitem", { name: /^C4, bar 1 beat 1/ })).toBeFocused();
   });
 
+  test("tells a screen reader how to open the section menu, in both languages, and not when the editor is read-only", async ({
+    page,
+    harness,
+  }) => {
+    await harness.mount({ score: { text: SONG } });
+    await expect(page.getByRole("region", { name: "Arrangement" })).toHaveAccessibleDescription(
+      /name of a section.*opens? its menu.*Shift and F10.*Menu key.*Left and Right move from section to section.*Enter opens its menu/s,
+    );
+
+    await harness.update({ language: "zh" });
+    await expect(page.getByRole("region", { name: "编曲视图" })).toHaveAccessibleDescription(
+      /段落名.*Shift 加 F10.*菜单键.*左、右键在段落之间移动.*Enter 打开它的菜单/s,
+    );
+
+    await harness.update({ language: "en", editable: false });
+    await expect(page.getByRole("region", { name: "Arrangement" })).not.toHaveAccessibleDescription(/section/);
+  });
+
   test("Shift and F10 on the Arrangement region opens the menu of the first section", async ({ page, harness }) => {
     await harness.mount({ score: { text: SONG } });
     await page.getByRole("region", { name: "Arrangement" }).focus();
