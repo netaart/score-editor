@@ -25,6 +25,24 @@ export const songCss = `
   display: inline-flex;
   visibility: hidden;
 }
+/* The two transpose buttons share an edge, as the view switch's do, so they read as one pair and not as the menu's chevron again. */
+.sce-root .sce-transposes {
+  gap: 0;
+}
+.sce-root .sce-transpose {
+  border-radius: 0;
+}
+.sce-root .sce-transpose + .sce-transpose {
+  margin-inline-start: -1px;
+}
+.sce-root .sce-transpose:first-child {
+  border-start-start-radius: var(--sce-_radius);
+  border-end-start-radius: var(--sce-_radius);
+}
+.sce-root .sce-transpose:last-child {
+  border-start-end-radius: var(--sce-_radius);
+  border-end-end-radius: var(--sce-_radius);
+}
 .sce-root :is(.sce-tempo, .sce-key, .sce-transposes) {
   display: inline-flex;
   flex: none;
@@ -59,7 +77,7 @@ export const songCss = `
   margin: 0;
 }
 .sce-root .sce-project-notice:not([hidden]) {
-  border-inline-start: 3px solid var(--sce-_accent);
+  border-inline-start: 3px solid var(--sce-_text);
   padding-inline-start: 9px;
 }
 .sce-root .sce-project-button {
@@ -174,13 +192,14 @@ export const songCss = `
   color: var(--sce-_text);
   font-weight: 600;
 }
+/* A reading, not a field: no fill, and the faint line, so it is not taken for a box to type in. */
 .sce-root .sce-panel-lyrics {
   max-height: 12em;
   padding: 6px 8px;
   overflow: auto;
-  border: 1px solid var(--sce-_line-strong);
+  border: 1px solid var(--sce-_line);
   border-radius: var(--sce-_radius);
-  background: var(--sce-_bg);
+  background: transparent;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -202,7 +221,7 @@ export const songCss = `
   display: grid;
   gap: 6px;
   padding-inline-start: 9px;
-  border-inline-start: 3px solid var(--sce-_accent);
+  border-inline-start: 3px solid var(--sce-_text);
 }
 .sce-root .sce-panel-notice-text {
   margin: 0;

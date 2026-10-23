@@ -252,10 +252,7 @@ export function drawProjectPanel(
       const text = joinLyrics(reading.score, lyricLinesOf(project, reading.score));
       lyricsText.textContent = text === "" ? t.projectLyricsEmpty : text;
       lyricsText.dataset.empty = String(text === "");
-      lyricsCount.textContent = t.projectLyricsCount(
-        lyricCharacterCount(text).toLocaleString(session.view.language),
-        LYRICS_MAX_CHARACTERS.toLocaleString(session.view.language),
-      );
+      lyricsCount.textContent = t.projectLyricsCount(String(lyricCharacterCount(text)), String(LYRICS_MAX_CHARACTERS));
       lyricsCount.dataset.over = String(lyricCharacterCount(text) > LYRICS_MAX_CHARACTERS);
       lyricsCount.hidden = false;
     } else {

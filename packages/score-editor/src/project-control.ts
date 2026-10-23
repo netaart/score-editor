@@ -38,21 +38,35 @@ export function mountProjectControl(
   button.popoverTargetAction = "toggle";
   const panel = drawProjectPanel(popover, session, live, onRefused);
 
+  /** Puts the popover under the button: on a narrow window it spans the window, and its height is the room below the button. */
+  function place(): void {
+    const view = doc.defaultView;
+    const rect = button.getBoundingClientRect();
+    const narrow = view?.matchMedia("(max-width: 40em)").matches ?? false;
+    popover.toggleAttribute("data-narrow", narrow);
+    popover.style.top = `${rect.bottom + 4}px`;
+    popover.style.left = narrow ? "" : `${rect.left}px`;
+    popover.style.maxHeight = `${Math.max((view?.innerHeight ?? 0) - rect.bottom - 12, 0)}px`;
+  }
+  /** Moves a placed popover left where it would run off the window; it must be shown to be measured. */
+  function keepInside(): void {
+    const view = doc.defaultView;
+    if (!view || popover.hasAttribute("data-narrow")) return;
+    const overflow = popover.getBoundingClientRect().right - (view.innerWidth - 8);
+    if (overflow > 0) popover.style.left = `${Math.max(8, popover.getBoundingClientRect().left - overflow)}px`;
+  }
+  /** The toolbar wraps again when its controls come and go or the window changes, which moves the button the popover hangs from. */
+  function follow(): void {
+    if (!popover.matches(":popover-open")) return;
+    place();
+    keepInside();
+  }
+
   popover.addEventListener(
     "beforetoggle",
     (event) => {
-      if ((event as ToggleEvent).newState === "open") {
-        const view = doc.defaultView;
-        const rect = button.getBoundingClientRect();
-        const room = (view?.innerHeight ?? 0) - rect.bottom - 12;
-        popover.style.top = `${rect.bottom + 4}px`;
-        const narrow = view?.matchMedia("(max-width: 40em)").matches ?? false;
-        popover.toggleAttribute("data-narrow", narrow);
-        popover.style.left = narrow ? "" : `${rect.left}px`;
-        popover.style.maxHeight = `${Math.max(room, 0)}px`;
-        return;
-      }
-      panel.commit();
+      if ((event as ToggleEvent).newState === "open") place();
+      else panel.commit();
     },
     { signal },
   );
@@ -62,16 +76,12 @@ export function mountProjectControl(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      const view = doc.defaultView;
-      if (view && !popover.hasAttribute("data-narrow")) {
-        const rect = popover.getBoundingClientRect();
-        const overflow = rect.right - (view.innerWidth - 8);
-        if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
-      }
+      keepInside();
       panel.element.focus({ preventScroll: true });
     },
     { signal },
   );
+  doc.defaultView?.addEventListener("resize", follow, { signal });
 
   let language: Language | null = null;
   let t = messagesFor(session.view.language);
@@ -93,6 +103,8 @@ export function mountProjectControl(
     const shown = `${session.dialect !== undefined}:${notices}`;
     if (shown === drawn) return;
     drawn = shown;
+    // The toolbar's other parts draw in this same change, so the button is where it will be a frame later.
+    doc.defaultView?.requestAnimationFrame(follow);
     button.hidden = session.dialect === undefined;
     count.hidden = notices === 0;
     count.textContent = String(notices);

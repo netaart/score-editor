@@ -111,7 +111,7 @@ export interface Messages {
   projectLyricsHint: string;
   projectLyricsEmpty: string;
   projectLyricsUnreadable: string;
-  /** The joined lyrics' length against what generation accepts; both numbers come formatted. */
+  /** The joined lyrics' length against what generation accepts, written as the notice for it writes them. */
   projectLyricsCount(count: string, max: string): string;
   projectRemoveChords: string;
   projectSwitchToFull: string;
@@ -229,7 +229,7 @@ const en: Messages = {
   projectSeedHint: "Clear it to let each generation pick its own.",
   projectSeedEmpty: "Not set. Each generation picks its own.",
   projectLyrics: "Lyrics",
-  projectLyricsHint: "As the next generation receives them.",
+  projectLyricsHint: "Read only. As the next generation receives them.",
   projectLyricsEmpty: "No lyrics yet.",
   projectLyricsUnreadable: "The score can’t be read, so the lyrics can’t be joined.",
   projectLyricsCount: (count, max) => `${count} of ${max} characters`,
@@ -341,7 +341,7 @@ const zh: Messages = {
   projectSeedHint: "清除后，每次生成会自己挑种子。",
   projectSeedEmpty: "未设置。每次生成会自己挑种子。",
   projectLyrics: "歌词",
-  projectLyricsHint: "下一次生成收到的样子。",
+  projectLyricsHint: "只读。下一次生成收到的样子。",
   projectLyricsEmpty: "还没有歌词。",
   projectLyricsUnreadable: "谱面读不出来，所以拼不出歌词。",
   projectLyricsCount: (count, max) => `${count} / ${max} 字`,
