@@ -437,7 +437,7 @@ test.describe("a choice that cannot be done", () => {
     for (const label of ["Duplicate", "Move earlier", "Move later"]) {
       const muted = choice(page, "Unnamed section", label);
       await expect(muted).toHaveAttribute("aria-disabled", "true");
-      await expect(muted).toContainText(why);
+      await expect(muted.getByText(why)).toBeVisible();
       await expect(muted).toHaveAccessibleDescription(`${why} (bar 1)`);
     }
     for (const label of ["Name this section…", "Start a section at a bar…", "Delete"]) {
@@ -462,14 +462,14 @@ test.describe("a choice that cannot be done", () => {
     await press(bandButton(page, "Section verse"));
     const first = choice(page, "Section verse", "Move earlier");
     await expect(first).toHaveAttribute("aria-disabled", "true");
-    await expect(first).toContainText("is already first and cannot move earlier.");
+    await expect(first.getByText("is already first and cannot move earlier.")).toBeVisible();
     await expect(choice(page, "Section verse", "Move later")).toHaveAttribute("aria-disabled", "false");
     await page.keyboard.press("Escape");
 
     await press(bandButton(page, "Section chorus"));
     const last = choice(page, "Section chorus", "Move later");
     await expect(last).toHaveAttribute("aria-disabled", "true");
-    await expect(last).toContainText("is already last and cannot move later.");
+    await expect(last.getByText("is already last and cannot move later.")).toBeVisible();
     await expect(choice(page, "Section chorus", "Move earlier")).toHaveAttribute("aria-disabled", "false");
   });
 
@@ -478,7 +478,7 @@ test.describe("a choice that cannot be done", () => {
     await press(bandButton(page, "Section verse"));
     const earlier = choice(page, "Section verse", "Move earlier");
     await expect(earlier).toHaveAttribute("aria-disabled", "true");
-    await expect(earlier).toContainText("A named section cannot move before the unnamed section");
+    await expect(earlier.getByText("A named section cannot move before the unnamed section")).toBeVisible();
   });
 
   test("a section that holds the cut tail cannot be copied or moved, and can be deleted", async ({
@@ -490,9 +490,11 @@ test.describe("a choice that cannot be done", () => {
     await press(bandButton(page, "Section chorus"));
     await expect(choice(page, "Section chorus", "Duplicate")).toHaveAttribute("aria-disabled", "true");
     await expect(choice(page, "Section chorus", "Move earlier")).toHaveAttribute("aria-disabled", "true");
-    await expect(choice(page, "Section chorus", "Duplicate")).toContainText(
-      "That would touch the score's cut; use the truncation commands for it.",
-    );
+    await expect(
+      choice(page, "Section chorus", "Duplicate").getByText(
+        "That would touch the score's cut; use the truncation commands for it.",
+      ),
+    ).toBeVisible();
     await expect(choice(page, "Section chorus", "Delete")).toHaveAttribute("aria-disabled", "false");
     await press(choice(page, "Section chorus", "Delete"));
     await expect(bandNames(page)).toHaveText(["verse"]);
@@ -502,7 +504,7 @@ test.describe("a choice that cannot be done", () => {
     await openSong(harness, ONLY);
     await press(bandButton(page, "Section a"));
     await expect(choice(page, "Section a", "Delete")).toHaveAttribute("aria-disabled", "true");
-    await expect(choice(page, "Section a", "Delete")).toContainText("The score would have no bars left.");
+    await expect(choice(page, "Section a", "Delete").getByText("The score would have no bars left.")).toBeVisible();
   });
 });
 
@@ -559,20 +561,32 @@ test.describe("the section menu from the keyboard", () => {
     harness,
   }) => {
     await openSong(harness);
-    await bandButton(page, "Section verse").focus();
+    await bandButton(page, "Unnamed section").focus();
     await page.keyboard.press("Enter");
     // The menu gives its first choice the focus a moment after it opens; keys pressed before that would go to the band.
-    await expect(choice(page, "Section verse", "Rename…")).toBeFocused();
+    await expect(choice(page, "Unnamed section", "Name this section…")).toBeFocused();
     await page.keyboard.press("End");
-    await expect(choice(page, "Section verse", "Delete")).toBeFocused();
+    await expect(choice(page, "Unnamed section", "Delete")).toBeFocused();
     await page.keyboard.press("Enter");
 
-    await expect(bandNames(page)).toHaveText(["Unnamed", "chorus"]);
-    await expect(bandButton(page, "Section chorus")).toBeFocused();
+    await expect(bandNames(page)).toHaveText(["verse", "chorus"]);
+    await expect(bandButton(page, "Section verse")).toBeFocused();
     // An undo from outside redraws the ruler, and the focus stays on a band instead of falling to the page.
     expect(await harness.layout.undo()).toBe(true);
     await expect(bandNames(page)).toHaveText(["Unnamed", "verse", "chorus"]);
     await expect(slot(page, "ruler").locator(".sce-section-open:focus")).toHaveCount(1);
+  });
+
+  test("deleting the last section leaves the focus on the one before it", async ({ page, harness }) => {
+    await openSong(harness);
+    await bandButton(page, "Section chorus").focus();
+    await page.keyboard.press("Enter");
+    await expect(choice(page, "Section chorus", "Rename…")).toBeFocused();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+
+    await expect(bandNames(page)).toHaveText(["Unnamed", "verse"]);
+    await expect(bandButton(page, "Section verse")).toBeFocused();
   });
 
   test("after a move, the focus is on the band of the section that moved", async ({ page, harness }) => {
@@ -612,6 +626,25 @@ test.describe("a read-only session", () => {
     await page.keyboard.press("Shift+F10");
     await expect(page.getByRole("menu")).toHaveCount(0);
     expect(await harness.layout.canUndo()).toBe(false);
+  });
+
+  /** Whether the name of a band carries the mark that says the band opens something. */
+  const marked = (page: Page, index: number) =>
+    bandNames(page)
+      .nth(index)
+      .locator(".sce-section-name")
+      .evaluate((name) => getComputedStyle(name, "::after").content !== "none");
+
+  test("a band carries a mark that it opens something only while the session is editable", async ({
+    page,
+    harness,
+  }) => {
+    await openSong(harness, SONG, { editable: false });
+    expect(await marked(page, 1)).toBe(false);
+    await harness.layout.setEditable(true);
+    expect(await marked(page, 1)).toBe(true);
+    await harness.layout.setEditable(false);
+    expect(await marked(page, 1)).toBe(false);
   });
 
   test("gets the controls when the session becomes editable, and loses them, and an open menu, when it does not", async ({
