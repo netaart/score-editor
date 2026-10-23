@@ -52,6 +52,45 @@ export const groundOf = (target: Locator) =>
     return getComputedStyle(root).backgroundColor;
   });
 
+/**
+ * Counts the event listeners on every element the page gains from now on, kept so one that a redraw removed can still be
+ * asked what it listened to: the way to see listeners piling up on a part that draws again.
+ */
+export async function listenerCounter(page: Page) {
+  await page.evaluate(() => {
+    const seen = new Set<Element>();
+    new MutationObserver((records) => {
+      for (const record of records)
+        for (const node of record.addedNodes)
+          if (node instanceof Element) for (const element of [node, ...node.querySelectorAll("*")]) seen.add(element);
+    }).observe(document, { childList: true, subtree: true });
+    window.harness.probes ??= {};
+    window.harness.probes.elements = seen;
+  });
+  const cdp = await page.context().newCDPSession(page);
+  return {
+    /** The listeners on all of those elements, as the browser's debugger counts them. */
+    async listeners() {
+      const { result: list } = await cdp.send("Runtime.evaluate", {
+        expression: "Array.from(window.harness.probes?.elements ?? [])",
+      });
+      if (!list.objectId) throw new Error("no list of elements");
+      const { result: items } = await cdp.send("Runtime.getProperties", {
+        objectId: list.objectId,
+        ownProperties: true,
+      });
+      let total = 0;
+      for (const item of items) {
+        const objectId = /^\d+$/.test(item.name) ? item.value?.objectId : undefined;
+        if (!objectId) continue;
+        total += (await cdp.send("DOMDebugger.getEventListeners", { objectId })).listeners.length;
+      }
+      return total;
+    },
+    detach: () => cdp.detach(),
+  };
+}
+
 /** The editing session as the test page exposes it to the helpers below. */
 interface PageSession {
   project: { score: string };
@@ -110,6 +149,7 @@ interface PageProbes {
   vibrations: unknown[];
   pointerId: number | null;
   keysSeen: boolean[];
+  elements?: Set<Element>;
 }
 
 interface PageHarness {
