@@ -364,12 +364,20 @@ describe("a click on empty space", () => {
     expect(session.insertionPoint).toEqual({ tick: 256 });
   });
 
-  it("measures beats in the meter of the bar it lands in: eighths in 6/8", () => {
+  it("counts the lines of the grid from the start of the score, whatever the meter of the bar it lands in", () => {
     const session = open({ score: MIXED_METERS });
     expect(session.reading.kind).toBe("score");
 
+    // The grid starts at 1/4: lines every 256 ticks, in the 4/4 bar and in the 6/8 bar after it.
     handleEditingInput(session, click.empty(190));
     expect(session.insertionPoint).toEqual({ tick: 256 });
+    handleEditingInput(session, click.empty(1100));
+    expect(session.insertionPoint).toEqual({ tick: 1024 });
+    handleEditingInput(session, click.empty(1700));
+    expect(session.insertionPoint).toEqual({ tick: 1792 });
+
+    // On an eighth grid the same clicks land on the eighth lines of the 6/8 bar, which 08b's beat lines gave.
+    session.setGrid({ value: 8 });
     handleEditingInput(session, click.empty(1100));
     expect(session.insertionPoint).toEqual({ tick: 1152 });
     handleEditingInput(session, click.empty(1700));
@@ -440,16 +448,22 @@ describe("the arrow keys, Home and End", () => {
     expect(session.insertionPoint).toEqual({ tick: 256 });
   });
 
-  it("follow the beats of each bar's meter across a change of meter", () => {
+  it("follow the current grid across a change of meter, counted from the start of the score", () => {
     const session = open({ score: MIXED_METERS });
     session.setInsertionPoint({ tick: 768 });
     handleEditingInput(session, key("ArrowRight"));
     expect(session.insertionPoint).toEqual({ tick: 1024 });
     handleEditingInput(session, key("ArrowRight"));
+    expect(session.insertionPoint).toEqual({ tick: 1280 });
+
+    // On an eighth grid the steps in the 6/8 bar are the beats 08b stepped by.
+    session.setGrid({ value: 8 });
+    session.setInsertionPoint({ tick: 1024 });
+    handleEditingInput(session, key("ArrowRight"));
     expect(session.insertionPoint).toEqual({ tick: 1152 });
     handleEditingInput(session, key("ArrowLeft"));
     handleEditingInput(session, key("ArrowLeft"));
-    expect(session.insertionPoint).toEqual({ tick: 768 });
+    expect(session.insertionPoint).toEqual({ tick: 896 });
     handleEditingInput(session, key("End"));
     expect(session.insertionPoint).toEqual({ tick: 1792 });
   });

@@ -6,7 +6,7 @@ import { noteAt, orderNotes, splitLength, tieChain } from "./commands-shared";
 import { type Chord, type Note, noteId, type Score, TICKS_PER_QUARTER } from "./score";
 import type { DialectConstraints, DurationSet } from "./types";
 
-const GRID_VALUES = [4, 8, 16, 32] as const;
+export const GRID_VALUES = [4, 8, 16, 32] as const;
 
 /** The note values the grid offers: a quarter, an eighth, a sixteenth and, when the score allows it, a thirty-second. */
 export type GridValue = (typeof GRID_VALUES)[number];
@@ -65,7 +65,8 @@ function snap(tick: number, step: number): number {
   return Math.round(tick / step) * step;
 }
 
-function gridStepOf(grid: Grid): number | null {
+/** One step of a grid in ticks, or null for a grid that is not one: a value outside the offered ones, or a dotted flag that is no boolean. */
+export function gridStepOf(grid: Grid): number | null {
   if (!GRID_VALUES.some((value) => value === grid.value)) return null;
   if (grid.dotted !== undefined && typeof grid.dotted !== "boolean") return null;
   const base = (4 * TICKS_PER_QUARTER) / grid.value;
@@ -98,6 +99,12 @@ function gridAllowed(score: Score, step: number, constraints: DialectConstraints
   if (unitTicks === undefined || !Number.isInteger(step) || step <= 0) return false;
   if (!Number.isInteger(unitTicks) || unitTicks <= 0 || step % unitTicks !== 0) return false;
   return canWriteUnits(step / unitTicks, constraints.durations);
+}
+
+/** Whether the note commands take this grid on this score: the one check they and the editor's grid control share. */
+export function isGridAllowed(score: Score, grid: Grid, constraints: DialectConstraints): boolean {
+  const step = gridStepOf(grid);
+  return step !== null && gridAllowed(score, step, constraints);
 }
 
 /**

@@ -3,9 +3,11 @@
 
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
+import { type Grid, isGridAllowed } from "./commands-notes";
 import { isProjectCommand, type ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
+import { DEFAULT_GRID, normalizeGrid, sameGrid } from "./grid";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
@@ -60,6 +62,8 @@ export interface SessionOptions {
   editable?: boolean;
   /** The view shown first. Defaults to "arrangement". */
   activeView?: ViewName;
+  /** The grid the editing starts on. Defaults to 1/4. A value the editor does not offer is a RangeError. */
+  grid?: Grid;
 }
 
 /**
@@ -81,11 +85,12 @@ export type SessionChangeCause =
   | "view"
   | "replace"
   | "active-view"
-  | "rejected-text";
+  | "rejected-text"
+  | "grid";
 
 /**
- * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view or of
- * the rejected text touches none of the four booleans and is told by its cause alone.
+ * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view, of
+ * the rejected text or of the grid touches none of the four booleans and is told by its cause alone.
  */
 export interface SessionChange {
   readonly cause: SessionChangeCause;
@@ -138,6 +143,11 @@ export interface EditingSession {
    */
   readonly rejectedText: RejectedText | null;
   /**
+   * The time grid that notes move, resize and land on, and that the insertion point steps by. UI state of the session
+   * like the selection: not in the project and not in the history. It starts at 1/4.
+   */
+  readonly grid: Grid;
+  /**
    * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
    * diagnostics; a command that leaves the project as it was adds no step and announces nothing. A command that comes
    * back with notices only is taken: the project changes as one step, and the result is `ok` with the notices in
@@ -168,6 +178,16 @@ export interface EditingSession {
   setActiveView(name: ViewName): void;
   /** Says which text the text view holds that was not taken, or that it holds none (null). Does nothing when the text is the same. */
   setRejectedText(next: RejectedText | null): void;
+  /**
+   * Sets the grid. A value the editor does not offer is a RangeError. It does not ask the score: a grid the score cannot
+   * write is refused by the note commands with `grid-not-allowed`, and `allowsGrid` says beforehand.
+   */
+  setGrid(grid: Grid): void;
+  /**
+   * Whether the score the session reads can be edited on this grid: the check the note commands make, run once for a
+   * control to ask. False while the score cannot be read.
+   */
+  allowsGrid(grid: Grid): boolean;
   /** Changes the view state by the keys given. Zoom is kept within its range, scroll at zero or more. */
   setView(patch: Partial<ViewState>): void;
   /**
@@ -208,6 +228,13 @@ function reportListenerError(error: unknown): void {
   });
 }
 
+function startingGrid(grid: Grid | undefined): Grid {
+  if (grid === undefined) return DEFAULT_GRID;
+  const normal = normalizeGrid(grid);
+  if (normal === null) throw new RangeError("The grid is not one the editor offers.");
+  return normal;
+}
+
 export function createEditingSession(options: SessionOptions): EditingSession {
   let project = options.project;
   /** The history keeps whole song projects, oldest first; the current project is in neither list. */
@@ -218,6 +245,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   let insertionPoint: InsertionPoint | null = null;
   let activeView: ViewName = options.activeView ?? "arrangement";
   let rejectedText: RejectedText | null = null;
+  let grid: Grid = startingGrid(options.grid);
   let view: ViewState = {
     zoom: 1,
     scrollLeft: 0,
@@ -389,6 +417,24 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       if (next === null ? rejectedText === null : rejectedText?.text === next.text) return;
       rejectedText = next;
       announce("rejected-text", {});
+    },
+    get grid() {
+      return grid;
+    },
+    setGrid(next) {
+      const normal = normalizeGrid(next);
+      if (normal === null) throw new RangeError("The grid is not one the editor offers.");
+      if (sameGrid(normal, grid)) return;
+      grid = normal;
+      announce("grid", {});
+    },
+    allowsGrid(candidate) {
+      const found = read();
+      if (found.kind !== "score") return false;
+      return withDialect(
+        (dialect) => isGridAllowed(found.score, candidate, dialect.constraints),
+        () => false,
+      );
     },
     checkScoreText(text) {
       return withDialect<ReadonlyArray<Diagnostic>>(

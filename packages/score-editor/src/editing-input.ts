@@ -1,8 +1,10 @@
 // ABOUTME: The editing input layer: what a key or a click means for an editing session, with no DOM and no event objects.
 // ABOUTME: The view parts turn their events into these inputs, so a host's own views get the same keys and clicks.
 
-import { beatLineAfter, beatLineBefore, gridTicks, nearestBeatLine } from "./arrangement";
+import { gridTicks } from "./arrangement";
+import { gridStepOf } from "./commands-notes";
 import type { Diagnostic } from "./diagnostics";
+import { gridLineAfter, gridLineBefore, snapToGrid } from "./grid";
 import type { Score } from "./score";
 import {
   clearSelection,
@@ -81,15 +83,20 @@ function historyActionOf(input: EditingKeyInput): "undo" | "redo" | null {
 
 /**
  * Where an insertion point key sends the point, in ticks, or null when the key is not one or has nothing to act on:
- * Left and Right step to the neighbouring beat line and need a point, Home and End go to the ends of the score.
+ * Left and Right step to the neighbouring line of the grid and need a point, Home and End go to the ends of the score.
  */
-function insertionPointTargetOf(score: Score, point: InsertionPoint | null, input: EditingKeyInput): number | null {
+function insertionPointTargetOf(
+  score: Score,
+  step: number,
+  point: InsertionPoint | null,
+  input: EditingKeyInput,
+): number | null {
   if (input.ctrlKey === true || input.metaKey === true || input.shiftKey === true || input.altKey === true) return null;
   if (input.key === "Home") return 0;
   if (input.key === "End") return gridTicks(score);
   if (point === null) return null;
-  if (input.key === "ArrowLeft") return beatLineBefore(score.bars, point.tick);
-  if (input.key === "ArrowRight") return beatLineAfter(score.bars, point.tick);
+  if (input.key === "ArrowLeft") return gridLineBefore(point.tick, step);
+  if (input.key === "ArrowRight") return gridLineAfter(point.tick, step, gridTicks(score));
   return null;
 }
 
@@ -143,7 +150,8 @@ function clickEmpty(session: EditingSession, tick: number): EditingInputResult {
   const score = readableScore(session);
   if (score === null || !Number.isFinite(tick)) return IGNORED;
   session.select([]);
-  session.setInsertionPoint({ tick: nearestBeatLine(score.bars, tick) });
+  const step = gridStepOf(session.grid) ?? 1;
+  session.setInsertionPoint({ tick: snapToGrid(tick, step, gridTicks(score)) });
   return HANDLED;
 }
 
@@ -163,7 +171,8 @@ function pressKey(session: EditingSession, input: EditingKeyInput): EditingInput
   const selecting = selectionActionOf(input);
   if (selecting !== null) return handleEditingInput(session, { type: selecting });
   const score = readableScore(session);
-  const tick = score === null ? null : insertionPointTargetOf(score, session.insertionPoint, input);
+  const step = gridStepOf(session.grid) ?? 1;
+  const tick = score === null ? null : insertionPointTargetOf(score, step, session.insertionPoint, input);
   if (tick === null) return IGNORED;
   session.setInsertionPoint({ tick });
   return HANDLED;
