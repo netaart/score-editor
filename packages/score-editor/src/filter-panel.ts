@@ -19,6 +19,8 @@ interface Applied {
   readonly ids: ReadonlySet<string>;
   /** How many conditions were on. With none, the panel selected nothing. */
   readonly conditions: number;
+  /** Whether a condition that was on cannot match any note: a range with its ends crossed, or a count that is not one. */
+  readonly invalid: boolean;
   readonly notes: number;
   readonly total: number;
 }
@@ -313,7 +315,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     conditions.invert = invert.checked;
   }
 
-  function currentFilter(score: Score): { filter: NoteFilter; count: number } {
+  function currentFilter(score: Score): { filter: NoteFilter; count: number; invalid: boolean } {
     const filter: {
       pitch?: { min: number; max: number };
       time?: { from?: number; to?: number };
@@ -323,31 +325,39 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       invert?: boolean;
     } = {};
     let conditionsOn = 0;
+    let invalid = false;
     const { pitch: p } = conditions;
     if (p.on && p.min !== null && p.max !== null) {
       filter.pitch = { min: p.min, max: p.max };
       conditionsOn += 1;
+      if (p.min > p.max) invalid = true;
     }
     if (conditions.time.on) {
       const from = barStart(score.bars, conditions.time.first);
       const to = barEnd(score.bars, conditions.time.last);
       filter.time = { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
       conditionsOn += 1;
+      if (from !== undefined && to !== undefined && from >= to) invalid = true;
     }
     if (conditions.length.on && conditions.length.min !== null && conditions.length.max !== null) {
       filter.duration = { min: conditions.length.min, max: conditions.length.max };
       conditionsOn += 1;
+      if (conditions.length.min > conditions.length.max) invalid = true;
     }
     if (conditions.key.on) {
       filter.key = conditions.key.mode;
       conditionsOn += 1;
     }
-    if (conditions.count.on && conditions.count.every !== null && conditions.count.skip !== null) {
-      filter.count = { every: conditions.count.every, skip: conditions.count.skip };
+    if (conditions.count.on) {
+      // A number that is missing is not a count, and a count that is not one takes no note.
+      const every = conditions.count.every ?? Number.NaN;
+      const skip = conditions.count.skip ?? Number.NaN;
+      filter.count = { every, skip };
       conditionsOn += 1;
+      if (!Number.isInteger(every) || every < 1 || !Number.isInteger(skip) || skip < 0) invalid = true;
     }
     if (conditions.invert) filter.invert = true;
-    return { filter, count: conditionsOn };
+    return { filter, count: conditionsOn, invalid };
   }
 
   let applied: Applied | null = null;
@@ -357,7 +367,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   function apply(): void {
     const { reading } = session;
     if (reading.kind !== "score") return;
-    const { filter, count } = currentFilter(reading.score);
+    const { filter, count, invalid } = currentFilter(reading.score);
     applying = true;
     try {
       session.select(count === 0 ? [] : filterNotes(reading.score, filter));
@@ -368,6 +378,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       scoreText: session.project.score,
       ids: new Set(session.selection),
       conditions: count,
+      invalid,
       notes: countNotes(reading.score, session.selection),
       total: summaryOf(reading.score).notes,
     };
@@ -385,9 +396,11 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       state = "stale";
       text = t.statusStale;
     } else if (applied.notes === 0) {
-      text = t.statusNone;
+      text = applied.invalid ? t.statusNoneInvalid : t.statusNone;
     } else {
-      text = t.statusSelected(applied.notes, applied.total);
+      text = session.view.editable
+        ? t.statusSelected(applied.notes, applied.total)
+        : t.statusSelectedReadOnly(applied.notes, applied.total);
     }
     status.dataset.state = state;
     if (text === statusShown && !force) return;

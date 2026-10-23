@@ -37,10 +37,15 @@ export interface FilterMessages {
   invertHint: string;
   reapply: string;
   done: string;
-  /** The status line: nothing chosen yet, nothing matched, how many matched, and that what was selected is out of date. */
+  /**
+   * The status line: nothing chosen yet, nothing matched (and, when a range or a number cannot match any note, that),
+   * how many matched (and, while read-only, that no frame is drawn), and that what was selected is out of date.
+   */
   statusIdle: string;
   statusNone: string;
+  statusNoneInvalid: string;
   statusSelected(selected: number, total: number): string;
+  statusSelectedReadOnly(selected: number, total: number): string;
   statusStale: string;
 }
 
@@ -75,8 +80,12 @@ const en: FilterMessages = {
   reapply: "Re-apply",
   done: "Done",
   statusIdle: "Pick a condition to select notes.",
-  statusNone: "No note matches these conditions.",
+  statusNone: "No note matches these conditions. Nothing is selected.",
+  statusNoneInvalid:
+    "No note matches: a range has its ends the wrong way round, or a number is not valid. Nothing is selected.",
   statusSelected: (selected, total) => `${selected} of ${total} ${total === 1 ? "note" : "notes"} selected`,
+  statusSelectedReadOnly: (selected, total) =>
+    `${selected} of ${total} ${total === 1 ? "note" : "notes"} selected. This view is read-only, so the notes are not framed.`,
   statusStale: "The score or the selection has changed since. Re-apply to select again.",
 };
 
@@ -111,8 +120,10 @@ const zh: FilterMessages = {
   reapply: "重新应用",
   done: "完成",
   statusIdle: "选一个条件来选中音符。",
-  statusNone: "没有音符符合这些条件。",
+  statusNone: "没有音符符合这些条件，没有选中任何音符。",
+  statusNoneInvalid: "没有音符符合：有范围两端颠倒，或有数字不成立。没有选中任何音符。",
   statusSelected: (selected, total) => `已选中 ${selected} 个音符，共 ${total} 个`,
+  statusSelectedReadOnly: (selected, total) => `已选中 ${selected} 个音符，共 ${total} 个。只读状态不画选中框。`,
   statusStale: "乐谱或选中的音符已变，点“重新应用”再选一次。",
 };
 
