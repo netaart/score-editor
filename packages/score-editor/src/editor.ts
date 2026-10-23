@@ -7,6 +7,7 @@ import { mountChordTrack } from "./chord-track";
 import { mountCutNotice } from "./cut-notice";
 import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
+import { createDraftBinding, type DraftBinding, type DraftTarget, sameOriginal } from "./draft-binding";
 import { installEditKeys } from "./edit-keys";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
@@ -40,6 +41,7 @@ export class Editor implements MountedEditor {
   private readonly releaseStyles: () => void;
   private readonly abort = new AbortController();
   private readonly session: EditingSession;
+  private readonly drafts: DraftBinding;
   private readonly scroller: HTMLElement;
   private readonly content: HTMLElement;
   private readonly top: HTMLElement;
@@ -79,10 +81,15 @@ export class Editor implements MountedEditor {
       language: options.language,
       editable: options.editable !== false,
     });
+    // A keeper opening keeps the session read-only until it is ready, so no edit can start before the restore has run.
+    this.drafts = createDraftBinding(this.session, (notice) => this.options.notify?.(notice));
+    this.drafts.follow(this.draftTarget());
+    this.applyEditable();
     this.reading = this.session.reading;
     this.language = this.session.view.language;
     // The frame hears a change before the parts do, so it shows the scroller and sets up the tracks they draw into.
     this.unsubscribe.push(this.session.subscribe((change) => this.beforeParts(change)));
+    this.unsubscribe.push(this.drafts.subscribe(() => this.applyEditable()));
 
     this.root = create(doc, "div", "sce-root sce-editor");
     host.appendChild(this.root);
@@ -134,7 +141,13 @@ export class Editor implements MountedEditor {
     if (patch.language !== undefined) this.session.setView({ language: patch.language });
     if (this.options.editable !== before.editable) this.applyEditable();
     if (patch.dialects !== undefined) this.session.replaceDialects(patch.dialects);
-    if (patch.project !== undefined) this.session.replaceProject(patch.project);
+    const target = this.draftTarget();
+    this.drafts.follow(target, () => {
+      if (patch.project === undefined) return;
+      // While drafts are kept, the host passing its original again is not news: the editor holds the user's edits.
+      if (target !== null && sameOriginal(before.project, patch.project)) return;
+      this.session.replaceProject(patch.project);
+    });
   }
 
   destroy(): void {
@@ -145,6 +158,7 @@ export class Editor implements MountedEditor {
     for (const part of [...this.parts, ...this.tracks]) part.destroy();
     this.root.remove();
     this.releaseStyles();
+    this.drafts.destroy();
     this.onDestroy();
   }
 
@@ -160,8 +174,14 @@ export class Editor implements MountedEditor {
     this.scroller.setAttribute("aria-label", t.title);
   }
 
+  /** The keeper the options call for: one while the editor is editable and the host gave a store. */
+  private draftTarget(): DraftTarget | null {
+    const { drafts, project } = this.options;
+    return drafts !== undefined && this.editable ? { store: drafts, original: project } : null;
+  }
+
   private applyEditable(): void {
-    this.session.setView({ editable: this.editable });
+    this.session.setView({ editable: this.editable && this.drafts.status !== "opening" });
   }
 
   /** A command the user's keys caused was refused and nothing changed: tell the host once, in the current language. */
