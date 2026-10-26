@@ -244,6 +244,31 @@ test.describe("dragging an edge", () => {
     expect(await noteList(harness)).toEqual([vocal(0, 2 * BEAT, MIDDLE_C), vocal(4 * BEAT, 4 * BEAT, 67)]);
   });
 
+  test("a wide note has grips and a narrow one does not, for either pointer, and a zoom moves the line", async ({
+    page,
+    harness,
+  }) => {
+    await openTrack(harness, vocalOnly("C4D1z11|G16|"));
+    await harness.layout.select(["Vocal:0", `Vocal:${BEAT}`]);
+    const wide = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
+    const narrow = block(page, "D4, bar 1 beat 2, length 0.25 beats, selected");
+    const gripped = (target: Locator) => target.evaluate((el) => getComputedStyle(el, "::after").content !== "none");
+
+    // At the default zoom a beat is wide enough for a grip at either pointer, and a sixteenth is not.
+    await expect(wide).toBeVisible();
+    await expect(narrow).toBeVisible();
+    expect(await gripped(wide)).toBe(true);
+    expect(await gripped(narrow)).toBe(false);
+
+    // Zoomed out, the beat falls under both pointers' threshold and loses its grips.
+    await harness.layout.setView({ zoom: 0.5 });
+    expect(await gripped(wide)).toBe(false);
+
+    // Zoomed in, the sixteenth rises above both and gains them.
+    await harness.layout.setView({ zoom: 4 });
+    expect(await gripped(narrow)).toBe(true);
+  });
+
   test("marks the zones with the resize cursor and the body with the move cursor", async ({
     page,
     harness,
