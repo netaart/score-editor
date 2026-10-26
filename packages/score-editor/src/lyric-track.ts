@@ -218,8 +218,10 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
       (button) => !button.hidden,
     );
     if (scroller === null || head === null || input === null || add === undefined) return;
+    // The field has the focus, and its ring is a 2px outline 2px outside its box: both must stay inside the scroller.
+    const ring = 4;
     const frame = scroller.getBoundingClientRect();
-    const maxBottom = frame.top + scroller.clientHeight;
+    const maxBottom = frame.top + scroller.clientHeight - ring;
     const inputBox = input.getBoundingClientRect();
     const addBox = add.getBoundingClientRect();
     const bottom = Math.max(inputBox.bottom, addBox.bottom);
@@ -229,7 +231,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     const headAfter = head.getBoundingClientRect();
     const inputAfter = input.getBoundingClientRect();
     const addAfter = add.getBoundingClientRect();
-    const topAfter = Math.min(inputAfter.top, addAfter.top);
+    const topAfter = Math.min(inputAfter.top, addAfter.top) - ring;
     const minTop = headAfter.bottom + 6;
     const lift = topAfter < minTop ? topAfter - minTop : 0;
     if (Math.abs(lift) > 0.5) scroller.scrollTop += lift;
