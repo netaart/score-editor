@@ -138,6 +138,18 @@ async function insideRoot(page: Page, target: Locator) {
   );
 }
 
+/** Scrolls the chrome so the conflict sentence is in view inside the root, as its own scroller lets a person do. */
+async function showConflictSentence(page: Page, harness: Harness) {
+  await page.locator(".sce-chrome").evaluate((element) => {
+    const sentence = element.querySelector<HTMLElement>('[role="alert"]');
+    if (!sentence) return;
+    const frame = element.getBoundingClientRect();
+    const at = sentence.getBoundingClientRect();
+    element.scrollTop += at.top - frame.top - (element.clientHeight - at.height) / 2;
+  });
+  await harness.frames(1);
+}
+
 test.describe("C1: the music stays reachable", () => {
   for (const height of [420, 288] as const) {
     for (const state of ["editable", "read-only", "conflict", "conflict-cut-notice"] as const) {
@@ -151,6 +163,7 @@ test.describe("C1: the music stays reachable", () => {
         expect(window.value).toBeGreaterThanOrEqual(3 * window.row - 0.5);
 
         if (state === "conflict" || state === "conflict-cut-notice") {
+          await showConflictSentence(page, harness);
           expect(await insideRoot(page, conflictSentence(page))).toBe(true);
         }
 
@@ -166,15 +179,16 @@ test.describe("C1: the music stays reachable", () => {
 });
 
 test.describe("C6: the pin rule", () => {
-  test("pins the header at 420 and lets it scroll away at 288, in both directions", async ({
+  test("pins the header only while the lane keeps six rows, in both directions", async ({
     page,
     harness,
     isMobile,
   }) => {
     test.skip(!isMobile, "the phone project's width is the one the rule was measured at");
     await page.setViewportSize({ width: 412, height: 800 });
+    // At 420 the four-row toolbar leaves 255px of scroller, below the six-row threshold; 440 is where it pins.
+    await harness.stageHeight(440);
     await harness.mount({ score: { text: QUARTERS } });
-    await harness.stageHeight(420);
     await harness.frames(2);
 
     const scroller = arrangement(page);
@@ -191,12 +205,15 @@ test.describe("C6: the pin rule", () => {
     at = await box(ruler);
     expect(at.y).toBeCloseTo(frame.y, 0);
 
+    await harness.stageHeight(420);
+    await expect.poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1).toBe(true);
+
     await harness.stageHeight(288);
     await expect.poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1).toBe(true);
     frame = await box(scroller);
     expect((await box(page.locator(".sce-track-head").first())).y).toBeCloseTo(frame.y, 0);
 
-    await harness.stageHeight(420);
+    await harness.stageHeight(440);
     await expect.poll(async () => Math.abs((await box(ruler)).y - (await box(scroller)).y)).toBeLessThan(1);
 
     await harness.stageHeight(288);
@@ -266,6 +283,7 @@ test.describe("C11: the existing guards", () => {
     expect(window).not.toBeNull();
     if (!window) return;
     expect(window.value).toBeGreaterThanOrEqual(3 * window.row - 0.5);
+    await showConflictSentence(page, harness);
     expect(await insideRoot(page, conflictSentence(page))).toBe(true);
 
     await tapFirstVisibleNote(page);
