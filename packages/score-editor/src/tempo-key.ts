@@ -2,7 +2,7 @@
 // ABOUTME: Each change is one command and one history step; a refusal is said as every refusal is, and the control goes back to the project's value.
 import type { ScoreCommand } from "./commands";
 import type { Diagnostic } from "./diagnostics";
-import { create } from "./dom";
+import { create, hasFocus } from "./dom";
 import { messagesFor } from "./i18n";
 import { lineIcon } from "./icons";
 import type { LiveRegion } from "./live-region";
@@ -20,14 +20,8 @@ export interface TempoKeyHooks {
   refused(diagnostics: ReadonlyArray<Diagnostic>): void;
   /** The words a taken change is told in, for a screen reader. */
   live: LiveRegion;
-  /** Shows what a taken command itself had to say, and gives back the sentence. */
-  noticed(notices: ReadonlyArray<Diagnostic>): string;
-}
-
-/** Whether `field` has the focus: a value typed into it is the person's, and a redraw does not take it away. */
-function hasFocus(field: HTMLElement): boolean {
-  const scope = field.getRootNode();
-  return (scope instanceof Document || scope instanceof ShadowRoot) && scope.activeElement === field;
+  /** Shows what a taken command itself had to say, and gives back the sentence it drew. */
+  showNotices(notices: ReadonlyArray<Diagnostic>): string;
 }
 
 /** The key in force at the start of the score: the last key stated at tick 0, as the marks row shows it. */
@@ -99,7 +93,7 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
       return;
     }
     const news = newsOf(session, result.diagnostics);
-    const sentence = news.length > 0 ? hooks.noticed(news) : "";
+    const sentence = news.length > 0 ? hooks.showNotices(news) : "";
     hooks.live.say(sentence === "" ? done() : `${done()} ${sentence}`);
   }
 
@@ -116,10 +110,6 @@ export function mountTempoKeyControls(parent: HTMLElement, session: EditingSessi
     "change",
     () => {
       const bpm = tempo.valueAsNumber;
-      if (Number.isNaN(bpm)) {
-        draw(true);
-        return;
-      }
       run({ type: "setTempo", bpm }, () => messagesFor(session.view.language).tempoSet(bpm));
     },
     { signal },

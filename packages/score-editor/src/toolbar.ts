@@ -1,7 +1,6 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
-import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create, requireDom } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
@@ -9,6 +8,7 @@ import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import { mountProjectControl } from "./project-control";
+import { mountProjectNoticeStrip } from "./project-notice-strip";
 import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -99,27 +99,16 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
   // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
   // project changes by anything else, as the text view keeps its notice.
-  const strip = create(doc, "p", "sce-notice sce-project-notice", root);
-  strip.setAttribute("role", "note");
-  strip.hidden = true;
+  const noticeStrip = mountProjectNoticeStrip(root, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
-  let told: ReadonlyArray<Diagnostic> = [];
-  function drawStrip(): void {
-    strip.textContent = told.map((notice) => formatDiagnostic(notice, session.view.language)).join(" ");
-    strip.hidden = told.length === 0;
-  }
   const song = options.tempoKey
     ? mountTempoKeyControls(row, session, {
         refused,
         live,
-        noticed(notices) {
-          told = notices;
-          drawStrip();
-          return strip.textContent ?? "";
-        },
+        showNotices: (notices) => noticeStrip.show(notices),
       })
     : null;
   const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
@@ -170,10 +159,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
 
   function draw(): void {
-    if (session.view.language !== language) {
-      applyLanguage();
-      drawStrip();
-    }
+    if (session.view.language !== language) applyLanguage();
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
     const deletable = canDeleteSelection(session);
@@ -193,10 +179,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
 
   draw();
   const unsubscribe = session.subscribe((change) => {
-    if (change.project && told.length > 0) {
-      told = [];
-      drawStrip();
-    }
+    if (change.project) noticeStrip.clear();
     draw();
   });
   let destroyed = false;
@@ -209,6 +192,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      noticeStrip.destroy();
       song?.destroy();
       projectControl?.destroy();
       synth?.destroy();
