@@ -216,7 +216,7 @@ describe("the names a chord picker offers", () => {
     expect(choices.letters).toEqual([{ letter: "C", roots: ["C"] }]);
   });
 
-  it("build only names the song2 command accepts: every root with every quality, and every bass", () => {
+  it("build only names the command accepts: every root with every quality and bass, for song2 and a vocabulary with a slash quality", () => {
     const session = open({ score: CHORDED });
     const choices = chordChoices(song2Dialect.constraints.chords);
     const roots = choices.letters.flatMap((found) => found.roots);
@@ -229,28 +229,28 @@ describe("the names a chord picker offers", () => {
 
     expect(names).toHaveLength(35 * 15 * 2);
     expect(refused).toEqual([]);
-  });
 
-  it("build only names the command accepts for a vocabulary with a slash quality", () => {
     const constraints = {
       ...song2Dialect.constraints,
       chords: { roots: ["C", "C#"], qualities: ["", "6/9"], slashBass: true },
     };
-    const session = createEditingSession({
+    const slashSession = createEditingSession({
       project: { ...project, score: CHORDED },
       dialects: createDialectRegistry([{ ...song2Dialect, constraints }]),
     });
-    const choices = chordChoices(constraints.chords);
-    const roots = choices.letters.flatMap((found) => found.roots);
-    const names = [
-      ...roots.flatMap((root) => choices.qualities.map((quality) => `${root}${quality}`)),
-      ...roots.flatMap((bass) => choices.qualities.map((quality) => `C${quality}/${bass}`)),
+    const slashChoices = chordChoices(constraints.chords);
+    const slashRoots = slashChoices.letters.flatMap((found) => found.roots);
+    const slashNames = [
+      ...slashRoots.flatMap((root) => slashChoices.qualities.map((quality) => `${root}${quality}`)),
+      ...slashRoots.flatMap((bass) => slashChoices.qualities.map((quality) => `C${quality}/${bass}`)),
     ];
 
-    expect(choices.qualities).toEqual([""]);
-    expect(names).not.toContain("C6/9");
-    const refused = names.filter((name) => !session.dispatch({ type: "setChord", noteId: "Vocal:256", name }).ok);
-    expect(refused).toEqual([]);
+    expect(slashChoices.qualities).toEqual([""]);
+    expect(slashNames).not.toContain("C6/9");
+    const slashRefused = slashNames.filter(
+      (name) => !slashSession.dispatch({ type: "setChord", noteId: "Vocal:256", name }).ok,
+    );
+    expect(slashRefused).toEqual([]);
   });
 
   it("offer only the qualities the grammar can write for every offered root", () => {
