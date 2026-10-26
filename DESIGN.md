@@ -547,7 +547,7 @@ Pill, 1px strong line, muted text, label size, at the end of the toolbar. It app
 
 ### Focus treatment
 
-Interactive parts (buttons, menu items) get a 2px accent outline with 2px offset on keyboard focus, and so does a note reached by keyboard, outside the selection frame, so the ring (where the keys act) and the frame (what Delete takes) read as two things. A click or tap does not draw the ring. The text box and the items of the problem list draw the ring inside their edge (see Text view), and the chord cursor draws it 4px inside its frame (see Chord editing), because those containers clip an outside ring. The scroller is focusable; because its own outline would be hidden behind the sticky header and pitch column, a 2px accent ring is drawn over the whole body instead.
+Interactive parts (buttons, menu items) get a 2px accent outline with 2px offset on keyboard focus, and so does a note reached by keyboard, outside the selection frame, so the ring (where the keys act) and the frame (what Delete takes) read as two things. A click or tap does not draw the ring. The text box and the items of the problem list draw the ring inside their edge (see Text view), and the chord cursor draws it 4px inside its frame (see Chord editing), because those containers clip an outside ring. The scroller is focusable; because its own outline would be hidden behind the sticky header and pitch column, a 2px accent ring is drawn over the whole body instead. The browser's own tap highlight is turned off for every control in the editor's root (`-webkit-tap-highlight-color: transparent`, one rule; a note's is off while it can be selected); the states the editor draws instead are this keyboard ring, the 6% text hover fill and 10% open fill of a menu row, the 12% text fill and text-colour border of a pressed toggle (the pencil, the shown view, a chosen chip), and the selection frame on a tapped note (see Selection).
 
 ### Announcements
 
@@ -813,11 +813,13 @@ bring the changes back and the warning's "You can't undo this." is true.
 
 While a required model input is missing, the handoff trigger names it: **Add style first…**, **Add lyrics first…**, or
 **Add 2 required inputs…**. Style, score mode and seed open the Project panel on that field; lyrics show the arrangement
-if another view is shown and open the lyric track's new-line editor on its text box, with the first row below the
-track's pinned head. The Project panel's hint on a required empty field starts **Required to regenerate.** The editor
-reads no model declaration. The handoff for a score file saves first when the file is dirty; the review says **Saves
-tune.abc first, then sends the song.**, and only in that dirty-file case. It keeps the callback closed on a conflict or
-a failure, says **Not sent: …** through the host's `handoff-not-sent` notice and the toolbar's live region, and writes
+if another view is shown and open the lyric track's new-line editor on its text box, scrolling the editor's own scroller
+so the whole box and its Add button lie inside its visible box, below the track's pinned head; the focus moves into the
+box and the page does not scroll. The Project panel's hint on a required empty field starts **Required to regenerate.**
+The editor reads no model declaration. The handoff for a score file saves first when the file is dirty; the review says
+**Saves tune.abc first, then sends the song.**, and only in that dirty-file case. It keeps the callback closed on a
+conflict or a failure, says **Not sent: …** through the host's `handoff-not-sent` notice and the toolbar's live region,
+and writes
 the file's name as the instruction's title. The decisions and what each rests on are in the ticket's shape document
 and report.
 

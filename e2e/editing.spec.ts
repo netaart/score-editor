@@ -314,6 +314,21 @@ test.describe("the toolbar part", () => {
   });
 });
 
+test.describe("the browser's tap highlight", () => {
+  test("is off for a toolbar button, a menu choice and a note", async ({ page, harness, press, isMobile }) => {
+    test.skip(!isMobile, "a tap highlight exists on the phone project");
+    await openTrack(harness);
+    const tap = (target: Locator): Promise<string> =>
+      target.evaluate((el) => getComputedStyle(el).getPropertyValue("-webkit-tap-highlight-color"));
+
+    expect(await tap(toolbar(page).getByRole("button", { name: "Undo", exact: true }))).toBe("rgba(0, 0, 0, 0)");
+    await press(gridButton(page));
+    expect(await tap(gridItem(page, "1/4"))).toBe("rgba(0, 0, 0, 0)");
+    await page.keyboard.press("Escape");
+    expect(await tap(laneOf(page).getByRole("listitem").first())).toBe("rgba(0, 0, 0, 0)");
+  });
+});
+
 /** Every note of the track as it stands, by name: where it is and how wide, for telling that nothing else moved. */
 async function layoutOf(page: Page, names: string[]) {
   const found: Record<string, { x: number; width: number }> = {};

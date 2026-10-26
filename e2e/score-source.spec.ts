@@ -757,6 +757,91 @@ test.describe("the handoff with a score file", () => {
     expect(firstRow.y).toBeGreaterThanOrEqual(head.y + head.height - 1);
   });
 
+  test("the lyrics gate's field and its Add button lie inside the scroller", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.setTimeout(180_000);
+    const cases: ReadonlyArray<readonly [number, "en" | "zh"]> = isMobile
+      ? [
+          [412, "en"],
+          [412, "zh"],
+          [320, "en"],
+          [320, "zh"],
+        ]
+      : [
+          [1280, "en"],
+          [1280, "zh"],
+        ];
+    for (const [width, language] of cases) {
+      await page.setViewportSize({ width, height: isMobile ? 839 : 720 });
+      await harness.stageHeight(420);
+      await openFile(harness, { handoff: true, requiredInputs: ["lyrics"], language });
+      const where = `${width} ${language}`;
+      await press(
+        page
+          .getByRole("group", { name: language === "zh" ? "视图" : "View" })
+          .getByRole("button", { name: language === "zh" ? "五线谱" : "Staff", exact: true }),
+      );
+      const required = page.getByRole("button", {
+        name: language === "zh" ? "先补歌词…" : "Add lyrics first…",
+        exact: true,
+      });
+      await expect(required).toBeVisible();
+      await press(required);
+
+      await expect(page.getByRole("region", { name: language === "zh" ? "编曲视图" : "Arrangement" })).toBeVisible();
+      const entry = page.getByRole("textbox", {
+        name: language === "zh" ? "新歌词行的文字" : "New lyric line text",
+        exact: true,
+      });
+      await expect(entry).toBeFocused();
+      await harness.frames(1);
+
+      const add = page
+        .locator(".sce-lyric-editor")
+        .getByRole("button", { name: language === "zh" ? "添加" : "Add", exact: true });
+      const scroller = await page.locator(".sce-scroller").evaluate((el) => {
+        const frame = el.getBoundingClientRect();
+        return {
+          left: frame.left,
+          right: frame.left + el.clientWidth,
+          top: frame.top,
+          bottom: frame.top + el.clientHeight,
+        };
+      });
+      const head = await box(page.locator(".sce-part-lyric-track .sce-lyric-head"));
+      const inputBox = await box(entry);
+      const addBox = await box(add);
+      const inside = (area: { x: number; y: number; width: number; height: number }): boolean =>
+        area.x >= scroller.left - 0.5 &&
+        area.x + area.width <= scroller.right + 0.5 &&
+        area.y >= scroller.top - 0.5 &&
+        area.y + area.height <= scroller.bottom + 0.5;
+      expect(inside(inputBox), `${where}: the input is inside the scroller`).toBe(true);
+      expect(inside(addBox), `${where}: the Add button is inside the scroller`).toBe(true);
+      expect(inputBox.y, `${where}: the input is below the pinned head`).toBeGreaterThanOrEqual(
+        head.y + head.height - 0.5,
+      );
+      expect(addBox.y, `${where}: the Add button is below the pinned head`).toBeGreaterThanOrEqual(
+        head.y + head.height - 0.5,
+      );
+      const hit = await page.evaluate(
+        ({ x, y }) => {
+          const found = document.elementFromPoint(x, y);
+          const field = document.querySelector(".sce-lyric-editor input.sce-lyric-input:not(.sce-lyric-bar)");
+          return found !== null && field !== null && (found === field || field.contains(found));
+        },
+        { x: inputBox.x + inputBox.width / 2, y: inputBox.y + inputBox.height / 2 },
+      );
+      expect(hit, `${where}: the input is on top at its centre`).toBe(true);
+      expect(await page.evaluate(() => window.scrollY), `${where}: the page did not scroll`).toBe(0);
+      await harness.destroy();
+    }
+  });
+
   test("a conflicted save keeps the handoff closed until the conflict is answered", async ({
     page,
     harness,

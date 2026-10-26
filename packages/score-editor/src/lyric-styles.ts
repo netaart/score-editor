@@ -357,7 +357,7 @@ export const lyricCss = `
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 5px;
 }
 .sce-root .sce-lyric-editor[hidden] {
   display: none;
@@ -441,6 +441,8 @@ export const lyricCss = `
   /* A field smaller than 16px makes a phone's browser zoom the page when the field takes the focus. */
   .sce-root .sce-lyric-input {
     font-size: 16px;
+    /* At 320px the 14em basis would wrap Add onto a second row, where the scroller has no room for both. */
+    flex-basis: 10em;
   }
 }
 
