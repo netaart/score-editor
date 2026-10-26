@@ -11,6 +11,7 @@ import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { pencilMode } from "./pencil-mode";
 import { mountProjectControl } from "./project-control";
 import { mountProjectNoticeStrip } from "./project-notice-strip";
 import { mountSelectionMenu } from "./selection-menu";
@@ -62,6 +63,9 @@ const ARROW = ["5.5,2.5 2.5,5.5 5.5,8.5", "2.5,5.5 9.5,5.5 12.5,7.5 12.5,10.5 9.
 /** A bin: the lid and its handle, then the body. */
 const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11.2,13.5 12,4.5"];
 
+/** A pencil: the body from the point to the eraser, and the line that separates them. */
+const PENCIL = ["3,13 4.5,9 11,2.5 13.5,5 7,11.5 3,13", "9.5,4 12,6.5"];
+
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
  * Select and Grid menus (while it is editable and the arrangement is shown), the read-only badge (while the session is not editable), the view switch when asked, the synth preview control, which is
@@ -95,6 +99,11 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.type = "button";
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
+  const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
+  pencilButton.type = "button";
+  pencilButton.setAttribute("aria-pressed", "false");
+  pencilButton.appendChild(lineIcon(doc, PENCIL));
+  const pencil = pencilMode(session);
   const select = mountSelectionMenu(row, session);
   const grid = mountGridControl(row, session, live);
   const spacer = create(doc, "span", "sce-spacer", row);
@@ -150,6 +159,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     },
     { signal },
   );
+  pencilButton.addEventListener("click", () => pencil.toggle(), { signal });
   installEditKeys(root, session, signal, { ...options, onRefused: refused });
 
   /** What the last draw showed, so a change of zoom or scroll, which this part does not draw, costs nothing here. */
@@ -173,6 +183,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       [undo, t.undo, "Ctrl/Cmd+Z"],
       [redo, t.redo, "Ctrl/Cmd+Shift+Z"],
       [remove, t.delete, "Del/Backspace"],
+      [pencilButton, t.drawNotes, "B"],
     ] as const) {
       button.setAttribute("aria-label", label);
       button.title = `${label} (${keys})`;
@@ -188,13 +199,24 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     const deletable = canEditSelection(session);
     const arrangement = !options.viewSwitch || arrangementShown(session);
     const opening = options.draftKeeper?.status === "opening";
-    const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView, opening].join();
+    const shown = [
+      editable,
+      readable,
+      session.canUndo,
+      session.canRedo,
+      deletable,
+      session.activeView,
+      opening,
+      pencil.on,
+    ].join();
     if (shown === drawn) return;
     drawn = shown;
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
     if (options.viewSwitch) setTitle();
     history.hidden = !editable || !readable;
     remove.hidden = history.hidden || !arrangement;
+    pencilButton.hidden = history.hidden || !arrangement;
+    pencilButton.setAttribute("aria-pressed", String(pencil.on));
     badge.hidden = editable;
     badge.textContent = opening ? t.draftOpening : t.readOnly;
     undo.setAttribute("aria-disabled", String(!session.canUndo));
@@ -207,6 +229,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (change.project) noticeStrip.clear();
     draw();
   });
+  const unsubscribePencil = pencil.subscribe(draw);
   const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {
@@ -215,6 +238,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       destroyed = true;
       abort.abort();
       unsubscribe();
+      unsubscribePencil();
       unsubscribeKeeper?.();
       zoom.destroy();
       views?.destroy();

@@ -38,6 +38,7 @@ interface Drawn {
   readonly score: Score;
   readonly t: Messages;
   readonly lane: HTMLElement;
+  readonly voice: string;
   readonly ticks: number;
   readonly rows: number;
   /** The pitch of the first row, which is the top one. */
@@ -207,6 +208,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           score,
           t,
           lane,
+          voice,
           ticks: gridTicks(score),
           rows: range.hi - range.lo,
           top: range.hi - 1,

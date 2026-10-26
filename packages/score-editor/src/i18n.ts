@@ -191,6 +191,8 @@ export interface Messages {
   restoreDone: string;
   /** Said when the original is back but the stored draft could not be cleared. */
   restoreNotCleared: string;
+  /** The pencil toggle's name; its tooltip adds the B key. */
+  drawNotes: string;
 }
 
 /** A grid the way a menu item and the button name it: the dotted word of the language, then the fraction. */
@@ -392,6 +394,7 @@ const en: Messages = {
   restoreDone: "The original score is back",
   restoreNotCleared:
     "The original score is back, but the saved draft could not be deleted. The next change tries again.",
+  drawNotes: "Draw notes",
 };
 
 const zh: Messages = {
@@ -560,6 +563,7 @@ const zh: Messages = {
   restoreCancel: "取消",
   restoreDone: "已恢复原谱",
   restoreNotCleared: "已恢复原谱，但保存的草稿没能删除。下一次改动会再试。",
+  drawNotes: "画笔",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

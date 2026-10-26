@@ -4,7 +4,9 @@
 import type { Diagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { handleEditingInput } from "./editing-input";
+import { auditionPitch, auditionPitches } from "./note-audition";
 import { type DragChannel, type Grab, grabAt, inputOf, isStill, previewOf } from "./note-drag";
+import { pencilMode } from "./pencil-mode";
 import type { Note } from "./score";
 import type { EditingSession } from "./session";
 
@@ -21,6 +23,8 @@ const TOUCH_SLOP = 10;
 export interface LaneGeometry {
   /** The element whose width is the whole score in ticks and whose height is all the pitch rows. */
   readonly lane: HTMLElement;
+  /** The voice the lane draws, such as `Vocal`. */
+  readonly voice: string;
   readonly ticks: number;
   readonly rows: number;
   /** The pitch of the first row, which is the top one. */
@@ -61,6 +65,10 @@ interface Gesture {
   /** What a drag from this press would take hold of: set only when the press landed on a selected note. */
   readonly grab: Grab | null;
   readonly shift: boolean;
+  /** Alt was down at the press: a move writes copies and leaves the originals. */
+  readonly copy: boolean;
+  /** The pitch offset whose sound this drag has already played, so a slide sounds each new pitch once. */
+  auditioned: number | null;
   /** Where the box started, in ticks and in rows from the top of the lane. */
   readonly anchor: { readonly tick: number; readonly row: number };
   phase: Phase;
@@ -133,6 +141,14 @@ export function installLanePointer(
   let gesture: Gesture | null = null;
   /** The selected note whose edge the mouse is over, when the resize cursor is showing. */
   let edgeCursor: HTMLElement | null = null;
+  /**
+   * The last click of this lane, for a double click or double tap: the browser's own `dblclick` is not sent for touch
+   * on every platform, so the second click at the same note or grid place is the one that draws or deletes.
+   */
+  let lastClick: { time: number; kind: "select" | "clear" | "add" | "delete"; noteId?: string; tick: number } | null =
+    null;
+  /** Whether the last press was a finger's; the browser's own `dblclick` is the mouse's, and touch is timed here. */
+  let touchPointer = false;
 
   /** Takes the resize cursor off the note that had it. */
   function clearEdgeCursor(): void {
@@ -218,7 +234,11 @@ export function installLanePointer(
   function drag(g: Gesture): void {
     if (g.phase !== "dragging" || g.grab === null) return;
     const now = placeIn(g.geometry, g.last.x, g.last.y);
-    if (now) options.preview.show(previewOf(g.grab, g.anchor, now));
+    if (now) {
+      const preview = previewOf(g.grab, g.anchor, now);
+      options.preview.show(preview);
+      if (preview.grab.kind === "move") auditionDrag(g, preview.semitones);
+    }
   }
 
   /** The press on a selected note has moved: the selection is carried by the pointer from here on. */
@@ -227,6 +247,7 @@ export function installLanePointer(
     clearTimeout(g.hold);
     g.phase = "dragging";
     g.geometry.lane.dataset.dragging = g.grab.kind;
+    auditionDrag(g, 0);
     watch(g);
     if (!g.touch) {
       try {
@@ -246,7 +267,10 @@ export function installLanePointer(
     if (g.grab === null || now === null) return;
     const preview = previewOf(g.grab, g.anchor, now);
     if (isStill(preview)) return;
-    const { refused } = handleEditingInput(session, inputOf(preview));
+    const input = g.copy
+      ? ({ type: "copy-notes", timeTicks: preview.timeTicks, semitones: preview.semitones } as const)
+      : inputOf(preview);
+    const { refused } = handleEditingInput(session, input);
     if (refused.length > 0) options.refused(refused);
   }
 
@@ -326,13 +350,67 @@ export function installLanePointer(
     if (device && device.userActivation?.hasBeenActive !== false) device.vibrate?.(10);
   }
 
+  /** The pitch of the row a pointer is on, kept inside the rows the lane draws. */
+  function midiAt(geometry: LaneGeometry, row: number): number {
+    const index = Math.min(geometry.rows - 1, Math.max(0, Math.floor(row)));
+    return geometry.top - index;
+  }
+
+  /** Sounds the pitch of each selected note as the drag would leave it, once for each new pitch offset. */
+  function auditionDrag(g: Gesture, semitones: number): void {
+    if (g.grab?.kind !== "move" || g.auditioned === semitones) return;
+    g.auditioned = semitones;
+    const reading = session.reading;
+    if (reading.kind !== "score") return;
+    const selected = new Set(session.selection);
+    auditionPitches(
+      reading.score.notes
+        .filter((note) => note.midi !== null && selected.has(note.id))
+        .map((note) => (note.midi as number) + semitones),
+    );
+  }
+
   /** A click or tap that came to nothing else. */
   function click(g: Gesture, event: PointerEvent): void {
+    const at = placeIn(g.geometry, event.clientX, event.clientY);
+    if (!at) return;
+    const now = Date.now();
+    const pencil = pencilMode(session);
+    // A tap that lands after a delete can be the same contact being reported twice: it adds nothing.
+    if (lastClick?.kind === "delete" && now - lastClick.time < 450) {
+      lastClick = null;
+      return;
+    }
+    // A second tap right after a pencil action at the same place is that action's release, not a new one.
+    if (
+      pencil.on &&
+      lastClick !== null &&
+      now - lastClick.time < 450 &&
+      ((lastClick.kind === "add" && g.noteId === undefined) || lastClick.kind === "delete") &&
+      Math.abs(lastClick.tick - at.tick) <= 8
+    ) {
+      lastClick = null;
+      return;
+    }
+    const double =
+      g.touch &&
+      lastClick !== null &&
+      now - lastClick.time < 450 &&
+      (g.noteId === undefined
+        ? lastClick.noteId === undefined && Math.abs(lastClick.tick - at.tick) <= 8
+        : lastClick.noteId === g.noteId);
     if (g.noteId !== undefined) {
+      if (double || pencil.on) {
+        const result = handleEditingInput(session, { type: "delete-note", noteId: g.noteId });
+        lastClick = { time: now, kind: "delete", tick: at.tick };
+        if (result.refused.length > 0) options.refused(result.refused);
+        return;
+      }
       const input = g.shift
         ? ({ type: "toggle-note", noteId: g.noteId } as const)
         : ({ type: "click-note", noteId: g.noteId } as const);
       const { handled } = handleEditingInput(session, input);
+      lastClick = double ? null : { time: now, kind: "select", noteId: g.noteId, tick: at.tick };
       // A mouse press has focused the note by now. A touch or pen release comes before the browser moves the focus, so
       // moving it from here would draw the keyboard ring on a tap; the browser focuses the note next, without the ring.
       if (handled && !g.touch) options.focus(g.noteId);
@@ -340,8 +418,21 @@ export function installLanePointer(
     }
     // Shift on empty space is an aim that missed, and must not cost the selection.
     if (g.shift) return;
-    const at = placeIn(g.geometry, event.clientX, event.clientY);
-    if (at) handleEditingInput(session, { type: "click-empty", tick: at.tick });
+    if (pencil.on || double) {
+      const midi = midiAt(g.geometry, at.row);
+      const result = handleEditingInput(session, {
+        type: "add-note",
+        voice: g.geometry.voice,
+        tick: at.tick,
+        midi,
+      });
+      lastClick = { time: now, kind: "add", tick: at.tick };
+      if (result.refused.length > 0) options.refused(result.refused);
+      else auditionPitch(midi);
+      return;
+    }
+    lastClick = { time: now, kind: "clear", tick: at.tick };
+    handleEditingInput(session, { type: "click-empty", tick: at.tick });
   }
 
   root.addEventListener(
@@ -358,6 +449,7 @@ export function installLanePointer(
       const anchor = placeIn(geometry, event.clientX, event.clientY);
       if (!anchor) return;
       const touch = event.pointerType !== "mouse";
+      touchPointer = touch;
       // Only a selected note is taken hold of; Shift toggles it instead, and a press on any other note is a click.
       const grab =
         block && !event.shiftKey && block.hasAttribute("data-selected") ? grabAt(block, event.clientX, touch) : null;
@@ -370,6 +462,8 @@ export function installLanePointer(
         noteId,
         grab,
         shift: event.shiftKey,
+        copy: event.altKey && grab?.kind === "move",
+        auditioned: null,
         anchor,
         phase: "pressed",
         hold: undefined,
@@ -430,6 +524,37 @@ export function installLanePointer(
       }
     },
     { passive: false, signal },
+  );
+
+  // The mouse's own double click: the first click selected or cleared, and this one draws or deletes. Touch is timed in
+  // `click` above, since a phone does not send this event for a double tap on every platform.
+  root.addEventListener(
+    "dblclick",
+    (event) => {
+      if (touchPointer || !session.view.editable || pencilMode(session).on) return;
+      const geometry = options.lane();
+      if (!geometry || !(event.target instanceof Element)) return;
+      event.preventDefault();
+      const block = event.target.closest(".sce-note");
+      const noteId = block ? geometry.owners.get(block) : undefined;
+      if (noteId !== undefined) {
+        const result = handleEditingInput(session, { type: "delete-note", noteId });
+        if (result.refused.length > 0) options.refused(result.refused);
+        return;
+      }
+      const at = placeIn(geometry, event.clientX, event.clientY);
+      if (!at) return;
+      const midi = midiAt(geometry, at.row);
+      const result = handleEditingInput(session, {
+        type: "add-note",
+        voice: geometry.voice,
+        tick: at.tick,
+        midi,
+      });
+      if (result.refused.length > 0) options.refused(result.refused);
+      else auditionPitch(midi);
+    },
+    { signal },
   );
 
   root.addEventListener(
