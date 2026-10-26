@@ -211,6 +211,10 @@ const css = `
 .sce-root .sce-tools > * {
   flex: none;
 }
+/* A part root takes no box in the strip, so its own children are the strip's flex items: they keep their content width too. */
+.sce-root .sce-tools > .sce-part > * {
+  flex: none;
+}
 .sce-root .sce-tools[data-cue="right"] {
   mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
 }
