@@ -12,10 +12,10 @@ import {
   gridButton,
   gridItem,
   type Harness,
-  laneOf,
   LEAD,
-  metrics,
+  laneOf,
   MIDDLE_C,
+  metrics,
   noteList,
   openTrack,
   pointerOf,
@@ -304,7 +304,11 @@ test.describe("where a dropped note lands", () => {
 
     await drag(page, harness, isMobile, from, { x: from.x - beat, y: from.y });
 
-    expect(await noteList(harness)).toEqual([vocal(0, BEAT, 64), vocal(BEAT, BEAT, MIDDLE_C), vocal(4 * BEAT, 4 * BEAT, 67)]);
+    expect(await noteList(harness)).toEqual([
+      vocal(0, BEAT, 64),
+      vocal(BEAT, BEAT, MIDDLE_C),
+      vocal(4 * BEAT, 4 * BEAT, 67),
+    ]);
     await expect(block(page, "E4, bar 1 beat 1, length 1 beat")).toBeVisible();
     expect(await harness.layout.undo()).toBe(true);
     expect(await noteList(harness)).toEqual([
@@ -523,7 +527,11 @@ test.describe("giving a drag up", () => {
 
     await drag(page, harness, isMobile, from, { x: from.x + 2 * beat, y: from.y });
 
-    expect(await noteList(harness)).toEqual([vocal(0, BEAT, MIDDLE_C), vocal(BEAT, BEAT, 62), vocal(4 * BEAT, 4 * BEAT, 67)]);
+    expect(await noteList(harness)).toEqual([
+      vocal(0, BEAT, MIDDLE_C),
+      vocal(BEAT, BEAT, 62),
+      vocal(4 * BEAT, 4 * BEAT, 67),
+    ]);
     expect(await harness.layout.canUndo()).toBe(false);
   });
 });

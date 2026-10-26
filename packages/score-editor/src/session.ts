@@ -323,7 +323,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   function droppedGrid(): Grid | undefined {
     const found = read();
     if (found.kind !== "score" || sameGrid(grid, DEFAULT_GRID)) return undefined;
-    const allowed = withDialect((dialect) => isGridAllowed(found.score, grid, dialect.constraints), () => true);
+    const allowed = withDialect(
+      (dialect) => isGridAllowed(found.score, grid, dialect.constraints),
+      () => true,
+    );
     if (allowed) return undefined;
     const dropped = grid;
     grid = DEFAULT_GRID;

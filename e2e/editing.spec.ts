@@ -10,10 +10,10 @@ import {
   expect,
   gridButton,
   gridItem,
-  laneOf,
   LEAD,
-  metrics,
+  laneOf,
   MIDDLE_C,
+  metrics,
   noteList,
   openTrack,
   type Point,
@@ -1092,9 +1092,7 @@ test.describe("the Grid menu", () => {
     await expect(toolbar(page).getByRole("status")).toHaveText("");
 
     await harness.layout.replace({ score: LEAD });
-    await expect(toolbar(page).getByRole("status")).toHaveText(
-      "网格已回到 1/4：这份乐谱写不出 附点 1/16",
-    );
+    await expect(toolbar(page).getByRole("status")).toHaveText("网格已回到 1/4：这份乐谱写不出 附点 1/16");
   });
 
   test("walks its choices with the arrow keys and skips the ones that are left out", async ({

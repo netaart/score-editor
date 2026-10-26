@@ -258,8 +258,7 @@ function pressKey(session: EditingSession, input: EditingKeyInput, step: number 
   const editing = pressNoteKey(session, input, step);
   if (editing.handled) return editing;
   const score = readableScore(session);
-  const tick =
-    score === null ? null : insertionPointTargetOf(score, step ?? 1, session.insertionPoint, input);
+  const tick = score === null ? null : insertionPointTargetOf(score, step ?? 1, session.insertionPoint, input);
   if (tick === null) return IGNORED;
   session.setInsertionPoint({ tick });
   return HANDLED;

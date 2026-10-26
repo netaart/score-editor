@@ -94,7 +94,10 @@ export interface Messages {
 }
 
 /** A grid the way a menu item and the button name it: the dotted word of the language, then the fraction. */
-const gridValueIn = (dotted: string) => (grid: Grid): string => `${grid.dotted === true ? dotted : ""}1/${grid.value}`;
+const gridValueIn =
+  (dotted: string) =>
+  (grid: Grid): string =>
+    `${grid.dotted === true ? dotted : ""}1/${grid.value}`;
 const enGridValue = gridValueIn("Dotted ");
 const zhGridValue = gridValueIn("附点 ");
 
@@ -211,8 +214,7 @@ const zh: Messages = {
   gridTip: "网格：音符移动和改长短的一格，插入点也吸附到网格上",
   gridValue: zhGridValue,
   gridUnavailable: "这份乐谱写不出这一格",
-  gridDropped: (dropped) =>
-    `网格已回到 ${zhGridValue({ value: 4 })}：这份乐谱写不出 ${zhGridValue(dropped)}`,
+  gridDropped: (dropped) => `网格已回到 ${zhGridValue({ value: 4 })}：这份乐谱写不出 ${zhGridValue(dropped)}`,
   bars: "小节",
   timeRuler: "时间尺",
   sections: "段落",
