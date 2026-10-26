@@ -3,6 +3,7 @@
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import type { Note, Score } from "@neta-art/score-editor";
 import { expect } from "vitest";
+import { normalizeLineBreaks, stripTrailingWhitespace, trimWhitespace } from "./song2-text";
 
 export function parse(text: string): Score {
   const { score, diagnostics } = song2Dialect.parse(text);
@@ -22,10 +23,9 @@ function wholeRestCount(body: string): number {
 
 /** Splits a score text into the raw piece of every bar, keyed by voice and 0-based bar number, plus every other line. */
 export function splitBars(text: string): { pieces: Map<string, string>; otherLines: string[] } {
-  const lines = text
-    .replace(/\r\n?/g, "\n")
+  const lines = normalizeLineBreaks(text)
     .split("\n")
-    .map((line) => line.replace(/[ \t]+$/, ""));
+    .map((line) => stripTrailingWhitespace(line));
   let bodyStart = lines.findIndex((line) => line.startsWith("K:"));
   bodyStart = bodyStart < 0 ? lines.length : bodyStart + 1;
   const pieces = new Map<string, string>();
@@ -52,7 +52,7 @@ export function splitBars(text: string): { pieces: Map<string, string>; otherLin
     const bodies = line.split("|");
     if (closes) bodies.pop();
     for (const raw of bodies) {
-      const body = raw.replace(/^[ \t]+/, "").replace(/[ \t]+$/, "");
+      const body = trimWhitespace(raw);
       const count = wholeRestCount(body);
       const first = nextBar.get(voice) ?? 0;
       for (let offset = 0; offset < count; offset += 1) {

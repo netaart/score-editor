@@ -2,6 +2,7 @@
 // ABOUTME: One piece/group pipeline serves both a complete score and one that still carries a cut.
 import type { Bar, Meter, Score } from "@neta-art/score-editor";
 import { type BarContent, barContentOf, type Song2Source, type Song2SourceBar, type Song2SourceLine } from "./parser";
+import { stripTrailingWhitespace, trimWhitespace } from "./text";
 import { keepsCutTail } from "./write-chords";
 import { sameContent, writeBar } from "./writer";
 
@@ -51,7 +52,7 @@ function keyOf(voice: string, bar: number): string {
 }
 
 function parseMeter(text: string): Meter {
-  const match = /^M:([1-9][0-9]{0,5})\/([1-9][0-9]{0,5})$/.exec(text.replace(/[ \t]+$/, ""));
+  const match = /^M:([1-9][0-9]{0,5})\/([1-9][0-9]{0,5})$/.exec(stripTrailingWhitespace(text));
   if (match === null) throw new Error("song2: the header meter cannot be read back");
   return { numerator: Number(match[1]), denominator: Number(match[2]) };
 }
@@ -81,8 +82,13 @@ function factsOf(score: Score, source: Song2Source): SourceFacts {
     oldBarCount,
     keyIndex,
     headerMeter: parseMeter(lines[2] ?? "M:4/4"),
-    trailingNewline: /\n[ \t]*$/.test(source.text),
+    trailingNewline: endsWithBlankLine(source.text),
   };
+}
+
+function endsWithBlankLine(text: string): boolean {
+  const lineStart = text.lastIndexOf("\n") + 1;
+  return lineStart > 0 && stripTrailingWhitespace(text.slice(lineStart)) === "";
 }
 
 function normalizeContent(content: BarContent): BarContent {
@@ -571,7 +577,7 @@ export function serializeTruncatedBarsSong2(score: Score, source: Song2Source): 
   if (droppedCutBlock && lastSource !== undefined) {
     cutBlock.push(...facts.lines.slice(lastSource.blockStart, lastMusicLine));
   }
-  const trailing = facts.lines.slice(lastMusicLine + 1).some((line) => line.trim() !== "");
+  const trailing = facts.lines.slice(lastMusicLine + 1).some((line) => trimWhitespace(line) !== "");
   const splitByCoverage = cut === null || cut.voice !== "Ins" || !cut.short || trailing;
   const body = writeBody(score, facts, pieces, coverage, cutBlock.length === 0, splitByCoverage);
   const lines = [
