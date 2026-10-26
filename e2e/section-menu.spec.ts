@@ -893,9 +893,14 @@ test.describe("in the assembled editor", () => {
     expect(await harness.notices()).toEqual([{ code: "command-refused", level: "warning", message: words }]);
   });
 
-  test("the Arrangement region still leads to the first note with one Tab", async ({ page, harness }) => {
+  test("the section bands add no tab stop: from the Arrangement region, Tab reaches the chord cursor and then the first note", async ({
+    page,
+    harness,
+  }) => {
     await harness.mount({ score: { text: SONG } });
     await page.getByRole("region", { name: "Arrangement" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: /^Chord place, bar 1 beat 1/ })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("listitem", { name: /^C4, bar 1 beat 1/ })).toBeFocused();
   });
