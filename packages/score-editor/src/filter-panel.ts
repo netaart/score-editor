@@ -3,10 +3,11 @@
 
 import { pitchName } from "./arrangement";
 import { create, requireDom } from "./dom";
+import { createConditions, currentFilter, readConditions } from "./filter-conditions";
 import { type FilterMessages, filterMessagesFor } from "./filter-messages";
-import { countNotes, filterNotes, type NoteFilter, type NoteSummary, summarizeNotes } from "./filter-notes";
+import { countNotes, filterNotes, type NoteSummary, summarizeNotes } from "./filter-notes";
 import { FILTER_SHEET_QUERY } from "./filter-styles";
-import type { Bar, Score } from "./score";
+import type { Score } from "./score";
 import { TICKS_PER_QUARTER } from "./score";
 import type { EditingSession, ScoreReading } from "./session";
 import { acquireStyles } from "./styles";
@@ -25,19 +26,6 @@ interface Applied {
   readonly total: number;
 }
 
-/** The conditions as the panel holds them: what each one is set to, and whether it counts. */
-interface Conditions {
-  pitch: { on: boolean; min: number | null; max: number | null };
-  /** Bar numbers as the ruler counts them, from 1; a bar that is not given leaves that end of the range open. */
-  time: { on: boolean; first: number | null; last: number | null };
-  /** Lengths in ticks. */
-  length: { on: boolean; min: number | null; max: number | null };
-  key: { on: boolean; mode: "in" | "out" };
-  count: { on: boolean; every: number | null; skip: number | null };
-  /** Whether to select the notes the conditions do not pick. */
-  invert: boolean;
-}
-
 function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
 }
@@ -47,21 +35,6 @@ function lengthName(ticks: number): string {
   const whole = 4 * TICKS_PER_QUARTER;
   const divisor = gcd(ticks, whole);
   return `${ticks / divisor}/${whole / divisor}`;
-}
-
-/** The tick a bar number starts at; a number past the last bar is the end of the score, one below 1 leaves the range open. */
-function barStart(bars: ReadonlyArray<Bar>, number: number | null): number | undefined {
-  if (number === null || number < 1) return undefined;
-  const bar = bars[number - 1];
-  const last = bars[bars.length - 1];
-  return bar !== undefined ? bar.start : last !== undefined ? last.start + last.length : 0;
-}
-
-/** The tick a bar number ends at; a number past the last bar leaves the range open, one below 1 ends it at the start. */
-function barEnd(bars: ReadonlyArray<Bar>, number: number | null): number | undefined {
-  if (number === null || number > bars.length) return undefined;
-  const bar = bars[number - 1];
-  return bar === undefined ? 0 : bar.start + bar.length;
 }
 
 function sameIds(a: ReadonlySet<string>, b: ReadonlyArray<string>): boolean {
@@ -98,14 +71,17 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   const rows = create(doc, "div", "sce-filter-rows", panel);
   const texts: Array<(t: FilterMessages) => void> = [];
 
+  /** The checkbox each condition row holds, so a change anywhere in the row can find it without searching by class. */
+  const rowChecks = new WeakMap<HTMLElement, HTMLInputElement>();
+
   /** A condition's row: a checkbox that says whether it counts, with its name, and a place for its fields. */
-  function conditionRow(name: string, label: (t: FilterMessages) => string) {
+  function conditionRow(label: (t: FilterMessages) => string) {
     const row = create(doc, "div", "sce-filter-row", rows);
-    row.dataset.condition = name;
     row.setAttribute("role", "group");
     const checkLabel = create(doc, "label", "sce-filter-check", row);
     const check = create(doc, "input", "", checkLabel);
     check.type = "checkbox";
+    rowChecks.set(row, check);
     const text = create(doc, "span", "sce-filter-name", checkLabel);
     const fields = create(doc, "div", "sce-filter-fields", row);
     texts.push((t) => {
@@ -113,6 +89,14 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       row.setAttribute("aria-label", label(t));
     });
     return { row, check, fields };
+  }
+
+  /** One option of a menu, built the one way every menu in the panel builds it. */
+  function option(value: string, text: string): HTMLOptionElement {
+    const built = doc.createElement("option");
+    built.value = value;
+    built.textContent = text;
+    return built;
   }
 
   function select(parent: HTMLElement, label: (t: FilterMessages) => string): HTMLSelectElement {
@@ -136,27 +120,27 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     });
   }
 
-  const pitch = conditionRow("pitch", (t) => t.pitch);
+  const pitch = conditionRow((t) => t.pitch);
   const pitchLowest = select(pitch.fields, (t) => t.pitchLowest);
   word(pitch.fields, (t) => t.to);
   const pitchHighest = select(pitch.fields, (t) => t.pitchHighest);
 
-  const time = conditionRow("time", (t) => t.time);
+  const time = conditionRow((t) => t.time);
   word(time.fields, (t) => t.timeBars);
   const timeFirst = number(time.fields, (t) => t.timeFirst);
   word(time.fields, (t) => t.to);
   const timeLast = number(time.fields, (t) => t.timeLast);
 
-  const length = conditionRow("length", (t) => t.length);
+  const length = conditionRow((t) => t.length);
   const lengthShortest = select(length.fields, (t) => t.lengthShortest);
   word(length.fields, (t) => t.to);
   const lengthLongest = select(length.fields, (t) => t.lengthLongest);
 
-  const key = conditionRow("key", (t) => t.key);
+  const key = conditionRow((t) => t.key);
   const keyChoice = select(key.fields, (t) => t.keyChoice);
 
   // Each number keeps the words around it on one line, so a line breaks between the two numbers and not inside one.
-  const count = conditionRow("count", (t) => t.count);
+  const count = conditionRow((t) => t.count);
   const countEveryPhrase = create(doc, "span", "sce-filter-phrase", count.fields);
   word(countEveryPhrase, (t) => t.countEveryBefore);
   const countEvery = number(countEveryPhrase, (t) => t.countEvery);
@@ -186,14 +170,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   const done = create(doc, "button", "sce-button", actions);
   done.type = "button";
 
-  const conditions: Conditions = {
-    pitch: { on: false, min: null, max: null },
-    time: { on: false, first: null, last: null },
-    length: { on: false, min: null, max: null },
-    key: { on: false, mode: "in" },
-    count: { on: false, every: 2, skip: 0 },
-    invert: false,
-  };
+  const conditions = createConditions();
   /** The reading the open panel was last filled from. */
   let rendered: ScoreReading | null = null;
   let language: Language | null = null;
@@ -236,14 +213,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       [pitchHighest, conditions.pitch.max],
     ] as const) {
       const values = kept !== null && !wanted.includes(kept) ? [...wanted, kept].sort((a, b) => a - b) : wanted;
-      field.replaceChildren(
-        ...values.map((midi) => {
-          const option = doc.createElement("option");
-          option.value = String(midi);
-          option.textContent = pitchName(midi);
-          return option;
-        }),
-      );
+      field.replaceChildren(...values.map((midi) => option(String(midi), pitchName(midi))));
       if (kept !== null) field.value = String(kept);
     }
     pitch.check.checked = conditions.pitch.on;
@@ -268,25 +238,13 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     ] as const) {
       const values =
         kept !== null && !durations.includes(kept) ? [...durations, kept].sort((a, b) => a - b) : durations;
-      field.replaceChildren(
-        ...values.map((ticks) => {
-          const option = doc.createElement("option");
-          option.value = String(ticks);
-          option.textContent = lengthName(ticks);
-          return option;
-        }),
-      );
+      field.replaceChildren(...values.map((ticks) => option(String(ticks), lengthName(ticks))));
       if (kept !== null) field.value = String(kept);
     }
     length.check.checked = conditions.length.on;
 
     keyChoice.replaceChildren(
-      ...(["in", "out"] as const).map((mode) => {
-        const option = doc.createElement("option");
-        option.value = mode;
-        option.textContent = mode === "in" ? t.keyIn : t.keyOut;
-        return option;
-      }),
+      ...(["in", "out"] as const).map((mode) => option(mode, mode === "in" ? t.keyIn : t.keyOut)),
     );
     keyChoice.value = conditions.key.mode;
     key.check.checked = conditions.key.on;
@@ -297,77 +255,16 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     invert.checked = conditions.invert;
   }
 
-  /** Takes what the person set in a field of the panel into the conditions. */
+  /** Takes what the person set in the fields into the conditions. */
   function read(): void {
-    conditions.pitch.on = pitch.check.checked;
-    if (pitchLowest.value !== "") conditions.pitch.min = Number(pitchLowest.value);
-    if (pitchHighest.value !== "") conditions.pitch.max = Number(pitchHighest.value);
-    conditions.time.on = time.check.checked;
-    conditions.time.first = timeFirst.value === "" ? null : timeFirst.valueAsNumber;
-    conditions.time.last = timeLast.value === "" ? null : timeLast.valueAsNumber;
-    conditions.length.on = length.check.checked;
-    if (lengthShortest.value !== "") conditions.length.min = Number(lengthShortest.value);
-    if (lengthLongest.value !== "") conditions.length.max = Number(lengthLongest.value);
-    conditions.key.on = key.check.checked;
-    if (keyChoice.value === "in" || keyChoice.value === "out") conditions.key.mode = keyChoice.value;
-    conditions.count.on = count.check.checked;
-    conditions.count.every = countEvery.value === "" ? null : countEvery.valueAsNumber;
-    conditions.count.skip = countSkip.value === "" ? null : countSkip.valueAsNumber;
-    conditions.invert = invert.checked;
-  }
-
-  function currentFilter(score: Score): { filter: NoteFilter; count: number; invalid: boolean } {
-    const filter: {
-      pitch?: { min: number; max: number };
-      time?: { from?: number; to?: number };
-      duration?: { min: number; max: number };
-      key?: "in" | "out";
-      count?: { every: number; skip: number };
-      invert?: boolean;
-    } = {};
-    let conditionsOn = 0;
-    let invalid = false;
-    const { pitch: p } = conditions;
-    if (p.on) {
-      conditionsOn += 1;
-      if (p.min !== null && p.max !== null) {
-        filter.pitch = { min: p.min, max: p.max };
-        if (p.min > p.max) invalid = true;
-      }
-    }
-    if (conditions.time.on) {
-      const from = barStart(score.bars, conditions.time.first);
-      const to = barEnd(score.bars, conditions.time.last);
-      filter.time = { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) };
-      conditionsOn += 1;
-      if (from !== undefined && to !== undefined && from >= to) invalid = true;
-    }
-    if (conditions.length.on) {
-      conditionsOn += 1;
-      if (conditions.length.min !== null && conditions.length.max !== null) {
-        filter.duration = { min: conditions.length.min, max: conditions.length.max };
-        if (conditions.length.min > conditions.length.max) invalid = true;
-      }
-    }
-    if (conditions.key.on) {
-      filter.key = conditions.key.mode;
-      conditionsOn += 1;
-    }
-    if (conditions.count.on) {
-      // Skip is optional and defaults to 0; a missing Every, or a supplied number that is not a count, takes no note.
-      const every = conditions.count.every ?? Number.NaN;
-      const skip = conditions.count.skip ?? 0;
-      filter.count = { every, skip };
-      conditionsOn += 1;
-      if (
-        !Number.isInteger(every) ||
-        every < 1 ||
-        (conditions.count.skip !== null && (!Number.isInteger(skip) || skip < 0))
-      )
-        invalid = true;
-    }
-    if (conditions.invert) filter.invert = true;
-    return { filter, count: conditionsOn, invalid };
+    readConditions(conditions, {
+      pitch: { on: pitch.check.checked, min: pitchLowest.value, max: pitchHighest.value },
+      time: { on: time.check.checked, first: timeFirst.value, last: timeLast.value },
+      length: { on: length.check.checked, min: lengthShortest.value, max: lengthLongest.value },
+      key: { on: key.check.checked, mode: keyChoice.value },
+      count: { on: count.check.checked, every: countEvery.value, skip: countSkip.value },
+      invert: invert.checked,
+    });
   }
 
   let applied: Applied | null = null;
@@ -377,7 +274,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   function apply(): void {
     const { reading } = session;
     if (reading.kind !== "score") return;
-    const { filter, count, invalid } = currentFilter(reading.score);
+    const { filter, count, invalid } = currentFilter(reading.score, conditions);
     if (countSkip.value === "" && conditions.count.skip === null) {
       // A cleared Skip is 0, the filter's default, so the field shows the number that is in force.
       conditions.count.skip = 0;
@@ -429,7 +326,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
       const row = target.closest<HTMLElement>(".sce-filter-row");
-      const check = row?.querySelector<HTMLInputElement>(".sce-filter-check input");
+      const check = row === null ? undefined : rowChecks.get(row);
       // Changing a field of a condition turns the condition on; the checkbox itself turns it on or off.
       if (check && target !== check) check.checked = true;
       read();
