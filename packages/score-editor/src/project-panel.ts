@@ -62,9 +62,13 @@ export function drawProjectPanel(
     hint.id = id(`${field.dataset.field}-hint`);
     return hint;
   };
-  /** The value of a field while the session cannot edit: text, not a control, named by the field's label. */
+  /**
+   * The value of a field while the session cannot edit: text, not a control, named by the field's label. It is a group
+   * because a paragraph cannot take a name from `aria-labelledby`.
+   */
   const valueIn = (field: HTMLElement, label: HTMLElement) => {
-    const value = create(doc, "p", "sce-panel-value", field);
+    const value = create(doc, "span", "sce-panel-value", field);
+    value.setAttribute("role", "group");
     value.setAttribute("aria-labelledby", label.id);
     return value;
   };
