@@ -97,7 +97,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, source, onSaveAs, onUnsavedChange, requiredInputs, drafts, tools, title, onHandoff. |
-| `MountedEditor` | `{ update(options), hasUnsavedChanges(), destroy() }`. |
+| `MountedEditor` | `{ update(options), hasUnsavedChanges(), save(), destroy() }`; `save()` returns the score-file keeper's `ScoreFileHandoffResult` (`saved`, `unchanged`, `conflict`, `failed`) and writes nothing for a generated score or read-only/destroyed editor. |
 | `ScoreSource`, `GeneratedScoreSource`, `ScoreFileSource`, `ScoreFileEntry`, `ScoreFileSaveResult` | Where the score came from, the host's versioned file save/read, and the shapes a version uses; see [score-files.md](score-files.md). |
 | `ProjectField`, `RequiredInput` | A project field the host may mark required for a handoff: `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`. |
 | `Language` | `"zh" \| "en"`. |

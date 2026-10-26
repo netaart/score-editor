@@ -298,7 +298,10 @@ const editor = mount(el, {
   onHandoff,
 });
 editor.hasUnsavedChanges(); // the same answer, asked just before closing
+await editor.save(); // "saved" | "unchanged" | "conflict" | "failed", the keeper's settled words
 ```
+
+`editor.save()` is the host's Save: it runs the same path as the Save button and Ctrl/Cmd+S, waits for the write to settle, adopts the returned version and answers the score-file keeper's `ScoreFileHandoffResult` — `saved`, `unchanged`, `conflict` or `failed`. `unchanged` means nothing was written: a generated score (it does not call Save as), a read-only editor, no unsaved changes, a save already in flight, a standing conflict, or an editor destroyed. A generated score's Save as stays a user action only.
 
 The toolbar has **Save** in its always-visible bar, before the view switch. It chooses one form for the bar from the room
 the widest state needs (the pill word plus the button word over clean, dirty, saving, failed and conflict), re-chooses
