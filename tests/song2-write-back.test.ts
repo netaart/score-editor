@@ -786,3 +786,228 @@ C16|`;
     expect(parse(output).keys).toEqual([{ at: 0, key: "C#" }]);
   });
 });
+
+describe("a cut at the next measure with lines after the final group", () => {
+  it("closes the Vocal line and lets the trailing section comment state the cut", () => {
+    const input = `${H2}
+K:C
+% verse
+V: Vocal
+C16|
+V: Ins
+Z|
+% outro`;
+    const output = succeed(input, { type: "insertBar", bar: 0 });
+
+    expect(output).toBe(`${H2}
+K:C
+% verse
+V: Vocal
+z16|C16|
+V: Ins
+z16|Z|
+% outro`);
+    const score = roundTrip(output);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 2, short: false });
+    expect(score.sections.map((section) => [section.name, section.firstBar, section.barCount])).toEqual([
+      ["verse", 0, 2],
+      ["outro", 2, 0],
+    ]);
+  });
+
+  it("closes the last group before a trailing Vocal cut block", () => {
+    const input = `${H2}
+K:C
+% verse
+V: Vocal
+z16|
+V: Ins
+z16|
+V: Vocal`;
+    const output = succeed(input, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 1, denominator: 1 },
+    });
+
+    expect(output).toBe(`${H2}
+K:C
+% verse
+V: Vocal
+M:1/1
+z16|
+V: Ins
+M:1/1
+z16|
+V: Vocal`);
+    const score = roundTrip(output);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 1, short: false });
+    expect(score.bars[0]?.meter).toEqual({ numerator: 1, denominator: 1 });
+  });
+});
+
+describe("a cut after the section whose meter changed", () => {
+  it("keeps the cut in Vocal at the end of the longer bar grid", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+C16|D16|
+V: Ins
+Z|Z|
+V: Vocal
+E16|F16`;
+    const output = succeed(input, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 2, denominator: 4 },
+    });
+
+    const score = roundTrip(output);
+    expect(score.bars).toHaveLength(8);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 8, short: false });
+  });
+});
+
+describe("fill pads a cut bar whose key change another voice spans", () => {
+  it("splits the spanning note so the key change can be written in both voices", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+C16|
+V: Ins
+Z|
+% b
+V: Vocal
+M:3/4
+K:G
+F12|F12|
+V: Ins
+M:3/4
+K:G
+z12|F12|
+V: Vocal
+M:4/4
+F8[K:F]`;
+    const output = succeed(input, { type: "fillTruncatedBar" });
+
+    const score = roundTrip(output);
+    expect(score.truncation).toBeNull();
+    expect(score.keys).toEqual([
+      { at: 0, key: "C" },
+      { at: 1024, key: "G" },
+      { at: 3072, key: "F" },
+    ]);
+    expect(
+      score.notes
+        .filter((note) => note.voice === "Ins" && note.bar === 3)
+        .map((note) => [note.start, note.duration, note.midi]),
+    ).toEqual([
+      [2560, 512, null],
+      [3072, 512, null],
+    ]);
+  });
+});
+
+describe("removeChords on a cut bar with only chord material", () => {
+  it("keeps an empty trailing section when the emptied partial measure goes", () => {
+    const input = `${H2}
+K:C
+% verse
+V: Vocal
+C16|
+V: Ins
+Z|
+% chorus
+V: Vocal
+"Cm`;
+    const output = succeed(input, { type: "removeChords" });
+
+    expect(output).toBe(`${H2}
+K:C
+% verse
+V: Vocal
+C16|
+V: Ins
+Z|
+% chorus
+V: Vocal`);
+    const score = roundTrip(output);
+    expect(score.hasChords).toBe(false);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 1, short: false });
+    expect(score.sections.map((section) => [section.name, section.firstBar, section.barCount])).toEqual([
+      ["verse", 0, 1],
+      ["chorus", 1, 0],
+    ]);
+  });
+});
+
+describe("removeChords when the cut holds another unfinished byte", () => {
+  it("keeps the partial measure and its unfinished accidental", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+"C"C16|
+V: Ins
+Z|
+V: Vocal
+"G"^`;
+    const output = succeed(input, { type: "removeChords" });
+
+    expect(output).toBe(`${H2}
+K:C
+V: Vocal
+C16|
+V: Ins
+Z|
+V: Vocal
+^`);
+    const score = roundTrip(output);
+    expect(score.hasChords).toBe(false);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 1, short: true });
+    expect(score.bars).toHaveLength(2);
+  });
+});
+
+describe("a meter command that changes no bars", () => {
+  it("keeps a cut that another short voice would otherwise claim", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+C16|
+V: Ins
+Z|
+V: Vocal
+D16|
+V: Ins
+Z|
+V: Vocal
+E16`;
+    const output = succeed(input, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 4, denominator: 4 },
+    });
+
+    const score = roundTrip(output);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 3, short: false });
+    expect(score.bars).toHaveLength(3);
+  });
+});
+
+describe("deleteBars cutting the last bars of a cut line", () => {
+  it("keeps the surviving bars and omits the new final barline instead of adding a Vocal block", () => {
+    const input = `${H2}
+K:C
+V: Vocal
+C16|D16|E16|F16`;
+    const output = succeed(input, { type: "deleteBars", from: 2, count: 2 });
+
+    expect(output).toBe(`${H2}
+K:C
+V: Vocal
+C16|D16`);
+    const score = roundTrip(output);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 2, short: false });
+    expect(score.bars).toHaveLength(2);
+  });
+});
