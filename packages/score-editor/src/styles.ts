@@ -2,6 +2,7 @@
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
 import { boxCss } from "./box-styles";
+import { chordCss } from "./chord-styles";
 import { draftCss } from "./draft-styles";
 import { dragCss } from "./drag-styles";
 import { filterCss } from "./filter-styles";
@@ -1119,6 +1120,7 @@ ${labelThinning()}
 ${boxCss}${lyricCss}
 ${draftCss}
 ${sectionMenuCss}
+${chordCss}
 ${songCss}
 ${filterCss}
 ${dragCss}`;

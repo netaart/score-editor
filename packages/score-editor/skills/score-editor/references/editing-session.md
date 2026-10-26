@@ -30,6 +30,7 @@ const session = createEditingSession({
 | --- | --- |
 | `project` | The current `SongProject`. The only document state. |
 | `reading` | A `ScoreReading`, cached until the score text, model or dialects change. |
+| `constraints` | `DialectConstraints \| null`: what the dialect that reads the project declares, or null when the registry has no dialect for its model. A part that must offer only what the dialect allows, as the chord picker does, draws from it. |
 | `dialect` | The `ScoreDialect` that reads `project`, or `undefined` when the registry has none for its model. Its `constraints` (the tempo range, the keys) are what the toolbar's tempo and key controls offer. |
 | `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
 | `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |

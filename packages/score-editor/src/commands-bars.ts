@@ -450,35 +450,14 @@ function setSectionMeter(
     name: item.name,
     firstBar: index > sectionIndex ? item.firstBar + delta : item.firstBar,
   }));
-  // A cut after the section keeps its place, shifted by the changed bar count. A voice that no
-  // longer reaches the section end now stops inside the new grid, so the cut is that voice's own.
-  let truncation =
+  // A cut after the section keeps its time and moves by the changed bar count; the command refuses a
+  // cut inside the section, so there is no partial measure to redraw.
+  const truncation =
     score.truncation === null || score.truncation.bar <= lastIndex
       ? score.truncation
       : { ...score.truncation, bar: score.truncation.bar + delta };
-  if (truncation !== null) {
-    const sectionEndTick = start + sectionLength;
-    const endOf = (voice: string): number => {
-      let end = start;
-      for (const note of notes) {
-        if (note.voice !== voice) continue;
-        end = Math.max(end, note.start + note.duration);
-      }
-      return end;
-    };
-    const shortVoice = score.voices
-      .filter((voice) => endOf(voice) < sectionEndTick)
-      .sort((left, right) => endOf(left) - endOf(right))[0];
-    if (shortVoice !== undefined) {
-      const relative = endOf(shortVoice) - start;
-      const offset = Math.min(Math.max(Math.floor(relative / length), 0), newCount);
-      truncation = {
-        voice: shortVoice,
-        bar: section.firstBar + offset,
-        short: relative % length !== 0,
-      };
-    }
-  }
+  const redrawn =
+    delta !== 0 || first.meter.numerator !== meter.numerator || first.meter.denominator !== meter.denominator;
 
   return {
     ok: true,
@@ -488,7 +467,7 @@ function setSectionMeter(
       notes: orderNotes(score, clearTiesIntoRests(notes)),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation: writableCut({ voices: score.voices, notes }, truncation),
+      truncation: redrawn ? writableCut({ voices: score.voices, notes }, truncation) : truncation,
     },
   };
 }

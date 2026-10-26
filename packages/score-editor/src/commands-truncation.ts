@@ -45,6 +45,43 @@ function attachChordsToFilledNotes(notes: ReadonlyArray<Note>, chords: ReadonlyA
   });
 }
 
+/** Splits a note at any key change inside it so the writer can put `[K:...]` on a token boundary. */
+function splitNotesAtKeys(
+  score: Score,
+  notes: ReadonlyArray<Note>,
+  fromBar: number,
+  unit: number,
+  durations: DialectConstraints["durations"],
+): Note[] {
+  const boundaries = [...new Set(score.keys.map((change) => change.at))];
+  const split: Note[] = [];
+  for (const note of notes) {
+    const inside =
+      note.bar < fromBar ? [] : boundaries.filter((at) => at > note.start && at < note.start + note.duration);
+    if (inside.length === 0) {
+      split.push(note);
+      continue;
+    }
+    const points = [note.start, ...inside, note.start + note.duration];
+    const pieces: Note[] = [];
+    for (let index = 0; index + 1 < points.length; index += 1) {
+      const start = points[index] as number;
+      const end = points[index + 1] as number;
+      let at = start;
+      for (const duration of splitLength(end - start, unit, durations)) {
+        pieces.push({ ...note, id: noteId(note.voice, at), start: at, duration, tie: false });
+        at += duration;
+      }
+    }
+    for (let index = 0; index < pieces.length; index += 1) {
+      const piece = pieces[index] as Note;
+      pieces[index] = { ...piece, tie: piece.midi !== null && (index < pieces.length - 1 ? true : note.tie) };
+    }
+    split.push(...pieces);
+  }
+  return split;
+}
+
 function fillTruncatedBar(score: Score, constraints: DialectConstraints): ScoreCommandResult {
   if (score.truncation === null) return commandRefusal("no-truncation", {});
   if (!score.truncation.short) return commandRefusal("no-incomplete-bar", {});
@@ -53,11 +90,13 @@ function fillTruncatedBar(score: Score, constraints: DialectConstraints): ScoreC
   if (bar === undefined) return commandRefusal("no-incomplete-bar", {});
   const unit = scoreUnit(score, [bar.length]);
   const notes = [...score.notes];
+  let firstFilled = cut.bar;
 
   for (const voice of score.voices) {
     const end = coverageEnd(score, voice);
     if (voice !== cut.voice && end >= score.bars.length) continue;
     const first = voice === cut.voice ? cut.bar : end;
+    firstFilled = Math.min(firstFilled, first);
     for (let index = first; index < score.bars.length; index += 1) {
       const target = score.bars[index];
       if (target === undefined) continue;
@@ -73,12 +112,13 @@ function fillTruncatedBar(score: Score, constraints: DialectConstraints): ScoreC
     }
   }
 
-  const chords = attachChordsToFilledNotes(notes, score.chords);
+  const split = splitNotesAtKeys(score, notes, firstFilled, unit, constraints.durations);
+  const chords = attachChordsToFilledNotes(split, score.chords);
   const bars = score.bars.map((item) => (item.incomplete ? { ...item, incomplete: false } : item));
   const nextScore: Score = {
     ...score,
     bars,
-    notes: orderNotes(score, clearTiesIntoRests(notes)),
+    notes: orderNotes(score, clearTiesIntoRests(split)),
     chords,
     hasChords: hasChordsAfter(chords, null),
     truncation: null,
