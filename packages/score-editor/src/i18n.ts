@@ -203,14 +203,14 @@ export interface Messages {
   changeLogTempoChanges: string;
   changeLogKey(from: string, to: string): string;
   changeLogKeyChanges: string;
-  changeLogMeter(from: string, to: string, count: number): string;
+  changeLogMeter(to: string, where: string): string;
   changeLogChords: string;
   changeLogLyrics: string;
   changeLogStyle: string;
   changeLogScoreMode(from: string, to: string): string;
-  changeLogSeed(from: string, to: string): string;
+  changeLogSeed(label: string, from: string, to: string): string;
   changeLogSeedNone: string;
-  changeLogNotes(count: number): string;
+  changeLogNotes(where: string): string;
   changeLogText: string;
   /** The handoff control: the trigger, the dialog and its action, and the note about rejected text. */
   handoffReview: string;
@@ -218,6 +218,7 @@ export interface Messages {
   handoffCancel: string;
   handoffAction: string;
   handoffRejected: string;
+  handoffSaving: string;
   /** The prefilled instruction: its labels and its fixed sentences. */
   handoffInstructionTitle: string;
   handoffInstructionIntro: string;
@@ -439,21 +440,21 @@ const en: Messages = {
   changeLogTempoChanges: "Tempo changes were added or removed.",
   changeLogKey: (from, to) => `Key changed from ${from} to ${to}.`,
   changeLogKeyChanges: "Key changes were added or removed.",
-  changeLogMeter: (from, to, count) =>
-    count === 1 ? `Meter changed from ${from} to ${to}.` : `Meter changed in ${plural(count, "bar", "bars")}.`,
+  changeLogMeter: (to, where) => `Meter changed to ${to} in ${where}.`,
   changeLogChords: "Chords changed.",
   changeLogLyrics: "Lyrics changed.",
   changeLogStyle: "Style description changed.",
   changeLogScoreMode: (from, to) => `Score mode changed from ${from} to ${to}.`,
-  changeLogSeed: (from, to) => `Seed changed from ${from} to ${to}.`,
+  changeLogSeed: (label, from, to) => `${label} changed from ${from} to ${to}.`,
   changeLogSeedNone: "none",
-  changeLogNotes: (count) => `The notes of ${plural(count, "bar", "bars")} changed.`,
+  changeLogNotes: (where) => `The notes of ${where} changed.`,
   changeLogText: "Edited the score text directly.",
-  handoffReview: "Hand off…",
-  handoffTitle: "Hand off this version",
+  handoffReview: "Regenerate…",
+  handoffTitle: "Check before regenerating",
   handoffCancel: "Cancel",
   handoffAction: "Regenerate with this version",
   handoffRejected: "The text view has text the score did not take. The handoff uses the last score the editor read.",
+  handoffSaving: "Saving…",
   handoffInstructionTitle: "Title",
   handoffInstructionIntro: "Regenerate with song2. Use the score in the attached score.abc, passed with --text.",
   handoffInstructionFinal:
@@ -642,20 +643,21 @@ const zh: Messages = {
   changeLogTempoChanges: "速度变化有增减。",
   changeLogKey: (from, to) => `调从 ${from} 改为 ${to}。`,
   changeLogKeyChanges: "调的改变有增减。",
-  changeLogMeter: (from, to, count) => (count === 1 ? `拍号从 ${from} 改为 ${to}。` : `${count} 个小节的拍号变了。`),
+  changeLogMeter: (to, where) => `${where}的拍号改为 ${to}。`,
   changeLogChords: "和弦有改动。",
   changeLogLyrics: "歌词有改动。",
   changeLogStyle: "风格描述有改动。",
   changeLogScoreMode: (from, to) => `乐谱模式从 ${from} 改为 ${to}。`,
-  changeLogSeed: (from, to) => `seed 从 ${from} 改为 ${to}。`,
+  changeLogSeed: (label, from, to) => `${label}从 ${from} 改为 ${to}。`,
   changeLogSeedNone: "无",
-  changeLogNotes: (count) => `改了 ${count} 个小节的音符。`,
+  changeLogNotes: (where) => `${where}的音符有改动。`,
   changeLogText: "直接修改了乐谱文本。",
-  handoffReview: "交接…",
-  handoffTitle: "交接这一版",
+  handoffReview: "重新生成…",
+  handoffTitle: "重新生成前核对",
   handoffCancel: "取消",
   handoffAction: "用这版重新生成",
   handoffRejected: "文本视图里有乐谱没读通的文字。交接用编辑器最后读通的乐谱。",
+  handoffSaving: "保存中…",
   handoffInstructionTitle: "标题",
   handoffInstructionIntro: "用 song2 重新生成，乐谱用附件里的 score.abc，用 --text 传。",
   handoffInstructionFinal: "下面的风格描述和拼回的歌词是最终版，编辑器已经同步好，不要再改。",

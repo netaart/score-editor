@@ -116,23 +116,29 @@ A16|B16|`;
     expect(log(current)).toEqual([
       "Tempo changed from 120 to 140 BPM.",
       "Key changed from C to Am.",
-      "Meter changed in 4 bars.",
+      "Meter changed to 2/2 in bars 1–4.",
       "Chords changed.",
       "Lyrics changed.",
       "Style description changed.",
-      "Score mode changed from full to melody.",
+      "Score mode changed from Full to Melody.",
       "Seed changed from 7 to 9.",
     ]);
   });
 
   it("names the bars whose notes changed, and not a section move's shifted bars", () => {
     const noteChanged = SCORE.replace("C4D4E4F4", "C4E4E4F4");
-    expect(log(changed({ score: noteChanged }))).toEqual(["The notes of 1 bar changed."]);
-    expect(log(changed({ score: noteChanged }), "zh")).toEqual(["改了 1 个小节的音符。"]);
+    expect(log(changed({ score: noteChanged }))).toEqual(["The notes of bar 1 changed."]);
+    expect(log(changed({ score: noteChanged }), "zh")).toEqual(["第 1 小节的音符有改动。"]);
+  });
+
+  it("names changed bars as one bar, a range or a list", () => {
+    const twoBars = SCORE.replace("C4D4E4F4", "C4E4E4F4").replace("A16|B16|", "C16|B16|");
+    expect(log(changed({ score: twoBars }))).toEqual(["The notes of bars 1, 3 changed."]);
+    expect(log(changed({ score: twoBars }), "zh")).toEqual(["第 1、3 小节的音符有改动。"]);
   });
 
   it("names a removed seed in Chinese", () => {
-    expect(log(changed({ seed: null }), "zh")).toEqual(["seed 从 7 改为 无。"]);
+    expect(log(changed({ seed: null }), "zh")).toEqual(["种子从 7 改为 无。"]);
   });
 });
 
@@ -163,7 +169,7 @@ describe("the prefilled handoff instruction", () => {
     expect(text).toContain("Score mode: melody");
     expect(text).toContain("Seed: 9");
     expect(text).toContain("Changes:");
-    expect(text).toContain("- The notes of 1 bar changed.");
+    expect(text).toContain("- The notes of bar 1 changed.");
   });
 
   it("writes the same instruction in Chinese, without a seed line when there is none", () => {
@@ -183,7 +189,9 @@ describe("the prefilled handoff instruction", () => {
     expect(text).toContain("乐谱模式: melody");
     expect(text).not.toContain("Seed:");
     expect(text).toContain("改动记录:");
-    expect(text).toContain("- 改了 1 个小节的音符。");
+    expect(text).toContain("- 第 1 小节的音符有改动。");
+    expect(text).toContain("- 乐谱模式从 完整（full） 改为 旋律（melody）。");
+    expect(text).toContain("- 种子从 7 改为 无。");
   });
 
   it("uses the source key as the title when none is given", () => {

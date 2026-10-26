@@ -176,7 +176,28 @@ function diffSections(before: Score, after: Score, t: Messages): SectionDiff {
   return { entries, pairs };
 }
 
-function changedNoteBars(before: Score, after: Score, pairs: ReadonlyArray<SectionPair>, t: Messages): string[] {
+/** A list of 1-based bars as the log says them: one bar, a run, or a comma-separated list. */
+function barList(bars: ReadonlyArray<number>, language: Language): string {
+  const sorted = [...new Set(bars)].sort((left, right) => left - right);
+  const runs: string[] = [];
+  let start = sorted[0];
+  let end = start;
+  for (const bar of sorted.slice(1)) {
+    if (bar === (end as number) + 1) {
+      end = bar;
+      continue;
+    }
+    runs.push(start === end ? String(start) : `${start}–${end}`);
+    start = bar;
+    end = bar;
+  }
+  if (start !== undefined) runs.push(start === end ? String(start) : `${start}–${end}`);
+  if (language === "zh") return `第 ${runs.join("、")} 小节`;
+  if (runs.length === 1 && !(runs[0] as string).includes("–")) return `bar ${runs[0]}`;
+  return `bars ${runs.join(", ")}`;
+}
+
+function changedNoteBars(before: Score, after: Score, pairs: ReadonlyArray<SectionPair>): number[] {
   const bars = new Set<number>();
   for (const pair of pairs) {
     if (pair.before.barCount !== pair.after.barCount) continue;
@@ -186,10 +207,15 @@ function changedNoteBars(before: Score, after: Score, pairs: ReadonlyArray<Secti
       if (left !== right) bars.add(pair.after.firstBar + offset + 1);
     }
   }
-  return bars.size === 0 ? [] : [t.changeLogNotes(bars.size)];
+  return [...bars].sort((left, right) => left - right);
 }
 
-function changedMeters(before: Score, after: Score, pairs: ReadonlyArray<SectionPair>, t: Messages): string[] {
+function changedMeters(
+  before: Score,
+  after: Score,
+  pairs: ReadonlyArray<SectionPair>,
+  t: Messages,
+): { to: string; bars: number[] } | null {
   const found: { from: string; to: string; bar: number }[] = [];
   for (const pair of pairs) {
     const count = Math.min(pair.before.barCount, pair.after.barCount);
@@ -198,16 +224,11 @@ function changedMeters(before: Score, after: Score, pairs: ReadonlyArray<Section
       const right = after.bars[pair.after.firstBar + offset]?.meter;
       if (left === undefined || right === undefined) continue;
       if (left.numerator === right.numerator && left.denominator === right.denominator) continue;
-      found.push({
-        from: t.meterText(left),
-        to: t.meterText(right),
-        bar: pair.after.firstBar + offset + 1,
-      });
+      found.push({ from: t.meterText(left), to: t.meterText(right), bar: pair.after.firstBar + offset + 1 });
     }
   }
-  if (found.length === 0) return [];
-  const first = found[0] as { from: string; to: string; bar: number };
-  return [t.changeLogMeter(first.from, first.to, found.length)];
+  if (found.length === 0) return null;
+  return { to: (found[0] as { to: string }).to, bars: found.map((entry) => entry.bar) };
 }
 
 function changedChords(before: Score, after: Score, pairs: ReadonlyArray<SectionPair>, t: Messages): string[] {
@@ -258,7 +279,8 @@ export function changeLog(
       );
     }
 
-    entries.push(...changedMeters(before, after, sections.pairs, t));
+    const meters = changedMeters(before, after, sections.pairs, t);
+    if (meters !== null) entries.push(t.changeLogMeter(meters.to, barList(meters.bars, options.language)));
     entries.push(...changedChords(before, after, sections.pairs, t));
   }
 
@@ -269,11 +291,13 @@ export function changeLog(
   }
   if (original.style !== current.style) entries.push(t.changeLogStyle);
   if (original.scoreMode !== current.scoreMode) {
-    entries.push(t.changeLogScoreMode(original.scoreMode, current.scoreMode));
+    const mode = (value: "full" | "melody") => (value === "full" ? t.projectModeFull : t.projectModeMelody);
+    entries.push(t.changeLogScoreMode(mode(original.scoreMode), mode(current.scoreMode)));
   }
   if (original.seed !== current.seed) {
     entries.push(
       t.changeLogSeed(
+        t.projectSeed,
         original.seed === null ? t.changeLogSeedNone : String(original.seed),
         current.seed === null ? t.changeLogSeedNone : String(current.seed),
       ),
@@ -281,7 +305,8 @@ export function changeLog(
   }
 
   if (before !== null && after !== null && sections !== null && original.score !== current.score) {
-    entries.push(...changedNoteBars(before, after, sections.pairs, t));
+    const bars = changedNoteBars(before, after, sections.pairs);
+    if (bars.length > 0) entries.push(t.changeLogNotes(barList(bars, options.language)));
   }
 
   if (original.score !== current.score && (before === null || after === null || sameScoreContent(before, after))) {

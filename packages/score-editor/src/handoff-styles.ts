@@ -2,10 +2,14 @@
 // ABOUTME: styles.ts appends it to the editor's stylesheet; every colour is a derivation of the theme variable contract.
 export const handoffCss = `
 /* The handoff control; see DESIGN.md, "Change log and handoff". */
+.sce-root.sce-part-handoff[hidden] {
+  display: none !important;
+}
 .sce-root .sce-handoff-popover {
   width: 26em;
   max-width: calc(100vw - 16px);
   padding: 12px;
+  overflow: hidden;
 }
 .sce-root .sce-handoff-popover:popover-open {
   display: flex;
@@ -14,6 +18,7 @@ export const handoffCss = `
 }
 .sce-root .sce-handoff-heading {
   margin: 0;
+  font-size: 1em;
   font-weight: 600;
 }
 .sce-root .sce-handoff-log-label {
@@ -22,11 +27,18 @@ export const handoffCss = `
   font-weight: 600;
 }
 .sce-root .sce-handoff-changes {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  min-height: 0;
   margin: 0;
   padding-inline-start: 1.2em;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  font-variant-numeric: lining-nums;
+}
+.sce-root .sce-handoff-changes[hidden] {
+  display: none;
+}
+.sce-root .sce-handoff-changes li + li {
+  margin-block-start: 4px;
 }
 .sce-root .sce-handoff-empty,
 .sce-root .sce-handoff-note {

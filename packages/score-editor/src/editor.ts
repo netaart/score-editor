@@ -225,12 +225,13 @@ export class Editor implements MountedEditor {
   /** What the handoff control reads: nothing while the editor cannot edit or the host gave no callback. */
   private handoffSource(): HandoffSource | null {
     const onHandoff = this.options.onHandoff;
-    if (!this.editable || onHandoff === undefined || this.drafts.status === "opening") return null;
+    if (onHandoff === undefined || this.drafts.status === "opening") return null;
     return {
       original: this.options.project,
       dialects: this.options.dialects,
       onHandoff,
       ...(this.options.title === undefined ? {} : { title: this.options.title }),
+      ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
     };
   }
 

@@ -471,7 +471,7 @@ window.harness = {
     editor.update(hostOptions(options));
   },
   destroy() {
-    editor.destroy();
+    editor?.destroy();
   },
 };
 

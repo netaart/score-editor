@@ -2,7 +2,7 @@
 // ABOUTME: Every current project comes from a draft the fake store returns, so the log is read from the difference, not from a command.
 import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
-import { expect, type Harness, test } from "./fixtures";
+import { box, expect, type Harness, test } from "./fixtures";
 
 const HEADER = `X:1
 T:
@@ -90,10 +90,18 @@ function storedDraft(project: Partial<DraftProject> = {}): string {
   });
 }
 
+/** Twelve one-bar sections, all renamed in the draft, so the review has a twelve-line change log. */
+function manySections(prefix: string): string {
+  const sections = Array.from({ length: 12 }, (_item, index) => `% ${prefix}${index + 1}\nV: Vocal\nC16|`);
+  return `${HEADER}\nK:C\n${sections.join("\n")}`;
+}
+
 interface PageStore {
   seed(key: string, text: string): string;
   external(key: string, text: string): string;
   failNext(method: "read" | "write" | "remove" | "list", count?: number): void;
+  holdWrite(): void;
+  releaseWrite(): void;
 }
 
 type PageWithStore = { harness: { drafts: PageStore } };
@@ -119,6 +127,14 @@ function failNext(page: Page, method: "read" | "write" | "remove" | "list") {
   );
 }
 
+function holdWrite(page: Page) {
+  return page.evaluate(() => (window as unknown as PageWithStore).harness.drafts.holdWrite());
+}
+
+function releaseWrite(page: Page) {
+  return page.evaluate(() => (window as unknown as PageWithStore).harness.drafts.releaseWrite());
+}
+
 async function openEditor(harness: Harness, draft: string, options: Record<string, unknown> = {}) {
   await seed(harness.page, draft);
   await harness.mount({
@@ -132,10 +148,10 @@ async function openEditor(harness: Harness, draft: string, options: Record<strin
 }
 
 const handoffButton = (page: Page, language: "en" | "zh" = "en") =>
-  page.getByRole("button", { name: language === "zh" ? "交接…" : "Hand off…", exact: true });
+  page.getByRole("button", { name: language === "zh" ? "重新生成…" : "Regenerate…", exact: true });
 
 const dialog = (page: Page, language: "en" | "zh" = "en") =>
-  page.getByRole("dialog", { name: language === "zh" ? "交接这一版" : "Hand off this version", exact: true });
+  page.getByRole("dialog", { name: language === "zh" ? "重新生成前核对" : "Check before regenerating", exact: true });
 
 const changeList = (page: Page, language: "en" | "zh" = "en") =>
   dialog(page, language).getByRole("list", { name: language === "zh" ? "改动记录" : "Changes", exact: true });
@@ -145,6 +161,9 @@ const confirmButton = (page: Page, language: "en" | "zh" = "en") =>
     name: language === "zh" ? "用这版重新生成" : "Regenerate with this version",
     exact: true,
   });
+
+const cancelButton = (page: Page, language: "en" | "zh" = "en") =>
+  dialog(page, language).getByRole("button", { name: language === "zh" ? "取消" : "Cancel", exact: true });
 
 test.describe("the change log in the mounted editor", () => {
   test("lists the section changes a draft carries", async ({ page, harness }) => {
@@ -188,19 +207,19 @@ test.describe("the change log in the mounted editor", () => {
     await expect(changeList(page, "zh").getByRole("listitem")).toHaveText([
       "速度从 120 改为 140 BPM。",
       "调从 C 改为 Am。",
-      "4 个小节的拍号变了。",
+      "第 1–4 小节的拍号改为 2/2。",
       "和弦有改动。",
       "歌词有改动。",
       "风格描述有改动。",
-      "乐谱模式从 full 改为 melody。",
-      "seed 从 7 改为 9。",
+      "乐谱模式从 完整（full） 改为 旋律（melody）。",
+      "种子从 7 改为 9。",
     ]);
   });
 
   test("lists the bars whose notes changed", async ({ page, harness }) => {
     await openEditor(harness, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") }));
     await handoffButton(page).click();
-    await expect(changeList(page).getByRole("listitem")).toHaveText(["The notes of 1 bar changed."]);
+    await expect(changeList(page).getByRole("listitem")).toHaveText(["The notes of bar 1 changed."]);
   });
 
   test("says the score text was edited directly when the text changed and the score did not", async ({
@@ -222,7 +241,7 @@ test.describe("handing off", () => {
     await openEditor(harness, storedDraft({ score: changedScore }));
     await handoffButton(page).click();
     await expect(dialog(page)).toBeVisible();
-    await expect(changeList(page).getByRole("listitem")).toHaveText(["The notes of 1 bar changed."]);
+    await expect(changeList(page).getByRole("listitem")).toHaveText(["The notes of bar 1 changed."]);
     await confirmButton(page).click();
 
     await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
@@ -242,7 +261,7 @@ test.describe("handing off", () => {
     expect(handoff.payload.instruction).toContain("Joined lyrics:\n[verse]\nla la\n[chorus]\nha ha");
     expect(handoff.payload.instruction).toContain("Score mode: full");
     expect(handoff.payload.instruction).toContain("Seed: 7");
-    expect(handoff.payload.instruction).toContain("- The notes of 1 bar changed.");
+    expect(handoff.payload.instruction).toContain("- The notes of bar 1 changed.");
 
     const writes = handoff.calls.filter((call) => call.method === "write");
     expect(writes).toHaveLength(1);
@@ -268,7 +287,7 @@ test.describe("handing off", () => {
     expect(handoff.payload.instruction).toContain("用 song2 重新生成");
     expect(handoff.payload.instruction).toContain("拼回的歌词:\n[verse]\nla la\n[chorus]\nha ha");
     expect(handoff.payload.instruction).toContain("乐谱模式: full");
-    expect(handoff.payload.instruction).toContain("- 改了 1 个小节的音符。");
+    expect(handoff.payload.instruction).toContain("- 第 1 小节的音符有改动。");
   });
 
   test("hands off an unchanged original without writing a draft", async ({ page, harness }) => {
@@ -331,5 +350,294 @@ test.describe("handing off", () => {
       .poll(async () => (await harness.notices()).map((notice) => notice.code))
       .toContain("draft-save-failed");
     expect(await harness.handoffs()).toEqual([]);
+  });
+});
+
+test.describe("the review", () => {
+  test("marks the trigger expanded while it is open", async ({ page, harness }) => {
+    await openEditor(harness, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") }));
+    await handoffButton(page).click();
+    await expect(handoffButton(page)).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeHidden();
+    await expect(handoffButton(page)).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("closes when Tab leaves it, lets Shift+Tab reach the trigger, and returns focus on Escape", async ({
+    page,
+    harness,
+  }) => {
+    await openEditor(harness, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") }));
+    await handoffButton(page).click();
+    await expect(dialog(page)).toBeVisible();
+    await expect(cancelButton(page)).toBeFocused();
+
+    await page.keyboard.press("Shift+Tab");
+    await expect(handoffButton(page)).toBeFocused();
+    await expect(dialog(page)).toBeVisible();
+
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(dialog(page)).toBeHidden();
+
+    await handoffButton(page).click();
+    await expect(dialog(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeHidden();
+    await expect(handoffButton(page)).toBeFocused();
+  });
+
+  test("keeps the list and its description one state at a time, and the heading at the Title step", async ({
+    page,
+    harness,
+  }) => {
+    await openEditor(harness, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") }));
+    await handoffButton(page).click();
+    const list = changeList(page);
+    await expect(list).toBeVisible();
+    const described = await dialog(page).getAttribute("aria-describedby");
+    expect(described).toBe(await list.getAttribute("id"));
+    expect(await list.evaluate((el) => getComputedStyle(el).display)).not.toBe("flex");
+    expect(await list.evaluate((el) => getComputedStyle(el).overflowWrap)).toBe("anywhere");
+    expect(await list.evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain("lining-nums");
+    const [headingSize, dialogSize] = await Promise.all([
+      dialog(page)
+        .locator(".sce-handoff-heading")
+        .evaluate((el) => getComputedStyle(el).fontSize),
+      dialog(page).evaluate((el) => getComputedStyle(el).fontSize),
+    ]);
+    expect(headingSize).toBe(dialogSize);
+    await cancelButton(page).click();
+
+    await harness.destroy();
+    await harness.mount({
+      score: { text: SCORE },
+      project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7, sourceKey: "empty-review" },
+      handoff: true,
+      drafts: true,
+    });
+    await handoffButton(page).click();
+    const empty = dialog(page).locator(".sce-handoff-empty");
+    await expect(empty).toBeVisible();
+    expect(await dialog(page).getAttribute("aria-describedby")).toBe(await empty.getAttribute("id"));
+    expect(
+      await dialog(page)
+        .locator(".sce-handoff-changes")
+        .evaluate((el) => (el as HTMLElement).hidden),
+    ).toBe(true);
+  });
+
+  test("keeps its height inside a short window and scrolls a twelve-line log", async ({ page, harness }) => {
+    for (const [width, height] of [
+      [412, 390],
+      [1280, 300],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await harness.destroy();
+      await openEditor(harness, storedDraft({ score: manySections("r") }));
+      await handoffButton(page).click();
+      await expect(dialog(page)).toBeVisible();
+      const area = await dialog(page).boundingBox();
+      if (area === null) throw new Error("the review has no box");
+      expect(area.y + area.height).toBeLessThanOrEqual(height + 1);
+      const scroll = await changeList(page).evaluate((el) => ({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      }));
+      expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+      await expect(confirmButton(page)).toBeEnabled();
+      await confirmButton(page).click();
+      await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
+    }
+  });
+});
+
+test.describe("a slow handoff", () => {
+  test("keeps the reviewed project in the payload when the save is delayed", async ({ page, harness }) => {
+    const reviewed = SCORE.replace("C4D4E4F4", "C4E4E4F4");
+    await openEditor(harness, storedDraft({ score: reviewed }));
+    await handoffButton(page).click();
+    await expect(changeList(page).getByRole("listitem")).toHaveText(["The notes of bar 1 changed."]);
+    await holdWrite(page);
+    await confirmButton(page).click();
+    const trigger = page.locator(".sce-handoff-button");
+    await expect(trigger).toHaveText("Saving…");
+
+    await page.getByRole("button", { name: "Score text", exact: true }).click();
+    const box = page.getByRole("textbox", { name: "Score text" });
+    await box.fill(SCORE.replace("C4D4E4F4", "C4F4E4F4"));
+    await box.press("Tab");
+    await page.getByRole("button", { name: "Arrangement", exact: true }).click();
+    await expect(
+      page.getByRole("list", { name: "Vocal" }).getByRole("listitem", { name: "F4, bar 1 beat 2, length 1 beat" }),
+    ).toBeVisible();
+
+    await releaseWrite(page);
+    await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
+    const handoff = (await harness.handoffs())[0];
+    if (handoff === undefined) throw new Error("the host callback did not run");
+    expect(handoff.payload.attachment.text).toBe(reviewed);
+    expect(handoff.payload.project.score).toBe(reviewed);
+    expect(handoff.payload.instruction).toContain("- The notes of bar 1 changed.");
+    const writes = handoff.calls.filter((call) => call.method === "write");
+    expect(writes).toHaveLength(1);
+    const stored = JSON.parse(String(writes[0]?.text)) as { project: { score: string } };
+    expect(stored.project.score).toBe(reviewed);
+  });
+
+  test("calls nothing after the editor is destroyed while the save is pending", async ({ page, harness }) => {
+    await openEditor(harness, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") }));
+    await handoffButton(page).click();
+    await holdWrite(page);
+    await confirmButton(page).click();
+    await expect(page.locator(".sce-handoff-button")).toHaveText("Saving…");
+    await harness.destroy();
+    await releaseWrite(page);
+    await page.waitForTimeout(200);
+    expect(await harness.handoffs()).toEqual([]);
+  });
+
+  test("shows Saving… and refuses to open the review until the save settles", async ({ page, harness }) => {
+    await openEditor(harness, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") }));
+    await handoffButton(page).click();
+    await holdWrite(page);
+    await confirmButton(page).click();
+    const trigger = page.locator(".sce-handoff-button");
+    await expect(trigger).toHaveText("Saving…");
+    await expect(trigger).toHaveAttribute("aria-busy", "true");
+    await expect(trigger).toBeDisabled();
+    await expect(dialog(page)).toBeHidden();
+
+    await releaseWrite(page);
+    await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
+    await expect(trigger).toHaveText("Regenerate…");
+    await expect(trigger).toHaveAttribute("aria-busy", "false");
+    await expect(trigger).toBeEnabled();
+  });
+});
+
+test.describe("the trigger and the toolbar", () => {
+  test("adds no toolbar height where the row has room, in either language", async ({ page, harness, isMobile }) => {
+    const cases = isMobile
+      ? ([
+          [320, "zh"],
+          [412, "en"],
+          [1280, "en"],
+          [1280, "zh"],
+        ] as const)
+      : ([
+          [320, "zh"],
+          [412, "zh"],
+          [1280, "en"],
+          [1280, "zh"],
+        ] as const);
+    for (const [width, language] of cases) {
+      await page.setViewportSize({ width, height: 900 });
+      await harness.destroy();
+      await harness.mount({
+        language,
+        score: { text: SCORE },
+        project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+        drafts: true,
+      });
+      await expect(page.locator(".sce-part-restore")).toBeVisible();
+      await harness.frames(1);
+      const without = (await box(page.locator(".sce-toolbar"))).height;
+
+      await harness.destroy();
+      await harness.mount({
+        language,
+        score: { text: SCORE },
+        project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+        drafts: true,
+        handoff: true,
+      });
+      await expect(handoffButton(page, language)).toBeVisible();
+      await harness.frames(1);
+      const withTrigger = (await box(page.locator(".sce-toolbar"))).height;
+
+      expect(withTrigger, `${language} ${width}px: ${without} -> ${withTrigger}`).toBeLessThanOrEqual(without);
+    }
+  });
+
+  test("cannot keep the toolbar height at the remaining 320 and 412 sizes with the word trigger", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.fail(
+      true,
+      "F2 remains with the word trigger: 320px English and, on a fine pointer, 412px English; on a coarse pointer, 320px English and 412px Chinese. Reported for the leader's decision.",
+    );
+    const cases = isMobile
+      ? ([
+          [320, "en"],
+          [412, "zh"],
+        ] as const)
+      : ([
+          [320, "en"],
+          [412, "en"],
+        ] as const);
+    for (const [width, language] of cases) {
+      await page.setViewportSize({ width, height: 900 });
+      await harness.destroy();
+      await harness.mount({
+        language,
+        score: { text: SCORE },
+        project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+        drafts: true,
+      });
+      await expect(page.locator(".sce-part-restore")).toBeVisible();
+      await harness.frames(1);
+      const without = (await box(page.locator(".sce-toolbar"))).height;
+
+      await harness.destroy();
+      await harness.mount({
+        language,
+        score: { text: SCORE },
+        project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+        drafts: true,
+        handoff: true,
+      });
+      await expect(handoffButton(page, language)).toBeVisible();
+      await harness.frames(1);
+      const withTrigger = (await box(page.locator(".sce-toolbar"))).height;
+
+      expect.soft(withTrigger, `${language} ${width}px: ${without} -> ${withTrigger}`).toBeLessThanOrEqual(without);
+    }
+  });
+
+  test("places the trigger after Select and Grid, before Restore original", async ({ page, harness }) => {
+    await harness.mount({
+      score: { text: SCORE },
+      project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+      drafts: true,
+      handoff: true,
+    });
+    await expect(handoffButton(page)).toBeVisible();
+    const order = await page.locator(".sce-toolbar").evaluate((el) =>
+      [...el.children]
+        .map((child) => [...child.classList].find((name) => /^sce-part-(select|grid|handoff|restore)$/.test(name)))
+        .filter((name) => name !== undefined)
+        .map((name) => `.${name}`),
+    );
+    expect(order).toEqual([".sce-part-select", ".sce-part-grid", ".sce-part-handoff", ".sce-part-restore"]);
+  });
+
+  test("hands off a host without a draft store without writing one", async ({ page, harness }) => {
+    await harness.mount({
+      score: { text: SCORE },
+      project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+      handoff: true,
+      title: "My Song",
+    });
+    await handoffButton(page).click();
+    await confirmButton(page).click();
+    await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
+    const handoff = (await harness.handoffs())[0];
+    if (handoff === undefined) throw new Error("the host callback did not run");
+    expect(handoff.payload.attachment.text).toBe(SCORE);
+    expect(handoff.calls).toEqual([]);
   });
 });

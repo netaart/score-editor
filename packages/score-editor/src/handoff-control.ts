@@ -9,7 +9,7 @@ import { keepInside, placeUnder } from "./popover-menu";
 import type { SongProject } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
-import type { HandoffPayload, Language } from "./types";
+import type { HandoffPayload, Language, Notice } from "./types";
 
 /** What the control needs to know at the moment it draws or hands off; null takes the control away. */
 export interface HandoffSource {
@@ -17,6 +17,8 @@ export interface HandoffSource {
   readonly title?: string;
   readonly dialects: DialectRegistry;
   readonly onHandoff: (handoff: HandoffPayload) => void;
+  /** Where an unexpected rejection of the save goes, as the keeper sends its own failures. */
+  readonly notify?: (notice: Notice) => void;
 }
 
 export interface HandoffControl {
@@ -57,7 +59,9 @@ export function mountHandoffControl(
   logLabel.id = `sce-handoff-log-${instanceCount}`;
   const changes = create(doc, "ul", "sce-handoff-changes", popover);
   changes.setAttribute("aria-labelledby", logLabel.id);
+  changes.id = `sce-handoff-list-${instanceCount}`;
   const empty = create(doc, "p", "sce-handoff-empty", popover);
+  empty.id = `sce-handoff-empty-${instanceCount}`;
   const rejected = create(doc, "p", "sce-handoff-note", popover);
   const actions = create(doc, "div", "sce-handoff-actions", popover);
   const cancel = create(doc, "button", "sce-button", actions);
@@ -72,6 +76,15 @@ export function mountHandoffControl(
 
   let language: Language | null = null;
   let busy = false;
+  let destroyed = false;
+
+  function setBusy(next: boolean): void {
+    busy = next;
+    button.disabled = next;
+    button.setAttribute("aria-busy", String(next));
+    const t = messagesFor(session.view.language);
+    button.textContent = next ? t.handoffSaving : t.handoffReview;
+  }
 
   function applyLanguage(): void {
     language = session.view.language;
@@ -83,6 +96,7 @@ export function mountHandoffControl(
     cancel.textContent = t.handoffCancel;
     confirm.textContent = t.handoffAction;
     rejected.textContent = t.handoffRejected;
+    if (busy) button.textContent = t.handoffSaving;
   }
 
   function renderLog(): void {
@@ -105,11 +119,12 @@ export function mountHandoffControl(
     empty.hidden = entries.length > 0;
     empty.textContent = t.changeLogNone;
     rejected.hidden = session.rejectedText === null;
+    popover.setAttribute("aria-describedby", entries.length === 0 ? empty.id : changes.id);
   }
 
   function draw(): void {
     const config = source();
-    const present = config !== null;
+    const present = !destroyed && config !== null && session.view.editable;
     root.hidden = !present;
     if (!present && popover.matches(":popover-open")) popover.hidePopover();
     if (!present) return;
@@ -120,7 +135,13 @@ export function mountHandoffControl(
   popover.addEventListener(
     "beforetoggle",
     (event) => {
-      if ((event as ToggleEvent).newState === "open") placeUnder(popover, button);
+      const open = (event as ToggleEvent).newState === "open";
+      button.setAttribute("aria-expanded", String(open));
+      if (!open) return;
+      const view = popover.ownerDocument.defaultView;
+      const room =
+        view === null ? undefined : Math.max(0, view.innerHeight - button.getBoundingClientRect().bottom - 12);
+      placeUnder(popover, button, room === undefined ? {} : { maxHeight: room });
     },
     { signal },
   );
@@ -137,6 +158,17 @@ export function mountHandoffControl(
     { signal },
   );
   cancel.addEventListener("click", () => popover.hidePopover(), { signal });
+  popover.addEventListener(
+    "focusout",
+    (event) => {
+      const next = (event as FocusEvent).relatedTarget;
+      // A press on plain text inside the review moves focus to nothing; that is not leaving it.
+      if (!(next instanceof Node)) return;
+      if (popover.contains(next) || button.contains(next)) return;
+      popover.hidePopover();
+    },
+    { signal },
+  );
 
   function payloadOf(config: HandoffSource): HandoffPayload {
     const dialect = config.dialects.find(session.project.modelId) ?? config.dialects.find(config.original.modelId);
@@ -154,21 +186,28 @@ export function mountHandoffControl(
   }
 
   async function handOff(): Promise<void> {
-    if (busy) return;
+    if (busy || destroyed) return;
     const config = source();
-    if (config === null) return;
+    if (config === null || !session.view.editable) return;
+    // The review shows this project; the save must not race an edit made while it is pending.
+    const handoff = payloadOf(config);
     popover.hidePopover();
-    busy = true;
+    setBusy(true);
+    let result: "written" | "unchanged" | "conflict" | "failed";
     try {
-      // No keeper means no store was given: there is nowhere to save a draft, so the host still gets the handoff.
-      if (keeper.status !== "destroyed") {
-        const result = await keeper.handoff();
-        if (result !== "written" && result !== "unchanged") return;
+      result = await keeper.handoff();
+    } catch {
+      const t = messagesFor(session.view.language);
+      if (!destroyed) {
+        config.notify?.({ code: "draft-save-failed", level: "error", message: t.draftSaveFailed });
       }
-      config.onHandoff(payloadOf(config));
-    } finally {
-      busy = false;
+      if (!destroyed) setBusy(false);
+      return;
     }
+    if (!destroyed) setBusy(false);
+    if (destroyed) return;
+    // A conflict goes to the conflict strip and a failure to the keeper's own notice; neither hands off.
+    if (result === "written" || result === "unchanged") config.onHandoff(handoff);
   }
 
   confirm.addEventListener("click", () => void handOff(), { signal });
@@ -177,7 +216,6 @@ export function mountHandoffControl(
   const unsubscribeSession = session.subscribe(draw);
   const unsubscribeKeeper = keeper.subscribe(draw);
 
-  let destroyed = false;
   return {
     refresh: draw,
     destroy() {
