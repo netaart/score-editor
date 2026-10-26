@@ -40,6 +40,33 @@ export type { DraftProject, ScoreDraft } from "./drafts";
 export { contentHash, DRAFT_FORMAT_VERSION, draftText, readDraft } from "./drafts";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
+// The lyric track: the rules a host's own lyric view can reuse.
+export type {
+  LyricBoundaryDrag,
+  LyricBoundaryMove,
+  LyricBoundaryPlan,
+  LyricDrop,
+  LyricDropPlan,
+  LyricEdge,
+  LyricRow,
+  LyricSplit,
+} from "./lyric-edit";
+export { barLineTick, lyricBoundaryPlan, lyricDropPlan, lyricRows, lyricSplitCommand } from "./lyric-edit";
+export { mountLyricTrack } from "./lyric-track";
+export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
+export {
+  alignedLyricLines,
+  alignLyricLine,
+  joinLyrics,
+  LYRICS_MAX_CHARACTERS,
+  layoutLyrics,
+  lyricCharacterCount,
+  lyricLinesOf,
+  lyricSyllables,
+  noteOnsets,
+  syllableCount,
+  unalignedLyricLines,
+} from "./lyrics";
 export { mount } from "./mount";
 // The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
@@ -123,30 +150,3 @@ export { mountViewSwitch } from "./view-switch";
 export type { VoiceTrackOptions } from "./voice-track";
 export { mountVoiceTrack } from "./voice-track";
 export { mountZoomControl } from "./zoom-control";
-// The lyric track: the rules a host's own lyric view can reuse.
-export type {
-  LyricBoundaryDrag,
-  LyricBoundaryMove,
-  LyricBoundaryPlan,
-  LyricDrop,
-  LyricDropPlan,
-  LyricEdge,
-  LyricRow,
-  LyricSplit,
-} from "./lyric-edit";
-export { barLineTick, lyricBoundaryPlan, lyricDropPlan, lyricRows, lyricSplitCommand } from "./lyric-edit";
-export { mountLyricTrack } from "./lyric-track";
-export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
-export {
-  alignedLyricLines,
-  alignLyricLine,
-  joinLyrics,
-  LYRICS_MAX_CHARACTERS,
-  layoutLyrics,
-  lyricCharacterCount,
-  lyricLinesOf,
-  lyricSyllables,
-  noteOnsets,
-  syllableCount,
-  unalignedLyricLines,
-} from "./lyrics";

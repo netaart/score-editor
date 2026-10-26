@@ -7,6 +7,7 @@ import {
   expect,
   groundOf,
   type Harness,
+  listenerCounter,
   lyricDropMark,
   lyricGrips,
   lyricGuide,
@@ -14,7 +15,6 @@ import {
   lyricKeys,
   lyricPanel,
   lyricSyllableCells,
-  listenerCounter,
   type Point,
   test,
 } from "./fixtures";
