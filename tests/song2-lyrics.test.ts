@@ -332,18 +332,18 @@ describe("joining the lyrics text", () => {
     expect(lyricCharacterCount("你好")).toBe(2);
     expect(lyricCharacterCount("a\nb")).toBe(3);
     expect(lyricCharacterCount("😀")).toBe(1);
-    expect(LYRICS_MAX_CHARACTERS).toBe(2000);
+    expect(LYRICS_MAX_CHARACTERS).toBe(4000);
   });
 
-  it("reports unaligned lines and a joined text over 2,000 characters as notices", () => {
+  it("reports unaligned lines and a joined text over 4,000 characters as notices", () => {
     const oneLineScore = `${ONE_VOICE}
 K:C
 V: Vocal
 C16|`;
-    expect(checkProject(song2Dialect, project({ score: oneLineScore, lyrics: "字".repeat(2000) }))).toEqual([]);
-    const tooLong = checkProject(song2Dialect, project({ score: oneLineScore, lyrics: "字".repeat(2001) }));
+    expect(checkProject(song2Dialect, project({ score: oneLineScore, lyrics: "字".repeat(4000) }))).toEqual([]);
+    const tooLong = checkProject(song2Dialect, project({ score: oneLineScore, lyrics: "字".repeat(4001) }));
     expect(tooLong.map((diagnostic) => diagnostic.code)).toEqual(["lyrics-too-long"]);
-    expect(tooLong[0]?.params).toEqual({ count: 2001, max: 2000 });
+    expect(tooLong[0]?.params).toEqual({ count: 4001, max: 4000 });
 
     const unaligned = checkProject(song2Dialect, project({ lyrics: "[Missing]\nloose" }));
     expect(unaligned.map((diagnostic) => diagnostic.code)).toEqual(["lyrics-unaligned"]);
