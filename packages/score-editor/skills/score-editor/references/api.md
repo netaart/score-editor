@@ -17,7 +17,7 @@ change. The tests in the repository check that the list stays complete.
 | `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
-| `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. |
+| `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. Returns a `StaffViewPart`. |
 | `mountStaleNotice` | core | Mounts the stale notice part: one sentence while the text view holds text the project did not take. |
 | `mountViewSwitch` | core | Mounts the view switch part: three buttons that set the session's `activeView`. |
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
@@ -46,6 +46,7 @@ change. The tests in the repository check that the list stays complete.
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
 | `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
+| `tickAtSeconds` | core | The tick at a time from the score's start, following tempo changes and staying at the end past it. Pure. |
 | `contentHash` | core | The lowercase SHA-256 of the UTF-8 bytes of `JSON.stringify([lyrics, score])`. |
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
@@ -95,7 +96,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`. |
-| `Score` | A parsed score: tempo, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, source. |
+| `Score` | A parsed score: tempo, optional `tempoChanges`, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |
@@ -134,6 +135,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
+| `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
 | `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview? }` for the toolbar. |
@@ -161,10 +163,10 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `PreviewPlayer` | `{ playing, tick, from, start(), stop(), subscribe(listener) }`. |
+| `PreviewPlayer` | `{ playing, tick, from, start(fromTick?), stop(), subscribe(listener) }`. |
 | `PreviewStart` | What `start()` resolves: `"started"`, `"nothing-to-play"`, `"unsupported"`, `"blocked"` or `"cancelled"`. |
 | `PreviewNoteOptions` | `{ duration? }` in seconds for `previewNote`. |
-| `PreviewSchedule` | `{ events, fromTick, secondsPerTick, length }`. |
+| `PreviewSchedule` | `{ events, fromTick, secondsPerTick, length }`; `secondsPerTick` is the opening tempo's. |
 | `PreviewEvent` | A `PreviewNoteEvent` or a `PreviewChordEvent`. |
 | `PreviewNoteEvent` | `{ kind: "note", voice, midi, at, length }`. |
 | `PreviewChordEvent` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |
