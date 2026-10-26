@@ -5,6 +5,7 @@ import { type BuiltAxis, headerRow, mountAxisPart } from "./axis-part";
 import { create } from "./dom";
 import type { Messages } from "./i18n";
 import type { Score } from "./score";
+import { createSectionMenus } from "./section-menu";
 import type { EditingSession } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
 
@@ -24,11 +25,19 @@ function buildRuler(canvas: HTMLElement, score: Score, t: Messages): { corner: H
   return row;
 }
 
-/** One band per section that has bars; a marker with no bars after it has nothing to cover. */
-function buildSections(canvas: HTMLElement, score: Score, t: Messages): HTMLElement {
+/**
+ * One band per section that has bars; a marker with no bars after it has nothing to cover. `decorate` is called on each
+ * band with the section's index in the score, once the band holds its name.
+ */
+function buildSections(
+  canvas: HTMLElement,
+  score: Score,
+  t: Messages,
+  decorate: (band: HTMLElement, section: number) => void,
+): HTMLElement {
   const doc = canvas.ownerDocument;
   const { timeline } = headerRow(canvas, "sce-sections", t.sections);
-  for (const section of score.sections) {
+  for (const [index, section] of score.sections.entries()) {
     const first = score.bars[section.firstBar];
     const last = score.bars[section.firstBar + section.barCount - 1];
     if (section.barCount < 1 || !first || !last) continue;
@@ -36,6 +45,7 @@ function buildSections(canvas: HTMLElement, score: Score, t: Messages): HTMLElem
     band.setAttribute("role", "listitem");
     band.style.cssText = `--t:${first.start};--d:${last.start + last.length - first.start}`;
     create(doc, "span", "sce-section-name", band).textContent = section.name ?? t.unnamedSection;
+    decorate(band, index);
   }
   return timeline;
 }
@@ -77,19 +87,24 @@ function buildMarks(canvas: HTMLElement, score: Score, t: Messages): HTMLElement
 
 /**
  * Mounts the time ruler on `el`: the bar numbers, the section bands and the key and meter marks. It draws from the
- * session's score and follows its zoom, scroll and language. Place it above the tracks; it scrolls with them.
+ * session's score and follows its zoom, scroll and language. Place it above the tracks; it scrolls with them. While the
+ * session is editable each section band opens the section menu (see `createSectionMenus`).
  */
 export function mountTimeRuler(el: HTMLElement, session: EditingSession, options?: AxisPartOptions): ViewPart {
-  return mountAxisPart(
+  const menus = createSectionMenus(session, options);
+  const part = mountAxisPart(
     el,
     session,
     {
       kind: "time-ruler",
       who: "mountTimeRuler",
       region: (t) => t.timeRuler,
+      attach: (root, signal, live) => menus.attach(root, signal, live),
+      refresh: () => menus.refresh(),
       build(canvas, score, t): BuiltAxis {
+        const decorate = menus.begin(canvas, score, t);
         const ruler = buildRuler(canvas, score, t);
-        const sections = buildSections(canvas, score, t);
+        const sections = buildSections(canvas, score, t, decorate);
         const marks = buildMarks(canvas, score, t);
         return {
           axes: [ruler.timeline, sections, marks],
@@ -102,4 +117,10 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
     },
     options,
   );
+  return {
+    destroy() {
+      menus.destroy();
+      part.destroy();
+    },
+  };
 }

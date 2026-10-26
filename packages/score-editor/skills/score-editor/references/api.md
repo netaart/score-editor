@@ -53,6 +53,7 @@ change. The tests in the repository check that the list stays complete.
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
+| `sectionActions` | core | What one section offers a menu: rename, start a section at a bar, move earlier, move later, duplicate and delete, each with its command and, when the command layer would refuse it, the refusal. Asks without changing the session. |
 | `chordSlots` | core | The places a chord can go in a `Score`: the starts of notes and rests in voices the constraints allow chords on, as `ChordSlot`s. Pure. |
 | `nearestChordSlot` | core | The `ChordSlot` nearest a tick, the earlier one on a tie; null when there is none. Pure. |
 | `chordChoices` | core | What a chord picker may offer from a `ChordVocabulary`: letters with their spellings, the types the grammar can write, and whether a bass note is allowed, as `ChordChoices`. Pure. |
@@ -215,6 +216,13 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `NoteFilter` | The conditions of `filterNotes`, each optional: `pitch`, `time`, `duration`, `key`, `count` and `invert`. |
+
+## Section menu types
+
+| Export | What it is |
+| --- | --- |
+| `SectionAction` | `{ name, command, unavailable }`: one action of a section, the command that does it (`null` for rename and start, which need a name first) and, when the command layer would refuse it, that refusal's `Diagnostic`. |
+| `SectionActionName` | `"rename" \| "start" \| "move-earlier" \| "move-later" \| "duplicate" \| "delete"`, in the order a menu lists them. |
 
 ## Lyric track types
 

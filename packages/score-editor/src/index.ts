@@ -99,6 +99,8 @@ export type {
   Truncation,
 } from "./score";
 export { noteId, TICKS_PER_QUARTER } from "./score";
+export type { SectionAction, SectionActionName } from "./section-actions";
+export { sectionActions } from "./section-actions";
 export type {
   DispatchResult,
   EditingSession,

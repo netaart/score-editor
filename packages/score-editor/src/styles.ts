@@ -8,6 +8,7 @@ import { dragCss } from "./drag-styles";
 import { filterCss } from "./filter-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
+import { sectionMenuCss } from "./section-styles";
 import { songCss } from "./song-styles";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
@@ -1118,6 +1119,7 @@ ${labelThinning()}
 }
 ${boxCss}${lyricCss}
 ${draftCss}
+${sectionMenuCss}
 ${chordCss}
 ${songCss}
 ${filterCss}
