@@ -14,7 +14,7 @@ change. The tests in the repository check that the list stays complete.
 | `mountCutNotice` | core | Mounts the cut-notice view part. |
 | `mountProblemView` | core | Mounts the problem view part. |
 | `mountTimeRuler` | core | Mounts the time-ruler view part; takes `AxisPartOptions`. |
-| `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. |
+| `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. While the session is editable, a press places, changes or removes a chord through a picker. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
 | `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. Returns a `StaffViewPart`. |
@@ -53,6 +53,10 @@ change. The tests in the repository check that the list stays complete.
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
+| `chordSlots` | core | The places a chord can go in a `Score`: the starts of notes and rests in voices the constraints allow chords on, as `ChordSlot`s. Pure. |
+| `nearestChordSlot` | core | The `ChordSlot` nearest a tick, the earlier one on a tie; null when there is none. Pure. |
+| `chordChoices` | core | What a chord picker may offer from a `ChordVocabulary`: letters with their spellings, the types the grammar can write, and whether a bass note is allowed, as `ChordChoices`. Pure. |
+| `splitChordName` | core | Splits a chord name into `ChordNameParts` by a vocabulary; null when the vocabulary does not allow the name. The grammar `setChord` checks. Pure. |
 | `filterNotes` | core | The ids of the notes that satisfy a `NoteFilter` (pitch, time, length, in or out of key, one in every N, invert) in a `Score`. Pure. |
 | `mountFilterPanel` | core | Mounts the Filter button and its panel on `(el, session)`: selects notes by condition through `session.select`; shown in read-only mode too. |
 | `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
@@ -196,6 +200,15 @@ change. The tests in the repository check that the list stays complete.
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
 | `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
 | `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
+
+## Chord editing types
+
+| Export | What it is |
+| --- | --- |
+| `ChordSlot` | `{ noteId, voice, start, duration, chord, before }`: a start a chord can go on, the chord there (or null) and the chord in force before it (or null). |
+| `ChordChoices` | `{ letters, qualities, slashBass }`: what a picker offers. |
+| `ChordLetter` | `{ letter, roots }`: one letter A-G and the root spellings the vocabulary has on it. |
+| `ChordNameParts` | `{ root, quality, bass }`: a chord name split by a vocabulary; `bass` is null without a slash bass. |
 
 ## Filter types
 

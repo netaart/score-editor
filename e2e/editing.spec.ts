@@ -26,6 +26,23 @@ import {
   vocalOnly,
 } from "./fixtures";
 
+/** Vocal has a whole note in each bar; Ins has four quarter notes in the first. */
+const INS_SCORE = [
+  "X:1",
+  "T:",
+  "M:4/4",
+  "L:1/16",
+  "Q:1/4=100",
+  'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"',
+  'V: Ins clef=treble name="Ins Melody" snm="Inst."',
+  "K:C",
+  "% a",
+  "V: Vocal",
+  "C16|G16|",
+  "V: Ins",
+  "C4D4E4F4|G16|",
+  "",
+].join("\n");
 const C4 = "C4, bar 1 beat 1, length 1 beat";
 const D4 = "D4, bar 1 beat 2, length 1 beat";
 const E4 = "E4, bar 1 beat 3, length 1 beat";
@@ -539,6 +556,19 @@ test.describe("the insertion point", () => {
     await press(lane(page), { x: 12, y: 4 });
     await expect(point).toHaveAccessibleName("Insertion point, bar 1 beat 1");
     expect(Math.abs(await insertionPointAt(page))).toBeLessThan(1.5);
+  });
+
+  test("a press in the Ins lane sets the insertion point and opens no chord picker", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.layout.open({ score: { text: INS_SCORE }, parts: ["chords", "ins"] });
+
+    await press(page.locator('[data-slot="ins"]').getByRole("list", { name: "Ins" }), { x: 70, y: 120 });
+
+    expect(await harness.layout.insertionPoint()).toEqual({ tick: 512 });
+    await expect(page.getByRole("dialog", { name: /^Chord at/ })).toHaveCount(0);
   });
 
   test("Left and Right move it a beat, Home and End send it to the ends, and it is no step of the history", async ({
