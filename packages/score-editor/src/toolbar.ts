@@ -1,4 +1,4 @@
-// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the Select and Grid menus, the read-only badge, the synth preview control, the Filter button and the hint.
+// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, Delete, the opt-in pencil, the Select, Grid and Bars menus, Meter, the read-only badge, the synth preview control, the Filter button and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
 import { mountBarMenu } from "./bar-menu";
@@ -63,9 +63,9 @@ export interface ToolbarOptions extends EditingPartOptions {
    */
   onChooseBars?: (bar: number) => void;
   /**
-   * Whether the toolbar holds the pencil toggle. Off by default, so a toolbar a host already mounts gains no control or
-   * tab stop; the default editor turns it on. A host that mounts the toolbar itself can turn it on when it has a voice
-   * track to draw on.
+   * Whether the toolbar holds the pencil toggle, after Delete. Off by default, so a toolbar a host already mounts gains
+   * no control or tab stop; the default editor turns it on. A host that mounts the toolbar itself can turn it on when it
+   * has a voice track to draw on.
    */
   pencil?: boolean;
 }
@@ -80,11 +80,12 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
 const PENCIL = ["3,13 4.5,9 11,2.5 13.5,5 7,11.5 3,13", "9.5,4 12,6.5"];
 
 /**
- * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
- * Select and Grid menus (while it is editable and the arrangement is shown), the read-only badge (while the session is not editable), the view switch when asked, the synth preview control, which is
- * there either way unless `synthPreview` is off, the Filter button, last in the row, and, when asked, the screen-reader
- * hint. The controls are in that order in the row and in the tab order, the Filter button last. It follows the session's
- * language.
+ * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), Delete,
+ * the pencil when asked, the Select and Grid menus and the Bars menu and meter control (while it is editable and the
+ * arrangement is shown), the read-only badge (while the session is not editable), the view switch when asked, the synth
+ * preview control, which is there either way unless `synthPreview` is off, the Filter button, last in the row, and, when
+ * asked, the screen-reader hint. The controls are in that order in the row and in the tab order, the Filter button last.
+ * It follows the session's language.
  */
 export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
   requireDom("mountToolbar");
@@ -100,6 +101,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
 
   const row = create(doc, "div", "sce-toolbar", root);
   if (options.viewSwitch) row.dataset.views = "";
+  const pencil = pencilMode(session);
+  const showsPencil = options.pencil === true;
   const title = create(doc, "span", "sce-title", row);
   const zoom = mountZoomControl(row, session);
   const history = create(doc, "div", "sce-history", row);
@@ -116,6 +119,13 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.type = "button";
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
+  // The pencil sits in the edit cluster, after Delete and before Select. It is opt-in, so a bare toolbar gains no control
+  // or tab stop; the merged Bars/Meter/handoff controls made the end of the row add a phone row, which this place does not.
+  const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
+  pencilButton.type = "button";
+  pencilButton.setAttribute("aria-pressed", "false");
+  pencilButton.hidden = !showsPencil;
+  pencilButton.appendChild(lineIcon(doc, PENCIL));
   const select = mountSelectionMenu(row, session);
   const grid = mountGridControl(row, session, live);
   const bars = mountBarMenu(row, session, {
@@ -163,15 +173,6 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   if (synth) row.dataset.synth = "";
   // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
   const filter = mountFilterPanel(row, session);
-  const pencil = pencilMode(session);
-  const showsPencil = options.pencil === true;
-  // The pencil is last too, after the Filter button: the controls before it keep their drawing and Tab order, which the
-  // existing toolbar tests pin. It is still in the editing cluster's mode language, just at the end of the row.
-  const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
-  pencilButton.type = "button";
-  pencilButton.setAttribute("aria-pressed", "false");
-  pencilButton.hidden = !showsPencil;
-  pencilButton.appendChild(lineIcon(doc, PENCIL));
 
   const abort = new AbortController();
   const { signal } = abort;
