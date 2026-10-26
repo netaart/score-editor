@@ -1,7 +1,14 @@
 // ABOUTME: The Select menu of the toolbar: a button that opens Select all, Invert selection and Clear selection.
 // ABOUTME: It is the touch path to the three selection keys; an item with nothing to do is muted and does nothing.
 import { create } from "./dom";
-import { handleEditingInput } from "./editing-input";
+import {
+  canEditSelection,
+  copySelection,
+  duplicateSelection,
+  handleEditingInput,
+  hasCopiedNotes,
+  pasteSelection,
+} from "./editing-input";
 import { messagesFor } from "./i18n";
 import { mountPopoverMenu } from "./popover-menu";
 import type { EditingSession } from "./session";
@@ -31,6 +38,10 @@ export function mountSelectionMenu(el: HTMLElement, session: EditingSession): Vi
   const selectAll = item("select-all");
   const invert = item("invert-selection");
   const clear = item("clear-selection");
+  menu.rule();
+  const copy = menu.item("menuitem", () => copySelection(session));
+  const paste = menu.item("menuitem", () => pasteSelection(session));
+  const duplicate = menu.item("menuitem", () => duplicateSelection(session));
 
   let language: Language | null = null;
   function applyLanguage(): void {
@@ -43,6 +54,9 @@ export function mountSelectionMenu(el: HTMLElement, session: EditingSession): Vi
       [selectAll, t.selectAll, "Ctrl/Cmd+A"],
       [invert, t.selectInvert, "Ctrl/Cmd+Shift+A"],
       [clear, t.selectClear, "Esc"],
+      [copy, t.selectCopy, "Ctrl/Cmd+C"],
+      [paste, t.selectPaste, "Ctrl/Cmd+V"],
+      [duplicate, t.selectDuplicate, "Ctrl/Cmd+D"],
     ] as const) {
       entry.textContent = label;
       entry.title = `${label} (${keys})`;
@@ -59,13 +73,18 @@ export function mountSelectionMenu(el: HTMLElement, session: EditingSession): Vi
     const { reading } = session;
     const shown = reading.kind === "score" && session.view.editable && arrangementShown(session);
     const anyNote = reading.kind === "score" && reading.score.notes.some((note) => note.midi !== null);
-    const state = [shown, anyNote, session.selection.length > 0].join();
+    const canCopy = canEditSelection(session);
+    const canPaste = hasCopiedNotes(session) && session.insertionPoint !== null;
+    const state = [shown, anyNote, session.selection.length > 0, canCopy, canPaste].join();
     if (state === drawn) return;
     drawn = state;
     root.hidden = !shown;
     selectAll.setAttribute("aria-disabled", String(!anyNote));
     invert.setAttribute("aria-disabled", String(!anyNote));
     clear.setAttribute("aria-disabled", String(session.selection.length === 0));
+    copy.setAttribute("aria-disabled", String(!canCopy));
+    paste.setAttribute("aria-disabled", String(!canPaste));
+    duplicate.setAttribute("aria-disabled", String(!canCopy));
   }
 
   draw();

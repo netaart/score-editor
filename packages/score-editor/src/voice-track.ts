@@ -21,6 +21,7 @@ import { installLanePointer } from "./lane-pointer";
 import { sayRefusals } from "./live-region";
 import { dragChannel, ghostsOf } from "./note-drag";
 import { mountNoteFocus, type NoteFocus } from "./note-focus";
+import { pencilMode } from "./pencil-mode";
 import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from "./playhead";
 import { previewPlayer } from "./preview-player";
 import type { Note, Score } from "./score";
@@ -40,6 +41,8 @@ interface Drawn {
   readonly t: Messages;
   readonly lane: HTMLElement;
   readonly voice: string;
+  /** The short word at the end of the pinned head that says the pencil is on. */
+  readonly drawMode: HTMLElement;
   readonly ticks: number;
   readonly rows: number;
   /** The pitch of the first row, which is the top one. */
@@ -80,6 +83,17 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     bars: BarSelection | null;
     editable: boolean;
   } | null = null;
+
+  const pencil = pencilMode(session);
+
+  /** Shows the head's word and the lane's pencil cursor while the pencil can draw here. */
+  function syncPencil(): void {
+    if (!drawn) return;
+    const on = session.view.editable && pencil.on;
+    drawn.drawMode.hidden = !on;
+    if (on) drawn.lane.dataset.pencil = "";
+    else delete drawn.lane.dataset.pencil;
+  }
 
   /** The ids drawn as selected for a selection: every selected note of this voice, with the whole chain it is tied into. */
   function framedFor(selection: ReadonlyArray<string>): Set<string> {
@@ -205,6 +219,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     drawn.framed = wanted;
     drawn.insertionPoint.show(editable ? point : null);
     noteFocus?.sync(editable, selection);
+    syncPencil();
   }
 
   const part = mountAxisPart(
@@ -254,6 +269,9 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         const group = create(doc, "div", "sce-track-group", canvas);
         const head = create(doc, "div", "sce-track-head", group);
         create(doc, "span", "sce-track-name", head).textContent = voice;
+        const drawMode = create(doc, "span", "sce-draw-mode", head);
+        drawMode.textContent = t.drawMode;
+        drawMode.hidden = true;
         const track = create(doc, "div", "sce-track", group);
         const keys = create(doc, "div", "sce-keys", track);
         for (let octave = range.hi - 12; octave >= range.lo; octave -= 12) {
@@ -287,6 +305,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           t,
           lane,
           voice,
+          drawMode,
           ticks: gridTicks(score),
           rows: range.hi - range.lo,
           top: range.hi - 1,
@@ -314,6 +333,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         }
         list.appendChild(blocks);
         drawn = fresh;
+        syncPencil();
         fresh.playhead.show(previewPlayer(session).tick);
         noteFocus?.draw({
           order: notes.filter((note) => note.midi !== null).map((note) => note.id),
@@ -325,8 +345,10 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     },
     options,
   );
+  const unsubscribePencil = pencil.subscribe(syncPencil);
   return {
     destroy() {
+      unsubscribePencil();
       part.destroy();
       drawn = null;
       root = null;

@@ -296,6 +296,14 @@ export interface Messages {
   handoffInstructionChanges: string;
   /** The pencil toggle's name; its tooltip adds the B key. */
   drawNotes: string;
+  /** The lane's short word while the pencil is on, and the pencil's state words, tooltip and menu items. */
+  drawMode: string;
+  drawOn: string;
+  drawOff: string;
+  drawNotesTip: string;
+  selectCopy: string;
+  selectPaste: string;
+  selectDuplicate: string;
 }
 
 /** A grid the way a menu item and the button name it: the dotted word of the language, then the fraction. */
@@ -324,7 +332,7 @@ const en: Messages = {
   title: "Arrangement",
   hint: "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel.",
   hintEditing:
-    "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel. Click or tap a note to select it, or press Tab to reach the notes, then, while no note is selected, Left and Right to step from note to note, selecting each, and Enter or Space to select the one you are on. Shift-click or Shift-tap adds a note to the selection or takes it out. Drag across empty space to select the notes in a box. On a touch screen, touch and hold a note to add it or take it out, or touch and hold empty space and then drag to draw the box. Ctrl and A selects all, Ctrl and Shift and A selects the others instead, and Escape clears the selection. To pick notes one by one from the keyboard, Ctrl and Left, Right, Home or End move from note to note without selecting, and Shift and Space adds the note you are on or takes it out. Press Delete, Backspace or the Delete button to turn the selected notes into rests. With notes selected, Left and Right move them by one step of the grid, Up and Down by a semitone, Shift with Up or Down by an octave, and Shift with Left or Right changes their length by a step; the Grid menu sets the step, and Ctrl with Left or Right then moves between notes. Drag a selected note to move it, or drag its left or right edge to change its length; Escape gives the drag up. Click or tap empty space to set the insertion point, then move it with Left, Right, Home and End. Ctrl and Z undoes, Ctrl and Y redoes. Click or tap the name of a section in the bar above the notes to open its menu, which renames, moves, duplicates or deletes the section. From the keyboard, press Shift and F10, or the Menu key, on the arrangement to open the menu of the section at the insertion point; once the focus is on a section, Left and Right move from section to section and Enter opens its menu.",
+    "Scroll with the arrow keys or a swipe. Zoom with the plus and minus keys, the zoom buttons, or Ctrl and the mouse wheel. Click or tap a note to select it, or press Tab to reach the notes, then, while no note is selected, Left and Right to step from note to note, selecting each, and Enter or Space to select the one you are on. Shift-click or Shift-tap adds a note to the selection or takes it out. Drag across empty space to select the notes in a box. On a touch screen, touch and hold a note to add it or take it out, or touch and hold empty space and then drag to draw the box. Ctrl and A selects all, Ctrl and Shift and A selects the others instead, and Escape clears the selection. To pick notes one by one from the keyboard, Ctrl and Left, Right, Home or End move from note to note without selecting, and Shift and Space adds the note you are on or takes it out. Press Delete, Backspace or the Delete button to turn the selected notes into rests. With notes selected, Left and Right move them by one step of the grid, Up and Down by a semitone, Shift with Up or Down by an octave, and Shift with Left or Right changes their length by a step; the Grid menu sets the step, and Ctrl with Left or Right then moves between notes. Drag a selected note to move it, or drag its left or right edge to change its length; Escape gives the drag up. Click or tap empty space to set the insertion point, then move it with Left, Right, Home and End. Ctrl and Z undoes, Ctrl and Y redoes. Click or tap the name of a section in the bar above the notes to open its menu, which renames, moves, duplicates or deletes the section. From the keyboard, press Shift and F10, or the Menu key, on the arrangement to open the menu of the section at the insertion point; once the focus is on a section, Left and Right move from section to section and Enter opens its menu. Press B to turn the drawing pencil on or off. Ctrl or Cmd with C copies the selected notes, V pastes them at the insertion point, and D repeats them right after themselves; Alt with a drag copies the notes where you drop them.",
   zoom: "Zoom",
   zoomIn: "Zoom in",
   zoomOut: "Zoom out",
@@ -598,13 +606,20 @@ const en: Messages = {
   handoffInstructionSeed: "Seed",
   handoffInstructionChanges: "Changes",
   drawNotes: "Draw notes",
+  drawMode: "Draw",
+  drawOn: "Draw notes on",
+  drawOff: "Draw notes off",
+  drawNotesTip: "Draw notes (B)",
+  selectCopy: "Copy",
+  selectPaste: "Paste",
+  selectDuplicate: "Duplicate",
 };
 
 const zh: Messages = {
   title: "编曲视图",
   hint: "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。",
   hintEditing:
-    "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。点击或轻点音符来选中它，也可以按 Tab 到达音符，没有音符被选中时，再用左、右键在音符之间逐个移动并选中，用 Enter 或空格选中当前所在的音符。按住 Shift 点击或轻点音符，可把它加进选中或移出选中；在空白处拖动，可框选框里的音符；在触屏上，长按音符可加进或移出选中，长按空白处再拖动可画出选框。Ctrl 加 A 全选，Ctrl 加 Shift 加 A 反选，Esc 取消选中。用键盘逐个挑选时，Ctrl 加左、右、Home 或 End 在音符之间移动但不改变选中，Shift 加空格把当前音符加进或移出选中。按 Delete、Backspace 或删除按钮把选中的音符变成休止符。选中音符后，左、右键按一格网格前后挪，上、下键按半音升降，Shift 加上、下键按八度升降，Shift 加左、右键按一格改长短；网格菜单设定一格的大小，这时 Ctrl 加左、右键才在音符之间移动。拖动选中的音符来移动它，拖它的左边缘或右边缘来改长短，按 Esc 放弃这次拖动。点击或轻点空白处来放置插入点，再用左、右、Home、End 键移动。Ctrl 加 Z 撤销，Ctrl 加 Y 重做。点击或轻点音符上方小节条里的段落名，打开该段落的菜单，可以重命名、移动、复制或删除这一段。用键盘时，在编曲视图上按 Shift 加 F10 或菜单键，打开插入点所在段落的菜单；焦点在某个段落上后，左、右键在段落之间移动，Enter 打开它的菜单。",
+    "用方向键或滑动来滚动；用加号、减号键、缩放按钮或 Ctrl 加鼠标滚轮来缩放。点击或轻点音符来选中它，也可以按 Tab 到达音符，没有音符被选中时，再用左、右键在音符之间逐个移动并选中，用 Enter 或空格选中当前所在的音符。按住 Shift 点击或轻点音符，可把它加进选中或移出选中；在空白处拖动，可框选框里的音符；在触屏上，长按音符可加进或移出选中，长按空白处再拖动可画出选框。Ctrl 加 A 全选，Ctrl 加 Shift 加 A 反选，Esc 取消选中。用键盘逐个挑选时，Ctrl 加左、右、Home 或 End 在音符之间移动但不改变选中，Shift 加空格把当前音符加进或移出选中。按 Delete、Backspace 或删除按钮把选中的音符变成休止符。选中音符后，左、右键按一格网格前后挪，上、下键按半音升降，Shift 加上、下键按八度升降，Shift 加左、右键按一格改长短；网格菜单设定一格的大小，这时 Ctrl 加左、右键才在音符之间移动。拖动选中的音符来移动它，拖它的左边缘或右边缘来改长短，按 Esc 放弃这次拖动。点击或轻点空白处来放置插入点，再用左、右、Home、End 键移动。Ctrl 加 Z 撤销，Ctrl 加 Y 重做。点击或轻点音符上方小节条里的段落名，打开该段落的菜单，可以重命名、移动、复制或删除这一段。用键盘时，在编曲视图上按 Shift 加 F10 或菜单键，打开插入点所在段落的菜单；焦点在某个段落上后，左、右键在段落之间移动，Enter 打开它的菜单。按 B 打开或关闭画笔。Ctrl 或 Cmd 加 C 复制选中的音符，加 V 粘贴到插入点，加 D 紧接在后面复制一份；按住 Alt 拖动，把音符复制到放下的地方。",
   zoom: "缩放",
   zoomIn: "放大",
   zoomOut: "缩小",
@@ -866,6 +881,13 @@ const zh: Messages = {
   handoffInstructionSeed: "Seed",
   handoffInstructionChanges: "改动记录",
   drawNotes: "画笔",
+  drawMode: "画笔",
+  drawOn: "画笔已打开",
+  drawOff: "画笔已关闭",
+  drawNotesTip: "画笔（B）",
+  selectCopy: "复制",
+  selectPaste: "粘贴",
+  selectDuplicate: "复制一份",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

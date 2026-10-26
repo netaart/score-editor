@@ -258,8 +258,14 @@ function selectWith(session: EditingSession, act: (score: Score) => EditingInput
 /** What the copy key holds for a session: the notes of the selection as one screen note each, tie chains joined. */
 const copied = new WeakMap<EditingSession, ReadonlyArray<CopiedNote>>();
 
+/** Whether the session holds notes from a Copy, for a control that offers Paste. */
+export function hasCopiedNotes(session: EditingSession): boolean {
+  const notes = copied.get(session);
+  return notes !== undefined && notes.length > 0;
+}
+
 /** Copies the selected pitched notes, a whole tie chain as one note, for a paste at the insertion point. */
-function copySelection(session: EditingSession): EditingInputResult {
+export function copySelection(session: EditingSession): EditingInputResult {
   const score = readableScore(session);
   if (score === null) return IGNORED;
   const notes: CopiedNote[] = [];
@@ -285,7 +291,7 @@ function copySelection(session: EditingSession): EditingInputResult {
 }
 
 /** Pastes what copy holds at the insertion point, or does nothing when there is none or no point. */
-function pasteSelection(session: EditingSession): EditingInputResult {
+export function pasteSelection(session: EditingSession): EditingInputResult {
   const notes = copied.get(session);
   const point = session.insertionPoint;
   if (notes === undefined || notes.length === 0 || point === null) return IGNORED;
@@ -294,7 +300,7 @@ function pasteSelection(session: EditingSession): EditingInputResult {
 }
 
 /** Repeats the selected notes right after the selection. */
-function duplicateSelection(session: EditingSession): EditingInputResult {
+export function duplicateSelection(session: EditingSession): EditingInputResult {
   const score = readableScore(session);
   if (score === null) return IGNORED;
   const noteIds = pitchedSelection(score, session.selection);
