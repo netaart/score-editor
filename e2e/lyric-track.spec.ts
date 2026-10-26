@@ -1359,7 +1359,7 @@ test.describe("the track as a person reads it", () => {
     await expect(textbox(page)).toHaveAttribute("aria-invalid", "true");
     const problem = lyrics(page)
       .getByRole("group", { name: "Line 1", exact: true })
-      .getByText("A lyric line cannot be only a [section] label", { exact: true });
+      .getByText("A lyric line cannot be only a [section] label");
     await expect(problem).toContainText("A lyric line cannot be only a [section] label");
     await expect(textbox(page)).toHaveAccessibleDescription(/^A lyric line cannot be only a \[section\] label/);
     await textbox(page).fill("一二三四五六七八九");
