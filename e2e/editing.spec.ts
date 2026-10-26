@@ -1070,7 +1070,7 @@ test.describe("the Grid menu", () => {
     await press(gridItem(page, "1/32"));
     await expect(gridButton(page)).toHaveAccessibleName("Grid: 1/32");
 
-    await harness.layout.replace({ score: LEAD });
+    await harness.layout.replace({ score: { text: LEAD } });
 
     expect(await harness.layout.grid()).toEqual({ value: 4 });
     await expect(gridButton(page)).toHaveAccessibleName("Grid: 1/4");
@@ -1087,11 +1087,11 @@ test.describe("the Grid menu", () => {
     await openTrack(harness, vocalOnly("C8z24|G32|").replace("L:1/16", "L:1/32"), { language: "zh" });
     await press(gridButton(page));
     await press(gridItem(page, "附点 1/16"));
-    await harness.layout.replace({ score: vocalOnly("C8D8z16|G32|").replace("L:1/16", "L:1/32") });
+    await harness.layout.replace({ score: { text: vocalOnly("C8D8z16|G32|").replace("L:1/16", "L:1/32") } });
     await expect(gridButton(page)).toHaveAccessibleName("网格: 附点 1/16");
     await expect(toolbar(page).getByRole("status")).toHaveText("");
 
-    await harness.layout.replace({ score: LEAD });
+    await harness.layout.replace({ score: { text: LEAD } });
     await expect(toolbar(page).getByRole("status")).toHaveText("网格已回到 1/4：这份乐谱写不出 附点 1/16");
   });
 
