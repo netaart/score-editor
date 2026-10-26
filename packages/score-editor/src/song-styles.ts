@@ -68,15 +68,15 @@ export const songCss = `
 .sce-root .sce-tempo-input {
   width: 5em;
 }
-.sce-root .sce-field:focus-visible {
+.sce-root :is(.sce-field, .sce-panel-radio):focus-visible {
   outline: 2px solid var(--sce-_accent);
   outline-offset: 2px;
 }
-/* A taken command's own word (a style without a BPM after a tempo change): a bar at its start, as the text view's notice has. */
+/* A taken command's own word (a style without a BPM after a tempo change): a bar at its start, as a panel notice has. */
 .sce-root .sce-project-notice {
   margin: 0;
 }
-.sce-root .sce-project-notice:not([hidden]) {
+.sce-root :is(.sce-project-notice:not([hidden]), .sce-panel-notice) {
   border-inline-start: 3px solid var(--sce-_text);
   padding-inline-start: 9px;
 }
@@ -160,10 +160,6 @@ export const songCss = `
   margin: 3px 0 0;
   accent-color: var(--sce-_accent);
 }
-.sce-root .sce-panel-radio:focus-visible {
-  outline: 2px solid var(--sce-_accent);
-  outline-offset: 2px;
-}
 .sce-root .sce-panel-choice-words {
   display: grid;
   gap: 0;
@@ -220,8 +216,6 @@ export const songCss = `
 .sce-root .sce-panel-notice {
   display: grid;
   gap: 6px;
-  padding-inline-start: 9px;
-  border-inline-start: 3px solid var(--sce-_text);
 }
 .sce-root .sce-panel-notice-text {
   margin: 0;

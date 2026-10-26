@@ -2,6 +2,29 @@
 // ABOUTME: The zoom control and the selection menu share it, so a menu opens, places itself, takes focus and closes one way.
 import { create } from "./dom";
 
+/** How a floating layer sits under its button; a narrow window spans its width instead of its left edge. */
+export interface UnderButtonOptions {
+  narrow?: boolean;
+  /** The room there is below the button, for a layer that scrolls inside. */
+  maxHeight?: number;
+}
+
+/** Places `popover` under `button`: the 4px gap and the left edge the zoom menu and the Project popover share. */
+export function placeUnder(popover: HTMLElement, button: HTMLElement, options: UnderButtonOptions = {}): void {
+  const rect = button.getBoundingClientRect();
+  popover.style.top = `${rect.bottom + 4}px`;
+  popover.style.left = options.narrow ? "" : `${rect.left}px`;
+  if (options.maxHeight !== undefined) popover.style.maxHeight = `${options.maxHeight}px`;
+}
+
+/** Moves a shown layer left where it would run off the window; a layer that spans the window is left alone. */
+export function keepInside(popover: HTMLElement, narrow = false): void {
+  const view = popover.ownerDocument.defaultView;
+  if (!view || narrow) return;
+  const overflow = popover.getBoundingClientRect().right - (view.innerWidth - 8);
+  if (overflow > 0) popover.style.left = `${Math.max(8, popover.getBoundingClientRect().left - overflow)}px`;
+}
+
 export interface PopoverMenu {
   readonly element: HTMLElement;
   /** Adds an item. Choosing it closes the menu first and then runs `choose`. */
@@ -41,9 +64,7 @@ export function mountPopoverMenu(
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      const rect = button.getBoundingClientRect();
-      menu.style.left = `${rect.left}px`;
-      menu.style.top = `${rect.bottom + 4}px`;
+      placeUnder(menu, button);
     },
     { signal },
   );
@@ -53,12 +74,7 @@ export function mountPopoverMenu(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      const view = doc.defaultView;
-      if (view) {
-        const rect = menu.getBoundingClientRect();
-        const overflow = rect.right - (view.innerWidth - 8);
-        if (overflow > 0) menu.style.left = `${Math.max(8, rect.left - overflow)}px`;
-      }
+      keepInside(menu);
       (options.initialFocus?.(items) ?? items[0])?.focus();
     },
     { signal },

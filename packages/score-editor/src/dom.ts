@@ -19,3 +19,9 @@ export function requireDom(who: string): void {
     throw new Error(`@neta-art/score-editor: ${who}() needs a browser DOM; call it from client-side code only.`);
   }
 }
+
+/** Whether `field` has the focus: a value typed into it is the person's, and a redraw does not take it away. */
+export function hasFocus(field: HTMLElement): boolean {
+  const scope = field.getRootNode();
+  return (scope instanceof Document || scope instanceof ShadowRoot) && scope.activeElement === field;
+}
