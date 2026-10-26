@@ -1,15 +1,21 @@
 // ABOUTME: The default editor: one editing session and the public view parts, laid out in a toolbar, a scroller and a problem view.
 // ABOUTME: Everything it adds is registered so destroy() removes it: the parts remove their own, the frame removes the rest.
 
+import { applyProjectCommand } from "./apply";
 import { notesByVoice, pitchRangeOf } from "./arrangement";
 import { installZoomGestures } from "./axis";
 import { mountChordTrack } from "./chord-track";
+import type { ProjectCommand } from "./commands-project";
 import { mountCutNotice } from "./cut-notice";
-import { type Diagnostic, formatDiagnostic } from "./diagnostics";
+import { type Diagnostic, formatDiagnostic, isNoticeDiagnostic } from "./diagnostics";
 import { create } from "./dom";
+import { createDraftBinding, type DraftBinding } from "./draft-binding";
+import { mountDraftConflict } from "./draft-conflict";
 import { installEditKeys } from "./edit-keys";
+import { hostChanges } from "./host-changes";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountLyricTrack } from "./lyric-track";
 import { mountProblemView } from "./problem-view";
 import {
   createEditingSession,
@@ -24,7 +30,7 @@ import { acquireStyles } from "./styles";
 import { mountTextView } from "./text-view";
 import { mountTimeRuler } from "./time-ruler";
 import { mountToolbar } from "./toolbar";
-import type { Language, MountedEditor, MountOptions, ViewPart } from "./types";
+import type { DraftStore, Language, MountedEditor, MountOptions, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountVoiceTrack } from "./voice-track";
 
@@ -40,6 +46,7 @@ export class Editor implements MountedEditor {
   private readonly releaseStyles: () => void;
   private readonly abort = new AbortController();
   private readonly session: EditingSession;
+  private readonly drafts: DraftBinding;
   private readonly scroller: HTMLElement;
   private readonly content: HTMLElement;
   private readonly top: HTMLElement;
@@ -49,6 +56,9 @@ export class Editor implements MountedEditor {
   private readonly staffPane: HTMLElement;
   private readonly textPane: HTMLElement;
   private readonly parts: ViewPart[] = [];
+  /** Where the draft conflict strip goes, between the toolbar and the cut notice; a comment so it takes no box. */
+  private readonly draftAnchor: Comment;
+  private conflict: ViewPart | null = null;
   private staffMounted = false;
   private textMounted = false;
   private shownView: ViewName = "arrangement";
@@ -56,6 +66,8 @@ export class Editor implements MountedEditor {
   private centreDue = false;
   private tracks: ViewPart[] = [];
   private voices: string[] = [];
+  /** The lyric track, the bottom track of the arrangement: it is mounted after the voice tracks and replaced with them. */
+  private lyricTrack: ViewPart | null = null;
   private reading: ScoreReading;
   private language: Language;
   private openingViewDue = false;
@@ -79,10 +91,15 @@ export class Editor implements MountedEditor {
       language: options.language,
       editable: options.editable !== false,
     });
+    // A keeper opening keeps the session read-only until it is ready, so no edit can start before the restore has run.
+    this.drafts = createDraftBinding(this.session, (notice) => this.options.notify?.(notice));
+    this.drafts.follow(this.draftStore(), options.project);
+    this.applyEditable();
     this.reading = this.session.reading;
     this.language = this.session.view.language;
     // The frame hears a change before the parts do, so it shows the scroller and sets up the tracks they draw into.
     this.unsubscribe.push(this.session.subscribe((change) => this.beforeParts(change)));
+    this.unsubscribe.push(this.drafts.subscribe(() => this.applyEditable()));
 
     this.root = create(doc, "div", "sce-root sce-editor");
     host.appendChild(this.root);
@@ -96,8 +113,12 @@ export class Editor implements MountedEditor {
         viewSwitch: true,
         tempoKey: true,
         projectPanel: true,
+        draftKeeper: this.drafts,
       }),
     );
+    this.draftAnchor = doc.createComment("draft conflict");
+    this.root.appendChild(this.draftAnchor);
+    this.syncDraftParts();
     this.parts.push(mountCutNotice(this.root, this.session));
     this.stalePane = pane(this.root);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));
@@ -142,7 +163,14 @@ export class Editor implements MountedEditor {
     if (patch.language !== undefined) this.session.setView({ language: patch.language });
     if (this.options.editable !== before.editable) this.applyEditable();
     if (patch.dialects !== undefined) this.session.replaceDialects(patch.dialects);
-    if (patch.project !== undefined) this.session.replaceProject(patch.project);
+    const store = this.draftStore();
+    this.drafts.follow(store, this.options.project, (sameOriginal) => {
+      if (patch.project === undefined) return;
+      // While drafts are kept, the original the user is editing stays in the session; the host's other fields come in as commands.
+      if (store !== null && sameOriginal) this.carry(hostChanges(before.project, patch.project));
+      else this.session.replaceProject(patch.project);
+    });
+    this.syncDraftParts();
   }
 
   destroy(): void {
@@ -151,8 +179,10 @@ export class Editor implements MountedEditor {
     this.abort.abort();
     for (const stop of this.unsubscribe) stop();
     for (const part of [...this.parts, ...this.tracks]) part.destroy();
+    this.lyricTrack?.destroy();
     this.root.remove();
     this.releaseStyles();
+    this.drafts.destroy();
     this.onDestroy();
   }
 
@@ -168,11 +198,69 @@ export class Editor implements MountedEditor {
     this.scroller.setAttribute("aria-label", t.title);
   }
 
-  private applyEditable(): void {
-    this.session.setView({ editable: this.editable });
+  /** The store the keeper is made for: the host's, while the editor is editable; none otherwise. */
+  private draftStore(): DraftStore | null {
+    return this.options.drafts !== undefined && this.editable ? this.options.drafts : null;
   }
 
-  /** A command the user's keys caused was refused and nothing changed: tell the host once, in the current language. */
+  /** Builds the conflict strip only while a keeper exists, so an editor without a store has no draft DOM. */
+  private syncDraftParts(): void {
+    if (this.draftStore() !== null) {
+      if (this.conflict === null) {
+        const part = mountDraftConflict(this.root, this.session, this.drafts);
+        const node = this.root.lastElementChild;
+        if (node !== null) this.root.insertBefore(node, this.draftAnchor);
+        this.conflict = part;
+        this.parts.push(part);
+      }
+    } else if (this.conflict !== null) {
+      this.conflict.destroy();
+      const at = this.parts.indexOf(this.conflict);
+      if (at >= 0) this.parts.splice(at, 1);
+      this.conflict = null;
+    }
+  }
+
+  /**
+   * Puts the fields the host changed into the session, once a draft being read has been put there: the draft holds the
+   * fields of an older project, and what the host passed after it is newer. The fields go in as one history step; a
+   * value a command refuses goes to the host, and the other fields still go in.
+   */
+  private carry(commands: ReadonlyArray<ProjectCommand>): void {
+    if (commands.length === 0) return;
+    this.drafts.afterOpening(() => {
+      const dialect = this.options.dialects.find(this.session.project.modelId);
+      if (dialect === undefined) {
+        const result = this.session.dispatchAll(commands);
+        if (!result.ok) this.refused(result.diagnostics);
+        return;
+      }
+      const accepted: ProjectCommand[] = [];
+      let current = this.session.project;
+      for (const command of commands) {
+        const applied = applyProjectCommand(dialect, current, command);
+        const refusals = applied.diagnostics.filter((diagnostic) => !isNoticeDiagnostic(diagnostic));
+        if (refusals.length > 0) {
+          this.refused(refusals);
+          continue;
+        }
+        current = applied.project;
+        accepted.push(command);
+      }
+      if (accepted.length === 0) return;
+      const result = this.session.dispatchAll(accepted);
+      if (!result.ok) this.refused(result.diagnostics);
+    });
+  }
+
+  private applyEditable(): void {
+    this.session.setView({ editable: this.editable && this.drafts.status !== "opening" });
+  }
+
+  /**
+   * A command was refused and nothing changed (the user's keys caused it, or a value the host passed): tell the host
+   * once, in the current language.
+   */
   private refused(diagnostics: ReadonlyArray<Diagnostic>): void {
     const first = diagnostics[0];
     if (first === undefined) return;
@@ -188,6 +276,7 @@ export class Editor implements MountedEditor {
     const voices = this.reading.kind === "score" ? [...this.reading.score.voices] : [];
     if (voices.length === this.voices.length && voices.every((voice, at) => voice === this.voices[at])) return;
     for (const track of this.tracks) track.destroy();
+    this.lyricTrack?.destroy();
     this.voices = voices;
     this.tracks = voices.map((voice) =>
       mountVoiceTrack(this.content, this.session, {
@@ -196,6 +285,13 @@ export class Editor implements MountedEditor {
         onRefused: (diagnostics) => this.refused(diagnostics),
       }),
     );
+    this.lyricTrack =
+      voices.length === 0
+        ? null
+        : mountLyricTrack(this.content, this.session, {
+            scroller: this.scroller,
+            onRefused: (diagnostics) => this.refused(diagnostics),
+          });
   }
 
   /**

@@ -2,6 +2,8 @@
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
 import { create, requireDom } from "./dom";
+import type { DraftKeeper } from "./draft-keeper";
+import { mountRestoreControl } from "./draft-restore";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
 import { messagesFor, viewName } from "./i18n";
@@ -48,6 +50,8 @@ export interface ToolbarOptions extends EditingPartOptions {
    * default editor turns it on. A host that mounts `mountProjectPanel` in a place of its own leaves it off.
    */
   projectPanel?: boolean;
+  /** The draft keeper of this editor; see "In the default editor" in the package README. */
+  draftKeeper?: DraftKeeper;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -88,7 +92,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
-  create(doc, "span", "sce-spacer", row);
+  const spacer = create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
   // (it is there only while the score reads), and what comes after the switch cannot push it to the next line between a
@@ -112,6 +116,19 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       })
     : null;
   const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
+  let restore: ViewPart | null = null;
+  /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
+  function syncRestore(): void {
+    const keeper = options.draftKeeper;
+    if (keeper !== undefined && keeper.status !== "destroyed") {
+      if (restore === null) {
+        restore = mountRestoreControl(row, session, keeper, (words) => live.say(words), spacer);
+      }
+    } else if (restore !== null) {
+      restore.destroy();
+      restore = null;
+    }
+  }
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
 
@@ -145,7 +162,6 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     t = messagesFor(language);
     root.lang = language;
     setTitle();
-    badge.textContent = t.readOnly;
     history.setAttribute("aria-label", t.history);
     for (const [button, label, keys] of [
       [undo, t.undo, "Ctrl/Cmd+Z"],
@@ -159,12 +175,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
 
   function draw(): void {
+    syncRestore();
     if (session.view.language !== language) applyLanguage();
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
     const deletable = canDeleteSelection(session);
     const arrangement = !options.viewSwitch || arrangementShown(session);
-    const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView].join();
+    const opening = options.draftKeeper?.status === "opening";
+    const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView, opening].join();
     if (shown === drawn) return;
     drawn = shown;
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
@@ -172,6 +190,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     history.hidden = !editable || !readable;
     remove.hidden = history.hidden || !arrangement;
     badge.hidden = editable;
+    badge.textContent = opening ? t.draftOpening : t.readOnly;
     undo.setAttribute("aria-disabled", String(!session.canUndo));
     redo.setAttribute("aria-disabled", String(!session.canRedo));
     remove.setAttribute("aria-disabled", String(!deletable));
@@ -182,6 +201,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (change.project) noticeStrip.clear();
     draw();
   });
+  const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {
     destroy() {
@@ -189,12 +209,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       destroyed = true;
       abort.abort();
       unsubscribe();
+      unsubscribeKeeper?.();
       zoom.destroy();
       views?.destroy();
       select.destroy();
       noticeStrip.destroy();
       song?.destroy();
       projectControl?.destroy();
+      restore?.destroy();
       synth?.destroy();
       root.remove();
       releaseStyles();

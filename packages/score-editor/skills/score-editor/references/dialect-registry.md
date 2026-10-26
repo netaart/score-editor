@@ -102,4 +102,6 @@ converting on the way in and out. Diagnostics are `{ code, params, at }`. `Diagn
 reading and command codes, and `formatDiagnostic` knows every one; use a reading code for text that cannot be read.
 
 The song2 dialect is the reference implementation: `song2Dialect`, `song2Constraints` and `song2Id` are exported from
-`@neta-art/score-dialect-song2`. A second dialect usually depends on the core for types only, as song2 does.
+`@neta-art/score-dialect-song2`. A second dialect usually depends on the core for types only, as song2 does. For writing
+or repairing song2 text by hand, start at the dialect package's [writing page](../../../../score-dialect-song2/WRITING.md)
+and follow its link to [RULES.md](../../../../score-dialect-song2/RULES.md).
