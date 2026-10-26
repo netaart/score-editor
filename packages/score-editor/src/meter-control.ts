@@ -3,7 +3,7 @@
 import { barIndexAt, gridTicks } from "./arrangement";
 import { create } from "./dom";
 import { messagesFor } from "./i18n";
-import { createLiveRegion, sayRefusals } from "./live-region";
+import { type LiveRegion, sayRefusals } from "./live-region";
 import { meterAllowed, meterChoices } from "./meter";
 import { nudgeIntoWindow, placeUnder } from "./popover-menu";
 import type { Meter, Score } from "./score";
@@ -49,19 +49,19 @@ function denominators(min: number, max: number, powerOfTwo: boolean): number[] {
  * Mounts the meter control on `el`, at the end of the toolbar's controls. It is drawn while the session is editable, has
  * a score and shows the arrangement; its popover offers the common meters the dialect's rule allows and a custom pair.
  */
-export function mountMeterControl(
-  el: HTMLElement,
-  session: EditingSession,
-  options: EditingPartOptions = {},
-): ViewPart {
+export interface MeterControlOptions extends EditingPartOptions {
+  /** The toolbar's one live region; the control says its changes and refusals there. */
+  live: LiveRegion;
+}
+
+export function mountMeterControl(el: HTMLElement, session: EditingSession, options: MeterControlOptions): ViewPart {
   const doc = el.ownerDocument;
   const abort = new AbortController();
   const { signal } = abort;
   const releaseStyles = acquireStyles(el);
   const root = create(doc, "div", "sce-root sce-part sce-part-meter");
   el.appendChild(root);
-  const live = createLiveRegion(root);
-  const refused = sayRefusals(live, session, options.onRefused);
+  const refused = sayRefusals(options.live, session, options.onRefused);
 
   const button = create(doc, "button", "sce-button sce-meter-button", root);
   button.type = "button";
@@ -85,7 +85,7 @@ export function mountMeterControl(
       refused(result.diagnostics);
       return;
     }
-    live.say(messagesFor(session.view.language).meterSet(target.section + 1, meter));
+    options.live.say(messagesFor(session.view.language).meterSet(target.section + 1, meter));
     closeAndFocus();
   }
 
@@ -194,7 +194,12 @@ export function mountMeterControl(
     if (state === drawn) return;
     drawn = state;
     root.hidden = !shown;
-    if (!shown || target === null) return;
+    if (!shown || target === null) {
+      button.textContent = "";
+      button.removeAttribute("aria-label");
+      button.removeAttribute("title");
+      return;
+    }
     const label = `${t.meter} ${t.meterText(target.meter)}`;
     button.textContent = label;
     button.setAttribute("aria-label", label);

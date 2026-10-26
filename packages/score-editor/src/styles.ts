@@ -169,8 +169,25 @@ const css = `
   display: inline-flex;
   visibility: hidden;
 }
+/* The Bars and meter controls sit by the Select menu, while the preview control keeps its DOM place and tab order. */
+.sce-root .sce-bars-button {
+  order: 3;
+}
+.sce-root .sce-meter-button {
+  order: 4;
+}
 .sce-root .sce-spacer {
+  order: 5;
   flex: 1 1 auto;
+}
+.sce-root .sce-toolbar-end {
+  order: 6;
+}
+.sce-root .sce-synth {
+  order: 7;
+}
+.sce-root .sce-toolbar > .sce-badge {
+  order: 6;
 }
 .sce-root .sce-badge {
   flex: none;
@@ -196,10 +213,7 @@ const css = `
   padding: 0;
 }
 .sce-root .sce-cut-notice {
-  display: flex;
   flex: 1 1 20em;
-  align-items: center;
-  gap: 0 0.6em;
   padding: 6px 12px;
 }
 .sce-root .sce-cut-notice::before {
@@ -561,7 +575,6 @@ const css = `
 /* The bar number is the handle that chooses a bar; a press on it starts a range, while a swipe elsewhere still scrolls. */
 .sce-root[data-editable="true"] .sce-bar-number {
   z-index: 1;
-  touch-action: none;
   cursor: pointer;
 }
 .sce-root .sce-bar-number[data-selected] {
@@ -587,6 +600,9 @@ ${labelThinning()}
   display: block;
 }
 @media (pointer: coarse) {
+  .sce-root .sce-title {
+    min-width: 2.5em;
+  }
   .sce-root .sce-bar-number {
     min-width: 32px;
   }

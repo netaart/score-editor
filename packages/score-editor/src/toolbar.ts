@@ -114,10 +114,12 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   if (synth) row.dataset.synth = "";
   // After the preview control, so the tab order of the editing controls that came before it is unchanged.
   const bars = mountBarMenu(row, session, {
+    live,
     ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
     ...(options.onChooseBars === undefined ? {} : { onChooseBars: options.onChooseBars }),
   });
   const meter = mountMeterControl(row, session, {
+    live,
     ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
   });
 

@@ -101,8 +101,10 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
       region: (t) => t.timeRuler,
       attach(root, signal, live) {
         rulerRoot = root;
+        root.setAttribute("data-editable", String(session.view.editable));
         let drag: { pointerId: number; anchor: number; bar: number } | null = null;
         let announced = "";
+        let lastPointerType = "mouse";
 
         const barAt = (clientX: number): number | null => {
           if (score === null || score.bars.length === 0) return null;
@@ -125,7 +127,16 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
         root.addEventListener(
           "pointerdown",
           (event) => {
+            lastPointerType = event.pointerType;
+          },
+          { capture: true, signal },
+        );
+        root.addEventListener(
+          "pointerdown",
+          (event) => {
             if (!session.view.editable || score === null || !event.isPrimary || event.button !== 0) return;
+            // A finger taps a bar to choose it; its swipe stays the scroller's, so only a pointer drags a run.
+            if (event.pointerType === "touch") return;
             const target =
               event.target instanceof Element ? event.target.closest<HTMLElement>(".sce-bar-number") : null;
             if (!target) return;
@@ -140,6 +151,31 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
             drag = { pointerId: event.pointerId, anchor, bar };
             choose(anchor, bar);
             target.focus();
+          },
+          { signal },
+        );
+        root.addEventListener(
+          "click",
+          (event) => {
+            if (!session.view.editable || score === null || lastPointerType !== "touch") return;
+            const target =
+              event.target instanceof Element ? event.target.closest<HTMLElement>(".sce-bar-number") : null;
+            if (!target) return;
+            const bar = Number(target.dataset.bar);
+            const range = selected();
+            if (range === null) {
+              session.setBarSelection({ from: bar, count: 1 });
+              return;
+            }
+            const first = range.from;
+            const last = range.from + range.count - 1;
+            if (bar >= first && bar <= last) {
+              session.setBarSelection({ from: bar, count: 1 });
+              return;
+            }
+            const from = Math.min(first, bar);
+            const to = Math.max(last, bar);
+            session.setBarSelection({ from, count: to - from + 1 });
           },
           { signal },
         );

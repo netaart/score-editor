@@ -3,7 +3,7 @@
 import { barIndexAt, gridTicks } from "./arrangement";
 import { create } from "./dom";
 import { messagesFor } from "./i18n";
-import { createLiveRegion, sayRefusals } from "./live-region";
+import { type LiveRegion, sayRefusals } from "./live-region";
 import { mountPopoverMenu } from "./popover-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -11,6 +11,8 @@ import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 
 export interface BarMenuOptions extends EditingPartOptions {
+  /** The toolbar's one live region; the menu says its changes and refusals there. */
+  live: LiveRegion;
   /** Puts the focus on the chosen bar number; the default editor passes the ruler's own way there. */
   onChooseBars?: (bar: number) => void;
 }
@@ -27,15 +29,14 @@ function insertTarget(session: EditingSession): number | null {
  * Mounts the Bars menu on `el`, at the end of the toolbar's editing controls. It is drawn while the session is editable,
  * has a score and shows the arrangement. Its items act on the session's insertion point and bar selection.
  */
-export function mountBarMenu(el: HTMLElement, session: EditingSession, options: BarMenuOptions = {}): ViewPart {
+export function mountBarMenu(el: HTMLElement, session: EditingSession, options: BarMenuOptions): ViewPart {
   const doc = el.ownerDocument;
   const abort = new AbortController();
   const { signal } = abort;
   const releaseStyles = acquireStyles(el);
   const root = create(doc, "div", "sce-root sce-part sce-part-bars");
   el.appendChild(root);
-  const live = createLiveRegion(root);
-  const refused = sayRefusals(live, session, options.onRefused);
+  const refused = sayRefusals(options.live, session, options.onRefused);
 
   const button = create(doc, "button", "sce-button sce-bars-button", root);
   button.type = "button";
@@ -55,7 +56,7 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
       return;
     }
     const t = messagesFor(session.view.language);
-    live.say(target >= before ? t.insertBarAtEndDone : t.insertBarBeforeDone(target + 1));
+    options.live.say(target >= before ? t.insertBarAtEndDone : t.insertBarBeforeDone(target + 1));
   });
   const remove = menu.item("menuitem", () => {
     const range = session.barSelection;
@@ -66,7 +67,7 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
       return;
     }
     const t = messagesFor(session.view.language);
-    live.say(t.barsDeleted(range.from + 1, range.from + range.count));
+    options.live.say(t.barsDeleted(range.from + 1, range.from + range.count));
   });
   menu.rule();
   const clear = menu.item("menuitem", () => session.setBarSelection(null));
@@ -93,12 +94,12 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
     const { reading, view, barSelection } = session;
     const score = reading.kind === "score" ? reading.score : null;
     const shown = score !== null && view.editable && arrangementShown(session);
-    const target = insertTarget(session);
-    const state = [shown, target, barSelection?.from, barSelection?.count, score?.bars.length].join();
+    const target = shown ? insertTarget(session) : null;
+    const selection = shown ? barSelection : null;
+    const state = [shown, target, selection?.from, selection?.count, score?.bars.length].join();
     if (state === drawn) return;
     drawn = state;
     root.hidden = !shown;
-    if (!shown) return;
 
     const bars = score?.bars.length ?? 0;
     const insertEnabled = target !== null;
@@ -107,14 +108,14 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
     insert.title = t.insertBarHint;
     insert.setAttribute("aria-disabled", String(!insertEnabled));
 
-    const removeEnabled = barSelection !== null;
+    const removeEnabled = selection !== null;
     remove.textContent =
-      barSelection === null
+      selection === null
         ? t.deleteBars
-        : barSelection.count === 1
-          ? t.deleteBar(barSelection.from + 1)
-          : t.deleteBarsRange(barSelection.from + 1, barSelection.from + barSelection.count);
-    remove.title = barSelection === null ? t.deleteBarsHint : "";
+        : selection.count === 1
+          ? t.deleteBar(selection.from + 1)
+          : t.deleteBarsRange(selection.from + 1, selection.from + selection.count);
+    remove.title = selection === null ? t.deleteBarsHint : "";
     remove.setAttribute("aria-disabled", String(!removeEnabled));
     clear.setAttribute("aria-disabled", String(!removeEnabled));
     choose.setAttribute("aria-disabled", String(score === null));

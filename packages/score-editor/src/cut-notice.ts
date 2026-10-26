@@ -43,7 +43,15 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession, options
     sentence.textContent = cut ? t.cutNotice(cut) : "";
     const repair = cut?.short === true && editable;
     actions.hidden = !repair;
-    if (cut === null) return;
+    if (cut === null) {
+      fill.textContent = "";
+      remove.textContent = "";
+      fill.removeAttribute("title");
+      remove.removeAttribute("title");
+      fill.removeAttribute("aria-description");
+      remove.removeAttribute("aria-description");
+      return;
+    }
     fill.textContent = t.fillTruncatedBar;
     remove.textContent = t.deleteTruncatedBar;
     const fillWords = t.fillTruncatedBarTitle(cut.bar, cut.voice);
