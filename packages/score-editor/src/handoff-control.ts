@@ -27,6 +27,8 @@ export interface HandoffSource {
   readonly notify?: (notice: Notice) => void;
   /** Says a refused handoff in the toolbar's live region, once. */
   readonly say?: (words: string) => void;
+  /** Draws the refused handoff's sentence in the chrome; a conflict leaves it to the conflict banner. */
+  readonly notSent?: (kind: "conflict" | "failed") => void;
   /** The file name while a dirty score file is saved before the handoff; null when no line is needed. */
   readonly savesFirst?: () => string | null;
 }
@@ -262,6 +264,7 @@ export function mountHandoffControl(
         config.notify?.({ code: "draft-save-failed", level: "error", message: t.draftSaveFailed });
         config.notify?.({ code: "handoff-not-sent", level: "warning", message: t.handoffNotSentFailed });
         config.say?.(t.handoffNotSentFailed);
+        config.notSent?.("failed");
       }
       if (!destroyed) setBusy(false);
       return;
@@ -277,6 +280,7 @@ export function mountHandoffControl(
     const message = result === "conflict" ? t.handoffNotSentConflict : t.handoffNotSentFailed;
     config.notify?.({ code: "handoff-not-sent", level: "warning", message });
     config.say?.(message);
+    config.notSent?.(result === "conflict" ? "conflict" : "failed");
   }
 
   confirm.addEventListener("click", () => void handOff(), { signal });
