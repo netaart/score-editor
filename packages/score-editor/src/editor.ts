@@ -71,6 +71,13 @@ function scoreFileOf(source: MountOptions["source"]): ScoreFileSource | null {
   return file;
 }
 
+/** The same host file, even when the host passes a new options object: same name and opened version. */
+function sameScoreFile(left: ScoreFileSource | null, right: ScoreFileSource | null): boolean {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  return left.name === right.name && left.version === right.version;
+}
+
 /** The fields a score file does not carry start empty; they belong to this handoff only. */
 function scoreFileProject(project: MountOptions["project"]): MountOptions["project"] {
   return { ...project, style: "", seed: null, lyricLines: [] };
@@ -231,7 +238,7 @@ export class Editor implements MountedEditor {
     if (this.destroyed) return;
     const before = this.options;
     const nextSource = patch.source === undefined ? this.scoreSource : scoreFileOf(patch.source);
-    const sourceChanged = nextSource !== this.scoreSource;
+    const sourceChanged = !sameScoreFile(nextSource, this.scoreSource);
     this.options = { ...before, ...patch };
     this.scoreSource = nextSource;
     if (patch.language !== undefined) this.session.setView({ language: patch.language });
