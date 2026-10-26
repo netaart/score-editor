@@ -26,10 +26,12 @@ the unaligned area. Only that binding is stored; syllables, note onsets and whet
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, an optional `tempoChanges` of `{ at, tempo }` points, `voices`, `bars`, `keys`,
-`sections`, `notes`, `chords`, `truncation`, `hasChords`, an optional `unitTicks`, and a dialect-private `source` the
-core never reads. `unitTicks` is how many ticks one written duration number lasts, so a command can ask the dialect's
-`constraints.durations` what it can write; a score that does not state it is refused by the note commands with
-`unit-unknown`. `noteId(voice, start)` builds the stable id the model uses.
+`sections`, `notes`, `chords`, `truncation`, `hasChords`, an optional `unitTicks`, an optional `drawingText`, and a
+dialect-private `source` the core never reads. `unitTicks` is how many ticks one written duration number lasts, so a
+command can ask the dialect's `constraints.durations` what it can write; a score that does not state it is refused by
+the note commands with `unit-unknown`. `drawingText` is the text a view that draws the score should read when it differs
+from the written text: `song2` expands each `Z2`–`Z4` run into separate one-bar rests there, while the project and the
+text view keep the run. `noteId(voice, start)` builds the stable id the model uses.
 
 `Bar`, `Note`, `Chord`, `Section`, `Tempo`, `Meter`, `KeyChange` and `Truncation` describe those parts. `Meter` is a
 fraction of a whole note; `Note.midi` is 0-127 or `null` for a rest; `Note.tie` continues into the next note of the

@@ -55,8 +55,10 @@ with the line each is on (a press on one selects that line in the box), the sess
 project keeps the last score that read. The views that draw the project then show that score, and the stale notice
 above them says so. A read-only session gives a read-only box.
 
-The staff view draws `session.project.score` with abcjs, which the part loads with a dynamic `import()` when it is
-mounted: importing the package loads none of it, and `abcjs` is the package's one runtime dependency. Until it
+The staff view draws the score with abcjs, which the part loads with a dynamic `import()` when it is
+mounted: importing the package loads none of it, and `abcjs` is the package's one runtime dependency. The dialect may
+give the score a `drawingText`; the staff reads that when it is there, and `song2` uses it to draw each `Z2`–`Z4` run as
+separate one-bar rests while the project text keeps the run. Until abcjs
 arrives the part says it is loading; if it cannot be loaded the part says so and the other parts go on working. The
 drawing sits in a shadow root of its own inside the part, so the host's CSS for `svg`, `text` and `path` does not
 reach it and it adds no rule to the page. It takes the colour of the part's text. The drawing is never narrower than
