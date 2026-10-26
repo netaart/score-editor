@@ -24,8 +24,8 @@ function twoVoice(vocal: string[], ins: string[], bpm = 100): string {
     ...header,
     "K:C",
     "% a",
-    ...vocal.flatMap((line) => ["V: Vocal", line]),
-    ...ins.flatMap((line) => ["V: Ins", line]),
+    // song2 writes a group as a Vocal block then an Ins block, so the lines alternate.
+    ...vocal.flatMap((line, index) => ["V: Vocal", line, ...(ins[index] === undefined ? [] : ["V: Ins", ins[index]])]),
     "",
   ].join("\n");
 }
