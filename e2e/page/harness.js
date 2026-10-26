@@ -7,6 +7,7 @@ import { song2Dialect } from "/packages/score-dialect-song2/dist/index.js";
 import {
   createDialectRegistry,
   createEditingSession,
+  formatDiagnostic,
   mount,
   mountChordTrack,
   mountCutNotice,
@@ -14,6 +15,7 @@ import {
   mountFilterPanel,
   mountLyricTrack,
   mountProblemView,
+  mountProjectPanel,
   mountStaffView,
   mountStaleNotice,
   mountSynthPreview,
@@ -71,6 +73,16 @@ const blank = {
   modelId: "song2",
   sourceKey: "test-page",
 };
+
+/** The notice a host receives when a mounted part refuses a command, as the default editor sends it. */
+function refusedBy(session) {
+  return (diagnostics) =>
+    notices.push({
+      code: "command-refused",
+      level: "warning",
+      message: formatDiagnostic(diagnostics[0], session.view.language),
+    });
+}
 
 /**
  * The song2 dialect with tempo changes the model allows but the format cannot write. A host that reads a format with
@@ -133,6 +145,17 @@ const VIEW_PARTS = {
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+  // The song project panel as a part of its own; a refusal is told to the host as the editor tells it.
+  panel: (el, session) => mountProjectPanel(el, session, { onRefused: refusedBy(session) }),
+  // The default editor's toolbar: the view switch, and the tempo, key, transpose and Project controls. A refusal is told
+  // to the host as the editor tells it, so the notices list shows what a host would be sent.
+  "toolbar-song": (el, session) =>
+    mountToolbar(el, session, {
+      viewSwitch: true,
+      tempoKey: true,
+      projectPanel: true,
+      onRefused: refusedBy(session),
+    }),
   filter: (el, session) => mountFilterPanel(el, session),
   "draft-conflict": (el, session) => mountDraftConflict(el, session, conflictKeeper()),
 };
@@ -280,6 +303,12 @@ const layout = {
   /** Reads the project with a new registry of the same dialects, the way a host that swaps its dialects does. */
   replaceDialects() {
     layout.session.replaceDialects(createDialectRegistry([song2Dialect]));
+  },
+  /** Lets a host take a pending field on a part it mounted itself, as the toolbar's popover does when it closes. */
+  commitPart(name) {
+    const part = layout.parts[name];
+    if (typeof part?.commit !== "function") throw new Error(`${name} has no commit`);
+    part.commit();
   },
   /** Mounts one more part on the open session, as a host does that adds a view later; `hidden` mounts it in a slot that is not shown. */
   mountPart(name, hidden = false) {

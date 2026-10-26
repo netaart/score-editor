@@ -43,6 +43,7 @@ change. The tests in the repository check that the list stays complete.
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
 | `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete, a toggle, a box, select all, invert, clear) to a session; returns `EditingInputResult`. |
+| `mountProjectPanel` | core | Mounts the song project panel: the style text, the score mode, the seed, the joined lyrics with their count and the notices the project carries; takes `EditingPartOptions` and returns a `ProjectPanel`. |
 | `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
@@ -144,10 +145,11 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
+| `ProjectPanel` | A `ViewPart` with `element` and `commit()`: the song project panel's root, and the pending field a host takes when it closes its own container. |
 | `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper?, tempoKey?, projectPanel? }` for the toolbar. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 

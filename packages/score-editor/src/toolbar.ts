@@ -11,10 +11,13 @@ import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountProjectControl } from "./project-control";
+import { mountProjectNoticeStrip } from "./project-notice-strip";
 import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import { mountSynthControl } from "./synth-preview";
+import { mountTempoKeyControls } from "./tempo-key";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
@@ -37,6 +40,18 @@ export interface ToolbarOptions extends EditingPartOptions {
    * that mounts `mountSynthPreview` in a place of its own turns it off, so the control is not there twice.
    */
   synthPreview?: boolean;
+  /**
+   * Whether the toolbar holds the tempo field, the key menu and the two transpose buttons, which act on the whole song and
+   * are there while the session is editable and its score reads. Off by default, so a toolbar a host already mounts gains
+   * no control; the default editor turns it on.
+   */
+  tempoKey?: boolean;
+  /**
+   * Whether the toolbar holds the Project button, which opens the song project panel (`mountProjectPanel`) under it. The
+   * button is there while the session has a dialect, in read-only mode too, where the panel only shows. Off by default; the
+   * default editor turns it on. A host that mounts `mountProjectPanel` in a place of its own leaves it off.
+   */
+  projectPanel?: boolean;
   /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
 }
@@ -91,9 +106,20 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
   const badge = create(doc, "span", "sce-badge", end ?? row);
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
+  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
+  // project changes by anything else, as the text view keeps its notice.
+  const noticeStrip = mountProjectNoticeStrip(root, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const refused = sayRefusals(live, session, options.onRefused);
+  const song = options.tempoKey
+    ? mountTempoKeyControls(row, session, {
+        refused,
+        live,
+        showNotices: (notices) => noticeStrip.show(notices),
+      })
+    : null;
+  const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
   let restore: ViewPart | null = null;
   /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
   function syncRestore(): void {
@@ -177,7 +203,10 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
 
   draw();
-  const unsubscribe = session.subscribe(draw);
+  const unsubscribe = session.subscribe((change) => {
+    if (change.project) noticeStrip.clear();
+    draw();
+  });
   const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {
@@ -190,6 +219,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      noticeStrip.destroy();
+      song?.destroy();
+      projectControl?.destroy();
       filter.destroy();
       grid.destroy();
       restore?.destroy();

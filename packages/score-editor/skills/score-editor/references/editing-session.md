@@ -30,6 +30,7 @@ const session = createEditingSession({
 | --- | --- |
 | `project` | The current `SongProject`. The only document state. |
 | `reading` | A `ScoreReading`, cached until the score text, model or dialects change. |
+| `dialect` | The `ScoreDialect` that reads `project`, or `undefined` when the registry has none for its model. Its `constraints` (the tempo range, the keys) are what the toolbar's tempo and key controls offer. |
 | `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
 | `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |
 | `grid` | `Grid` (`{ value, dotted? }`): the step that notes move and resize by, that a drag lands on and that the insertion point snaps to and steps by. UI state like the selection: outside the history, and not a field of `view` or of the project. It starts at `{ value: 4 }` (1/4) unless `SessionOptions.grid` says otherwise. A project or registry change that cannot write the grid in force puts 1/4 back, and the change carries `gridDropped` with the old grid. |

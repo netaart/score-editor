@@ -138,6 +138,7 @@ interface PageLayout {
   replace(options: Record<string, unknown>): Promise<void>;
   replaceDialects(): void;
   mountPart(name: string, hidden?: boolean): void;
+  commitPart(name: string): void;
   /** Drives the mounted staff part's play position in seconds, or clears it for null. */
   setPlayPosition(seconds: number | null): void;
   setSlotHidden(name: string, hidden: boolean): void;
@@ -231,6 +232,11 @@ export class Layout {
     return this.page.evaluate((all) => {
       for (const name of all) window.harness.layout.mountPart(name);
     }, names);
+  }
+
+  /** Takes a pending field on a part the host mounted itself, as a host does when it closes its own container. */
+  commitPart(name: string) {
+    return this.page.evaluate((target) => window.harness.layout.commitPart(target), name);
   }
 
   destroyPart(name: string, times = 1) {
@@ -414,6 +420,14 @@ export class Harness {
     return this.page.evaluate(() => window.harness.destroy());
   }
 
+  /** Sets the height of the stage the editor fills, as a host resizing the editor's box does. */
+  async stageHeight(px: number) {
+    await this.page.evaluate((height) => {
+      window.harness.stage.style.height = `${height}px`;
+    }, px);
+    await this.frames(1);
+  }
+
   /**
    * Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones; `inShadowRoot`
    * adds them to the open shadow root the editor or the layout stands in.
@@ -530,15 +544,16 @@ export class Harness {
   }
 
   /**
-   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` or
-   * inside it; null when none is. A part may pin a header over `target`, so the first free spot is found by looking.
+   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` itself
+   * and so is the element 8 pixels below it; null when none is. A note or another child of `target` does not count, and
+   * requiring the second point leaves room for the finger. A part may pin a header over `target`, so the first empty
+   * spot is found by looking.
    */
   firstYOn(target: Locator, x: number, from: number, until: number) {
     return target.evaluate(
       (el, { at, start, end }) => {
-        for (let y = start; y < end; y += 4) {
-          const top = document.elementFromPoint(at, y);
-          if (top && el.contains(top)) return y;
+        for (let y = start; y + 8 < end; y += 4) {
+          if (document.elementFromPoint(at, y) === el && document.elementFromPoint(at, y + 8) === el) return y;
         }
         return null;
       },
@@ -640,6 +655,32 @@ export class Finger {
   async close() {
     await this.cdp.detach();
   }
+}
+
+/**
+ * Taps or clicks the first note of Vocal whose centre is the top element at that point, and gives back its name. It
+ * works through the DOM and the pointer directly, so it does not scroll the note into view the way `locator.tap()` does.
+ */
+export async function tapFirstVisibleNote(page: Page): Promise<string> {
+  const at = await page.evaluate(() => {
+    const notes = document.querySelectorAll<HTMLElement>('[role="list"][aria-label="Vocal"] [role="listitem"]');
+    for (const note of notes) {
+      const rect = note.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+      if (document.elementFromPoint(x, y) !== note) continue;
+      return { x, y, name: note.getAttribute("aria-label") ?? "" };
+    }
+    return null;
+  });
+  if (at === null) throw new Error("no note is hit-testable");
+  if (await page.evaluate(() => matchMedia("(pointer: coarse)").matches)) {
+    await page.touchscreen.tap(at.x, at.y);
+  } else {
+    await page.mouse.click(at.x, at.y);
+  }
+  return at.name;
 }
 
 /** A way to press, move and lift one pointer: a mouse on the desktop project, a finger on the phone project. */

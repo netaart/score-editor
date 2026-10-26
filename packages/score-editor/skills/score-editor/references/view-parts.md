@@ -305,6 +305,25 @@ noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once
 - `previewPlayer(session)` touches no audio until `start()`. Destroying the last control that holds the player stops it.
 - The headless half, `schedulePreview`, is in [headless-layer.md](headless-layer.md#the-preview-schedule).
 
+## Tempo, key and the song project panel
+
+`mountToolbar` takes `tempoKey` for the four song controls (tempo, key, transpose down and transpose up), there while
+the session is editable and its score reads, and `projectPanel` for the Project button that opens the panel; `mount`
+turns both on. The behaviour, the rules and the controls are in
+[the package README](../../../README.md#tempo-key-and-the-song-project-panel),
+[DESIGN's tempo and transpose section](../../../../../DESIGN.md#tempo-key-and-transpose) and
+[its panel section](../../../../../DESIGN.md#song-project-panel).
+
+A host that wants the panel somewhere of its own mounts it and leaves `projectPanel` off; it gets a `ProjectPanel`,
+whose `commit()` takes a field that has not been let go and whose `destroy()` changes no document:
+
+```ts
+import { mountProjectPanel, mountToolbar } from "@neta-art/score-editor";
+
+mountToolbar(toolbarEl, session, { tempoKey: true, onRefused });
+const panel = mountProjectPanel(panelEl, session, { onRefused }); // a ProjectPanel
+```
+
 ## Selecting by filter
 
 Use this when a person should pick notes by condition instead of by pointing: a Filter button that opens a panel named

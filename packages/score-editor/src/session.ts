@@ -129,6 +129,12 @@ export interface EditingSession {
    */
   readonly reading: ScoreReading;
   /**
+   * The dialect that reads the project's model, or undefined when the registry has none. It is how a control learns what
+   * the dialect allows (`dialect.constraints`) and how a panel asks what the project carries (`checkProject`). It follows
+   * `replaceDialects` and a project of another model.
+   */
+  readonly dialect: ScoreDialect | undefined;
+  /**
    * The ids of the selected notes. The selection is UI state: it is not in the history. An id that names no note of
    * the current score is dropped, so the selection always names notes that exist.
    */
@@ -425,6 +431,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get reading() {
       return read();
+    },
+    get dialect() {
+      return dialects.find(project.modelId);
     },
     get selection() {
       return selection;

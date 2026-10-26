@@ -7,6 +7,7 @@ import { dragCss } from "./drag-styles";
 import { filterCss } from "./filter-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
+import { songCss } from "./song-styles";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
 const BLACK_KEY_ROWS = [1, 3, 5, 8, 10];
@@ -86,6 +87,8 @@ const css = `
   overflow: hidden;
   /* Where the track heads pin: right under the header block that the editor pins above the tracks. */
   --sce-_head-top: var(--sce-_top);
+  /* The music keeps the header, a track head and three rows; the chrome scrolls inside itself when it needs more. */
+  --sce-_floor: calc(var(--sce-_head-top) + var(--sce-_band) + 3 * var(--sce-_row));
 }
 .sce-part.sce-part {
   display: block;
@@ -126,6 +129,19 @@ const css = `
 }
 .sce-root.sce-root [hidden] {
   display: none;
+}
+
+/*
+ * Everything above the music: the toolbar, the conflict strip, the cut sentence and the stale notice. Its height is
+ * bounded so the body keeps the floor; what does not fit scrolls inside it, and nothing is cut or hidden.
+ */
+.sce-root .sce-chrome {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  max-height: calc(100% - var(--sce-_floor));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sce-root .sce-toolbar {
@@ -270,7 +286,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-grid-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -375,7 +391,7 @@ const css = `
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  min-height: 0;
+  min-height: var(--sce-_floor);
 }
 
 /*
@@ -435,6 +451,13 @@ const css = `
   position: sticky;
   top: 0;
   z-index: 5;
+}
+/* Below six rows in the lane the header costs more than it gives: it scrolls away and the track head stays pinned. */
+.sce-editor[data-pin="none"] {
+  --sce-_head-top: 0px;
+}
+.sce-editor[data-pin="none"] .sce-top {
+  position: static;
 }
 .sce-root .sce-ruler {
   height: var(--sce-_ruler);
@@ -1094,6 +1117,7 @@ ${labelThinning()}
 }
 ${boxCss}${lyricCss}
 ${draftCss}
+${songCss}
 ${filterCss}
 ${dragCss}`;
 
