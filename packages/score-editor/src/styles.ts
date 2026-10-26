@@ -1176,6 +1176,14 @@ ${labelThinning()}
   border-color: var(--sce-_text);
   background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
 }
+/* The pencil is a mode like the view switch, and carries its state the same way: fill, border and weight, never hue. */
+.sce-root .sce-pencil-button[aria-pressed="true"] {
+  border-color: var(--sce-_text);
+  background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
+}
+.sce-root .sce-pencil-button[aria-pressed="true"] .sce-icon {
+  stroke-width: 2px;
+}
 .sce-root .sce-view-button[aria-pressed="true"] .sce-icon {
   stroke-width: 2px;
 }

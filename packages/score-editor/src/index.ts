@@ -171,3 +171,11 @@ export { mountZoomControl } from "./zoom-control";
 export type { NoteFilter } from "./filter-notes";
 export { filterNotes } from "./filter-notes";
 export { mountFilterPanel } from "./filter-panel";
+// Placing notes: add, paste at the insertion point, duplicate, and the Alt-drag copy.
+export type {
+  AddNoteCommand,
+  CopiedNote,
+  CopyNotesCommand,
+  DuplicateNotesCommand,
+  PasteNotesCommand,
+} from "./commands-place";

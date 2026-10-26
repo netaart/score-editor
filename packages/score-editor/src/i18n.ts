@@ -294,6 +294,8 @@ export interface Messages {
   handoffInstructionMode: string;
   handoffInstructionSeed: string;
   handoffInstructionChanges: string;
+  /** The pencil toggle's name; its tooltip adds the B key. */
+  drawNotes: string;
 }
 
 /** A grid the way a menu item and the button name it: the dotted word of the language, then the fraction. */
@@ -595,6 +597,7 @@ const en: Messages = {
   handoffInstructionMode: "Score mode",
   handoffInstructionSeed: "Seed",
   handoffInstructionChanges: "Changes",
+  drawNotes: "Draw notes",
 };
 
 const zh: Messages = {
@@ -862,6 +865,7 @@ const zh: Messages = {
   handoffInstructionMode: "乐谱模式",
   handoffInstructionSeed: "Seed",
   handoffInstructionChanges: "改动记录",
+  drawNotes: "画笔",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

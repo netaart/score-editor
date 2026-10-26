@@ -83,6 +83,13 @@ reports those notices for a project as it stands, `isNoticeDiagnostic` tells a n
 the session does that for you (`dispatch` returns `ok: true` with the notices), and a host that calls this function itself
 should do the same.
 
+The placing commands are `AddNoteCommand` (`voice`, `start`, `midi`, `grid`, one grid step long), `PasteNotesCommand`
+(`notes: CopiedNote[]`, `at`, `grid`), `DuplicateNotesCommand` (`noteIds`, `grid`) and `CopyNotesCommand` (`noteIds`,
+`timeTicks`, `semitones`, `grid`, the Alt-drag). A `CopiedNote` is `{ voice, start, duration, midi }`, with a copied tie
+chain as one note. All four land on the grid and obey the one-note-a-time rule (a covered start is removed, a covered end
+is shortened); each refusal code is listed with the command in the package README. The session follows the notes a placing
+command makes, so they are selected afterwards.
+
 The note edits are `MoveNotesCommand` and `ResizeNotesCommand`, both members of `MoveResizeCommand` and of `ScoreCommand`.
 They take several note ids and act on each note's whole tie chain. Their `grid` is a `Grid`: its `value` is a
 `GridValue`, one of 4, 8, 16 or 32, and `dotted` makes a step half as long again. A grid step is allowed only when the

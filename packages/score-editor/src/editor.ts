@@ -120,6 +120,7 @@ export class Editor implements MountedEditor {
         viewSwitch: true,
         tempoKey: true,
         projectPanel: true,
+        pencil: true,
         draftKeeper: this.drafts,
         onChooseBars: (bar) => {
           const number = this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);

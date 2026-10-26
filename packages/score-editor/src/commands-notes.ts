@@ -41,7 +41,7 @@ export interface ResizeNotesCommand {
 export type MoveResizeCommand = MoveNotesCommand | ResizeNotesCommand;
 
 /** One event as the user sees it: a note with its whole tie chain, or one rest. */
-interface NoteSpan {
+export interface NoteSpan {
   readonly voice: string;
   readonly start: number;
   readonly end: number;
@@ -116,7 +116,7 @@ export function isGridAllowed(score: Score, grid: Grid, constraints: DialectCons
  * The notes of one voice grouped into what the user sees as one note: a pitched note and every note its tie continues
  * into, or one rest. The voice's notes are passed already sorted, so `tieChain` does not sort them again per chain.
  */
-function spansOf(score: Score, voice: string): NoteSpan[] {
+export function spansOf(score: Score, voice: string): NoteSpan[] {
   const notes = score.notes.filter((note) => note.voice === voice).sort((left, right) => left.start - right.start);
   const spans: NoteSpan[] = [];
   let index = 0;
@@ -386,6 +386,55 @@ export function movedIds(score: Score, command: MoveResizeCommand): Map<string, 
 }
 
 /**
+ * Puts one span into a voice under the one-note-a-time rule: a span whose start it covers goes, and a span it starts
+ * inside is shortened to the placed note's start. Every note touched is added to `affected`, so its ties are repaired.
+ */
+export function placeOverlap(byVoice: Map<string, NoteSpan[]>, span: NoteSpan, affected: Set<string>): void {
+  const spans = byVoice.get(span.voice) ?? [];
+  const kept: NoteSpan[] = [];
+  for (const present of spans) {
+    if (present.end <= span.start || present.start >= span.end) {
+      kept.push(present);
+      continue;
+    }
+    for (const member of present.notes ?? []) affected.add(member.id);
+    if (present.start >= span.start) continue;
+    kept.push({ ...present, end: span.start, notes: null });
+  }
+  kept.push(span);
+  kept.sort((left, right) => left.start - right.start);
+  byVoice.set(span.voice, kept);
+}
+
+/**
+ * Writes the spans of every voice out as the notes and rests the score can hold, splitting at bar lines, tying across
+ * them, repairing the ties the edit broke, rebinding chords, and putting the voices back in their order.
+ */
+export function finishPlacement(
+  score: Score,
+  byVoice: Map<string, NoteSpan[]>,
+  affected: Set<string>,
+  unitTicks: number,
+  constraints: DialectConstraints,
+): Score {
+  const ends = fillEnds(score);
+  const notes: Note[] = [];
+  for (const voice of score.voices) {
+    const voiceNotes: Note[] = [];
+    for (const span of byVoice.get(voice) ?? []) {
+      if (span.notes !== null) voiceNotes.push(...span.notes);
+      else voiceNotes.push(...piecesFor(score, span, unitTicks, constraints.durations));
+    }
+    notes.push(...fillVoice(score, voice, voiceNotes, ends, unitTicks, constraints));
+  }
+
+  const split = splitAtKeyChanges(score, notes, unitTicks, constraints.durations);
+  const repaired = repairTies(score, split, affected);
+  const placed = placeChords(score, repaired, unitTicks, constraints.durations);
+  return { ...score, notes: orderNotes(score, placed.notes), chords: placed.chords };
+}
+
+/**
  * Moves or resizes the whole tie chain of every named note as one command. All targets are checked before anything
  * changes, so a refusal names the first note that cannot be placed and leaves the score as it was.
  */
@@ -486,42 +535,12 @@ export function runNoteCommand(
 
   const ordered = [...placements].sort((left, right) => left.start - right.start || left.order - right.order);
   for (const placement of ordered) {
-    const spans = byVoice.get(placement.voice) ?? [];
-    const kept: NoteSpan[] = [];
-    for (const span of spans) {
-      if (span.end <= placement.start || span.start >= placement.end) {
-        kept.push(span);
-        continue;
-      }
-      for (const member of span.notes ?? []) affected.add(member.id);
-      if (span.start >= placement.start) continue;
-      kept.push({ ...span, end: placement.start, notes: null });
-    }
-    kept.push({
-      voice: placement.voice,
-      start: placement.start,
-      end: placement.end,
-      midi: placement.midi,
-      notes: null,
-    });
-    kept.sort((left, right) => left.start - right.start);
-    byVoice.set(placement.voice, kept);
+    placeOverlap(
+      byVoice,
+      { voice: placement.voice, start: placement.start, end: placement.end, midi: placement.midi, notes: null },
+      affected,
+    );
   }
 
-  const ends = fillEnds(score);
-  const notes: Note[] = [];
-  for (const voice of score.voices) {
-    const voiceNotes: Note[] = [];
-    for (const span of byVoice.get(voice) ?? []) {
-      if (span.notes !== null) voiceNotes.push(...span.notes);
-      else voiceNotes.push(...piecesFor(score, span, unitTicks, constraints.durations));
-    }
-    notes.push(...fillVoice(score, voice, voiceNotes, ends, unitTicks, constraints));
-  }
-
-  const split = splitAtKeyChanges(score, notes, unitTicks, constraints.durations);
-  const repaired = repairTies(score, split, affected);
-  const placed = placeChords(score, repaired, unitTicks, constraints.durations);
-  const orderedNotes = orderNotes(score, placed.notes);
-  return { ok: true, score: { ...score, notes: orderedNotes, chords: placed.chords } };
+  return { ok: true, score: finishPlacement(score, byVoice, affected, unitTicks, constraints) };
 }
