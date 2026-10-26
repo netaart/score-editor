@@ -13,6 +13,7 @@ import {
   type Song2SourceBar,
   signatureOf,
 } from "./parser";
+import { stripTrailingWhitespace } from "./text";
 import { serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
 import { keepsCutTail } from "./write-chords";
 import { sectionsMatchSource } from "./write-sections";
@@ -374,7 +375,7 @@ function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
 }
 
 function headerValue(line: string | undefined): string {
-  return line === undefined ? "" : line.replace(/[ \t]+$/, "").slice(2);
+  return line === undefined ? "" : stripTrailingWhitespace(line).slice(2);
 }
 
 function writeKeyLine(lines: string[], line: number, key: string): void {
@@ -387,7 +388,7 @@ function writeKeyLine(lines: string[], line: number, key: string): void {
  */
 function writeHeader(score: Score, source: Song2Source, lines: string[]): void {
   const tempoLine = lines[4];
-  const tempo = tempoLine === undefined ? null : /^Q:1\/4=([0-9]+)$/.exec(tempoLine.replace(/[ \t]+$/, ""));
+  const tempo = tempoLine === undefined ? null : /^Q:1\/4=([0-9]+)$/.exec(stripTrailingWhitespace(tempoLine));
   if (tempo === null || Number(tempo[1]) !== score.tempo.bpm) lines[4] = `Q:1/4=${score.tempo.bpm}`;
 
   const headerKey = score.keys[0]?.key;
