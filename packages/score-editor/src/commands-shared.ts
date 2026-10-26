@@ -40,6 +40,81 @@ export function withoutUnfinishedChord(truncation: Truncation | null): Truncatio
   return { voice: truncation.voice, bar: truncation.bar, short: truncation.short };
 }
 
+/**
+ * RULES.md W16: only a bar command may move a boundary cut in Vocal into Ins when Ins has no
+ * measure at or after it. The cut goes to the first measure Ins lacks.
+ */
+export function writableCut(score: Pick<Score, "voices" | "notes">, truncation: Truncation | null): Truncation | null {
+  if (truncation === null || truncation.voice !== "Vocal" || truncation.short) return truncation;
+  if (!score.voices.includes("Ins")) return truncation;
+  let end = 0;
+  for (const note of score.notes) if (note.voice === "Ins" && note.bar + 1 > end) end = note.bar + 1;
+  if (end >= truncation.bar) return truncation;
+  return { voice: "Ins", bar: end, short: false };
+}
+
+/** True when the cut measure has no finished note, rest or chord left, so the writer drops its line. */
+function cutBarIsEmptyAfterChords(score: Score, chords: ReadonlyArray<Chord>, truncation: Truncation | null): boolean {
+  if (truncation === null || !truncation.short) return false;
+  const bar = score.bars[truncation.bar];
+  if (bar === undefined) return false;
+  const hasNote = score.notes.some((note) => note.voice === truncation.voice && note.bar === truncation.bar);
+  const hasChord = chords.some((chord) => chord.start >= bar.start && chord.start < bar.start + bar.length);
+  return !hasNote && !hasChord;
+}
+
+/** The model after removing chords empties the cut measure: its partial bar is gone and the cut moves before it. */
+export function withoutEmptyCutBar(score: Score): Pick<Score, "bars" | "truncation" | "sections"> | null {
+  const truncation = withoutUnfinishedChord(score.truncation);
+  if (!cutBarIsEmptyAfterChords(score, [], truncation)) return null;
+  const last = score.bars[score.bars.length - 1];
+  const bars =
+    last !== undefined && truncation !== null && truncation.bar === last.index && last.incomplete
+      ? score.bars.slice(0, -1)
+      : score.bars;
+  const markers = score.sections.map((section) => ({ name: section.name, firstBar: section.firstBar }));
+  const endOf = (voice: string): number => {
+    let end = 0;
+    for (const note of score.notes) if (note.voice === voice && note.bar + 1 > end) end = note.bar + 1;
+    return end;
+  };
+  // The trimmed Vocal bar may leave the required Ins block short of whole bars; the cut then reads
+  // in Ins, which is the only legal place for it, instead of inventing a Vocal block after it.
+  const shortOther =
+    truncation !== null && truncation.voice === "Vocal"
+      ? score.voices.find((voice) => voice !== "Vocal" && endOf(voice) < truncation.bar)
+      : undefined;
+  return {
+    bars,
+    truncation:
+      truncation === null
+        ? null
+        : shortOther === undefined
+          ? { ...truncation, short: false }
+          : { voice: shortOther, bar: endOf(shortOther), short: false },
+    sections: sectionsFrom({ ...score, bars }, markers),
+  };
+}
+
+/**
+ * The model after a chord removal. Removing the last finished chord also removes an unfinished chord
+ * string at the cut (RULES.md C8), and an emptied cut measure; chord material that remains keeps it.
+ */
+export function withoutChordMaterial(
+  score: Score,
+  chords: ReadonlyArray<Chord>,
+): Pick<Score, "bars" | "truncation" | "sections" | "chords" | "hasChords"> {
+  const trimmed = chords.length === 0 ? withoutEmptyCutBar(score) : null;
+  const truncation =
+    trimmed?.truncation ?? (chords.length === 0 ? withoutUnfinishedChord(score.truncation) : score.truncation);
+  return {
+    ...(trimmed ?? { bars: score.bars, sections: score.sections }),
+    chords,
+    truncation,
+    hasChords: hasChordsAfter(chords, truncation),
+  };
+}
+
 export function barTicks(meter: Meter): number {
   return (4 * meter.numerator * TICKS_PER_QUARTER) / meter.denominator;
 }

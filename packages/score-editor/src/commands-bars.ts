@@ -12,7 +12,9 @@ import {
   scoreUnit,
   sectionsFrom,
   splitLength,
+  writableCut,
 } from "./commands-shared";
+import { clearTiesIntoRests } from "./commands-truncation";
 import { type Bar, type Chord, type KeyChange, type Meter, type Note, noteId, type Score, type Section } from "./score";
 import type { DialectConstraints } from "./types";
 
@@ -125,7 +127,7 @@ function insertBar(score: Score, at: number, constraints: DialectConstraints): S
       notes: orderNotes(score, notes),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation,
+      truncation: writableCut({ voices: score.voices, notes }, truncation),
     },
   };
 }
@@ -244,17 +246,42 @@ function deleteBars(score: Score, from: number, count: number): ScoreCommandResu
         continue;
       }
       const next = list[index + 1];
-      if (next === undefined || next.start !== note.start + note.duration) cutTies.add(note.id);
+      if (next === undefined) {
+        // RULES.md P14: a tie into an X5 tail has no note after it, but it is not dangling.
+        const cut = score.truncation;
+        const cutBar = cut === null ? undefined : score.bars[cut.bar];
+        const cutStart = cutBar === undefined ? undefined : cutBar.start - (cut !== null && cut.bar > to ? length : 0);
+        const intoTail =
+          cut !== null &&
+          cut.voice === note.voice &&
+          cut.short &&
+          note.start + note.duration === cutStart &&
+          score.source !== null &&
+          score.source !== undefined;
+        if (!intoTail) cutTies.add(note.id);
+        continue;
+      }
+      if (next.start !== note.start + note.duration) cutTies.add(note.id);
     }
   }
   const finalNotes = notes.map((note) => (cutTies.has(note.id) ? { ...note, tie: false } : note));
 
-  const removedBefore = (at: number): number => Math.min(Math.max(at - from, 0), count);
+  // A marker inside the deleted range stays unless the range removed its whole section; then it
+  // moves to the first surviving bar, which is the bar now at `from`.
   const markers = score.sections
-    .filter((section) => !(section.firstBar >= from && section.firstBar <= to))
-    .map((section) => ({ name: section.name, firstBar: section.firstBar - removedBefore(section.firstBar) }));
+    .filter((section) => {
+      const whole =
+        section.barCount > 0 && section.firstBar >= from && section.firstBar + section.barCount <= from + count;
+      const crossed = section.firstBar > from && section.firstBar <= to;
+      return !(whole || crossed);
+    })
+    .map((section) => ({
+      name: section.name,
+      firstBar: section.firstBar < from ? section.firstBar : section.firstBar > to ? section.firstBar - count : from,
+    }));
 
   const truncation = score.truncation === null ? null : { ...score.truncation, bar: score.truncation.bar - count };
+  const nextTruncation = writableCut({ voices: score.voices, notes: finalNotes }, truncation);
 
   return {
     ok: true,
@@ -265,8 +292,8 @@ function deleteBars(score: Score, from: number, count: number): ScoreCommandResu
       notes: orderNotes(score, finalNotes),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation,
-      hasChords: hasChordsAfter(chords, truncation),
+      truncation: nextTruncation,
+      hasChords: hasChordsAfter(chords, nextTruncation),
     },
   };
 }
@@ -423,20 +450,45 @@ function setSectionMeter(
     name: item.name,
     firstBar: index > sectionIndex ? item.firstBar + delta : item.firstBar,
   }));
-  const truncation =
+  // A cut after the section keeps its place, shifted by the changed bar count. A voice that no
+  // longer reaches the section end now stops inside the new grid, so the cut is that voice's own.
+  let truncation =
     score.truncation === null || score.truncation.bar <= lastIndex
       ? score.truncation
       : { ...score.truncation, bar: score.truncation.bar + delta };
+  if (truncation !== null) {
+    const sectionEndTick = start + sectionLength;
+    const endOf = (voice: string): number => {
+      let end = start;
+      for (const note of notes) {
+        if (note.voice !== voice) continue;
+        end = Math.max(end, note.start + note.duration);
+      }
+      return end;
+    };
+    const shortVoice = score.voices
+      .filter((voice) => endOf(voice) < sectionEndTick)
+      .sort((left, right) => endOf(left) - endOf(right))[0];
+    if (shortVoice !== undefined) {
+      const relative = endOf(shortVoice) - start;
+      const offset = Math.min(Math.max(Math.floor(relative / length), 0), newCount);
+      truncation = {
+        voice: shortVoice,
+        bar: section.firstBar + offset,
+        short: relative % length !== 0,
+      };
+    }
+  }
 
   return {
     ok: true,
     score: {
       ...score,
       bars,
-      notes: orderNotes(score, notes),
+      notes: orderNotes(score, clearTiesIntoRests(notes)),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation,
+      truncation: writableCut({ voices: score.voices, notes }, truncation),
     },
   };
 }

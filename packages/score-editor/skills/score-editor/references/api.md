@@ -60,7 +60,7 @@ change. The tests in the repository check that the list stays complete.
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
-| `LYRICS_MAX_CHARACTERS` | core | 2000; the limit song2 generation accepts for the joined `lyrics` text. |
+| `LYRICS_MAX_CHARACTERS` | core | 4000; the limit song2 generation accepts for the joined `lyrics` text. |
 | `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`. |
 | `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
