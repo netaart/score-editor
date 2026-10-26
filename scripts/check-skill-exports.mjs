@@ -150,6 +150,12 @@ const ownerGroups = {
     "PasteNotesCommand",
     "DuplicateNotesCommand",
     "CopyNotesCommand",
+    "VoiceOctaveCommand",
+    "InstrumentalVersionCommand",
+    "VoiceCommand",
+    "VoiceOctaveReport",
+    "InstrumentalReport",
+    "CommandReport",
   ],
   "references/editing-session.md": [
     "createEditingSession",

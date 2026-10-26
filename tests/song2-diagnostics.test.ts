@@ -76,6 +76,8 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "lyric-lines-not-mergeable",
   "lyric-split-invalid",
   "cut-other-voice-short",
+  "voice-octave-range",
+  "instrumental-voice-missing",
   "tool-result",
 ];
 

@@ -16,6 +16,7 @@ import { runSectionCommand } from "./commands-sections";
 import { noteAt, tieChain } from "./commands-shared";
 import { type NoteToolCommand, runNoteToolCommand } from "./commands-tools";
 import { runTruncationCommand } from "./commands-truncation";
+import { type CommandReport, runVoiceCommand, type VoiceCommand } from "./commands-voice";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
 import type { DialectConstraints } from "./types";
@@ -50,12 +51,13 @@ export type ScoreCommand =
   | PasteNotesCommand
   | DuplicateNotesCommand
   | CopyNotesCommand
-  | NoteToolCommand;
+  | NoteToolCommand
+  | VoiceCommand;
 
 export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
 export type ScoreCommandResult =
-  | { readonly ok: true; readonly score: Score }
+  | { readonly ok: true; readonly score: Score; readonly report?: CommandReport }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
 /**
@@ -146,5 +148,8 @@ export function runScoreCommand(
     case "setNoteLength":
     case "fitNotesToRange":
       return runNoteToolCommand(score, command, constraints);
+    case "voiceOctave":
+    case "instrumentalVersion":
+      return runVoiceCommand(score, command, constraints);
   }
 }

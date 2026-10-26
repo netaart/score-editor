@@ -75,6 +75,8 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "lyric-lines-not-mergeable",
   "lyric-split-invalid",
   "cut-other-voice-short",
+  "voice-octave-range",
+  "instrumental-voice-missing",
   "tool-result",
 ] as const;
 
@@ -177,6 +179,8 @@ interface Catalog {
   readonly lyricLinesNotMergeable: Text;
   readonly lyricSplitInvalid: Text;
   readonly cutOtherVoiceShort: Text;
+  readonly voiceOctaveRange: Text;
+  readonly instrumentalVoiceMissing: Text;
   readonly toolResult: Text;
 }
 
@@ -1007,6 +1011,24 @@ function chineseCutOtherVoiceShort(params: DiagnosticParams): string {
 }
 
 /** A tool's own result broke a rule the command layer keeps: the score and the history were left as they were. */
+function englishVoiceOctaveRange(params: DiagnosticParams): string {
+  const octaves = value(params, "octaves");
+  return `Moving the Vocal voice by ${octaves} octaves would put a note at MIDI ${value(params, "moved")}, outside MIDI 0-127.`;
+}
+
+function chineseVoiceOctaveRange(params: DiagnosticParams): string {
+  const octaves = value(params, "octaves");
+  return `把人声移动 ${octaves} 个八度会让一个音落在 MIDI ${value(params, "moved")}，超出 MIDI 0-127。`;
+}
+
+function englishInstrumentalVoiceMissing(params: DiagnosticParams): string {
+  return `The score has no ${value(params, "voice")} voice, so there is nowhere to move Vocal's notes.`;
+}
+
+function chineseInstrumentalVoiceMissing(params: DiagnosticParams): string {
+  return `乐谱没有 ${value(params, "voice")} 声部，无法把人声的音移过去。`;
+}
+
 function englishToolResult(params: DiagnosticParams): string {
   const tool = quoted(value(params, "toolName") || value(params, "toolId"));
   if (value(params, "reason") === "overlap") {
@@ -1088,6 +1110,8 @@ const en: Catalog = {
   lyricLinesNotMergeable: englishLyricLinesNotMergeable,
   lyricSplitInvalid: englishLyricSplitInvalid,
   cutOtherVoiceShort: englishCutOtherVoiceShort,
+  voiceOctaveRange: englishVoiceOctaveRange,
+  instrumentalVoiceMissing: englishInstrumentalVoiceMissing,
   toolResult: englishToolResult,
 };
 
@@ -1156,6 +1180,8 @@ const zh: Catalog = {
   lyricLinesNotMergeable: chineseLyricLinesNotMergeable,
   lyricSplitInvalid: chineseLyricSplitInvalid,
   cutOtherVoiceShort: chineseCutOtherVoiceShort,
+  voiceOctaveRange: chineseVoiceOctaveRange,
+  instrumentalVoiceMissing: chineseInstrumentalVoiceMissing,
   toolResult: chineseToolResult,
 };
 
@@ -1292,6 +1318,10 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.lyricSplitInvalid(diagnostic.params);
     case "cut-other-voice-short":
       return catalog.cutOtherVoiceShort(diagnostic.params);
+    case "voice-octave-range":
+      return catalog.voiceOctaveRange(diagnostic.params);
+    case "instrumental-voice-missing":
+      return catalog.instrumentalVoiceMissing(diagnostic.params);
     case "tool-result":
       return catalog.toolResult(diagnostic.params);
     default:

@@ -2,6 +2,7 @@
 // ABOUTME: The registry is the only list it reads, so a creator's tool gets the same controls and the same one-step run as a built-in one.
 
 import { watchChromeFloor } from "./chrome-floor";
+import type { CommandReport } from "./commands-voice";
 import { formatDiagnostic } from "./diagnostics";
 import { create, requireDom, uniqueId } from "./dom";
 import { NOTE_TOOLS } from "./note-tools";
@@ -278,6 +279,16 @@ export function mountToolPanel(
     return t.statusFitSame(selectionFirstBar, selectionLastBar);
   }
 
+  /** What a command's report says, in the panel's language, for a preview or an applied run. */
+  function reportStatus(report: CommandReport, applied: boolean): string {
+    switch (report.kind) {
+      case "voiceOctave":
+        return t.statusVoiceOctave(report, applied);
+      case "instrumentalVersion":
+        return t.statusInstrumental(report, applied);
+    }
+  }
+
   function setStatus(message: string, state: string, announce = false): void {
     status.textContent = message;
     status.dataset.state = state;
@@ -342,7 +353,7 @@ export function mountToolPanel(
       return;
     }
     build(entries.get(chosen.id) as Entry);
-    if (session.selection.length === 0) {
+    if (session.selection.length === 0 && chosen.needsSelection !== false) {
       setStatus(t.statusNoSelection, "idle", announce);
       return;
     }
@@ -355,6 +366,13 @@ export function mountToolPanel(
         "refused",
         announce,
       );
+      return;
+    }
+    const report = result.reports?.[0];
+    if (report !== undefined) {
+      setStatus(reportStatus(report, false), "preview", announce);
+      preview.show({ project: result.project });
+      revealPreview();
       return;
     }
     if (result.project.score === session.project.score) {
@@ -517,6 +535,12 @@ export function mountToolPanel(
         return;
       }
       clearPreview();
+      const report = result.reports?.[0];
+      if (report !== undefined) {
+        const changed = result.project.score !== before;
+        setStatus(reportStatus(report, true), changed ? "applied" : "unchanged", true);
+        return;
+      }
       setStatus(
         result.project.score === before ? t.statusUnchanged : t.statusApplied,
         result.project.score === before ? "unchanged" : "applied",
