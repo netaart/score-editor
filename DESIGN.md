@@ -85,6 +85,8 @@ components:
     height: "40px"
   playhead:
     width: "1px"
+  staff-cursor:
+    width: "1px"
   synth-caption:
     max-width: "12em"
   lyric-phrase:
@@ -396,6 +398,16 @@ abcjs is loaded with `import()` when the staff view is mounted, and the default 
 - What cannot be isolated, and is accepted: abcjs registers two `resize` listeners on `window` when it loads, which it offers no way to remove (the lifecycle test loads abcjs before taking its baseline of listeners for that reason), and it keeps a text-size cache of its own for the life of the page.
 - `getBBox` needs a displayed box, so the part draws only when its region has a width: a staff view mounted in a hidden container waits until it is shown, and keeps what it drew before while it is hidden.
 
+### Staff play cursor
+
+The staff view's play position is the host's. `mountStaffView` returns a `StaffViewPart`; `setPlayPosition(seconds)` draws the cursor at that time from the start of the score, and `null` takes it away. It is a readout, not an edit, so it is drawn while the session is read-only too. The session's own preview drives the same cursor while it plays, and a press on a drawn note starts the preview at that note. Seconds become a position through `tickAtSeconds`: each stretch of the score uses the tempo in force in it, and a time past the end stays on the last bar line.
+
+The cursor is 1px in the text colour with a 1px edge in the ground colour on each side, so it reads over a staff line and over a note, and it spans the five staff lines plus 2px beyond each. It has no flag, so it is told from the insertion point by shape; it spends no accent, ignores the pointer, and is hidden from assistive technology. It has no transition or easing. Under forced colours it is `CanvasText`.
+
+When a new position is outside the region, the region scrolls so the cursor comes in 16px from its left edge, and, when its staff line is outside, from the top or bottom; the host page itself never scrolls. A position already in view moves the view not at all, so the cursor does not drag the staff under the eye; a line is turned only when the cursor reaches its end. This is the same rule as the arrangement playhead's page turn, applied to the staff's own scroller.
+
+The states a reviewer checks, at desktop and phone width: the cursor at the start, mid-bar, after a tempo change (the test page can open a score with one), at the end, and while the preview plays; also in a read-only session, since that is the host's case.
+
 ### Read-only badge
 
 Pill, 1px strong line, muted text, label size, at the end of the toolbar. It appears only while the session is not editable, and takes the place of the history group. In that state nothing in the view offers an edit: no history or Delete button, no selection frame, no insertion point, no tab stop or pointer cursor on a note, nothing about editing said in the live regions, and Delete, the history keys, the note keys and the insertion point keys do nothing.
@@ -410,7 +422,7 @@ What a screen reader cannot see in the drawing is said in words, in the session'
 
 ### Motion
 
-None. No transition or animation exists, so nothing needs a reduced-motion alternative. Zoom, scroll, selection and the insertion point change the view directly. The one thing that moves by itself is the playhead of the synth preview, and it is not an animation: it is a readout of where the sound is, set from the audio clock on every frame, with no transition or easing, and present only while the person has asked for sound. A reduced-motion setting therefore changes nothing about it.
+None. No transition or animation exists, so nothing needs a reduced-motion alternative. Zoom, scroll, selection and the insertion point change the view directly. The things that move by themselves are the playhead of the synth preview and the staff view's play cursor while the preview plays, and neither is an animation: both are readouts of where the sound is, set from the audio clock on every frame, with no transition or easing, and present only while the person has asked for sound. A reduced-motion setting therefore changes nothing about them.
 
 ### Synth preview
 

@@ -20,7 +20,7 @@ added; calling it twice is harmless.
 | `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line. | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
 | `mountTextView(el, session)` | The score text in a box with line numbers, a status sentence, and the problems of text that cannot be read. | — |
-| `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only. | — |
+| `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only; returns a `StaffViewPart` whose `setPlayPosition` draws the host player's cursor. | — |
 | `mountStaleNotice(el, session)` | One sentence while the text view holds text the project did not take, or nothing. | — |
 | `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
@@ -61,18 +61,27 @@ drawing sits in a shadow root of its own inside the part, so the host's CSS for 
 reach it and it adds no rule to the page. It takes the colour of the part's text. The drawing is never narrower than
 240px; in a narrower box the part scrolls inside its own region and not the page. A score that cannot be read is not drawn.
 
+`mountStaffView` returns a `StaffViewPart`: the usual `destroy()` plus `setPlayPosition(seconds | null)`. A host
+player calls it with the time of its own playback, or with null to remove the cursor; the part turns seconds into a
+tick with `tickAtSeconds`, following a tempo change in the score and staying at the end past the last second. The
+cursor is drawn whether or not the session is editable. While the session's preview plays, the same cursor follows
+the player's tick; when it stops, the host's last position is shown again. A press on a drawn note starts the preview
+at that note. The cursor's look and the scroll that keeps it in view are in [DESIGN.md](../../../DESIGN.md#staff-view).
+
 ```ts
 const views = {
   arrangement: document.querySelector<HTMLElement>(".roll")!,
   staff: document.querySelector<HTMLElement>(".staff")!,
   text: document.querySelector<HTMLElement>(".text")!,
 };
+const staff = mountStaffView(views.staff, session); // asks for abcjs now
 const parts = [
   mountViewSwitch(document.querySelector(".views")!, session),
   mountStaleNotice(document.querySelector(".stale")!, session),
   mountTextView(views.text, session),
-  mountStaffView(views.staff, session), // asks for abcjs now
+  staff,
 ];
+staff.setPlayPosition(12.5); // the host player's seconds, or null to take the cursor away
 const show = () => {
   for (const name of VIEW_NAMES) views[name].hidden = name !== session.activeView;
 };

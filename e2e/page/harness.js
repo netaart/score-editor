@@ -71,6 +71,20 @@ const blank = {
   sourceKey: "test-page",
 };
 
+/**
+ * The song2 dialect with tempo changes the model allows but the format cannot write. A host that reads a format with
+ * them hands the editor a `Score` that carries them; this is that host, so the staff cursor can be checked against one.
+ */
+function withTempoChanges(dialect, changes) {
+  return {
+    ...dialect,
+    parse(text) {
+      const result = dialect.parse(text);
+      return result.score ? { ...result, score: { ...result.score, tempoChanges: changes } } : result;
+    },
+  };
+}
+
 /** The view parts of the layout page, by name, each with the function that mounts it on its slot. */
 const LAYOUT_PARTS = {
   // The layout has a slot of its own for the preview control, so the toolbar leaves its own out.
@@ -226,6 +240,7 @@ const layout = {
     shadow,
     scene,
     editable,
+    tempoChanges,
   } = {}) {
     if (layout.session) throw new Error("a layout is already open");
     const base = await projectFrom(blank, score, fields);
@@ -250,7 +265,7 @@ const layout = {
     if (scene) SCENES[scene](container, layout.slots);
     layout.session = createEditingSession({
       project: base,
-      dialects,
+      dialects: tempoChanges ? createDialectRegistry([withTempoChanges(song2Dialect, tempoChanges)]) : dialects,
       language,
       ...(editable === undefined ? {} : { editable }),
     });
@@ -272,6 +287,12 @@ const layout = {
     }
     layout.slots[name].closest(".layout-card").style.display = hidden ? "none" : "";
     layout.parts[name] = PART_FACTORIES[name](layout.slots[name], layout.session);
+  },
+  /** Drives the mounted staff part's play position in seconds, or clears it for null. */
+  setPlayPosition(seconds) {
+    const staff = layout.parts.staff;
+    if (!staff || typeof staff.setPlayPosition !== "function") throw new Error("no staff part is mounted");
+    staff.setPlayPosition(seconds);
   },
   /** Shows or hides the box a mounted part stands in, as a host with tabs does. */
   setSlotHidden(name, hidden) {

@@ -134,6 +134,8 @@ interface PageLayout {
   replace(options: Record<string, unknown>): Promise<void>;
   replaceDialects(): void;
   mountPart(name: string, hidden?: boolean): void;
+  /** Drives the mounted staff part's play position in seconds, or clears it for null. */
+  setPlayPosition(seconds: number | null): void;
   setSlotHidden(name: string, hidden: boolean): void;
   destroyPart(name: string, times?: number): void;
   roots(): Record<string, string>;
@@ -176,7 +178,7 @@ interface PageHarness {
     readonly playing: boolean;
     readonly tick: number | null;
     readonly from: number | null;
-    start(): Promise<string>;
+    start(fromTick?: number): Promise<string>;
     stop(): void;
   };
   mount(options?: Record<string, unknown>): Promise<void>;
