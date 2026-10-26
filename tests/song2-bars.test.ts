@@ -1071,3 +1071,79 @@ describe("failure texts", () => {
     }
   });
 });
+
+describe("setSectionMeter reaches a voice that stops early", () => {
+  it("refuses a section that reaches the cut bar of a short Ins", () => {
+    const text = `${HEADER}
+K:C
+% a
+V: Vocal
+C16|D16|E16|F16|
+V: Ins
+Z4|
+V: Vocal
+E16|F16`;
+    const result = applyScoreCommand(song2Dialect, text, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 3, denominator: 4 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("truncated-tail");
+  });
+
+  it("refuses the whole-score meter change when Ins ends at bar 8", () => {
+    const text = `${HEADER}
+K:C
+% a
+V: Vocal
+C16|D16|E16|F16|
+V: Ins
+Z4|
+V: Vocal
+E16|F16|G16|A16|
+V: Ins
+Z4|
+V: Vocal
+B16|c16|d16|e16`;
+    const result = applyScoreCommand(song2Dialect, text, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 2, denominator: 4 },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("truncated-tail");
+  });
+
+  it("changes a section that ends before the short voice does", () => {
+    const text = `${HEADER}
+K:C
+% a
+V: Vocal
+C16|D16|
+V: Ins
+Z2|
+% b
+V: Vocal
+E16|F16|G16|A16`;
+    const result = applyScoreCommand(song2Dialect, text, {
+      type: "setSectionMeter",
+      section: 0,
+      meter: { numerator: 2, denominator: 4 },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const score = parse(result.text);
+    check(score);
+    expect(score.truncation).toEqual({ voice: "Vocal", bar: 8, short: false });
+    expect(score.bars).toHaveLength(8);
+    expect(score.bars.slice(0, 4).map((bar) => bar.meter)).toEqual(
+      Array.from({ length: 4 }, () => ({ numerator: 2, denominator: 4 })),
+    );
+  });
+});

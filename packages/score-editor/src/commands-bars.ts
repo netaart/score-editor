@@ -137,6 +137,15 @@ function barEnd(score: Score): number {
   return last.start + last.length;
 }
 
+/** The number of bars a voice covers with finished events, as a cut's short voice counts from the top. */
+function voiceBarEnd(score: Score, voice: string): number {
+  let end = 0;
+  for (const note of score.notes) {
+    if (note.voice === voice && note.bar + 1 > end) end = note.bar + 1;
+  }
+  return end;
+}
+
 function deleteBars(score: Score, from: number, count: number): ScoreCommandResult {
   if (!isIndex(from) || !isIndex(count) || count < 1 || from + count > score.bars.length) {
     return commandRefusal("bar-out-of-range", { from: from + 1, count, bars: score.bars.length }, { bar: from + 1 });
@@ -367,6 +376,11 @@ function setSectionMeter(
   if (score.truncation !== null && score.truncation.bar <= lastIndex) {
     return commandRefusal("truncated-tail", { bar: score.truncation.bar + 1 }, { bar: score.truncation.bar + 1 });
   }
+  // RULES.md V2/X9: a voice with fewer bars than the section stops in the cut tail, so the section
+  // reaches a cut even when the reported cut bar belongs to the other voice.
+  if (score.voices.some((voice) => voiceBarEnd(score, voice) <= lastIndex)) {
+    return commandRefusal("truncated-tail", { bar: section.firstBar + 1 }, { bar: section.firstBar + 1 });
+  }
   if (score.bars.slice(section.firstBar, lastIndex + 1).some((bar) => bar.incomplete)) {
     return commandRefusal("truncated-tail", { bar: section.firstBar + 1 }, { bar: section.firstBar + 1 });
   }
@@ -450,35 +464,14 @@ function setSectionMeter(
     name: item.name,
     firstBar: index > sectionIndex ? item.firstBar + delta : item.firstBar,
   }));
-  // A cut after the section keeps its place, shifted by the changed bar count. A voice that no
-  // longer reaches the section end now stops inside the new grid, so the cut is that voice's own.
-  let truncation =
+  // A cut after the section keeps its time and moves by the changed bar count; the command refuses a
+  // cut inside the section, so there is no partial measure to redraw.
+  const truncation =
     score.truncation === null || score.truncation.bar <= lastIndex
       ? score.truncation
       : { ...score.truncation, bar: score.truncation.bar + delta };
-  if (truncation !== null) {
-    const sectionEndTick = start + sectionLength;
-    const endOf = (voice: string): number => {
-      let end = start;
-      for (const note of notes) {
-        if (note.voice !== voice) continue;
-        end = Math.max(end, note.start + note.duration);
-      }
-      return end;
-    };
-    const shortVoice = score.voices
-      .filter((voice) => endOf(voice) < sectionEndTick)
-      .sort((left, right) => endOf(left) - endOf(right))[0];
-    if (shortVoice !== undefined) {
-      const relative = endOf(shortVoice) - start;
-      const offset = Math.min(Math.max(Math.floor(relative / length), 0), newCount);
-      truncation = {
-        voice: shortVoice,
-        bar: section.firstBar + offset,
-        short: relative % length !== 0,
-      };
-    }
-  }
+  const redrawn =
+    delta !== 0 || first.meter.numerator !== meter.numerator || first.meter.denominator !== meter.denominator;
 
   return {
     ok: true,
@@ -488,7 +481,7 @@ function setSectionMeter(
       notes: orderNotes(score, clearTiesIntoRests(notes)),
       chords,
       sections: sectionsFrom({ ...score, bars }, markers),
-      truncation: writableCut({ voices: score.voices, notes }, truncation),
+      truncation: redrawn ? writableCut({ voices: score.voices, notes }, truncation) : truncation,
     },
   };
 }

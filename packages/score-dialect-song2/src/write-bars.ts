@@ -406,6 +406,11 @@ function writeGroup(
   allowCutAtNext: boolean,
 ): string[] {
   const lines: string[] = [];
+  const writtenVoices = score.voices.filter((voice) => {
+    for (let index = group.from; index <= group.to; index += 1) if (coveredAt(coverage, voice, index)) return true;
+    return false;
+  });
+  const lastWrittenVoice = writtenVoices[writtenVoices.length - 1];
   for (const name of sections.get(group.from) ?? []) lines.push(`% ${name}`);
   const bar = score.bars[group.from] as Bar;
   const meterBefore = group.from === 0 ? facts.headerMeter : (score.bars[group.from - 1] as Bar).meter;
@@ -426,15 +431,15 @@ function writeGroup(
     if (meterField) lines.push(`M:${bar.meter.numerator}/${bar.meter.denominator}`);
     if (keyFieldAt(score, pieces, group.from)) lines.push(`K:${bar.key}`);
     const lastBar = score.bars[lastCovered] as Bar;
+    // RULES.md X10/X9: only the final music line of the text may omit its closing barline, because a
+    // line without one is a cut only at the end (X1). Otherwise the trailing bytes state the cut.
+    const finalLine = lastGroup && allowCutAtNext && voice === lastWrittenVoice;
     const incomplete =
+      finalLine &&
       (lastBar.incomplete ||
-        (score.truncation?.voice === voice && score.truncation.short && lastCovered === score.truncation.bar)) ??
-      false;
-    // RULES.md X10/X9: a cut at the next measure is written without the closing barline, so it reads
-    // as the same cut instead of a complete score.
+        (score.truncation?.voice === voice && score.truncation.short && lastCovered === score.truncation.bar));
     const cutAtNext =
-      allowCutAtNext &&
-      lastGroup &&
+      finalLine &&
       score.truncation !== null &&
       score.truncation.voice === voice &&
       lastCovered + 1 === score.truncation.bar;
@@ -558,33 +563,39 @@ export function serializeTruncatedBarsSong2(score: Score, source: Song2Source): 
   const pieces = buildPieces(score, facts, alignment, score.bars.length, coverage, source.unitDenominator);
   let lastMusicLine = facts.keyIndex;
   for (const line of facts.musicLines) lastMusicLine = Math.max(lastMusicLine, line.line);
-  // RULES.md X8: when the empty partial measure is dropped, its block opening still states the cut.
-  const cutBlock: string[] = [];
   const cut = score.truncation;
-  const lastSource = facts.musicLines.find((line) => line.line === lastMusicLine);
-  const lastSourceBar = lastSource?.segments[lastSource.segments.length - 1]?.bars.at(-1)?.bar;
-  const sourceLastKept = lastSourceBar !== undefined && alignment.oldAt.includes(lastSourceBar);
-  const droppedCutBlock =
-    cut !== null &&
-    !cut.short &&
-    cut.bar === score.bars.length &&
-    lastSource !== undefined &&
-    lastSource.voice === cut.voice &&
-    cut.voice !== "Ins" &&
-    lastSourceBar !== undefined &&
-    lastSourceBar >= score.bars.length &&
-    !sourceLastKept;
-  if (droppedCutBlock && lastSource !== undefined) {
-    cutBlock.push(...facts.lines.slice(lastSource.blockStart, lastMusicLine));
-  }
-  const trailing = facts.lines.slice(lastMusicLine + 1).some((line) => trimWhitespace(line) !== "");
+  const trailingLines = facts.lines.slice(lastMusicLine + 1);
+  const trailingText = new Set(trailingLines.map((line) => stripTrailingWhitespace(line)));
+  // RULES.md S3/S6 and X11: a section marker after the last bar opens an empty final section, which is
+  // part of the cut; the bar-grid writer has to write it from the model because the body is rebuilt.
+  const trailingSections =
+    cut === null
+      ? []
+      : score.sections
+          .filter(
+            (section) =>
+              section.name !== null && section.firstBar >= score.bars.length && !trailingText.has(`% ${section.name}`),
+          )
+          .map((section) => `% ${section.name}`);
+  const trailingComments = trailingLines.some((line) => trimWhitespace(line) !== "");
+  const trailing = trailingComments || trailingSections.length > 0;
   const splitByCoverage = cut === null || cut.voice !== "Ins" || !cut.short || trailing;
-  const body = writeBody(score, facts, pieces, coverage, cutBlock.length === 0, splitByCoverage);
+  const body = writeBody(score, facts, pieces, coverage, !trailing, splitByCoverage);
+  const lastBodyVoice = [...body]
+    .reverse()
+    .find((line) => line.startsWith("V: "))
+    ?.slice(3);
+  // RULES.md X8: when no later music line can omit its barline, the cut block's V: line still states it.
+  const cutBlock =
+    cut !== null && !trailingComments && !cut.short && cut.voice !== "Ins" && lastBodyVoice !== cut.voice
+      ? [`V: ${cut.voice}`]
+      : [];
   const lines = [
     ...facts.lines.slice(0, facts.keyIndex + 1),
     ...body,
+    ...trailingSections,
     ...cutBlock,
-    ...facts.lines.slice(lastMusicLine + 1),
+    ...trailingLines,
   ];
   return lines.join("\n");
 }

@@ -5,6 +5,7 @@ import type { ChordSlot } from "./chord-edit";
 import { type ChordMessages, chordMessagesFor } from "./chord-text";
 import { type ChordChoices, joinChordName, rootLetter, splitChordName } from "./chord-vocabulary";
 import { create } from "./dom";
+import { keepInside, type PopoverAnchor, placePopover } from "./popover-menu";
 import type { ChordVocabulary, Language } from "./types";
 
 export interface ChordPickerRequest {
@@ -168,6 +169,7 @@ export function mountChordPicker(
   function build(request: ChordPickerRequest, panel: HTMLElement, signal: AbortSignal): HTMLElement | undefined {
     const t: ChordMessages = chordMessagesFor(request.language);
     const { choices, slot } = request;
+    const anchor = anchorOf(request);
     const draft = startDraft(request);
     panel.replaceChildren();
     panel.setAttribute("aria-label", t.pickerLabel(request.position));
@@ -301,7 +303,7 @@ export function mountChordPicker(
         bassAccidentals.set(draft.bass === null ? [] : spellings(draft.bass), draft.bass);
         bassAccidentals.element.hidden = draft.bass === null;
       }
-      if (isOpen) refit(panel);
+      if (isOpen) keepInside(panel, anchor, { keepTop: true, maxHeight: visibleHeight() });
     }
 
     const actions = create(doc, "div", "sce-picker-actions", panel);
@@ -335,46 +337,14 @@ export function mountChordPicker(
     return letters?.stop() ?? actions.querySelector("button") ?? undefined;
   }
 
-  /**
-   * Fits the picker to the window: its left edge is clamped to the width the page lays out in, its height to the visible
-   * height, and on a first placement it goes under the row, or above it when that has more room. A refit keeps the top it
-   * has and moves up only as far as the edge needs.
-   */
-  function fit(panel: HTMLElement, anchor: ChordPickerRequest["anchor"], mode: "place" | "refit"): void {
-    const view = doc.defaultView;
-    if (!view) return;
-    const innerHeight = view.innerHeight;
-    const highest = Math.max(0, innerHeight - 16);
-    panel.style.maxHeight = `${highest}px`;
-    if (mode === "place") {
-      panel.style.left = `${anchor.left}px`;
-      panel.style.top = `${anchor.top}px`;
-      const rect = panel.getBoundingClientRect();
-      const below = Math.max(0, innerHeight - anchor.top - 8);
-      const above = Math.max(0, anchor.rowTop - 4 - 8);
-      if (rect.height > below && above > below) {
-        const height = Math.min(rect.height, above);
-        panel.style.maxHeight = `${Math.min(highest, height)}px`;
-        panel.style.top = `${Math.max(8, anchor.rowTop - 4 - height)}px`;
-      } else {
-        panel.style.maxHeight = `${Math.min(highest, below)}px`;
-      }
-    } else {
-      const rect = panel.getBoundingClientRect();
-      panel.style.top = `${Math.max(8, Math.min(rect.top, innerHeight - 8 - rect.height))}px`;
-    }
-    const rect = panel.getBoundingClientRect();
-    const layoutWidth = Math.min(view.innerWidth, doc.documentElement.clientWidth || view.innerWidth);
-    const left = mode === "place" ? anchor.left : rect.left;
-    panel.style.left = `${Math.max(8, Math.min(left, layoutWidth - 8 - rect.width))}px`;
+  /** The anchor the picker hangs from: the slot's left edge, the line under the row, and the row's own top. */
+  function anchorOf(request: ChordPickerRequest): PopoverAnchor {
+    return { left: request.anchor.left, bottom: request.anchor.top - 4, top: request.anchor.rowTop };
   }
 
-  function place(panel: HTMLElement, anchor: ChordPickerRequest["anchor"]): void {
-    fit(panel, anchor, "place");
-  }
-
-  function refit(panel: HTMLElement): void {
-    fit(panel, { left: panel.getBoundingClientRect().left, top: 0, rowTop: 0 }, "refit");
+  /** The height the window can show of the picker, which is also the cap a refit measures against. */
+  function visibleHeight(): number {
+    return Math.max(0, (doc.defaultView?.innerHeight ?? 0) - 16);
   }
 
   return {
@@ -408,7 +378,7 @@ export function mountChordPicker(
       own = new AbortController();
       const first = build(request, panel, own.signal);
       panel.showPopover();
-      place(panel, request.anchor);
+      placePopover(panel, anchorOf(request), { maxHeight: visibleHeight() });
       first?.focus();
     },
     close,

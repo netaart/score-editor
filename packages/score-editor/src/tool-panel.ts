@@ -4,6 +4,7 @@
 import { formatDiagnostic } from "./diagnostics";
 import { create, requireDom, uniqueId } from "./dom";
 import { NOTE_TOOLS } from "./note-tools";
+import { anchorOf, clearPlacement, keepInside, placeUnder } from "./popover-menu";
 import type { Score, SongProject } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -17,6 +18,15 @@ import { arrangementShown } from "./view-rules";
 export interface ToolPanelOptions extends EditingPartOptions {
   /** The host's tools, added after the built-in note tools. A duplicate id is a registry error and throws at mount. */
   tools?: ReadonlyArray<ScoreTool>;
+}
+
+/** The Tools panel part: `setTools` replaces the host's tools, keeping the built-in ones and any values already set. */
+export interface ToolPanelPart extends ViewPart {
+  /**
+   * Replaces the host's tools. The built-in note tools stay; a tool that is gone closes an open panel and clears the
+   * preview, and a tool that stays keeps the values set in it.
+   */
+  setTools(tools: ReadonlyArray<ScoreTool>): void;
 }
 
 /** A tool row and the controls under it, kept so a language change can relabel both without rebuilding them. */
@@ -75,7 +85,11 @@ function changedNotes(session: EditingSession, before: SongProject, after: SongP
  * It is an editing control: it is hidden while the session is read-only, while the score does not read, and while the
  * staff or text view is shown.
  */
-export function mountToolPanel(el: HTMLElement, session: EditingSession, options: ToolPanelOptions = {}): ViewPart {
+export function mountToolPanel(
+  el: HTMLElement,
+  session: EditingSession,
+  options: ToolPanelOptions = {},
+): ToolPanelPart {
   requireDom("mountToolPanel");
   const doc = el.ownerDocument;
   const abort = new AbortController();
@@ -106,10 +120,10 @@ export function mountToolPanel(el: HTMLElement, session: EditingSession, options
   const close = create(doc, "button", "sce-button", actions);
   close.type = "button";
 
-  const registry = createToolRegistry([...NOTE_TOOLS, ...(options.tools ?? [])]);
-  const tools = registry.list();
   const entries = new Map<string, Entry>();
   const labels: Array<(messages: ToolMessages, language: Language) => void> = [];
+  /** The values last read from each tool's controls, so rebuilding the list does not reset a tool that stays. */
+  const saved = new Map<string, ToolParameterValues>();
   const preview = toolPreviewChannel(session);
   let chosen: ScoreTool | null = null;
   let language: Language | null = null;
@@ -166,6 +180,16 @@ export function mountToolPanel(el: HTMLElement, session: EditingSession, options
     if (entry.built) return;
     entry.built = true;
     for (const parameter of entry.tool.parameters ?? []) control(entry, parameter);
+    const values = saved.get(entry.tool.id);
+    if (values !== undefined) {
+      for (const parameter of entry.tool.parameters ?? []) {
+        const value = values[parameter.name];
+        const field = entry.fields.get(parameter.name);
+        if (field === undefined || value === undefined) continue;
+        if (parameter.type === "boolean") (field as HTMLInputElement).checked = value === true;
+        else field.value = String(value);
+      }
+    }
     for (const label of labels) label(t, language ?? "en");
   }
 
@@ -185,6 +209,7 @@ export function mountToolPanel(el: HTMLElement, session: EditingSession, options
         values[parameter.name] = field.value;
       }
     }
+    saved.set(tool.id, values);
     return values;
   }
 
@@ -279,18 +304,44 @@ export function mountToolPanel(el: HTMLElement, session: EditingSession, options
     );
   }
 
-  for (const group of [...TOOL_GROUPS, "more"] as const) {
-    const members = tools.filter((tool) => (tool.group ?? "more") === group);
-    if (members.length === 0) continue;
-    const section = create(doc, "div", "sce-tool-group", body);
-    section.dataset.group = group;
-    const heading = text("div", section, "sce-tool-group-name");
-    heading.setAttribute("role", "heading");
-    heading.setAttribute("aria-level", "3");
-    labels.push((messages) => {
-      heading.textContent = messages.group[group];
-    });
-    for (const tool of members) buildEntry(tool, section);
+  /** Draws the groups and rows of a tool list, replacing the last; the entries and their labels are built again. */
+  function renderTools(tools: ReadonlyArray<ScoreTool>): void {
+    body.replaceChildren();
+    entries.clear();
+    labels.length = 0;
+    for (const group of [...TOOL_GROUPS, "more"] as const) {
+      const members = tools.filter((tool) => (tool.group ?? "more") === group);
+      if (members.length === 0) continue;
+      const section = create(doc, "div", "sce-tool-group", body);
+      section.dataset.group = group;
+      const heading = text("div", section, "sce-tool-group-name");
+      heading.setAttribute("role", "heading");
+      heading.setAttribute("aria-level", "3");
+      labels.push((messages) => {
+        heading.textContent = messages.group[group];
+      });
+      for (const tool of members) buildEntry(tool, section);
+    }
+  }
+
+  renderTools(createToolRegistry([...NOTE_TOOLS, ...(options.tools ?? [])]).list());
+
+  /** Replaces the host's tools: the built-ins stay, a tool that is gone closes the panel, a tool that stays keeps values. */
+  function setTools(next: ReadonlyArray<ScoreTool>): void {
+    const registry = createToolRegistry([...NOTE_TOOLS, ...next]);
+    const keep = chosen === null ? null : (registry.find(chosen.id) ?? null);
+    if (chosen !== null) saved.set(chosen.id, valuesOf(chosen));
+    if (chosen !== null && keep === null) {
+      chosen = null;
+      if (panel.matches(":popover-open")) panel.hidePopover();
+      clearPreview();
+      setStatus(t.statusIdle, "idle");
+    } else {
+      chosen = keep;
+    }
+    renderTools(registry.list());
+    for (const label of labels) label(t, language ?? "en");
+    if (chosen !== null) choose(chosen);
   }
 
   function applyLanguage(): void {
@@ -339,16 +390,9 @@ export function mountToolPanel(el: HTMLElement, session: EditingSession, options
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      if (isSheet()) {
-        panel.style.left = "";
-        panel.style.top = "";
-        panel.style.maxHeight = "";
-        return;
-      }
-      const rect = button.getBoundingClientRect();
-      panel.style.left = `${rect.left}px`;
-      panel.style.top = `${rect.bottom + 4}px`;
-      panel.style.maxHeight = "";
+      // The one placement rule in `popover-menu.ts`: under the button on the desktop, the stylesheet's own sheet on a phone.
+      if (isSheet()) clearPlacement(panel);
+      else placeUnder(anchorOf(button), panel);
     },
     { signal },
   );
@@ -361,25 +405,7 @@ export function mountToolPanel(el: HTMLElement, session: EditingSession, options
         clearPreview();
         return;
       }
-      const view = doc.defaultView;
-      if (view && !isSheet()) {
-        const rect = panel.getBoundingClientRect();
-        const overflow = rect.right - (view.innerWidth - 8);
-        if (overflow > 0) panel.style.left = `${Math.max(8, rect.left - overflow)}px`;
-        // The panel is as tall as the room it has and scrolls inside it, under the button when there is enough room
-        // there, otherwise over it, and otherwise as high as the window allows (the popover rule's own behaviour).
-        const anchor = button.getBoundingClientRect();
-        const below = view.innerHeight - 8 - (anchor.bottom + 4);
-        if (below >= 160) {
-          panel.style.top = `${anchor.bottom + 4}px`;
-          panel.style.maxHeight = `${below}px`;
-        } else {
-          const above = anchor.top - 12;
-          panel.style.maxHeight = `${Math.max(160, above)}px`;
-          const height = Math.min(rect.height, Math.max(160, above));
-          panel.style.top = `${Math.max(8, anchor.top - 4 - height)}px`;
-        }
-      }
+      if (!isSheet()) keepInside(panel, anchorOf(button));
       previewNow();
       const focusOn = chosen === null ? entries.values().next().value?.row : entries.get(chosen.id)?.row;
       focusOn?.focus();
@@ -408,6 +434,7 @@ export function mountToolPanel(el: HTMLElement, session: EditingSession, options
   });
   let destroyed = false;
   return {
+    setTools,
     destroy() {
       if (destroyed) return;
       destroyed = true;

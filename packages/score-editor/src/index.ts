@@ -4,6 +4,8 @@
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
+export type { ChangeLogOptions, HandoffInstructionOptions } from "./change-log";
+export { changeLog, handoffInstruction } from "./change-log";
 export type { ChordSlot } from "./chord-edit";
 export { chordSlots, nearestChordSlot } from "./chord-edit";
 export { mountChordTrack } from "./chord-track";
@@ -73,6 +75,7 @@ export {
   syllableCount,
   unalignedLyricLines,
 } from "./lyrics";
+export { COMMON_METERS, meterAllowed, meterChoices } from "./meter";
 export { mount } from "./mount";
 // The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
@@ -99,7 +102,10 @@ export type {
   Truncation,
 } from "./score";
 export { noteId, TICKS_PER_QUARTER } from "./score";
+export type { SectionAction, SectionActionName } from "./section-actions";
+export { sectionActions } from "./section-actions";
 export type {
+  BarSelection,
   DispatchResult,
   EditingSession,
   InsertionPoint,
@@ -121,7 +127,7 @@ export { tickAtSeconds } from "./tempo";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
 export { NOTE_TOOLS } from "./note-tools";
-export type { ToolPanelOptions } from "./tool-panel";
+export type { ToolPanelOptions, ToolPanelPart } from "./tool-panel";
 export { mountToolPanel } from "./tool-panel";
 export type {
   BooleanToolParameter,
@@ -142,7 +148,7 @@ export type {
   ToolText,
 } from "./tool";
 export { applyCommandList, createToolRegistry, previewTool, TOOL_GROUPS, validateToolParameters } from "./tool";
-export type { ToolbarOptions } from "./toolbar";
+export type { ToolbarOptions, ToolbarPart } from "./toolbar";
 export { mountToolbar } from "./toolbar";
 export type {
   AxisPartOptions,
@@ -152,6 +158,7 @@ export type {
   DraftStoreEntry,
   DraftWriteResult,
   DurationSet,
+  HandoffPayload,
   Language,
   MeterRule,
   MountedEditor,

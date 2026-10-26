@@ -401,16 +401,9 @@ export function applyToolRequest(
   if (!checked.ok) return failure(request.project, checked.diagnostics, []);
   if (typeof tool.commands !== "function") return failure(request.project, [commandsDiagnostic(tool)], []);
 
-  // A tool that declares the context parameter receives it; a 0.1.0-shaped tool with three parameters is called as it was.
-  const three = tool.commands as unknown as (
-    project: SongProject,
-    selection: ReadonlyArray<string>,
-    values: ToolParameterValues,
-  ) => ReadonlyArray<ScoreCommand>;
-  const commands =
-    tool.commands.length >= 4
-      ? tool.commands(request.project, request.selection, checked.values, context)
-      : three(request.project, request.selection, checked.values);
+  // Every tool is called with the context, whatever its declared arity: a JavaScript function written with three
+  // parameters ignores a fourth argument, and a tool written with a default or rest parameters still receives it.
+  const commands = tool.commands(request.project, request.selection, checked.values, context);
   const dialect = dialectOf(request.project, source);
   if (dialect === undefined) return failure(request.project, [noDialectDiagnostic(request.project.modelId)], commands);
 

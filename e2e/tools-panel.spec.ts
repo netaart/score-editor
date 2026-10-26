@@ -212,6 +212,64 @@ test.describe("every note tool", () => {
   }
 });
 
+test.describe("update({ tools })", () => {
+  test("rebuilds the panel's list and closes it when the tool it showed is gone", async ({ page, harness, press }) => {
+    await harness.mount({ tools: "safe" });
+    await openPanel(page, press);
+    await press(tool(page, "Rest the last note"));
+    await expect(panel(page).getByRole("spinbutton", { name: "How many", exact: true })).toBeVisible();
+
+    await harness.update({ tools: "breaking" });
+
+    await expect(panel(page)).toBeHidden();
+    await press(toolsButton(page));
+    await expect(tool(page, "Off the grid")).toBeVisible();
+    await expect(tool(page, "Rest the last note")).toHaveCount(0);
+    await expect(panel(page).getByRole("heading", { name: "More tools", exact: true })).toBeVisible();
+    await press(tool(page, "Off the grid"));
+
+    await harness.update({ tools: "none" });
+    await expect(panel(page)).toBeHidden();
+    await press(toolsButton(page));
+    await expect(panel(page).getByRole("heading", { name: "More tools", exact: true })).toHaveCount(0);
+    await expect(panel(page).getByRole("heading", { name: "Note tools", exact: true })).toBeVisible();
+  });
+});
+
+test.describe("a real score", () => {
+  test("previews and applies a tool on a two-voice score with Z runs, then undoes it", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const real = await page.evaluate(() =>
+      fetch("/packages/score-editor/skills/score-editor/assets/edit-one-bar/score.abc").then((response) =>
+        response.text(),
+      ),
+    );
+    expect(real).toContain("V: Ins");
+    expect(real).toMatch(/Z[234]/);
+    await harness.mount({ score: { text: real } });
+    await selectAll(page, press, test.info().project.name === "phone");
+    // The score is written in 1/16; the tools land on the grid in force, so the test sets it as a person would.
+    await setGrid(page, press, "1/16");
+    await openPanel(page, press);
+    await press(tool(page, "Reverse"));
+
+    await expect(status(page)).toContainText("Preview:");
+    await expect(ghosts(page).first()).toBeVisible();
+    await press(applyButton(page));
+    await expect(status(page)).toContainText("Applied.");
+    await press(closeButton(page));
+
+    const applied = await scoreText(page, press);
+    expect(applied).not.toBe(real);
+    expect(applied).toContain("V: Ins");
+    await press(undoButton(page));
+    expect(await scoreText(page, press)).toBe(real);
+  });
+});
+
 test.describe("a custom tool", () => {
   test("appears in the panel, takes its declared parameters, previews, applies and undoes", async ({
     page,

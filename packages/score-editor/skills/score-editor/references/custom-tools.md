@@ -39,11 +39,12 @@ name. `group` is a `ToolGroup`: `"note"`, `"quantize"`, `"transform"`, `"generat
 fit the four (a tool without a group is listed under More tools). `TOOL_GROUPS` is the four groups without `"more"`.
 
 `ToolCommandBuilder` is `(project, selection, values, context?) => ReadonlyArray<ScoreCommand>`; it is pure and reads
-nothing else. A tool that declares the fourth parameter receives a `ToolContext`, `{ grid, insertionPoint }`, with the
-grid in force in the session and the insertion point's tick (or null). A tool with three parameters is called with
-three, as a tool written before this argument existed. A preview without a session takes the context as its last
-argument: `previewTool(tool, project, selection, values, dialects, context)`; without it the context is 1/4 and no
-insertion point.
+nothing else. Every tool is called with a `ToolContext`, `{ grid, insertionPoint }`, as its fourth argument: the grid
+in force in the session and the insertion point's tick (or null). A function written with three parameters ignores it, as a
+tool written before the argument existed did, and one written with a default or rest parameters still receives it. A
+preview without a session takes the context as its last argument:
+`previewTool(tool, project, selection, values, dialects, context)`; without it the context is 1/4 and no insertion
+point.
 
 `ToolParameter` is one of four declarations:
 

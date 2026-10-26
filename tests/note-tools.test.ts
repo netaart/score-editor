@@ -1,5 +1,6 @@
 // ABOUTME: Seam 1 for the built-in note tools: each tool on hand-written scores through the editing session.
 // ABOUTME: Every expected score is written out from the music, never worked out by rerunning the code under test.
+import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
   createDialectRegistry,
@@ -11,7 +12,7 @@ import {
   TICKS_PER_QUARTER,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
-import { parse, pitched } from "./song2-support";
+import { parse, pitched, splitBars } from "./song2-support";
 
 const HEADER = `X:1
 T:
@@ -274,4 +275,79 @@ describe("a tool that has nothing to act on", () => {
     expect(result.project).toBe(before);
     expect(session.canUndo).toBe(false);
   });
+});
+
+describe("the built-in note tools on the real score", () => {
+  /** Two voices, Z runs, four bars a line: the score the editor skill edits, read from disk. */
+  const REAL = readFileSync(
+    new URL("../packages/score-editor/skills/score-editor/assets/edit-one-bar/score.abc", import.meta.url),
+    "utf8",
+  );
+  /** The chorus's Vocal line is bars 9-12 (0-based 8-11); Ins there is a whole-bar rest run. */
+  const FIRST = 8;
+  const LAST = 11;
+  const STEP = 64;
+
+  function openReal(): EditingSession {
+    const session = createEditingSession({ project: { ...project, score: REAL }, dialects, grid: { value: 16 } });
+    const score = parse(REAL);
+    const ids = score.notes
+      .filter((note) => note.voice === "Vocal" && note.bar >= FIRST && note.bar <= LAST && note.midi !== null)
+      .map((note) => note.id);
+    session.select(ids);
+    const first = score.notes.find((note) => ids.includes(note.id) && note.duration >= 2 * STEP);
+    if (first !== undefined) session.setInsertionPoint({ tick: first.start + STEP });
+    return session;
+  }
+
+  const valuesOf: ReadonlyArray<{ id: string; values?: Readonly<Record<string, string | number>> }> = [
+    { id: "split" },
+    { id: "chop" },
+    { id: "join" },
+    { id: "legato" },
+    { id: "reverse" },
+    { id: "flip" },
+    { id: "snap-to-key" },
+    { id: "length-double" },
+    { id: "length-halve" },
+    { id: "set-length", values: { length: "1/8" } },
+    { id: "fit-range", values: { from: FIRST + 1, to: FIRST + 1 } },
+  ];
+
+  for (const example of valuesOf) {
+    it(`${example.id} reads and checks, keeps one note a time, stays on the grid and leaves untouched bars alone`, () => {
+      const session = openReal();
+      const before = parse(REAL);
+      const result = session.runTool(tool(example.id), example.values ?? {});
+
+      expect(result.ok).toBe(true);
+      const score = parse(result.project.score);
+      expect(song2Dialect.check(score)).toEqual([]);
+
+      for (const voice of score.voices) {
+        const notes = pitched(score, voice);
+        let reached = -1;
+        for (const note of notes) {
+          expect(note.start, `${voice} ${note.id}`).toBeGreaterThanOrEqual(reached);
+          reached = note.start + note.duration;
+          expect(note.start % STEP, `${voice} start ${note.id}`).toBe(0);
+          expect(note.duration % STEP, `${voice} length ${note.id}`).toBe(0);
+        }
+      }
+
+      const untouched = (bar: number): boolean => bar < FIRST || bar > LAST + 1;
+      const afterBars = splitBars(result.project.score);
+      const beforeBars = splitBars(REAL);
+      for (const [key, piece] of beforeBars.pieces) {
+        const bar = Number(key.split(":")[1]);
+        if (!untouched(bar)) continue;
+        expect(afterBars.pieces.get(key), key).toBe(piece);
+      }
+      for (const line of beforeBars.otherLines) expect(afterBars.otherLines).toContain(line);
+
+      const again = openReal().runTool(tool(example.id), example.values ?? {});
+      expect(again.ok).toBe(true);
+      expect(again.project.score).toBe(result.project.score);
+    });
+  }
 });

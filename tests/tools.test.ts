@@ -10,7 +10,9 @@ import {
   previewTool,
   type ScoreTool,
   type SongProject,
+  type ToolContext,
   type ToolParameter,
+  type ToolParameterValues,
   validateToolParameters,
 } from "@neta-art/score-editor";
 import { describe, expect, it, vi } from "vitest";
@@ -154,7 +156,16 @@ describe("tool parameters", () => {
 
     expect(result.ok).toBe(true);
     expect(result.project.score).toBe(SCORE_WITHOUT_E);
-    expect(build).toHaveBeenCalledWith(project, ["Vocal:256", "Vocal:512"], { every: 2 });
+    // Every tool is called with the context; a builder written with three parameters ignores it.
+    expect(build).toHaveBeenCalledWith(
+      project,
+      ["Vocal:256", "Vocal:512"],
+      { every: 2 },
+      {
+        grid: { value: 4 },
+        insertionPoint: null,
+      },
+    );
   });
 
   it("refuses a wrong type or an out-of-range value before the builder runs", () => {
@@ -509,6 +520,37 @@ describe("a tool that declares the tool context", () => {
       return [{ type: "splitNotes", noteIds: selection, at: context.insertionPoint, grid: context.grid }];
     },
   };
+
+  it("gives the context to a tool that declares it with a default or with rest parameters", () => {
+    const withDefault: ScoreTool = {
+      id: "context-default",
+      name: { en: "With a default", zh: "带默认值" },
+      commands(_project, selection, _values, context = { grid: { value: 4 }, insertionPoint: null }) {
+        if (selection.length === 0) return [];
+        return [{ type: "splitNotes", noteIds: selection, at: context.insertionPoint, grid: context.grid }];
+      },
+    };
+    const withRest: ScoreTool = {
+      id: "context-rest",
+      name: { en: "With rest parameters", zh: "带剩余参数" },
+      commands(...args: [SongProject, ReadonlyArray<string>, ToolParameterValues, ToolContext]) {
+        const [, selection, , context] = args;
+        if (selection.length === 0) return [];
+        return [{ type: "splitNotes", noteIds: selection, at: context.insertionPoint, grid: context.grid }];
+      },
+    };
+
+    for (const tool of [withDefault, withRest]) {
+      const session = createEditingSession({ project, dialects, grid: { value: 16 } });
+      session.setInsertionPoint({ tick: 128 });
+      session.select(["Vocal:0"]);
+
+      const preview = session.previewTool(tool, {});
+
+      expect(preview.ok, tool.id).toBe(true);
+      expect(preview.project.score, tool.id).toBe(SCORE.replace("C4D4E4F4|", "C2C2D4E4F4|"));
+    }
+  });
 
   it("receives the session's grid and insertion point, and the same context without a session", () => {
     const session = createEditingSession({

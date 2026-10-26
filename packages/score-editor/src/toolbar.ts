@@ -1,6 +1,7 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the Select and Grid menus, the read-only badge, the synth preview control, the Filter button and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
+import { mountBarMenu } from "./bar-menu";
 import { create, requireDom } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { mountRestoreControl } from "./draft-restore";
@@ -11,6 +12,7 @@ import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountMeterControl } from "./meter-control";
 import { mountProjectControl } from "./project-control";
 import { mountProjectNoticeStrip } from "./project-notice-strip";
 import { mountSelectionMenu } from "./selection-menu";
@@ -24,6 +26,11 @@ import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
 import { mountZoomControl } from "./zoom-control";
+
+/** The toolbar part: `setTools` replaces the Tools panel's host tools, and does nothing without the `tools` option. */
+export interface ToolbarPart extends ViewPart {
+  setTools(tools: ReadonlyArray<ScoreTool>): void;
+}
 
 export interface ToolbarOptions extends EditingPartOptions {
   /**
@@ -61,6 +68,11 @@ export interface ToolbarOptions extends EditingPartOptions {
    * button; the built-in note tools are always listed. Off by default, so a toolbar a host already mounts gains no control.
    */
   tools?: ReadonlyArray<ScoreTool>;
+  /**
+   * Puts the focus on the bar the Bars menu chose. The default editor passes its ruler's way there; a host that mounts
+   * the toolbar without a ruler can leave it out, and the menu still chooses the bar in the session.
+   */
+  onChooseBars?: (bar: number) => void;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -76,13 +88,17 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
  * hint. The controls are in that order in the row and in the tab order, the Filter button last. It follows the session's
  * language.
  */
-export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
+export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ToolbarPart {
   requireDom("mountToolbar");
   const doc = el.ownerDocument;
   const releaseStyles = acquireStyles(el);
   const root = create(doc, "div", "sce-root sce-part sce-part-toolbar");
   el.appendChild(root);
   const live = createLiveRegion(root);
+  const refused = sayRefusals(live, session, options.onRefused);
+  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
+  // project changes by anything else, as the text view keeps its notice.
+  const noticeStrip = mountProjectNoticeStrip(root, session);
 
   const row = create(doc, "div", "sce-toolbar", root);
   if (options.viewSwitch) row.dataset.views = "";
@@ -104,6 +120,15 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
   const grid = mountGridControl(row, session, live);
+  const bars = mountBarMenu(row, session, {
+    live,
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+    ...(options.onChooseBars === undefined ? {} : { onChooseBars: options.onChooseBars }),
+  });
+  const meter = mountMeterControl(row, session, {
+    live,
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+  });
   const spacer = create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -113,12 +138,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
   const badge = create(doc, "span", "sce-badge", end ?? row);
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
-  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
-  // project changes by anything else, as the text view keeps its notice.
-  const noticeStrip = mountProjectNoticeStrip(root, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
-  const refused = sayRefusals(live, session, options.onRefused);
   const song = options.tempoKey
     ? mountTempoKeyControls(row, session, {
         refused,
@@ -142,17 +163,19 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
-  // The Tools button and then the Filter button end the row, both held to its right edge by the tool button's auto
-  // margin: its panel hangs from the right, so the arrangement a preview draws stays in view on the left.
+  // The Tools button and the Filter button after it end the row as one item, held to the right edge: the Tools panel
+  // hangs from the right, so a preview on the arrangement stays in view, and the pair wraps together onto the line
+  // Filter already used, so the row keeps its height at a phone's width.
+  const toolsHost = options.tools === undefined ? null : create(doc, "div", "sce-toolbar-tools", row);
   const tools =
-    options.tools === undefined
+    toolsHost === null
       ? null
-      : mountToolPanel(row, session, {
-          tools: options.tools,
+      : mountToolPanel(toolsHost, session, {
+          tools: options.tools ?? [],
           ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
         });
   // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
-  const filter = mountFilterPanel(row, session);
+  const filter = mountFilterPanel(toolsHost ?? row, session);
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -207,6 +230,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView, opening].join();
     if (shown === drawn) return;
     drawn = shown;
+    // An empty pair still costs a flex gap and its auto margin, and would rebalance the row while the parts are hidden.
+    if (toolsHost !== null) toolsHost.hidden = !(arrangement && readable);
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
     if (options.viewSwitch) setTitle();
     history.hidden = !editable || !readable;
@@ -226,6 +251,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {
+    setTools(next) {
+      tools?.setTools(next);
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -235,6 +263,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      bars.destroy();
+      meter.destroy();
       noticeStrip.destroy();
       song?.destroy();
       projectControl?.destroy();

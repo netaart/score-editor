@@ -118,11 +118,22 @@ let vectors = null;
 const notices = [];
 /** The host's draft store: what `drafts: true` in the options of `mount` and `update` stands for. */
 const drafts = createFakeDraftStore();
-const withDrafts = (options) => {
-  if (options.drafts === true) return { ...options, drafts };
-  if (options.drafts === false) return { ...options, drafts: undefined };
-  return options;
-};
+/** What the host callback of the mounted editor received, each with the store calls made before it ran. */
+const handoffs = [];
+/** The options of `mount` and `update`, with the page's store and callback standing in for the host's. */
+function hostOptions(options) {
+  const { handoff, ...rest } = options;
+  const withStore =
+    rest.drafts === true ? { ...rest, drafts } : rest.drafts === false ? { ...rest, drafts: undefined } : rest;
+  if (handoff === true) {
+    return {
+      ...withStore,
+      onHandoff: (payload) => handoffs.push({ payload, calls: drafts.calls() }),
+    };
+  }
+  if (handoff === false) return { ...withStore, onHandoff: undefined };
+  return withStore;
+}
 
 /**
  * The score text a test asks for: `{ sample }` is a file of the dialect's samples, `{ vector }` the text of a
@@ -243,7 +254,7 @@ const BREAKING_TOOL = {
   },
 };
 
-const TOOL_SETS = { safe: [SAFE_TOOL], breaking: [BREAKING_TOOL], both: [SAFE_TOOL, BREAKING_TOOL] };
+const TOOL_SETS = { safe: [SAFE_TOOL], breaking: [BREAKING_TOOL], both: [SAFE_TOOL, BREAKING_TOOL], none: [] };
 
 /**
  * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for
@@ -560,6 +571,7 @@ window.harness = {
   layout,
   notices,
   drafts,
+  handoffs,
   host: hostPage,
   shadowRoot: null,
   /** The single-note preview export, called as a host calls it. */
@@ -601,24 +613,25 @@ window.harness = {
       window.harness.shadowRoot.append(target);
     }
     notices.length = 0;
+    handoffs.length = 0;
     editor = mount(target, {
       language: "en",
       project,
       dialects: registry(dialect),
       notify: (notice) => notices.push(notice),
       ...(tools === undefined ? {} : { tools: TOOL_SETS[tools] }),
-      ...withDrafts(options),
+      ...hostOptions(options),
     });
   },
-  async update({ score, project: fields, ...options } = {}) {
+  async update({ score, project: fields, tools, ...options } = {}) {
     if (score !== undefined || fields !== undefined) {
       project = await projectFrom(project, score, fields);
       options.project = project;
     }
-    editor.update(withDrafts(options));
+    editor.update({ ...(tools === undefined ? {} : { tools: TOOL_SETS[tools] }), ...hostOptions(options) });
   },
   destroy() {
-    editor.destroy();
+    editor?.destroy();
     document.getElementById("chord-host")?.remove();
     document.getElementById("chord-cover")?.remove();
   },

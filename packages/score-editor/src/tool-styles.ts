@@ -7,11 +7,17 @@ export const TOOLS_SHEET_QUERY = "(pointer: coarse) and (max-width: 640px)";
 export const toolCss = `
 /* The Tools button and panel: DESIGN.md, "The Tools panel"; the box and the sheet are the Filter panel's. */
 .sce-root .sce-tool-button {
-  /* The last control of the row, held to its right edge: the panel that hangs from it then leaves the arrangement, and
-     a tool preview drawn on it, in view to the left. */
-  margin-inline-start: auto;
   gap: 4px;
   padding: 0 8px;
+}
+/* Tools and the Filter button after it end the row as one pair, held to its right edge: the panel hangs from the right,
+   so a preview on the arrangement stays in view, and the pair wraps as one item onto the line Filter already used. */
+.sce-root .sce-toolbar-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
 }
 .sce-root .sce-tool-button::after {
   content: "";
