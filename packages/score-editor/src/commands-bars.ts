@@ -137,6 +137,15 @@ function barEnd(score: Score): number {
   return last.start + last.length;
 }
 
+/** The number of bars a voice covers with finished events, as a cut's short voice counts from the top. */
+function voiceBarEnd(score: Score, voice: string): number {
+  let end = 0;
+  for (const note of score.notes) {
+    if (note.voice === voice && note.bar + 1 > end) end = note.bar + 1;
+  }
+  return end;
+}
+
 function deleteBars(score: Score, from: number, count: number): ScoreCommandResult {
   if (!isIndex(from) || !isIndex(count) || count < 1 || from + count > score.bars.length) {
     return commandRefusal("bar-out-of-range", { from: from + 1, count, bars: score.bars.length }, { bar: from + 1 });
@@ -366,6 +375,11 @@ function setSectionMeter(
   const last = score.bars[lastIndex] as Bar;
   if (score.truncation !== null && score.truncation.bar <= lastIndex) {
     return commandRefusal("truncated-tail", { bar: score.truncation.bar + 1 }, { bar: score.truncation.bar + 1 });
+  }
+  // RULES.md V2/X9: a voice with fewer bars than the section stops in the cut tail, so the section
+  // reaches a cut even when the reported cut bar belongs to the other voice.
+  if (score.voices.some((voice) => voiceBarEnd(score, voice) <= lastIndex)) {
+    return commandRefusal("truncated-tail", { bar: section.firstBar + 1 }, { bar: section.firstBar + 1 });
   }
   if (score.bars.slice(section.firstBar, lastIndex + 1).some((bar) => bar.incomplete)) {
     return commandRefusal("truncated-tail", { bar: section.firstBar + 1 }, { bar: section.firstBar + 1 });
