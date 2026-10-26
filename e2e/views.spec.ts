@@ -956,7 +956,7 @@ test.describe("the staff view", () => {
     await expect(drawnNotes(page)).toHaveCount(5);
   });
 
-  test("draws the play cursor as a 7 px band of text colour, and as a Highlight band under forced colours", async ({
+  test("draws the play cursor as a 20% band in light and dark, and as a Highlight band under forced colours", async ({
     page,
     harness,
   }) => {
@@ -965,8 +965,17 @@ test.describe("the staff view", () => {
     await setStaffPosition(page, 0);
     const read = () =>
       staffCursor(page).evaluate((el) => {
+        const parse = (value: string) => {
+          const found = /rgba?\(([^)]+)\)/.exec(value);
+          const parts = found?.[1]?.split(/[ ,/]+/).map(Number) ?? [];
+          return { r: parts[0] ?? 0, g: parts[1] ?? 0, b: parts[2] ?? 0 };
+        };
         const style = getComputedStyle(el);
         const after = getComputedStyle(el, "::after");
+        const root = el.getRootNode();
+        const host = root instanceof ShadowRoot ? root.host : null;
+        const region = host?.closest(".sce-staff");
+        const band = /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\/\s*([\d.]+)\)/.exec(style.backgroundImage);
         return {
           width: style.width,
           marginLeft: style.marginLeft,
@@ -978,14 +987,64 @@ test.describe("the staff view", () => {
           afterContent: after.content,
           afterWidth: after.width,
           afterBackground: after.backgroundColor,
+          text: parse(style.color),
+          ground: region ? parse(getComputedStyle(region).backgroundColor) : null,
+          band: band
+            ? {
+                r: Number(band[1]) * 255,
+                g: Number(band[2]) * 255,
+                b: Number(band[3]) * 255,
+                alpha: Number(band[4]),
+              }
+            : null,
         };
       });
 
-    const normal = await read();
-    expect(normal.width, "a 7 px box: 2 px band, 1 px edge, 1 px ink, 1 px edge, 2 px band").toBe("7px");
-    expect(normal.marginLeft, "the ink stays where the 3 px box put it").toBe("-3px");
-    expect(normal.backgroundImage).toContain("linear-gradient");
-    expect(normal.backgroundImage, "the band is a wash of the text colour").toContain("0.08");
+    const luminance = (channel: number) => {
+      const value = channel / 255;
+      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    };
+    const contrast = (one: { r: number; g: number; b: number }, other: { r: number; g: number; b: number }) => {
+      const first = 0.2126 * luminance(one.r) + 0.7152 * luminance(one.g) + 0.0722 * luminance(one.b);
+      const second = 0.2126 * luminance(other.r) + 0.7152 * luminance(other.g) + 0.0722 * luminance(other.b);
+      return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+    };
+    const checkBand = (scheme: string, state: Awaited<ReturnType<typeof read>>) => {
+      expect(state.band, `${scheme}: a band colour is computed`).not.toBeNull();
+      expect(state.ground, `${scheme}: the staff ground is known`).not.toBeNull();
+      if (!state.band || !state.ground) return;
+      expect(state.band.alpha, `${scheme}: 20% of the text colour`).toBeCloseTo(0.2, 2);
+      expect(Math.abs(state.band.r - state.text.r), `${scheme}: band red is the text red`).toBeLessThan(1.5);
+      expect(Math.abs(state.band.g - state.text.g), `${scheme}: band green is the text green`).toBeLessThan(1.5);
+      expect(Math.abs(state.band.b - state.text.b), `${scheme}: band blue is the text blue`).toBeLessThan(1.5);
+      const over = {
+        r: state.band.r * state.band.alpha + state.ground.r * (1 - state.band.alpha),
+        g: state.band.g * state.band.alpha + state.ground.g * (1 - state.band.alpha),
+        b: state.band.b * state.band.alpha + state.ground.b * (1 - state.band.alpha),
+      };
+      expect(
+        contrast(over, state.ground),
+        `${scheme}: the band is at least 1.3:1 against the ground`,
+      ).toBeGreaterThanOrEqual(1.3);
+    };
+
+    const light = await read();
+    expect(light.width, "a 7 px box: 2 px band, 1 px edge, 1 px ink, 1 px edge, 2 px band").toBe("7px");
+    expect(light.marginLeft, "the ink stays where the 3 px box put it").toBe("-3px");
+    expect(light.backgroundImage).toContain("linear-gradient");
+    checkBand("light", light);
+
+    await page.evaluate(() => {
+      document.documentElement.style.colorScheme = "dark";
+    });
+    await framesPass(page);
+    const dark = await read();
+    expect(dark.backgroundImage).toContain("linear-gradient");
+    checkBand("dark", dark);
+    await page.evaluate(() => {
+      document.documentElement.style.colorScheme = "";
+    });
+    await framesPass(page);
 
     await page.emulateMedia({ forcedColors: "active" });
     const forced = await read();
