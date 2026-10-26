@@ -87,6 +87,7 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
       menu.element.setAttribute("aria-label", t.bars);
       choose.textContent = t.chooseBars;
       clear.textContent = t.clearBarSelection;
+      drawn = "";
     }
     const t = messagesFor(session.view.language);
     const { reading, view, barSelection } = session;

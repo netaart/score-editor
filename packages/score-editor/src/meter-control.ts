@@ -36,7 +36,7 @@ function targetOf(score: Score, session: EditingSession): Target | null {
   return meter === undefined ? null : { bar, section: index, first, last, meter };
 }
 
-/** The powers of two a meter rule allows, or the single allowed denominator when it is not restricted to powers of two. */
+/** The denominators the rule allows: its powers of two, or every integer in its range when it does not restrict them. */
 function denominators(min: number, max: number, powerOfTwo: boolean): number[] {
   const values: number[] = [];
   for (let value = Math.max(1, min); value <= max; value++) {
@@ -182,7 +182,15 @@ export function mountMeterControl(
     const score = reading.kind === "score" ? reading.score : null;
     const target = score === null ? null : targetOf(score, session);
     const shown = score !== null && target !== null && view.editable && arrangementShown(session);
-    const state = [shown, target?.section, target?.meter.numerator, target?.meter.denominator, view.language].join();
+    const state = [
+      shown,
+      target?.section,
+      target?.first,
+      target?.last,
+      target?.meter.numerator,
+      target?.meter.denominator,
+      view.language,
+    ].join();
     if (state === drawn) return;
     drawn = state;
     root.hidden = !shown;
