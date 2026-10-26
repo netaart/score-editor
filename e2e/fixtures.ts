@@ -55,6 +55,7 @@ interface PageLayout {
   replace(options: Record<string, unknown>): Promise<void>;
   replaceDialects(): void;
   mountPart(name: string, hidden?: boolean): void;
+  commitPart(name: string): void;
   setSlotHidden(name: string, hidden: boolean): void;
   destroyPart(name: string, times?: number): void;
   roots(): Record<string, string>;
@@ -145,6 +146,11 @@ export class Layout {
     return this.page.evaluate((all) => {
       for (const name of all) window.harness.layout.mountPart(name);
     }, names);
+  }
+
+  /** Takes a pending field on a part the host mounted itself, as a host does when it closes its own container. */
+  commitPart(name: string) {
+    return this.page.evaluate((target) => window.harness.layout.commitPart(target), name);
   }
 
   destroyPart(name: string, times = 1) {
@@ -430,15 +436,16 @@ export class Harness {
   }
 
   /**
-   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` or
-   * inside it; null when none is. A part may pin a header over `target`, so the first free spot is found by looking.
+   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` itself
+   * and so is the element 8 pixels below it; null when none is. A note or another child of `target` does not count, and
+   * requiring the second point leaves room for the finger. A part may pin a header over `target`, so the first empty
+   * spot is found by looking.
    */
   firstYOn(target: Locator, x: number, from: number, until: number) {
     return target.evaluate(
       (el, { at, start, end }) => {
-        for (let y = start; y < end; y += 4) {
-          const top = document.elementFromPoint(at, y);
-          if (top && el.contains(top)) return y;
+        for (let y = start; y + 8 < end; y += 4) {
+          if (document.elementFromPoint(at, y) === el && document.elementFromPoint(at, y + 8) === el) return y;
         }
         return null;
       },

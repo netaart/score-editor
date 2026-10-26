@@ -1242,19 +1242,20 @@ test.describe("the assembled editor", () => {
     const scroller = page.getByRole("region", { name: "Arrangement" });
     const vocal = page.getByRole("list", { name: "Vocal" });
     await expect(vocal).toBeVisible();
-    // The toolbar takes three rows at a phone's width, which leaves the lane little height: the verse is brought into the
+    // The toolbar takes four rows at a phone's width, which leaves the lane little height: the verse is brought into the
     // frame first, so the box reaches notes whatever the height of the toolbar is.
     await scroller.evaluate((el) => el.scrollTo({ left: 400 }));
     const position = () => harness.scrollOf(scroller);
     const before = await position();
     const frame = await box(scroller);
     const laneArea = await box(vocal);
-    // The four bars of the intro are rests: the lane is empty where the finger goes down, and the box reaches the verse.
-    // The editor pins a header over the lane, so the first free spot is found by looking at what is on the screen.
+    // The intro is rests and the verse has notes: the first empty lane spot at this x is found by looking, so the finger
+    // goes down on the notes layer and not on a note. The editor pins a header over the lane.
     const x = Math.max(laneArea.x, frame.x + 60) + 10;
     const free = await harness.firstYOn(vocal, x, Math.max(laneArea.y, frame.y), frame.y + frame.height);
     expect(free).not.toBeNull();
     const from = { x, y: (free ?? 0) + 8 };
+    expect(await vocal.evaluate((el, point) => document.elementFromPoint(point.x, point.y) === el, from)).toBe(true);
     const to = { x: frame.x + frame.width - 6, y: Math.min(laneArea.y + laneArea.height, frame.y + frame.height) - 6 };
 
     const finger = await harness.finger();
