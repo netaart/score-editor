@@ -40,7 +40,7 @@ To look at the page by hand: `node e2e/serve.mjs`, then open `/?demo` (add `&lan
 - Everything the editor adds (listeners, nodes, stylesheets) is registered so `destroy()` removes it, and so does every view part's own `destroy()`.
 - Later UI is built as view parts bound to the editing session: a part mounts on an element of the host's layout, takes the session (and, for the draft parts, the draft binding it is given), draws from what the session holds, re-renders from its notifications, and keeps the isolation `mount()` gives. It does not read another part or reach into the default editor. The default editor is one arrangement of such parts. See [the package README](packages/score-editor/README.md#the-editing-session-and-view-parts) and [DESIGN.md](DESIGN.md#view-parts).
 - A change that adds a public export or a view part updates the editor skill in the same change ([packages/score-editor/skills/score-editor](packages/score-editor/skills/score-editor)).
-- The skill and both examples pin the package version; 0.1.0 predates the new API, and the release bump changes the version and those pins in one commit, enforced by `pnpm check:skill`.
+- The skill and both examples pin the package version; a release bump changes the version and those pins in one commit, enforced by `pnpm check:skill`.
 - Dependency versions are pinned exactly. Commits are small and named by type: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`.
 - UI work goes through the design tooling's review steps (critique, audit, polish) and is checked in the rendered result at desktop and phone widths.
 
