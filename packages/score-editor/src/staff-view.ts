@@ -34,21 +34,21 @@ svg { display: block; }
   left: 0;
   top: 0;
   box-sizing: border-box;
-  width: 7px;
-  margin-left: -3px;
+  width: 8px;
+  margin-left: -3.5px;
   background: linear-gradient(
     to right,
-    color-mix(in srgb, var(--sce-_text) 20%, transparent) 0 2px,
-    var(--sce-_bg) 2px 3px,
-    var(--sce-_text) 3px 4px,
-    var(--sce-_bg) 4px 5px,
-    color-mix(in srgb, var(--sce-_text) 20%, transparent) 5px 7px
+    color-mix(in srgb, var(--sce-_note) 20%, transparent) 0 3px,
+    var(--sce-_note) 3px 5px,
+    color-mix(in srgb, var(--sce-_note) 20%, transparent) 5px 8px
   );
   pointer-events: none;
 }
 @media (forced-colors: active) {
   /* Forced colours drop a background image, so the band is two 2 px borders and the ink a pseudo-element. */
   .sce-staff-cursor {
+    width: 7px;
+    margin-left: -3px;
     background: Canvas;
     border-left: 2px solid Highlight;
     border-right: 2px solid Highlight;
