@@ -13,7 +13,7 @@ import {
   TICKS_PER_QUARTER,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
-import { chainAround, parse, pitched, splitBars } from "./song2-support";
+import { chainAround, parse, pitched, splitBars, spread } from "./song2-support";
 
 const HEADER = `X:1
 T:
@@ -493,25 +493,6 @@ describe("the refusals of the note commands", () => {
     expectUnchanged(text, move(["Vocal:0"], 1.5, 0));
   });
 });
-
-/** First, middle and last pitched note of each voice, and one segment of a tie chain. */
-function spread(score: Score): string[] {
-  const chosen = new Set<string>();
-  for (const voice of score.voices) {
-    const notes = pitched(score, voice);
-    if (notes.length === 0) continue;
-    for (const note of [notes[0], notes[Math.floor(notes.length / 2)], notes[notes.length - 1]]) {
-      if (note !== undefined) chosen.add(note.id);
-    }
-  }
-  for (const note of score.notes) {
-    if (note.midi !== null && note.tie) {
-      chosen.add(chainAround(score, note.id).at(-1)?.id ?? note.id);
-      break;
-    }
-  }
-  return [...chosen];
-}
 
 interface SampleFact {
   file: string;

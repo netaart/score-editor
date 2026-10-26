@@ -85,3 +85,21 @@ export function noteFacts(note: Note): [string, number, number, number | null, b
 export function pitched(score: Score, voice: string): Note[] {
   return score.notes.filter((note) => note.voice === voice && note.midi !== null).sort((a, b) => a.start - b.start);
 }
+/** First, middle and last pitched note of each voice, and one segment of a tie chain. */
+export function spread(score: Score): string[] {
+  const chosen = new Set<string>();
+  for (const voice of score.voices) {
+    const notes = pitched(score, voice);
+    if (notes.length === 0) continue;
+    for (const note of [notes[0], notes[Math.floor(notes.length / 2)], notes[notes.length - 1]]) {
+      if (note !== undefined) chosen.add(note.id);
+    }
+  }
+  for (const note of score.notes) {
+    if (note.midi !== null && note.tie) {
+      chosen.add(chainAround(score, note.id).at(-1)?.id ?? note.id);
+      break;
+    }
+  }
+  return [...chosen];
+}
