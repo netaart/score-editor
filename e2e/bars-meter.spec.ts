@@ -10,8 +10,11 @@ L:1/16
 Q:1/4=120
 V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
 K:C
+% A
 V: Vocal
 C16|D16|
+% B
+V: Vocal
 E8`;
 
 const CUT_SHARED = `X:1
@@ -32,7 +35,7 @@ const barNumber = (page: Page, bar: number) => barsList(page).getByText(String(b
 const barItems = (page: Page) => barsList(page).getByRole("listitem");
 const barsButton = (page: Page) => page.getByRole("button", { name: "Bars", exact: true });
 const meterButton = (page: Page) => page.getByRole("button", { name: /^Meter / });
-const toolbarStatus = (page: Page) => page.locator(".sce-part-toolbar > [role='status']");
+const barMenuStatus = (page: Page) => page.locator(".sce-part-bars > [role='status']");
 const notice = (page: Page) => page.locator(".sce-part-notice");
 const noticeStatus = (page: Page) => page.locator(".sce-part-notice > [role='status']");
 const selectionBand = (page: Page) => page.locator(".sce-bar-selection");
@@ -171,7 +174,7 @@ test.describe("bars, meter and the cut tail", () => {
     await press(barNumber(page, 3));
     await openBarsMenu(page);
     await page.getByRole("menuitem", { name: "Delete bar 3", exact: true }).click();
-    await expect(toolbarStatus(page)).toContainText("cut");
+    await expect(barMenuStatus(page)).toContainText("cut");
     await expect.poll(async () => (await harness.notices()).at(-1)?.code).toBe("command-refused");
     await expect(barItems(page)).toHaveCount(3);
   });
