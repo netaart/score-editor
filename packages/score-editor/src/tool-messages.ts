@@ -13,12 +13,15 @@ export interface ToolMessages {
   /** The footer's two buttons. */
   apply: string;
   close: string;
-  /** The status line: nothing chosen, nothing selected, what a preview would do, nothing, applied, read-only. */
+  /** The status line: nothing chosen, something chosen, nothing selected, what a preview would do, nothing, applied, read-only. */
   statusIdle: string;
+  statusChooseTool: string;
   statusNoSelection: string;
   statusChooseFirst: string;
   statusPreview(notes: number): string;
   statusUnchanged: string;
+  /** Why Fit into bars changes nothing when its bars are already the selection's. */
+  statusFitSame(from: number, to: number): string;
   statusApplied: string;
   statusReadOnly: string;
   /** The step buttons beside a number field on a coarse pointer. */
@@ -34,10 +37,13 @@ const en: ToolMessages = {
   apply: "Apply",
   close: "Close",
   statusIdle: "Select notes, then choose a tool.",
+  statusChooseTool: "Choose a tool.",
   statusNoSelection: "Select notes first.",
   statusChooseFirst: "Choose a tool first.",
   statusPreview: (notes) => (notes === 1 ? "Preview: 1 note would change." : `Preview: ${notes} notes would change.`),
   statusUnchanged: "This tool changes nothing with the current selection and settings.",
+  statusFitSame: (from, to) =>
+    `The selected notes already fill ${from === to ? `bar ${from}` : `bars ${from} to ${to}`}. Change From bar or To bar to move them.`,
   statusApplied: "Applied. Undo takes it back.",
   statusReadOnly: "This view is read-only.",
   decrease: (name) => `Decrease ${name}`,
@@ -52,10 +58,13 @@ const zh: ToolMessages = {
   apply: "应用",
   close: "关闭",
   statusIdle: "先选中音符，再选择工具。",
+  statusChooseTool: "选择一个工具。",
   statusNoSelection: "请先选中音符。",
   statusChooseFirst: "请先选择一个工具。",
   statusPreview: (notes) => `预览：会改动 ${notes} 个音。`,
   statusUnchanged: "以当前的选区和参数，这个工具不会改动任何东西。",
+  statusFitSame: (from, to) =>
+    `选中的音已经刚好填满${from === to ? `第 ${from} 小节` : `第 ${from} 到第 ${to} 小节`}。改“起始小节”或“结束小节”就能移动它们。`,
   statusApplied: "已应用，撤销即可恢复。",
   statusReadOnly: "这里是只读视图。",
   decrease: (name) => `减小${name}`,

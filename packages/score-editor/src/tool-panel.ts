@@ -258,6 +258,26 @@ export function mountToolPanel(
     return values;
   }
 
+  /** The body's scrolls keep the target below the sticky heading, whose height is measured rather than assumed. */
+  function syncScrollPadding(): void {
+    if (!panel.matches(":popover-open")) {
+      body.style.removeProperty("scroll-padding-top");
+      return;
+    }
+    const heading = body.querySelector<HTMLElement>(".sce-tool-group-name");
+    if (heading === null) return;
+    body.style.scrollPaddingTop = `${heading.getBoundingClientRect().height}px`;
+  }
+
+  /** Why a tool that would change nothing changes nothing, when its own values name the cause. */
+  function unchangedReason(tool: ScoreTool, values: ToolParameterValues): string | null {
+    if (tool.id !== "fit-range") return null;
+    const { selectionFirstBar, selectionLastBar } = session.toolContext;
+    if (selectionFirstBar == null || selectionLastBar == null) return null;
+    if (Number(values.from) !== selectionFirstBar || Number(values.to) !== selectionLastBar) return null;
+    return t.statusFitSame(selectionFirstBar, selectionLastBar);
+  }
+
   function setStatus(message: string, state: string, announce = false): void {
     status.textContent = message;
     status.dataset.state = state;
@@ -314,7 +334,7 @@ export function mountToolPanel(
     clearPreview();
     if (!panel.matches(":popover-open")) return;
     if (chosen === null) {
-      setStatus(t.statusIdle, "idle", announce);
+      setStatus(session.selection.length === 0 ? t.statusIdle : t.statusChooseTool, "idle", announce);
       return;
     }
     if (!session.view.editable) {
@@ -326,7 +346,8 @@ export function mountToolPanel(
       setStatus(t.statusNoSelection, "idle", announce);
       return;
     }
-    const result = session.previewTool(chosen, valuesOf(chosen));
+    const values = valuesOf(chosen);
+    const result = session.previewTool(chosen, values);
     const diagnostic = result.diagnostics[0];
     if (!result.ok) {
       setStatus(
@@ -337,7 +358,7 @@ export function mountToolPanel(
       return;
     }
     if (result.project.score === session.project.score) {
-      setStatus(t.statusUnchanged, "unchanged", announce);
+      setStatus(unchangedReason(chosen, values) ?? t.statusUnchanged, "unchanged", announce);
       return;
     }
     setStatus(t.statusPreview(changedNotes(session, session.project, result.project)), "preview", announce);
@@ -394,9 +415,21 @@ export function mountToolPanel(
         choose(chosen === tool ? null : tool);
         if (chosen === null) return;
         const entry = entries.get(chosen.id);
-        entry?.controls.scrollIntoView({ block: "nearest", inline: "nearest" });
+        if (entry !== undefined) {
+          const fits = entry.controls.getBoundingClientRect().height <= body.clientHeight;
+          // A tool that fits shows its row below the sticky heading and all its controls; a taller one shows its last control.
+          if (fits) {
+            entry.row.scrollIntoView({ block: "start", inline: "nearest" });
+            const heading = entry.row.closest(".sce-tool-group")?.querySelector<HTMLElement>(".sce-tool-group-name");
+            const headingHeight = heading?.getBoundingClientRect().height ?? 0;
+            const delta = entry.row.getBoundingClientRect().top - body.getBoundingClientRect().top - headingHeight;
+            if (delta !== 0) body.scrollTop += delta;
+          } else {
+            entry.controls.scrollIntoView({ block: "nearest", inline: "nearest" });
+          }
+        }
         // A keyboard click has detail 0 and keeps the move into the controls; a tap leaves the keyboard closed.
-        if (event.detail === 0) entry?.fields.values().next().value?.focus();
+        if (event.detail === 0) entry?.fields.values().next().value?.focus({ preventScroll: true });
       },
       { signal },
     );
@@ -420,6 +453,7 @@ export function mountToolPanel(
       });
       for (const tool of members) buildEntry(tool, section);
     }
+    syncScrollPadding();
   }
 
   renderTools(createToolRegistry([...NOTE_TOOLS, ...(options.tools ?? [])]).list());
@@ -453,6 +487,7 @@ export function mountToolPanel(
     apply.textContent = t.apply;
     close.textContent = t.close;
     for (const label of labels) label(t, language);
+    syncScrollPadding();
     previewNow();
   }
 
@@ -510,9 +545,11 @@ export function mountToolPanel(
       button.setAttribute("aria-expanded", String(open));
       if (!open) {
         clearPreview();
+        syncScrollPadding();
         return;
       }
       if (!isSheet()) keepInside(panel, anchorOf(button));
+      syncScrollPadding();
       previewNow(true);
       const focusOn = chosen === null ? entries.values().next().value?.row : entries.get(chosen.id)?.row;
       focusOn?.focus();

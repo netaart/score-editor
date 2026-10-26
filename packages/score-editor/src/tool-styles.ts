@@ -36,8 +36,20 @@ export const toolCss = `
   overflow: hidden;
 }
 .sce-root .sce-tool-title {
-  padding: 12px 12px 0;
+  position: relative;
+  z-index: 2;
+  padding: 12px 12px 2px;
+  background: var(--sce-_surface);
   font-weight: 600;
+}
+/* One ground-coloured line below the title, over the first pixels of a row at the body's clipped top edge. */
+.sce-root .sce-tool-title::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--sce-_surface);
 }
 .sce-root .sce-tool-body {
   display: flex;
@@ -45,7 +57,8 @@ export const toolCss = `
   flex-direction: column;
   gap: 10px;
   min-height: 0;
-  padding: 8px 12px 12px;
+  /* The heading carries the top padding, so its ground reaches the body's own top edge. */
+  padding: 0 12px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -56,9 +69,9 @@ export const toolCss = `
 }
 .sce-root .sce-tool-group-name {
   position: sticky;
-  top: -8px;
+  top: 0;
   z-index: 1;
-  padding: 4px 2px;
+  padding: 12px 2px 4px;
   background: var(--sce-_surface);
   color: var(--sce-_muted);
   font-size: 0.92em;
@@ -145,7 +158,7 @@ export const toolCss = `
   min-height: 28px;
   min-width: 0;
   padding: 0 6px;
-  border: 1px solid color-mix(in srgb, var(--sce-_text) 47%, var(--sce-_bg));
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 52%, var(--sce-_bg));
   border-radius: var(--sce-_radius);
   background: var(--sce-_bg);
   color: var(--sce-_text);
@@ -168,7 +181,7 @@ export const toolCss = `
   width: 40px;
   height: 40px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--sce-_text) 47%, var(--sce-_bg));
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 52%, var(--sce-_bg));
   border-radius: var(--sce-_radius);
   background: var(--sce-_bg);
   color: var(--sce-_text);
@@ -255,17 +268,7 @@ export const toolCss = `
     border-end-end-radius: 0;
   }
   .sce-root .sce-tool-footer {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  }
-  .sce-root .sce-tool-status {
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  .sce-root .sce-tool-actions {
-    flex: none;
   }
 }
 `;

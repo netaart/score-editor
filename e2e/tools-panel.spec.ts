@@ -446,7 +446,7 @@ test.describe("the phone sheet leaves the music in view", () => {
       expect(seen.panelTop).toBeGreaterThan(seen.toolbarBottom);
       expect(seen.panelBottom).toBeCloseTo(height, 0);
       expect(seen.inBand).toBeGreaterThan(0);
-      expect(seen.footerDirection).toBe("row");
+      expect(seen.footerDirection).toBe("column");
     });
   }
 });
@@ -754,6 +754,172 @@ test.describe("a review pass on the panel", () => {
     await expect(live).toContainText("Applied. Undo takes it back.");
   });
 
+  test("choosing a tool leaves its row title below the sticky heading", async ({ page, harness, press }) => {
+    if (test.info().project.name === "phone") await page.setViewportSize({ width: 320, height: 700 });
+    await harness.mount({ tools: "both" });
+    await openPanel(page, press);
+    for (const name of ["Fit into bars", "Rest the last note"]) {
+      const row = tool(page, name);
+      await row.focus();
+      await page.locator(".sce-tool-body").evaluate((body, label) => {
+        const target = [...document.querySelectorAll(".sce-tool-row")].find(
+          (found) => found.querySelector(".sce-tool-name")?.textContent === label,
+        ) as HTMLElement;
+        body.scrollTop += target.getBoundingClientRect().top - body.getBoundingClientRect().top - 2;
+      }, name);
+      await page.keyboard.press("Enter");
+      const seen = await page.evaluate((label) => {
+        const body = document.querySelector(".sce-tool-body") as HTMLElement;
+        const row = [...document.querySelectorAll(".sce-tool-row")].find(
+          (found) => found.querySelector(".sce-tool-name")?.textContent === label,
+        ) as HTMLElement;
+        const name = row.querySelector(".sce-tool-name") as HTMLElement;
+        const group = row.closest(".sce-tool-group") as HTMLElement;
+        const heading = group.querySelector(".sce-tool-group-name") as HTMLElement;
+        return {
+          bodyTop: body.getBoundingClientRect().top,
+          bodyBottom: body.getBoundingClientRect().bottom,
+          headingBottom: heading.getBoundingClientRect().bottom,
+          rowTop: row.getBoundingClientRect().top,
+          nameTop: name.getBoundingClientRect().top,
+          nameBottom: name.getBoundingClientRect().bottom,
+        };
+      }, name);
+      expect(seen.nameTop).toBeGreaterThanOrEqual(seen.headingBottom - 0.5);
+      expect(seen.rowTop).toBeGreaterThanOrEqual(seen.headingBottom - 1);
+      expect(seen.nameBottom).toBeLessThanOrEqual(seen.bodyBottom + 0.5);
+      expect(seen.nameTop).toBeGreaterThanOrEqual(seen.bodyTop - 0.5);
+    }
+  });
+
+  test("the idle line follows the selection", async ({ page, harness, press }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await openPanel(page, press);
+    await expect(status(page)).toHaveText("Select notes, then choose a tool.");
+    await press(closeButton(page));
+    await selectFirst(page, press);
+    await openPanel(page, press);
+    await expect(status(page)).toHaveText("Choose a tool.");
+  });
+
+  test("Fit into bars says why its default changes nothing and what to change", async ({ page, harness, press }) => {
+    await harness.mount({ score: { text: QUARTERS } });
+    await selectAll(page, press, test.info().project.name === "phone");
+    await openPanel(page, press);
+    await press(tool(page, "Fit into bars"));
+    await expect(status(page)).toContainText("The selected notes already fill bars 1 to 2.");
+    await expect(status(page)).toContainText("Change From bar or To bar to move them.");
+    if (test.info().project.name === "phone") {
+      await page.setViewportSize({ width: 320, height: 700 });
+      const fits = await page.evaluate(() => {
+        const status = (document.querySelector(".sce-tool-status") as HTMLElement).getBoundingClientRect();
+        const sheet = (document.querySelector(".sce-tool-panel") as HTMLElement).getBoundingClientRect();
+        return { bottom: status.bottom, sheetBottom: sheet.bottom };
+      });
+      expect(fits.bottom).toBeLessThanOrEqual(fits.sheetBottom);
+    }
+
+    await press(closeButton(page));
+    await harness.update({ language: "zh" });
+    await press(toolsButton(page, "工具"));
+    await expect(status(page, "工具")).toContainText("第 1 到第 2 小节");
+  });
+
+  test("the refusal footer takes the sheet's width on a phone, Apply and Close beside each other", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    test.skip(test.info().project.name !== "phone", "the sheet is the phone project's");
+    for (const [width, height] of [
+      [412, 839],
+      [320, 700],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await harness.destroy();
+      await harness.mount({ score: { text: QUARTERS }, tools: "breaking" });
+      await selectAll(page, press, true);
+      await openPanel(page, press);
+      await press(tool(page, "Off the grid"));
+      const seen = await page.evaluate(() => {
+        const pick = (selector: string) => {
+          const found = document.querySelector(selector);
+          if (!(found instanceof HTMLElement)) throw new Error(`no ${selector}`);
+          return found.getBoundingClientRect();
+        };
+        const sheet = pick(".sce-tool-panel");
+        const footer = pick(".sce-tool-footer");
+        const status = pick(".sce-tool-status");
+        const apply = pick(".sce-tool-apply");
+        const close = [...document.querySelectorAll(".sce-tool-actions .sce-button")].at(-1);
+        if (!(close instanceof HTMLElement)) throw new Error("no Close");
+        const closeRect = close.getBoundingClientRect();
+        return {
+          sheet: { top: sheet.top, bottom: sheet.bottom },
+          footerHeight: footer.height,
+          status: {
+            left: status.left,
+            right: status.right,
+            top: status.top,
+            bottom: status.bottom,
+            width: status.width,
+          },
+          actions: {
+            applyCenter: apply.top + apply.height / 2,
+            closeCenter: closeRect.top + closeRect.height / 2,
+            applyRight: apply.right,
+            closeLeft: closeRect.left,
+          },
+          footerWidth: footer.width,
+          footerLeft: footer.left,
+        };
+      });
+      expect(seen.status.width).toBeGreaterThanOrEqual(seen.footerWidth - 26);
+      expect(seen.status.left).toBeGreaterThanOrEqual(seen.footerLeft + 10);
+      expect(seen.status.top).toBeGreaterThanOrEqual(seen.sheet.top);
+      expect(seen.status.bottom).toBeLessThanOrEqual(seen.sheet.bottom);
+      expect(Math.abs(seen.actions.applyCenter - seen.actions.closeCenter)).toBeLessThanOrEqual(1);
+      expect(seen.actions.applyRight).toBeLessThanOrEqual(seen.actions.closeLeft);
+    }
+  });
+
+  test("no sliver shows between the sheet title and the sticky heading at 320", async ({ page, harness, press }) => {
+    test.skip(test.info().project.name !== "phone", "the 320 sheet is the phone project's");
+    await page.setViewportSize({ width: 320, height: 700 });
+    await harness.mount({ tools: "both" });
+    await openPanel(page, press);
+    await page.locator(".sce-tool-body").evaluate((body) => {
+      body.scrollTop = 180;
+    });
+    const seen = await page.evaluate(() => {
+      const body = document.querySelector(".sce-tool-body") as HTMLElement;
+      const title = document.querySelector(".sce-tool-title") as HTMLElement;
+      const heading = document.querySelector(".sce-tool-group-name") as HTMLElement;
+      const titleBottom = title.getBoundingClientRect().bottom;
+      const headingTop = heading.getBoundingClientRect().top;
+      const intersecting: string[] = [];
+      if (headingTop > titleBottom + 0.5) {
+        for (const element of body.querySelectorAll(
+          ".sce-tool-entry, .sce-tool-row, .sce-tool-description, .sce-tool-controls, .sce-tool-group-name",
+        )) {
+          const rect = element.getBoundingClientRect();
+          if (rect.top < headingTop - 0.5 && rect.bottom > titleBottom + 0.5 && element !== heading) {
+            intersecting.push(`${element.className}: ${element.textContent?.slice(0, 20)}`);
+          }
+        }
+      }
+      return {
+        top: getComputedStyle(heading).top,
+        titleBottom,
+        headingTop,
+        intersecting,
+      };
+    });
+    expect(seen.top).toBe("0px");
+    expect(seen.headingTop).toBeGreaterThanOrEqual(seen.titleBottom - 0.5);
+    expect(seen.intersecting).toEqual([]);
+  });
+
   test("every field reach a 3:1 border against its ground, in light and dark", async ({ page, harness, press }) => {
     await harness.mount({ score: { text: QUARTERS } });
     await openPanel(page, press);
@@ -790,22 +956,33 @@ test.describe("a review pass on the panel", () => {
             }) as [number, number, number];
             return 0.2126 * r + 0.7152 * g + 0.0722 * b;
           };
-          const a = luminance(style.borderTopColor);
-          const b = luminance(style.backgroundColor);
-          return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          const border = luminance(style.borderTopColor);
+          const ground = element.closest(".sce-popover, .sce-toolbar");
+          if (ground === null) throw new Error("the field is not on a panel or the toolbar");
+          return {
+            fill: ratio(border, luminance(style.backgroundColor)),
+            ground: ratio(border, luminance(getComputedStyle(ground).backgroundColor)),
+          };
         });
 
     for (const scheme of ["light", "dark"] as const) {
-      await page.emulateMedia({ colorScheme: scheme });
+      await harness.setColorScheme(scheme);
       for (const selector of [".sce-tool-number", ".sce-key-select", ".sce-tempo-input"]) {
-        expect(await contrastOf(selector)).toBeGreaterThanOrEqual(3);
+        const seen = await contrastOf(selector);
+        expect(seen.fill).toBeGreaterThanOrEqual(3);
+        expect(seen.ground).toBeGreaterThanOrEqual(3);
       }
       await press(TOOLBAR(page).getByRole("button", { name: "Project", exact: true }));
-      expect(await contrastOf(".sce-panel-style")).toBeGreaterThanOrEqual(3);
+      const project = await contrastOf(".sce-panel-style");
+      expect(project.fill).toBeGreaterThanOrEqual(3);
+      expect(project.ground).toBeGreaterThanOrEqual(3);
       await page.keyboard.press("Escape");
       await expect(page.getByRole("dialog", { name: "Project" })).toBeHidden();
       await press(page.getByRole("button", { name: "Filter", exact: true }));
-      expect(await contrastOf(".sce-filter-number")).toBeGreaterThanOrEqual(3);
+      const filter = await contrastOf(".sce-filter-number");
+      expect(filter.fill).toBeGreaterThanOrEqual(3);
+      expect(filter.ground).toBeGreaterThanOrEqual(3);
       await page.keyboard.press("Escape");
       await expect(page.getByRole("dialog", { name: "Filter" })).toBeHidden();
     }

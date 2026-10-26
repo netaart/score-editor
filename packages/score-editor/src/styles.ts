@@ -967,7 +967,7 @@ ${labelThinning()}
 .sce-root .sce-meter-input {
   min-height: 28px;
   padding: 0 6px;
-  border: 1px solid color-mix(in srgb, var(--sce-_text) 47%, var(--sce-_bg));
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 52%, var(--sce-_bg));
   border-radius: var(--sce-_radius);
   background: var(--sce-_bg);
   color: var(--sce-_text);
