@@ -92,7 +92,7 @@ describe("what a section offers", () => {
     ]);
   });
 
-  it("offers the unnamed opening only delete and naming, and says why it cannot be copied or moved", () => {
+  it("offers the unnamed opening rename, start and delete, and refuses duplicate and the moves", () => {
     expect(summary(open(THREE), 0)).toEqual([
       ["rename", null],
       ["start", null],

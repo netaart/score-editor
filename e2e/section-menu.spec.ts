@@ -116,14 +116,15 @@ test.describe("opening the menu of a section", () => {
     await expect(menu(page, "Section chorus")).toBeVisible();
   });
 
-  test("a finger can press 12px above a band, which makes a target of 36px, and a mouse cannot", async ({
+  test("a finger can press 12px above a band, which makes a target of at least 37px, and a mouse cannot", async ({
     page,
     harness,
     isMobile,
   }) => {
     await openSong(harness);
     const band = await box(bandButton(page, "Section verse"));
-    // WCAG 2.5.8 (AA) asks for 24 by 24 CSS pixels; DESIGN.md asks 36px of a control on a coarse pointer. The row is 25px.
+    // WCAG 2.5.8 (AA) asks for 24 by 24 CSS pixels; DESIGN.md asks 36px of a control on a coarse pointer. The row is
+    // 25px and the ::before adds 12px above it, so the target is at least 37px.
     if (isMobile) expect(band.height).toBeGreaterThanOrEqual(24);
     const above = (offset: number) =>
       page.evaluate(
@@ -155,7 +156,7 @@ test.describe("opening the menu of a section", () => {
     expect(Math.abs(open.x - name.x)).toBeLessThan(2);
   });
 
-  test("a menu near the right edge of the window is as wide as it is anywhere", async ({ page, harness, press }) => {
+  test("a menu keeps its text width wherever it is placed", async ({ page, harness, press }) => {
     await openSong(harness);
     await press(bandButton(page, "Section chorus"));
     const near = await box(menu(page, "Section chorus"));
@@ -290,7 +291,7 @@ test.describe("naming a section", () => {
     await expect(nameField(page, "Rename")).toBeFocused();
     await expect(nameField(page, "Rename")).toHaveValue("verse");
     await expect(barField(page, "Rename")).toBeHidden();
-    await expect(form(page, "Rename").getByText("This section covers")).toBeHidden();
+    await expect(form(page, "Rename").getByText("This section covers bars 3 to 5.")).toBeVisible();
     await nameField(page, "Rename").fill("bridge");
     await page.keyboard.press("Enter");
 
@@ -314,6 +315,7 @@ test.describe("naming a section", () => {
     await press(choice(page, "Unnamed section", "Name this section…"));
 
     await expect(form(page, "Name this section")).toBeVisible();
+    await expect(form(page, "Name this section").getByText("This section covers bars 1 to 2.")).toBeVisible();
     await expect(nameField(page, "Name this section")).toHaveValue("");
     await nameField(page, "Name this section").fill("intro");
     await press(formButton(page, "Name this section", "Name"));
@@ -459,8 +461,17 @@ test.describe("starting a section at a bar", () => {
 
     await barField(page, title).fill("");
     await page.keyboard.press("Enter");
-    await expect(refusalLine(page, title)).toHaveText("Enter the bar where the section starts.");
+    await expect(refusalLine(page, title)).toHaveText("The bar is outside this score.");
+    await expect(barField(page, title)).toHaveAttribute("aria-invalid", "true");
     expect(await harness.layout.canUndo()).toBe(false);
+    expect(await harness.layout.scoreText()).toBe(SONG);
+
+    await barField(page, title).fill("abc");
+    await page.keyboard.press("Enter");
+    await expect(refusalLine(page, title)).toHaveText("The bar is outside this score.");
+    await expect(barField(page, title)).toHaveAttribute("aria-invalid", "true");
+    expect(await harness.layout.canUndo()).toBe(false);
+    expect(await harness.layout.scoreText()).toBe(SONG);
 
     await barField(page, title).fill("3");
     await page.keyboard.press("Enter");
@@ -517,9 +528,45 @@ test.describe("starting a section at a bar", () => {
 
     // What the line says is what the command does.
     await barField(page, title).fill("6");
+    await expect(formButton(page, title, "Rename")).toBeVisible();
     await nameField(page, title).fill("bridge");
     await page.keyboard.press("Enter");
     await expect(bandNames(page)).toHaveText(["Unnamed", "verse", "bridge"]);
+    await expect(said(page)).toHaveText("Renamed section “chorus” to “bridge”");
+  });
+
+  test("names the section the typed bar is in, and says that the command splits it", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+    await press(bandButton(page, "Section verse"));
+    await press(choice(page, "Section verse", `${title}…`));
+    await barField(page, title).fill("7");
+    const context = "Bar 7 is in “chorus”, which covers bars 6 to 7, so this splits it.";
+    await expect(form(page, title).getByText(context)).toBeVisible();
+    await expect(barField(page, title)).toHaveAccessibleDescription(context);
+    await nameField(page, title).fill("bridge");
+    await page.keyboard.press("Enter");
+    await expect(bandNames(page)).toHaveText(["Unnamed", "verse", "chorus", "bridge"]);
+    await expect(said(page)).toHaveText("Started section “bridge” at bar 7");
+  });
+
+  test("a bar that starts the unnamed section names it, and the form confirms Name", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness);
+    await press(bandButton(page, "Section verse"));
+    await press(choice(page, "Section verse", `${title}…`));
+    await barField(page, title).fill("1");
+    await expect(formButton(page, title, "Name")).toBeVisible();
+    await nameField(page, title).fill("intro");
+    await page.keyboard.press("Enter");
+    await expect(bandNames(page)).toHaveText(["intro", "verse", "chorus"]);
+    await expect(said(page)).toHaveText("Named the unnamed section “intro”");
   });
 
   test("shows a refusal under the field it is about", async ({ page, harness, press }) => {
@@ -545,7 +592,7 @@ test.describe("starting a section at a bar", () => {
 });
 
 test.describe("a choice that cannot be done", () => {
-  test("the unnamed music can only be named and deleted, and the muted choices say why", async ({
+  test("the unnamed music can be named or deleted, and duplicate and the moves say why", async ({
     page,
     harness,
     press,
