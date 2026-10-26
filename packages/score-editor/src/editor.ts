@@ -12,6 +12,7 @@ import { create } from "./dom";
 import { createDraftBinding, type DraftBinding } from "./draft-binding";
 import { mountDraftConflict } from "./draft-conflict";
 import { installEditKeys } from "./edit-keys";
+import { type HandoffControl, type HandoffSource, mountHandoffControl } from "./handoff-control";
 import { hostChanges } from "./host-changes";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
@@ -61,6 +62,7 @@ export class Editor implements MountedEditor {
   /** Where the draft conflict strip goes, between the toolbar and the cut notice; a comment so it takes no box. */
   private readonly draftAnchor: Comment;
   private conflict: ViewPart | null = null;
+  private handoff: HandoffControl | null = null;
   private staffMounted = false;
   private textMounted = false;
   private shownView: ViewName = "arrangement";
@@ -120,12 +122,30 @@ export class Editor implements MountedEditor {
         projectPanel: true,
         pencil: true,
         draftKeeper: this.drafts,
+        onChooseBars: (bar) => {
+          const number = this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);
+          if (!number) return;
+          delete number.dataset.pointerFocus;
+          number.dataset.keyFocus = "";
+          number.focus();
+        },
       }),
     );
+    const toolbar = this.root.querySelector<HTMLElement>(".sce-toolbar");
+    if (toolbar !== null) {
+      this.handoff = mountHandoffControl(
+        toolbar,
+        this.session,
+        this.drafts,
+        () => this.handoffSource(),
+        toolbar.querySelector(".sce-part-restore") ?? toolbar.querySelector(".sce-spacer"),
+      );
+      this.parts.push(this.handoff);
+    }
     this.draftAnchor = doc.createComment("draft conflict");
     this.chrome.appendChild(this.draftAnchor);
     this.syncDraftParts();
-    this.parts.push(mountCutNotice(this.chrome, this.session));
+    this.parts.push(mountCutNotice(this.chrome, this.session, { onRefused }));
     this.stalePane = pane(this.chrome);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));
     const body = create(doc, "div", "sce-body", this.root);
@@ -190,6 +210,7 @@ export class Editor implements MountedEditor {
       else this.session.replaceProject(patch.project);
     });
     this.syncDraftParts();
+    this.handoff?.refresh();
   }
 
   destroy(): void {
@@ -207,6 +228,19 @@ export class Editor implements MountedEditor {
 
   private get editable(): boolean {
     return this.options.editable !== false;
+  }
+
+  /** What the handoff control reads: nothing while the editor cannot edit or the host gave no callback. */
+  private handoffSource(): HandoffSource | null {
+    const onHandoff = this.options.onHandoff;
+    if (onHandoff === undefined || this.drafts.status === "opening") return null;
+    return {
+      original: this.options.project,
+      dialects: this.options.dialects,
+      onHandoff,
+      ...(this.options.title === undefined ? {} : { title: this.options.title }),
+      ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
+    };
   }
 
   private applyLanguage(): void {

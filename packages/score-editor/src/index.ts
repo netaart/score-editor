@@ -4,6 +4,8 @@
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
+export type { ChangeLogOptions, HandoffInstructionOptions } from "./change-log";
+export { changeLog, handoffInstruction } from "./change-log";
 export type { ChordSlot } from "./chord-edit";
 export { chordSlots, nearestChordSlot } from "./chord-edit";
 export { mountChordTrack } from "./chord-track";
@@ -73,6 +75,7 @@ export {
   syllableCount,
   unalignedLyricLines,
 } from "./lyrics";
+export { COMMON_METERS, meterAllowed, meterChoices } from "./meter";
 export { mount } from "./mount";
 // The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
@@ -99,7 +102,10 @@ export type {
   Truncation,
 } from "./score";
 export { noteId, TICKS_PER_QUARTER } from "./score";
+export type { SectionAction, SectionActionName } from "./section-actions";
+export { sectionActions } from "./section-actions";
 export type {
+  BarSelection,
   DispatchResult,
   EditingSession,
   InsertionPoint,
@@ -147,6 +153,7 @@ export type {
   DraftStoreEntry,
   DraftWriteResult,
   DurationSet,
+  HandoffPayload,
   Language,
   MeterRule,
   MountedEditor,

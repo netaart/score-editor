@@ -24,7 +24,7 @@ import { mountNoteFocus, type NoteFocus } from "./note-focus";
 import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from "./playhead";
 import { previewPlayer } from "./preview-player";
 import type { Note, Score } from "./score";
-import type { EditingSession, InsertionPoint } from "./session";
+import type { BarSelection, EditingSession, InsertionPoint } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
 import { announceVoice } from "./voice-announcements";
 
@@ -49,6 +49,8 @@ interface Drawn {
   readonly owners: Map<Element, string>;
   readonly insertionPoint: InsertionPointLine;
   readonly playhead: PlayheadLine;
+  /** The full-height band over the chosen bars, under the notes. */
+  readonly barSelection: HTMLElement;
   /** The notes drawn as selected now. */
   framed: ReadonlySet<string>;
 }
@@ -71,7 +73,12 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
   let drawn: Drawn | null = null;
   let root: HTMLElement | null = null;
   let noteFocus: NoteFocus | null = null;
-  let shown: { selection: ReadonlyArray<string>; point: InsertionPoint | null; editable: boolean } | null = null;
+  let shown: {
+    selection: ReadonlyArray<string>;
+    point: InsertionPoint | null;
+    bars: BarSelection | null;
+    editable: boolean;
+  } | null = null;
 
   /** The ids drawn as selected for a selection: every selected note of this voice, with the whole chain it is tied into. */
   function framedFor(selection: ReadonlyArray<string>): Set<string> {
@@ -119,13 +126,35 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     }
   }
 
+  /** Draws the band over the chosen run through this lane; the ruler keeps the same band in its own row. */
+  function drawBarSelection(bars: BarSelection | null, editable: boolean): void {
+    if (!drawn) return;
+    const first = bars === null || !editable ? undefined : drawn.score.bars[bars.from];
+    const last = bars === null || !editable ? undefined : drawn.score.bars[bars.from + bars.count - 1];
+    if (!first || !last) {
+      drawn.barSelection.hidden = true;
+      return;
+    }
+    drawn.barSelection.hidden = false;
+    drawn.barSelection.style.setProperty("--t", String(first.start));
+    drawn.barSelection.style.setProperty("--d", String(last.start + last.length - first.start));
+  }
+
   function refresh(): void {
     const editable = session.view.editable;
-    const { selection, insertionPoint: point } = session;
-    if (shown && shown.selection === selection && shown.point === point && shown.editable === editable) return;
-    shown = { selection, point, editable };
+    const { selection, insertionPoint: point, barSelection: bars } = session;
+    if (
+      shown &&
+      shown.selection === selection &&
+      shown.point === point &&
+      shown.bars === bars &&
+      shown.editable === editable
+    )
+      return;
+    shown = { selection, point, bars, editable };
     root?.setAttribute("data-editable", String(editable));
     if (!drawn) return;
+    drawBarSelection(bars, editable);
     const wanted = editable ? framedFor(selection) : new Set<string>();
     for (const id of drawn.framed) if (!wanted.has(id)) markSelected(id, false);
     for (const id of wanted) if (!drawn.framed.has(id)) markSelected(id, true);
@@ -199,6 +228,9 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           tail.setAttribute("aria-hidden", "true");
           tail.style.cssText = `--t:${cut.missingFrom};--d:${gridTicks(score) - cut.missingFrom}`;
         }
+        const barSelection = create(doc, "div", "sce-bar-selection", lane);
+        barSelection.setAttribute("aria-hidden", "true");
+        barSelection.hidden = true;
         const list = create(doc, "div", "sce-notes", lane);
         list.setAttribute("role", "list");
         list.setAttribute("aria-label", voice);
@@ -218,6 +250,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           owners: new Map(),
           insertionPoint: createInsertionPointLine(lane, score, t),
           playhead: createPlayheadLine(lane, score),
+          barSelection,
           framed: new Set(),
         };
         const blocks = doc.createDocumentFragment();

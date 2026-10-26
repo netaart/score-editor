@@ -1,6 +1,7 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the Select and Grid menus, the read-only badge, the synth preview control, the Filter button and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
+import { mountBarMenu } from "./bar-menu";
 import { create, requireDom } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { mountRestoreControl } from "./draft-restore";
@@ -11,6 +12,7 @@ import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountMeterControl } from "./meter-control";
 import { pencilMode } from "./pencil-mode";
 import { mountProjectControl } from "./project-control";
 import { mountProjectNoticeStrip } from "./project-notice-strip";
@@ -56,6 +58,11 @@ export interface ToolbarOptions extends EditingPartOptions {
   /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
   /**
+   * Puts the focus on the bar the Bars menu chose. The default editor passes its ruler's way there; a host that mounts
+   * the toolbar without a ruler can leave it out, and the menu still chooses the bar in the session.
+   */
+  onChooseBars?: (bar: number) => void;
+  /**
    * Whether the toolbar holds the pencil toggle. Off by default, so a toolbar a host already mounts gains no control or
    * tab stop; the default editor turns it on. A host that mounts the toolbar itself can turn it on when it has a voice
    * track to draw on.
@@ -86,6 +93,10 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const root = create(doc, "div", "sce-root sce-part sce-part-toolbar");
   el.appendChild(root);
   const live = createLiveRegion(root);
+  const refused = sayRefusals(live, session, options.onRefused);
+  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
+  // project changes by anything else, as the text view keeps its notice.
+  const noticeStrip = mountProjectNoticeStrip(root, session);
 
   const row = create(doc, "div", "sce-toolbar", root);
   if (options.viewSwitch) row.dataset.views = "";
@@ -105,10 +116,17 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.type = "button";
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
-  const pencil = pencilMode(session);
-  const showsPencil = options.pencil === true;
   const select = mountSelectionMenu(row, session);
   const grid = mountGridControl(row, session, live);
+  const bars = mountBarMenu(row, session, {
+    live,
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+    ...(options.onChooseBars === undefined ? {} : { onChooseBars: options.onChooseBars }),
+  });
+  const meter = mountMeterControl(row, session, {
+    live,
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+  });
   const spacer = create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -118,12 +136,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
   const badge = create(doc, "span", "sce-badge", end ?? row);
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
-  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
-  // project changes by anything else, as the text view keeps its notice.
-  const noticeStrip = mountProjectNoticeStrip(root, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
-  const refused = sayRefusals(live, session, options.onRefused);
   const song = options.tempoKey
     ? mountTempoKeyControls(row, session, {
         refused,
@@ -149,6 +163,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   if (synth) row.dataset.synth = "";
   // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
   const filter = mountFilterPanel(row, session);
+  const pencil = pencilMode(session);
+  const showsPencil = options.pencil === true;
   // The pencil is last too, after the Filter button: the controls before it keep their drawing and Tab order, which the
   // existing toolbar tests pin. It is still in the editing cluster's mode language, just at the end of the row.
   const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
@@ -217,7 +233,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       deletable,
       session.activeView,
       opening,
-      pencil.on,
+      showsPencil && pencil.on,
     ].join();
     if (shown === drawn) return;
     drawn = shown;
@@ -253,6 +269,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      bars.destroy();
+      meter.destroy();
       noticeStrip.destroy();
       song?.destroy();
       projectControl?.destroy();

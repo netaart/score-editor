@@ -2,7 +2,13 @@
 // ABOUTME: Hand-worked texts come from RULES.md S1-S9 and W7-W11; sample sweeps check every untouched bar and note.
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
-import { applyScoreCommand, type Score, type ScoreCommand, type Section } from "@neta-art/score-editor";
+import {
+  applyScoreCommand,
+  formatDiagnostic,
+  type Score,
+  type ScoreCommand,
+  type Section,
+} from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
 interface SampleFact {
@@ -822,6 +828,17 @@ Z2|`);
 
   it("refuses a bar outside the score for naming", () => {
     refuse(KEY_METER_SCORE, { type: "nameSection", bar: 5, name: "outro" }, "bar-out-of-range");
+  });
+
+  it("describes a non-finite bar without printing it as a number", () => {
+    for (const bar of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const result = applyScoreCommand(song2Dialect, KEY_METER_SCORE, { type: "nameSection", bar, name: "outro" });
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.diagnostic.code).toBe("bar-out-of-range");
+      expect(formatDiagnostic(result.diagnostic, "en")).toBe("The bar is outside this score.");
+      expect(formatDiagnostic(result.diagnostic, "zh")).toBe("小节超出了这份乐谱的范围。");
+    }
   });
 
   it("refuses a section index outside the score for renaming", () => {

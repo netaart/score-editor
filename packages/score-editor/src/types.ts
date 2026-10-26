@@ -46,13 +46,29 @@ export interface AxisPartOptions extends EditingPartOptions {
   scroller?: HTMLElement;
 }
 
+/**
+ * The three things the editor hands to a host when the user asks to regenerate with this version: the score as the
+ * `score.abc` attachment, the prefilled instruction in the interface language, and the final song project.
+ */
+export interface HandoffPayload {
+  readonly attachment: {
+    readonly name: "score.abc";
+    readonly mediaType: "text/plain";
+    readonly text: string;
+  };
+  /** The instruction the host prefills: title, the song2 command, the final fields and the change log. */
+  readonly instruction: string;
+  /** The project as it stands, including the lyric lines and the fields the instruction states. */
+  readonly project: SongProject;
+}
+
 export interface MountOptions {
   /** Interface language. */
   language: Language;
   /**
    * Whether the user may change the score. Defaults to true. While true the toolbar offers undo and redo, a click or tap
-   * selects a note or sets the insertion point, and Delete, the history keys and the insertion point keys act. While
-   * false none of that exists, the score is only shown, and the toolbar shows the read-only badge.
+   * selects a note or sets the insertion point, and the Delete key, the history keys and the insertion point keys act.
+   * While false none of that exists, the score is only shown, and the toolbar shows the read-only badge.
    */
   editable?: boolean;
   /** Receives every one-time message the editor wants shown, as listed in `NOTICE_CODES`. */
@@ -63,6 +79,14 @@ export interface MountOptions {
   dialects: DialectRegistry;
   /** The host's draft storage; see "In the default editor" in the package README. */
   drafts?: DraftStore;
+  /** The work's title for the handoff instruction; the project's source key when absent or blank. */
+  title?: string;
+  /**
+   * Receives what the editor hands to the host's agent when the user presses the handoff button: the score as
+   * `score.abc`, the prefilled instruction and the final project. Without this callback there is no button. The editor
+   * never calls a generation API and never sends anything by itself.
+   */
+  onHandoff?: (handoff: HandoffPayload) => void;
 }
 
 export interface MountedEditor {

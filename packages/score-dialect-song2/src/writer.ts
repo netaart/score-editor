@@ -352,6 +352,16 @@ function cutWasRepaired(score: Score, source: Song2Source): boolean {
   return source.truncation !== null && score.truncation === null;
 }
 
+/** True when an edit changed the cut, so the bar-grid writer must state the new one. */
+function cutChanged(score: Score, source: Song2Source): boolean {
+  const before = source.truncation;
+  const after = score.truncation;
+  if (before === null || after === null) return before !== after;
+  // The unfinished-chord flag changes with the last chord and the normal writer drops that tail; the
+  // cut's voice, bar and length decide whether the bar-grid writer has to state a different cut.
+  return before.voice !== after.voice || before.bar !== after.bar || before.short !== after.short;
+}
+
 function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
   if (!sectionsMatchSource(score, source)) return true;
   const content = sourceContentByBar(source);
@@ -403,7 +413,7 @@ function writeHeader(score: Score, source: Song2Source, lines: string[]): void {
 /** Writes a score: untouched bars keep their read bytes, changed bars are rewritten whole. */
 export function serializeSong2(score: Score): string {
   const source = sourceOf(score);
-  if (barGridNeedsWriting(score, source) || cutWasRepaired(score, source)) {
+  if (barGridNeedsWriting(score, source) || cutWasRepaired(score, source) || cutChanged(score, source)) {
     return score.truncation !== null ? serializeTruncatedBarsSong2(score, source) : serializeBarsSong2(score, source);
   }
   const lines = source.text.split("\n");

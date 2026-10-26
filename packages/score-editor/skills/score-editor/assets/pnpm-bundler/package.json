@@ -8,8 +8,8 @@
     "preview": "node serve.mjs"
   },
   "dependencies": {
-    "@neta-art/score-dialect-song2": "0.1.0",
-    "@neta-art/score-editor": "0.1.0"
+    "@neta-art/score-dialect-song2": "0.2.0",
+    "@neta-art/score-editor": "0.2.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2"
