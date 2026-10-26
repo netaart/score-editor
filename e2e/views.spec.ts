@@ -654,22 +654,82 @@ const drawnNotes = (page: Page) => staffSlot(page).locator("svg .abcjs-note");
 const drawnRests = (page: Page) => staffSlot(page).locator("svg .abcjs-rest");
 /** The staff view's cursor, in the drawing's shadow root like the notes it stands over. */
 const staffCursor = (page: Page) => staffSlot(page).locator(".sce-staff-cursor");
-/** The x of each bar line abcjs drew, in drawing coordinates. */
-const staffBarXs = (page: Page) =>
-  staffSlot(page)
-    .locator("svg .abcjs-bar")
-    .evaluateAll((nodes) =>
-      nodes
-        .map((node) => (node as SVGGraphicsElement).getBBox())
-        .map((box) => box.x)
-        .sort((a, b) => a - b),
-    );
-/** Where the cursor stands, in pixels in the drawing: the same coordinates as the SVG boxes beside it. */
-async function staffCursorX(page: Page) {
+/** A drawing box, in pixels from the drawing host's corner: the coordinates the cursor is positioned in. */
+interface DrawnBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** The boxes of the elements matching `selector`, in the drawing host's coordinates. */
+function drawnBoxes(page: Page, selector: string): Promise<DrawnBox[]> {
+  return staffSlot(page)
+    .locator(selector)
+    .evaluateAll((nodes) => {
+      const root = nodes[0]?.getRootNode();
+      const host = root && "host" in root ? ((root as ShadowRoot).host as HTMLElement) : null;
+      const base = host?.getBoundingClientRect();
+      if (!base) return [];
+      return nodes.map((node) => {
+        const box = (node as SVGGraphicsElement).getBoundingClientRect();
+        return {
+          x: box.left - base.left,
+          y: box.top - base.top,
+          width: box.width,
+          height: box.height,
+        };
+      });
+    });
+}
+
+/** The bar lines and staff systems abcjs drew, in the drawing host's coordinates. */
+const staffBars = (page: Page) => drawnBoxes(page, "svg .abcjs-bar");
+const staffSystems = (page: Page) => drawnBoxes(page, "svg .abcjs-staff");
+const staffNotes = (page: Page) => drawnBoxes(page, "svg .abcjs-note");
+
+/** The cursor's box in the drawing host's coordinates. */
+async function staffCursorBox(page: Page) {
   const found = await box(staffCursor(page));
   const drawingAt = await box(drawing(page));
-  return found.x + found.width / 2 - drawingAt.x;
+  return {
+    x: found.x - drawingAt.x,
+    y: found.y - drawingAt.y,
+    width: found.width,
+    height: found.height,
+  };
 }
+
+/** Where the cursor stands, in pixels in the drawing: the same coordinates as the SVG boxes beside it. */
+async function staffCursorX(page: Page) {
+  const found = await staffCursorBox(page);
+  return found.x + found.width / 2;
+}
+
+/** The staff system the cursor is on: the one whose vertical middle is nearest the cursor's. */
+function systemAt(systems: DrawnBox[], y: number): DrawnBox {
+  const first = systems[0];
+  if (!first) throw new Error("the staff drew no system");
+  return systems.reduce((best, system) =>
+    Math.abs(system.y + system.height / 2 - y) < Math.abs(best.y + best.height / 2 - y) ? system : best,
+  );
+}
+
+/** What the drawing shows around the cursor: its system, the bar lines and notes on that system, and all notes. */
+async function staffPlace(page: Page) {
+  const cursor = await staffCursorBox(page);
+  const system = systemAt(await staffSystems(page), cursor.y + cursor.height / 2);
+  const allBars = await staffBars(page);
+  const allNotes = await staffNotes(page);
+  const bars = allBars
+    .filter((bar) => bar.y >= system.y - 2 && bar.y <= system.y + system.height + 2)
+    .sort((a, b) => a.x - b.x);
+  const notes = allNotes
+    .filter((note) => note.y + note.height >= system.y - 30 && note.y <= system.y + system.height + 30)
+    .sort((a, b) => a.x - b.x);
+  return { cursor, system, bars, notes, allNotes };
+}
+
 /** Drives the staff part's play position as a host player does. */
 const setStaffPosition = (page: Page, seconds: number | null) =>
   page.evaluate((value) => window.harness.layout.setPlayPosition(value), seconds);
@@ -795,30 +855,30 @@ test.describe("the staff view", () => {
     // draw the line the first bar starts at, so the first drawn line can be the opening one or the end of bar 1.
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], editable: false });
     await expect(drawnNotes(page)).toHaveCount(5);
-    const bars = await staffBarXs(page);
-    expect(bars.length).toBeGreaterThanOrEqual(2);
-    const opening = bars.length > 2;
-    const barTwo = bars[opening ? 1 : 0] as number;
-    const end = bars[opening ? 2 : 1] as number;
 
     await setStaffPosition(page, 0);
     await expect(staffCursor(page)).toBeVisible();
-    const start = await staffCursorX(page);
-    if (opening) expect(Math.abs(start - (bars[0] as number))).toBeLessThan(4);
-    else {
-      expect(start).toBeGreaterThan(0);
-      expect(start).toBeLessThan(barTwo);
-    }
+    const first = await staffPlace(page);
+    const start = first.bars.length > 2 ? first.bars[0]?.x : first.notes[0]?.x;
+    expect(Math.abs((await staffCursorX(page)) - (start ?? 0))).toBeLessThan(2);
 
     await setStaffPosition(page, 2.4);
-    expect(Math.abs((await staffCursorX(page)) - barTwo)).toBeLessThan(4);
+    const second = await staffPlace(page);
+    // A later system starts at its first bar, which has no line of its own; otherwise bar 2 starts at the line
+    // that closes bar 1 (the first line when there is no opening line).
+    const wrapped = second.notes.length < second.allNotes.length;
+    const opening = second.bars.length > 2;
+    const barTwo = wrapped ? second.notes[0]?.x : second.bars[opening ? 1 : 0]?.x;
+    const end = wrapped ? second.bars[0]?.x : second.bars[opening ? 2 : 1]?.x;
+    expect(Math.abs((await staffCursorX(page)) - (barTwo ?? 0))).toBeLessThan(2);
 
     // 3.6 s is half way through the second bar, which is where the cursor is drawn.
     await setStaffPosition(page, 3.6);
-    expect(Math.abs((await staffCursorX(page)) - (barTwo + (end - barTwo) / 2))).toBeLessThan(4);
+    const middle = ((barTwo ?? 0) + (end ?? 0)) / 2;
+    expect(Math.abs((await staffCursorX(page)) - middle)).toBeLessThan(2);
 
     await setStaffPosition(page, 1000);
-    expect(Math.abs((await staffCursorX(page)) - end)).toBeLessThan(4);
+    expect(Math.abs((await staffCursorX(page)) - (end ?? 0))).toBeLessThan(2);
 
     await setStaffPosition(page, null);
     await expect(staffCursor(page)).toBeHidden();
@@ -835,16 +895,18 @@ test.describe("the staff view", () => {
       tempoChanges: [{ at: 1024, tempo: { unit: "1/4", bpm: 60 } }],
     });
     await expect(drawnNotes(page)).toHaveCount(9);
-    const bars = await staffBarXs(page);
-    expect(bars.length).toBeGreaterThanOrEqual(3);
-    const opening = bars.length > 3;
-    const barTwo = bars[opening ? 1 : 0] as number;
-    const barThree = bars[opening ? 2 : 1] as number;
-
     await setStaffPosition(page, 2.5);
 
-    const expected = barTwo + (barThree - barTwo) / 8;
-    expect(Math.abs((await staffCursorX(page)) - expected)).toBeLessThan(4);
+    const place = await staffPlace(page);
+    // On a later system bar 2 is the first bar and starts at its first drawn note; in one system it starts at
+    // the line that closes bar 1.
+    const wrapped = place.notes.length < place.allNotes.length;
+    const opening = place.bars.length > 3;
+    const barTwo = wrapped ? place.notes[0]?.x : place.bars[opening ? 1 : 0]?.x;
+    const barThree = wrapped ? place.bars[0]?.x : place.bars[opening ? 2 : 1]?.x;
+
+    const expected = (barTwo ?? 0) + ((barThree ?? 0) - (barTwo ?? 0)) / 8;
+    expect(Math.abs((await staffCursorX(page)) - expected)).toBeLessThan(2);
   });
 
   test("shows the preview on the same cursor, from the start while it plays, and the host's position again when it stops", async ({
