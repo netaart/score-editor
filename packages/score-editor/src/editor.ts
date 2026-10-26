@@ -21,8 +21,8 @@ import { type LyricTrackPart, mountLyricTrack } from "./lyric-track";
 import { lyricLinesOf } from "./lyrics";
 import { mountProblemView } from "./problem-view";
 import { mountSaveConflict } from "./save-conflict";
-import { mountScoreSourceControl } from "./save-control";
-import { createScoreFileKeeper, type ScoreFileKeeper } from "./score-source";
+import { mountScoreSourceControl, type ScoreSourceControl } from "./save-control";
+import { createScoreFileKeeper, type ScoreFileHandoffResult, type ScoreFileKeeper } from "./score-source";
 import { watchScrollCue } from "./scroll-cue";
 import {
   createEditingSession,
@@ -101,7 +101,7 @@ export class Editor implements MountedEditor {
   private readonly live: LiveRegion;
   private scoreSource: ScoreFileSource | null;
   private scoreFile: ScoreFileKeeper | null = null;
-  private saveControl: ViewPart | null = null;
+  private saveControl: ScoreSourceControl | null = null;
   private saveConflict: ViewPart | null = null;
   private scoreRestore: ViewPart | null = null;
   /** The chrome above the body: toolbar, conflict strip, cut sentence and stale notice, bounded by the music's floor. */
@@ -278,6 +278,11 @@ export class Editor implements MountedEditor {
 
   hasUnsavedChanges(): boolean {
     return this.scoreFile?.unsaved ?? false;
+  }
+
+  save(): Promise<ScoreFileHandoffResult> {
+    if (this.destroyed) return Promise.resolve("unchanged");
+    return this.saveControl?.save() ?? Promise.resolve("unchanged");
   }
 
   destroy(): void {
