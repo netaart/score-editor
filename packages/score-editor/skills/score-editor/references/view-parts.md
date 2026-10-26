@@ -30,7 +30,7 @@ added; calling it twice is harmless.
 | `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, tempoKey?: boolean, projectPanel?: boolean, pencil?: boolean, tools?: ScoreTool[], onChooseBars?: (bar: number) => void }`; `mountToolbar` returns a `ToolbarPart`, whose `setTools(tools)` replaces the Tools panel's host tools and whose `openProject(field?)` opens the Project panel on a field. The options are:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, tempoKey?: boolean, projectPanel?: boolean, pencil?: boolean, tools?: ScoreTool[], onChooseBars?: (bar: number) => void }`; `mountToolbar` returns a `ToolbarPart`, whose `setTools(tools)` replaces the Tools panel's host tools and whose `openProject(field?)` opens the Project panel on a field and whose `say(words)` speaks in the toolbar's live region. The options are:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
 switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
@@ -325,7 +325,7 @@ turns both on. The behaviour, the rules and the controls are in
 [DESIGN's tempo and transpose section](../../../../../DESIGN.md#tempo-key-and-transpose) and
 [its panel section](../../../../../DESIGN.md#song-project-panel).
 
-A host that wants the panel somewhere of its own mounts it and leaves `projectPanel` off; it gets a `ProjectPanel`, whose `focus(field)` puts the focus on one of `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`,
+A host that wants the panel somewhere of its own mounts it and leaves `projectPanel` off; it gets a `ProjectPanel` (its options are `ProjectPanelOptions`), whose `focus(field)` puts the focus on one of `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`,
 whose `commit()` takes a field that has not been let go and whose `destroy()` changes no document:
 
 ```ts

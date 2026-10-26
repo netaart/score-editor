@@ -186,7 +186,7 @@ The default editor's toolbar holds four controls that act on the whole song. The
 The Project button after them (`projectPanel: true` in `ToolbarOptions`; `mount` passes it) opens the song project panel in a popover under it. The panel is a view part of its own, `mountProjectPanel(el, session, { onRefused })`, for a host that wants it somewhere else; it then leaves `projectPanel` off. It returns a `ProjectPanel`, whose `commit()` takes a field that has not been let go, for a host that closes its own container; `destroy()` changes no document. It holds:
 
 - the style text, the score mode (`full` or `melody`) and the seed, each edited in place. The style text is taken as one command when its box loses the focus or the popover closes, the score mode when a radio is chosen, the seed when it is confirmed; each is one undo step. The Clear button sets the seed to `null`. A seed that is not a whole number is refused as `setSeed` refuses it, and the field goes back to the project's value.
-- the lyrics as `joinLyrics` writes them, in a read-only region, with their length: "N of 2000 characters" (`LYRICS_MAX_CHARACTERS`). Over the limit nothing stops the person; the panel says so (`lyrics-too-long`), and a line with no bar to stand on is told as `lyrics-unaligned`.
+- the lyrics as `joinLyrics` writes them, in a read-only region, with their length: "N of 4000 characters" (`LYRICS_MAX_CHARACTERS`). Over the limit nothing stops the person; the panel says so (`lyrics-too-long`), and a line with no bar to stand on is told as `lyrics-unaligned`.
 - the notices the project carries (`checkProject`). For `melody-with-chords` there are two buttons, "Delete all chords" (`removeChords`) and "Switch to full" (`setScoreMode`), each one undo step. While the popover is closed the Project button's name says how many notices there are.
 - a field the host did not give (an empty style, a `null` seed, a score mode that is missing) is empty and says "Not set"; the person can fill it. While the session is read-only the panel shows the values as text, edits nothing and offers no fix; the notices stay.
 
@@ -297,24 +297,32 @@ const editor = mount(el, {
 editor.hasUnsavedChanges(); // the same answer, asked just before closing
 ```
 
-The toolbar has **Save** in its right-hand group, before the view switch. At 1280px an **Unsaved** pill sits beside it;
-below 480px the pill gives way to a 6px dot so the row does not grow, and at 320px the word gives way too, leaving the
-same 36px icon button the others use on a coarse pointer. Ctrl/Cmd+S saves while the focus is inside the editor. While there is nothing to save, or a save is in flight or a conflict stands,
-Save is `aria-disabled`. A slow save reads **Saving…**; a failed one says **Save failed**, leaves the changes in place,
-and sends `notify` the `score-save-failed` notice. A version conflict shows the draft conflict's strip with
-**Overwrite with my version** (read their version, then write ours over it) and **Load the other version** (their text
-opens as a new document); the editor never overwrites by itself. Restore original asks about the last saved version and
-replaces the project without reading or writing the file. The change log and the handoff use the last saved project as
-their original. No draft call is made, even when `drafts` is also given.
+The toolbar has **Save** in its right-hand group, before the view switch. It chooses one form for the box from the room
+the widest state needs (the pill word plus the button word over clean, dirty, saving, failed and conflict), re-chooses
+only when the toolbar's width, the language or the font metrics change, and never because the state changed. While the
+widest state's words fit in the height the toolbar has without the control, the state is in words: **Unsaved**,
+**Saving…** in the button, **Save failed** in the pill with **Save again** on the button, and **Unsaved** in a conflict.
+Where the words would add a row, every state uses the icon and one mark (`•`, `!`, `?`, `…` while saving). The pill is
+`aria-hidden`; the button's description carries the state, and a failed save also has the recovery sentence there and as
+its tooltip. The toolbar's live region says **Saved** after a successful write and the recovery sentence after a
+failure. Ctrl/Cmd+S saves while the focus is inside the editor. While there is nothing to save, or a save is in flight
+or a conflict stands, Save is `aria-disabled`. A version conflict shows the draft conflict's strip with **Overwrite with
+my version** (read their version, then write ours over it; the other version can't be brought back) and **Load the other
+version** (their text opens as a new document; your changes here are dropped); the strip is scrolled into the chrome's
+visible box when it appears. Restore original asks about the last saved version, is muted while the file is clean, and
+its answer is **Go back to last save**; it resets the history, so Undo cannot bring the changes back. The change log and
+the handoff use the last saved project as their original. No draft call is made, even when `drafts` is also given.
 
 A **generated score** (the absent source) keeps drafts as before and adds **Save as…** while `onSaveAs` is given; the
 callback receives the current score text. `onSaveAs` is not shown in read-only mode.
 
 `requiredInputs` is the host's list of `ProjectField` values (`"style"`, `"scoreMode"`, `"seed"`, `"lyrics"`). While
-one is missing, the handoff trigger reads **Complete required inputs…** instead of opening the review. Style, score
-mode and seed open the Project panel on that field; lyrics show the arrangement and open the lyric track's new-line
-editor, because the Project panel shows lyrics read-only. The editor reads no model declaration. A score-file handoff saves first when the file is
-dirty and stays closed on a conflict or a failed save; its instruction title is the file's name.
+one is missing, the trigger names it (**Add style first…**, **Add lyrics first…**, or **Add 2 required inputs…**). Style,
+score mode and seed open the Project panel on that field; lyrics show the arrangement and open the lyric track's new-line
+editor, because the Project panel shows lyrics read-only. A required empty field's hint starts **Required to
+regenerate.** The editor reads no model declaration. A score-file handoff saves first when the file is dirty (the review
+says **Saves tune.abc first, then sends the song.**) and stays closed on a conflict or a failed save, saying **Not sent: …**
+through a `handoff-not-sent` notice and the toolbar's live region; its instruction title is the file's name.
 
 For a host with its own Save control, `createScoreFileKeeper({ session, original, source, notify?, onUnsavedChange? })`
 returns a `ScoreFileKeeper` with `status`, `unsaved`, `failed`, `savedProject`, `version`, `save`, `overwrite`,
@@ -367,7 +375,7 @@ Give `mount` a `drafts` store and the editor does the keeper's half that a perso
 - **Wiring.** While the editor is editable and has a store, and the source is a generated score, `mount` creates one keeper on the project and `destroy()` destroys it, which starts one pending write. A read-only editor, one without `drafts`, or one with a score-file source has no keeper: no read, no write, no list, no Restore original.
 - **Opening.** Until the keeper is ready the editor shows the original, the toolbar badge says "Opening draft…" where a read-only editor says "Read only", and no edit can start: the editing controls are not there and the keys do nothing. When the draft is read (or none is found) the editing controls appear. A store whose reads never settle keeps the editor in this state; there is no timeout, because how long a read may take is the store's to decide.
 - **Restore original.** A word button in the toolbar, shown while the keeper is ready or in conflict and the editor is editable. It opens a question in a native popover of the editor's own, so it stacks above a host's full-screen layer: "Go back to the original score?" and "Every change you made is discarded and the saved draft is deleted. You can't undo this." The focus starts on Cancel; the other answer is "Restore original", which calls `restoreOriginal()` and, once the store has answered, has the toolbar's live region say that the original is back. When the draft could not be cleared it says that too, and the host has had `draft-save-failed`. The question is asked once, and Escape or Cancel leaves everything as it was. The button is there from the first edit, and before it, so a person can always get back to the original; there is no muted state.
-- **Conflict.** When another window wrote the draft first the editor keeps editing, the keeper writes nothing, and a strip between the toolbar and the views says that the draft was changed somewhere else and that nothing is saved until the user chooses. It has two buttons, each of two lines: "Overwrite with my version" ("The other version is replaced by yours.") and "Load the other version" ("It opens here, and your changes in this window are dropped."). They call `overwrite()` and `loadTheirs()`; there is no second question, since the cost is in the button. The strip never takes the focus; its sentence is an alert. Restore original stays available during a conflict.
+- **Conflict.** When another window wrote the draft first the editor keeps editing, the keeper writes nothing, and a strip between the toolbar and the views says that the draft was changed somewhere else and that nothing is saved until the user chooses. It has two buttons, each of two lines: "Overwrite with my version" ("The other version is replaced and can't be brought back.") and "Load the other version" ("It opens here, and your changes in this window are dropped."). They call `overwrite()` and `loadTheirs()`; there is no second question, since the cost is in the button. When it appears, the editor scrolls the chrome so the sentence and both choices are in its visible box. The strip never takes the focus; its sentence is an alert. Restore original stays available during a conflict.
 - **Notices.** `draft-source-changed` and `draft-save-failed` reach the `notify` of the options, in the current language. The editor draws nothing of its own for them; a failed save is tried again after the next edit.
 - **`update`.** A project with another `sourceKey`, `lyrics` or score text is a new original: the keeper is destroyed (it writes what it still holds under the old key), the project is replaced, and a new keeper opens on it. A project with the same original but another `style`, `scoreMode` or `seed` keeps the keeper and the user's edits, and those fields go to the session through the project commands, as one history step. A change to `modelId` has no project command, and a change to the stored `lyricLines` alone is not carried; the editor keeps what it has for those. Passing a project whose every field is equal (the lyric lines by content) is not news, so a host that re-renders does not take the user's edits away. `update({ drafts })` with another store ends the keeper of the old one (it writes what it holds) and opens one on the new, `update({ drafts: undefined })` takes the store away (a pending write is made first, and later edits write nothing), and `update({ editable: false })` ends the keeper in the same way while `update({ editable: true })` opens one again.
 - **Parts.** A host with its own layout puts the strip where it likes with `mountDraftConflict(el, session, keeper)`. The Restore original button and the opening badge belong to the toolbar part and appear when it is given the keeper in its `draftKeeper` option.

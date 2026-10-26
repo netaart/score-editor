@@ -56,6 +56,7 @@ describe("package entries in a node environment", () => {
       "draft-save-failed",
       "score-save-failed",
       "score-load-failed",
+      "handoff-not-sent",
     ]);
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });

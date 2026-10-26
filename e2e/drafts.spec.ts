@@ -356,6 +356,64 @@ test.describe("a draft that another window changed first", () => {
   const overwrite = (page: Page) => page.getByRole("button", { name: "Overwrite with my version" });
   const loadTheirs = (page: Page) => page.getByRole("button", { name: "Load the other version" });
 
+  test("reveals the strip in the chrome without a swipe", async ({ page, harness, press, isMobile }) => {
+    const widths = isMobile ? [412, 320] : [1280];
+    await page.clock.install();
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: isMobile ? 839 : 720 });
+      await page.evaluate(() => {
+        const stage = document.getElementById("stage");
+        if (stage) stage.style.height = "420px";
+      });
+      await harness.mount({ score: { text: QUARTERS }, drafts: true });
+      await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+      const store = new Store(page);
+      await press(noteNamed(page, D4));
+      await page.keyboard.press("Delete");
+      await page.clock.runFor(DEBOUNCE_MS + 100);
+      await store.external("test-page", storedDraft({ source: { lyrics: "", score: QUARTERS }, score: THEIRS }));
+      await press(noteNamed(page, F4));
+      await page.keyboard.press("Delete");
+      await page.clock.runFor(DEBOUNCE_MS + 100);
+      await expect(page.getByRole("alert")).toBeVisible();
+      await page.clock.runFor(50);
+
+      const found = await page.evaluate(() => {
+        const chrome = document.querySelector<HTMLElement>(".sce-chrome");
+        const strip = document.querySelector<HTMLElement>(".sce-part-draft-conflict .sce-draft-conflict");
+        if (!chrome || !strip) return null;
+        const outer = chrome.getBoundingClientRect();
+        const sentence = strip.querySelector<HTMLElement>(".sce-draft-conflict-text")?.getBoundingClientRect();
+        const choices = [...strip.querySelectorAll<HTMLElement>(".sce-draft-choice")].map((choice) => {
+          const area = choice.getBoundingClientRect();
+          const top = document.elementFromPoint(area.left + area.width / 2, area.top + area.height / 2);
+          return {
+            inside: area.top >= outer.top - 0.5 && area.bottom <= outer.top + chrome.clientHeight + 0.5,
+            hit: top === choice || choice.contains(top),
+          };
+        });
+        return {
+          sentenceInside:
+            sentence !== undefined &&
+            sentence.top >= outer.top - 0.5 &&
+            sentence.bottom <= outer.top + chrome.clientHeight + 0.5,
+          choices,
+        };
+      });
+      expect(found?.sentenceInside, `${width}: the sentence is in the chrome`).toBe(true);
+      expect(
+        found?.choices.map((choice) => choice.inside),
+        `${width}: both choices are in the chrome`,
+      ).toEqual([true, true]);
+      expect(
+        found?.choices.map((choice) => choice.hit),
+        `${width}: both choices are on top`,
+      ).toEqual([true, true]);
+      await harness.destroy();
+    }
+  });
+
   /** Our first edit is saved; another window then writes the draft; our next edit is refused as a conflict. */
   async function conflict(page: Page, press: (target: Locator) => Promise<void>) {
     const store = new Store(page);
@@ -386,7 +444,9 @@ test.describe("a draft that another window changed first", () => {
       "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
     );
     await expect(overwrite(page)).toBeVisible();
-    await expect(overwrite(page)).toHaveAccessibleDescription("The other version is replaced by yours.");
+    await expect(overwrite(page)).toHaveAccessibleDescription(
+      "The other version is replaced and can't be brought back.",
+    );
     await expect(loadTheirs(page)).toBeVisible();
     await expect(loadTheirs(page)).toHaveAccessibleDescription(
       "It opens here, and your changes in this window are dropped.",

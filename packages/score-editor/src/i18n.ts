@@ -4,7 +4,7 @@ import type { BarPosition, Cut } from "./arrangement";
 import type { Grid } from "./commands-notes";
 import type { Meter } from "./score";
 import type { ViewName } from "./session";
-import type { Language } from "./types";
+import type { Language, ProjectField } from "./types";
 
 export interface Messages {
   title: string;
@@ -140,6 +140,8 @@ export interface Messages {
   saving: string;
   unsaved: string;
   saveFailed: string;
+  saveAgain: string;
+  saveSaved: string;
   /** The score-file conflict strip, with the same two choices as the draft conflict. */
   saveConflict: string;
   saveConflictText: string;
@@ -151,8 +153,18 @@ export interface Messages {
   restoreSavedQuestion: string;
   restoreSavedWarning: string;
   restoreSavedDone: string;
-  /** The handoff trigger while a required input is missing; it opens the Project panel on that field. */
+  restoreSavedConfirm: string;
+  /** The handoff trigger while a required input is missing; it opens the place that field is entered. */
   handoffMissing: string;
+  requiredAddOne(name: string): string;
+  requiredAddMany(count: number): string;
+  requiredInputName(field: ProjectField): string;
+  requiredHint: string;
+  /** The review's line when a dirty score file is saved before the handoff. */
+  handoffSavesFirst(name: string): string;
+  /** A handoff that was not sent, once for a conflict and once for a failed save. */
+  handoffNotSentConflict: string;
+  handoffNotSentFailed: string;
   /** The tempo, key and transpose controls of the toolbar: the group's name, the field's name and what is said aloud. */
   songControls: string;
   tempo: string;
@@ -483,17 +495,28 @@ const en: Messages = {
   saving: "Saving…",
   unsaved: "Unsaved",
   saveFailed: "Save failed",
+  saveAgain: "Save again",
+  saveSaved: "Saved",
   saveConflict: "Score file conflict",
   saveConflictText:
     "This score file was changed somewhere else after you opened it. Your changes are not saved until you choose.",
   saveOverwrite: "Overwrite with my version",
-  saveOverwriteNote: "The other version is replaced by yours.",
+  saveOverwriteNote: "The other version is replaced and can't be brought back.",
   saveLoadTheirs: "Load the other version",
   saveLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
   restoreSavedQuestion: "Go back to the last saved version?",
   restoreSavedWarning: "Every change since the last save is discarded. You can't undo this.",
   restoreSavedDone: "The last saved version is back",
+  restoreSavedConfirm: "Go back to last save",
   handoffMissing: "Complete required inputs…",
+  requiredAddOne: (name) => `Add ${name} first…`,
+  requiredAddMany: (count) => `Add ${count} required inputs…`,
+  requiredInputName: (field) =>
+    field === "style" ? "style" : field === "lyrics" ? "lyrics" : field === "seed" ? "seed" : "score mode",
+  requiredHint: "Required to regenerate.",
+  handoffSavesFirst: (name) => `Saves ${name} first, then sends the song.`,
+  handoffNotSentConflict: "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
+  handoffNotSentFailed: "Not sent: the score file was not saved. Try again, then regenerate.",
   songControls: "Tempo, key and transpose",
   tempo: "Tempo (BPM)",
   tempoSet: (bpm) => `Tempo set to ${bpm} BPM`,
@@ -602,7 +625,7 @@ const en: Messages = {
   draftConflictText:
     "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
   draftOverwrite: "Overwrite with my version",
-  draftOverwriteNote: "The other version is replaced by yours.",
+  draftOverwriteNote: "The other version is replaced and can't be brought back.",
   draftLoadTheirs: "Load the other version",
   draftLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
   restoreOriginal: "Restore original",
@@ -781,16 +804,27 @@ const zh: Messages = {
   saving: "保存中…",
   unsaved: "未保存",
   saveFailed: "保存失败",
+  saveAgain: "重新保存",
+  saveSaved: "已保存",
   saveConflict: "乐谱文件冲突",
   saveConflictText: "这份乐谱文件在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
   saveOverwrite: "用我的版本覆盖",
-  saveOverwriteNote: "对方的版本会被你的版本替换。",
+  saveOverwriteNote: "对方的版本会被你的版本替换，无法找回。",
   saveLoadTheirs: "载入对方的版本",
   saveLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
   restoreSavedQuestion: "回到上次保存的版本？",
   restoreSavedWarning: "上次保存之后的修改都会丢掉，无法撤销。",
   restoreSavedDone: "已回到上次保存的版本",
+  restoreSavedConfirm: "回到上次保存",
   handoffMissing: "先补上必填项…",
+  requiredAddOne: (name) => `先补${name}…`,
+  requiredAddMany: (count) => `先补 ${count} 个必填项…`,
+  requiredInputName: (field) =>
+    field === "style" ? "风格描述" : field === "lyrics" ? "歌词" : field === "seed" ? "种子" : "乐谱模式",
+  requiredHint: "重新生成前必填。",
+  handoffSavesFirst: (name) => `先保存 ${name}，再发送歌曲。`,
+  handoffNotSentConflict: "未发送：这份乐谱文件在别处被改过。先选一个版本，再重新生成。",
+  handoffNotSentFailed: "未发送：乐谱文件没有保存成功。再试一次，然后重新生成。",
   songControls: "速度、调和移调",
   tempo: "速度（BPM）",
   tempoSet: (bpm) => `速度已设为 ${bpm} BPM`,
@@ -897,7 +931,7 @@ const zh: Messages = {
   draftConflict: "草稿冲突",
   draftConflictText: "这份草稿在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
   draftOverwrite: "用我的版本覆盖",
-  draftOverwriteNote: "对方的版本会被你的版本替换。",
+  draftOverwriteNote: "对方的版本会被你的版本替换，无法找回。",
   draftLoadTheirs: "载入对方的版本",
   draftLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
   restoreOriginal: "恢复原谱",

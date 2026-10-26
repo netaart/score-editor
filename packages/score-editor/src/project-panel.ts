@@ -14,6 +14,11 @@ import { acquireStyles } from "./styles";
 import type { EditingPartOptions, Language, ProjectField, ViewPart } from "./types";
 
 /** The panel as the toolbar's popover holds it: `commit` takes a value typed into a field that has not been let go. */
+export interface ProjectPanelOptions extends EditingPartOptions {
+  /** The model inputs the host marked required; an empty one says so in its hint. */
+  requiredInputs?: ReadonlyArray<ProjectField>;
+}
+
 export interface ProjectPanel extends ViewPart {
   /** The element the popover moves the focus to when it opens. */
   readonly element: HTMLElement;
@@ -41,6 +46,7 @@ export function drawProjectPanel(
   live: LiveRegion,
   onRefused: EditingPartOptions["onRefused"],
   named = true,
+  requiredInputs: ReadonlyArray<ProjectField> = [],
 ): ProjectPanel {
   const doc = parent.ownerDocument;
   const abort = new AbortController();
@@ -49,6 +55,7 @@ export function drawProjectPanel(
   const id = (name: string) => `sce-project-${n}-${name}`;
 
   const root = create(doc, "div", "sce-panel", parent);
+  const required = new Set(requiredInputs);
   root.setAttribute("role", "region");
   root.tabIndex = -1;
   const notices = create(doc, "div", "sce-panel-notices", root);
@@ -242,7 +249,13 @@ export function drawProjectPanel(
     styleValue.textContent = project.style;
     styleHint.hidden = !editable && project.style !== "";
     styleHint.textContent =
-      project.style !== "" ? t.projectStyleHint : editable ? t.projectStyleEmpty : t.projectNotSet;
+      project.style !== ""
+        ? t.projectStyleHint
+        : editable
+          ? required.has("style")
+            ? `${t.requiredHint} ${t.projectStyleEmpty}`
+            : t.projectStyleEmpty
+          : t.projectNotSet;
     if (force || !hasFocus(styleBox)) styleBox.value = project.style;
 
     const mode = modeOf(project);
@@ -250,18 +263,32 @@ export function drawProjectPanel(
     modeValue.hidden = editable || mode === null;
     modeValue.textContent = mode === "full" ? t.projectModeFull : mode === "melody" ? t.projectModeMelody : "";
     modeHint.hidden = mode !== null;
-    modeHint.textContent = editable ? t.projectModeEmpty : t.projectNotSet;
+    modeHint.textContent = editable
+      ? required.has("scoreMode")
+        ? `${t.requiredHint} ${t.projectModeEmpty}`
+        : t.projectModeEmpty
+      : t.projectNotSet;
     for (const [value, { input }] of radios) input.checked = mode === value;
 
     seedLine.hidden = !editable;
     seedValue.hidden = editable || project.seed === null;
     seedValue.textContent = project.seed === null ? "" : String(project.seed);
     seedHint.hidden = !editable && project.seed !== null;
-    seedHint.textContent = project.seed !== null ? t.projectSeedHint : editable ? t.projectSeedEmpty : t.projectNotSet;
+    seedHint.textContent =
+      project.seed !== null
+        ? t.projectSeedHint
+        : editable
+          ? required.has("seed")
+            ? `${t.requiredHint} ${t.projectSeedEmpty}`
+            : t.projectSeedEmpty
+          : t.projectNotSet;
     if (force || !hasFocus(seedField)) seedField.value = project.seed === null ? "" : String(project.seed);
 
     if (reading.kind === "score") {
       const text = joinLyrics(reading.score, lyricLinesOf(project, reading.score));
+      const noLyrics = lyricLinesOf(project, reading.score).every((line) => line.text.trim() === "");
+      lyricsHint.textContent =
+        noLyrics && required.has("lyrics") ? `${t.requiredHint} ${t.projectLyricsHint}` : t.projectLyricsHint;
       lyricsText.textContent = text === "" ? t.projectLyricsEmpty : text;
       lyricsText.dataset.empty = String(text === "");
       lyricsCount.textContent = t.projectLyricsCount(String(lyricCharacterCount(text)), String(LYRICS_MAX_CHARACTERS));
@@ -309,7 +336,7 @@ export function drawProjectPanel(
 export function mountProjectPanel(
   el: HTMLElement,
   session: EditingSession,
-  options: EditingPartOptions = {},
+  options: ProjectPanelOptions = {},
 ): ProjectPanel {
   requireDom("mountProjectPanel");
   const doc = el.ownerDocument;
@@ -317,7 +344,7 @@ export function mountProjectPanel(
   const root = create(doc, "div", "sce-root sce-part sce-part-project");
   el.appendChild(root);
   const live = createLiveRegion(root);
-  const panel = drawProjectPanel(root, session, live, options.onRefused);
+  const panel = drawProjectPanel(root, session, live, options.onRefused, true, options.requiredInputs);
   let destroyed = false;
   return {
     element: panel.element,

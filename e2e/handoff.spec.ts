@@ -337,7 +337,7 @@ test.describe("handing off", () => {
     await external(page, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4"), seed: 8 }));
     await handoffButton(page).click();
     await confirmButton(page).click();
-    await expect(page.getByText(/changed somewhere else/)).toBeVisible();
+    await expect(page.getByRole("alert").filter({ hasText: /changed somewhere else/ })).toBeVisible();
     expect(await harness.handoffs()).toEqual([]);
   });
 

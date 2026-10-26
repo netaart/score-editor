@@ -65,18 +65,24 @@ const editor = mount(el, {
 editor.hasUnsavedChanges(); // false for a generated score
 ```
 
-- The toolbar gets **Save** in the right-hand group, before the view switch. At 1280px an **Unsaved** pill sits beside
-  it; below 480px a 6px dot carries the unsaved state, and at 320px the word gives way to the save icon. Save is
-  `aria-disabled` while there is nothing to write or while a save is in flight or a conflict stands. Ctrl/Cmd+S saves
-  while the focus is inside the editor; outside it the browser's and the host's own shortcuts are untouched.
-- The states are clean (no mark), dirty (`Unsaved` or the dot), saving (`Saving…`), conflict (the strip) and failed
-  (`Save failed`; the host also gets `score-save-failed`). A failed save leaves the changes in place, and Save retries
-  with the same version.
+- The toolbar gets **Save** in the right-hand group, before the view switch. It chooses one form for the box from the
+  room the widest state's words need, and re-chooses only when the toolbar's width, the language or the font metrics
+  change, never when the state changes. While those words fit in the toolbar's height without the control, the state is
+  in words: `Unsaved`, `Saving…` in the button, `Save failed` in the pill with `Save again` on the button, and `Unsaved`
+  in a conflict. Where they would add a row, every state uses the icon and one mark (`•`, `!`, `?`, `…` while saving).
+  The pill is `aria-hidden`; the button's description carries the state and, after a failure, the recovery sentence. The
+  toolbar's live region says `Saved` or the recovery sentence. Save is `aria-disabled` while there is nothing to write,
+  or while a save is in flight or a conflict stands. Ctrl/Cmd+S saves while the focus is inside the editor; outside it
+  the browser's and the host's own shortcuts are untouched.
+- A failed save leaves the changes in place and Save again retries with the same version; the host gets
+  `score-save-failed`. The conflict strip scrolls the chrome into view and its Overwrite note says the other version
+  can't be brought back.
 - A conflict shows the same strip and two two-line choices as the draft conflict: **Overwrite with my version** reads
   the other writer's version and writes ours over it, **Load the other version** puts their text in the session as a new
   document. The editor never overwrites by itself.
-- Restore original for a file asks about the last saved version; it replaces the project and resets the history without
-  reading or writing the host's file.
+- Restore original for a file asks about the last saved version; it is muted while the file is clean, its answer is
+  `Go back to last save`, it replaces the project, and it resets the history (Undo cannot bring the changes back)
+  without reading or writing the host's file.
 - `onUnsavedChange` is called when the state changes, and `hasUnsavedChanges()` answers the same question for a close
   guard that asks just before closing. Both are false for a generated score.
 
@@ -115,12 +121,13 @@ project when it starts, so an edit made while the host is slow stays unsaved whe
 ## Required inputs and the handoff
 
 The editor reads no model declaration. `requiredInputs` is the host's list of `ProjectField` values (`"style"`,
-`"scoreMode"`, `"seed"` or `"lyrics"`). While one is missing, the handoff trigger reads **Complete required inputs…**;
-pressing it opens the Project panel on the first missing field instead of the review, except for lyrics: those show the
-arrangement and open the lyric track's new-line editor on its text box. Filling the field recomputes the state, and the
-ordinary trigger comes back.
+`"scoreMode"`, `"seed"` or `"lyrics"`). While one is missing, the trigger names it (`Add style first…` or `Add 2 required
+inputs…`); pressing it opens the Project panel on the first missing field, except for lyrics: those show the arrangement
+and open the lyric track's new-line editor on its text box, with the first row below the pinned head. A required empty
+field's hint starts `Required to regenerate.` Filling the field recomputes the state, and the ordinary trigger comes back.
 
-With a score file, the handoff saves first when the file is dirty (conflict and failure keep the callback closed), the
+With a score file, the handoff saves first when the file is dirty (the review says `Saves <file> first, then sends the
+song.`; conflict and failure keep the callback closed and send `handoff-not-sent` plus the toolbar live region), the
 change log compares with the last saved project, and the instruction's title is the file's name. With a generated
 score, the draft is saved first as [handoff.md](handoff.md) describes.
 

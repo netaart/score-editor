@@ -25,6 +25,10 @@ export interface HandoffSource {
   readonly openProject?: (field: ProjectField) => void;
   /** Where an unexpected rejection of the save goes, as the keeper sends its own failures. */
   readonly notify?: (notice: Notice) => void;
+  /** Says a refused handoff in the toolbar's live region, once. */
+  readonly say?: (words: string) => void;
+  /** The file name while a dirty score file is saved before the handoff; null when no line is needed. */
+  readonly savesFirst?: () => string | null;
 }
 
 /** What the control needs from the keeper whose state it follows: the opening badge and the state changes. */
@@ -74,6 +78,8 @@ export function mountHandoffControl(
   changes.id = `sce-handoff-list-${instanceCount}`;
   const empty = create(doc, "p", "sce-handoff-empty", popover);
   empty.id = `sce-handoff-empty-${instanceCount}`;
+  const fileNote = create(doc, "p", "sce-handoff-note sce-handoff-file", popover);
+  fileNote.hidden = true;
   const rejected = create(doc, "p", "sce-handoff-note", popover);
   const actions = create(doc, "div", "sce-handoff-actions", popover);
   const cancel = create(doc, "button", "sce-button", actions);
@@ -142,6 +148,9 @@ export function mountHandoffControl(
     changes.hidden = entries.length === 0;
     empty.hidden = entries.length > 0;
     empty.textContent = t.changeLogNone;
+    const first = config.savesFirst?.() ?? null;
+    fileNote.hidden = first === null;
+    fileNote.textContent = first === null ? "" : t.handoffSavesFirst(first);
     rejected.hidden = session.rejectedText === null;
     popover.setAttribute("aria-describedby", entries.length === 0 ? empty.id : changes.id);
   }
@@ -160,8 +169,15 @@ export function mountHandoffControl(
     if (!present) return;
     if (session.view.language !== language) applyLanguage();
     const missing = missingNow();
-    button.textContent = missing.length > 0 ? messagesFor(session.view.language).handoffMissing : buttonText();
-    if (missing.length > 0) button.setAttribute("aria-description", messagesFor(session.view.language).handoffMissing);
+    const t = messagesFor(session.view.language);
+    const word =
+      missing.length === 0
+        ? buttonText()
+        : missing.length === 1
+          ? t.requiredAddOne(t.requiredInputName(missing[0] as ProjectField))
+          : t.requiredAddMany(missing.length);
+    button.textContent = word;
+    if (missing.length > 0) button.setAttribute("aria-description", t.requiredHint);
     else button.removeAttribute("aria-description");
     if (missing.length > 0 && popover.matches(":popover-open")) popover.hidePopover();
     if (popover.matches(":popover-open")) renderLog();
@@ -244,6 +260,8 @@ export function mountHandoffControl(
       const t = messagesFor(session.view.language);
       if (!destroyed) {
         config.notify?.({ code: "draft-save-failed", level: "error", message: t.draftSaveFailed });
+        config.notify?.({ code: "handoff-not-sent", level: "warning", message: t.handoffNotSentFailed });
+        config.say?.(t.handoffNotSentFailed);
       }
       if (!destroyed) setBusy(false);
       return;
@@ -251,7 +269,14 @@ export function mountHandoffControl(
     if (!destroyed) setBusy(false);
     if (destroyed) return;
     // A conflict goes to the conflict strip and a failure to the keeper's own notice; neither hands off.
-    if (result === "written" || result === "unchanged") config.onHandoff(handoff);
+    if (result === "written" || result === "unchanged") {
+      config.onHandoff(handoff);
+      return;
+    }
+    const t = messagesFor(session.view.language);
+    const message = result === "conflict" ? t.handoffNotSentConflict : t.handoffNotSentFailed;
+    config.notify?.({ code: "handoff-not-sent", level: "warning", message });
+    config.say?.(message);
   }
 
   confirm.addEventListener("click", () => void handOff(), { signal });

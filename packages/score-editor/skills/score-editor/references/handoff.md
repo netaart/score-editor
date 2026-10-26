@@ -43,9 +43,10 @@ options are `{ original, current, title?, language, dialect? }`. It states:
 The joined lyrics come from the current score and lyric lines, not from the stored `lyrics` field alone.
 
 `requiredInputs` is the host's list of `ProjectField` values the model requires. While one is missing, the handoff
-trigger reads **Complete required inputs…** instead of opening the review; style, score mode and seed open the Project
-panel on that field, while lyrics show the arrangement and open the lyric track's new-line editor. The trigger comes
-back when the field is filled. The editor reads no model declaration.
+trigger names it (`Add style first…` or `Add 2 required inputs…`) instead of opening the review; style, score mode and
+seed open the Project panel on that field, while lyrics show the arrangement and open the lyric track's new-line editor.
+A required empty field's hint starts `Required to regenerate.` The trigger comes back when the field is filled. The
+editor reads no model declaration.
 
 ## The handoff in `mount`
 
@@ -83,8 +84,9 @@ did not take, the review says the last readable score is what is handed off; the
 is bounded by the window and scrolls a long change list, so the action stays reachable. The change log is visible only
 in that review.
 
-With a score-file source the same trigger saves the file first when it is dirty, uses the last saved project as the
-change log's original, and does not call the host on a conflict or a failed save. The instruction's title is the file
-name. See [score-files.md](score-files.md).
+With a score-file source the same trigger saves the file first when it is dirty (the review says `Saves <file> first,
+then sends the song.`), uses the last saved project as the change log's original, and does not call the host on a
+conflict or a failed save. Those send a `handoff-not-sent` notice and the same sentence in the toolbar's live region; the
+instruction's title is the file name. See [score-files.md](score-files.md).
 
 See [the package README](../../../README.md#change-log-and-handoff) for the same contract next to the draft rules.
