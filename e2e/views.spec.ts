@@ -1,9 +1,34 @@
 // ABOUTME: Seam 5 for the staff view, the text view, the view switch and the stale notice: parts on one session, and the default editor.
 // ABOUTME: Tests type, click and tap as a user does, and read what the session holds, in desktop and phone projects.
+import { readFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
 import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
+
+/** The skill's real two-voice score: 4/4 at 190, with Ins's intro `Z4` against Vocal's four bars. */
+const REAL_SCORE = readFileSync("packages/score-editor/skills/score-editor/assets/edit-one-bar/score.abc", "utf8");
+
+/** A Vocal-and-Ins song2 score in C major, 4/4, at `bpm`, with the given music lines under one section. */
+function twoVoice(vocal: string[], ins: string[], bpm = 100): string {
+  const header = [
+    "X:1",
+    "T:",
+    "M:4/4",
+    "L:1/16",
+    `Q:1/4=${bpm}`,
+    'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"',
+    'V: Ins clef=treble name="Ins Melody" snm="Inst."',
+  ];
+  return [
+    ...header,
+    "K:C",
+    "% a",
+    ...vocal.flatMap((line) => ["V: Vocal", line]),
+    ...ins.flatMap((line) => ["V: Ins", line]),
+    "",
+  ].join("\n");
+}
 
 /** Four quarter notes, then a whole note: six header lines, the key line, the section line, then a voice line and the music. */
 const QUARTERS = vocalOnly("C4D4E4F4|G16|");
@@ -688,6 +713,90 @@ const staffBars = (page: Page) => drawnBoxes(page, "svg .abcjs-bar");
 const staffSystems = (page: Page) => drawnBoxes(page, "svg .abcjs-staff");
 const staffNotes = (page: Page) => drawnBoxes(page, "svg .abcjs-note");
 
+/** One drawn element with the voice, system and measure marks abcjs puts on it. */
+interface StaffMark extends DrawnBox {
+  kind: "bar" | "note" | "rest" | "staff";
+  voice: number;
+  line: number;
+}
+
+/** Every marked element abcjs drew, with the marks it uses for its voice, line and measure. */
+function staffMarks(page: Page): Promise<StaffMark[]> {
+  return staffSlot(page)
+    .locator("svg :is(.abcjs-note, .abcjs-rest, .abcjs-bar, .abcjs-staff)")
+    .evaluateAll((nodes) => {
+      const root = nodes[0]?.getRootNode();
+      const host = root && "host" in root ? ((root as ShadowRoot).host as HTMLElement) : null;
+      const base = host?.getBoundingClientRect();
+      if (!base) return [];
+      return nodes.flatMap((node) => {
+        const classes = node.getAttribute("class") ?? "";
+        const voice = /abcjs-v(\d+)/.exec(classes)?.[1];
+        const line = /abcjs-l(\d+)/.exec(classes)?.[1];
+        if (voice === undefined || line === undefined) return [];
+        const box = (node as SVGGraphicsElement).getBoundingClientRect();
+        const kind = classes.includes("abcjs-staff")
+          ? "staff"
+          : classes.includes("abcjs-bar")
+            ? "bar"
+            : classes.includes("abcjs-rest")
+              ? "rest"
+              : "note";
+        return [
+          {
+            kind,
+            voice: Number(voice),
+            line: Number(line),
+            x: box.left - base.left,
+            y: box.top - base.top,
+            width: box.width,
+            height: box.height,
+          } as StaffMark,
+        ];
+      });
+    });
+}
+
+/** One score bar as the drawing lays it out: its start and end x, and its system's staff span. */
+interface BarSpan {
+  line: number;
+  x0: number;
+  x1: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Every drawn measure, in score order, for `voice`. After the `Z` expansion a drawn measure is one score bar. A bar
+ * starts at its first drawn note or rest, or at the opening line when abcjs drew one, and ends at its closing bar line.
+ */
+function barSpans(marks: StaffMark[], voice = 0): BarSpan[] {
+  const lines = [...new Set(marks.map((mark) => mark.line))].sort((a, b) => a - b);
+  const spans: BarSpan[] = [];
+  for (const line of lines) {
+    const bars = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === voice && mark.line === line)
+      .sort((a, b) => a.x - b.x);
+    if (bars.length === 0) continue;
+    const notes = marks
+      .filter((mark) => (mark.kind === "note" || mark.kind === "rest") && mark.voice === voice && mark.line === line)
+      .sort((a, b) => a.x - b.x);
+    const staves = marks.filter((mark) => mark.kind === "staff" && mark.line === line);
+    const top = staves.length > 0 ? Math.min(...staves.map((mark) => mark.y)) : (bars[0] as StaffMark).y;
+    const bottom =
+      staves.length > 0 ? Math.max(...staves.map((mark) => mark.y + mark.height)) : (bars[0] as StaffMark).y;
+    const opening = notes[0] !== undefined && (bars[0] as StaffMark).x < notes[0].x - 1;
+    const closers = opening ? bars.slice(1) : bars;
+    for (let index = 0; index < closers.length; index += 1) {
+      const x1 = (closers[index] as StaffMark).x;
+      const x0 =
+        index === 0 ? (opening ? (bars[0] as StaffMark).x : (notes[0]?.x ?? x1)) : (closers[index - 1] as StaffMark).x;
+      spans.push({ line, x0, x1, top, bottom });
+    }
+  }
+  return spans;
+}
+
 /** The cursor's box in the drawing host's coordinates. */
 async function staffCursorBox(page: Page) {
   const found = await box(staffCursor(page));
@@ -949,6 +1058,122 @@ test.describe("the staff view", () => {
     await expect(staffCursor(page)).toBeVisible();
     await page.evaluate(() => window.harness.previewPlayer().stop());
   });
+
+  test("draws every score bar in both voices, with the two voices' bar lines at the same x", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    const barCount = await page.evaluate(() => {
+      const reading = window.harness.layout.live().reading;
+      return reading.kind === "score" ? (reading.score?.bars.length ?? 0) : 0;
+    });
+    const marks = await staffMarks(page);
+    const lines = [...new Set(marks.map((mark) => mark.line))].sort((a, b) => a - b);
+    let vocalTotal = 0;
+    let insTotal = 0;
+    for (const line of lines) {
+      const vocal = marks
+        .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.line === line)
+        .sort((a, b) => a.x - b.x);
+      const ins = marks
+        .filter((mark) => mark.kind === "bar" && mark.voice === 1 && mark.line === line)
+        .sort((a, b) => a.x - b.x);
+      expect(vocal.length).toBeGreaterThan(0);
+      expect(ins.length).toBe(vocal.length);
+      for (let index = 0; index < vocal.length; index += 1)
+        expect(Math.abs((vocal[index] as StaffMark).x - (ins[index] as StaffMark).x)).toBeLessThan(1);
+      vocalTotal += vocal.length;
+      insTotal += ins.length;
+    }
+    expect(vocalTotal).toBe(barCount);
+    expect(insTotal).toBe(barCount);
+    expect(await harness.layout.scoreText()).toBe(REAL_SCORE);
+  });
+
+  test("follows the start of the first twelve bars in Vocal, on the right system", async ({ page, harness }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    const spans = barSpans(await staffMarks(page), 0);
+    expect(spans.length).toBeGreaterThanOrEqual(12);
+    const barSeconds = (4 * 60) / 190;
+
+    for (let bar = 0; bar < 12; bar += 1) {
+      await setStaffPosition(page, bar * barSeconds + 0.02);
+      const cursor = await staffCursorBox(page);
+      const span = spans[bar] as BarSpan;
+      const after = 0.02 / barSeconds;
+      const expected = span.x0 + (span.x1 - span.x0) * after;
+      expect(Math.abs(cursor.x + cursor.width / 2 - expected), `bar ${bar + 1} x`).toBeLessThan(2);
+      expect(Math.abs(cursor.y - (span.top - 2)), `bar ${bar + 1} top`).toBeLessThan(2);
+      expect(Math.abs(cursor.y + cursor.height - (span.bottom + 2)), `bar ${bar + 1} bottom`).toBeLessThan(2);
+    }
+  });
+
+  for (const target of [0, 1] as const) {
+    for (const count of [2, 3, 4] as const) {
+      test(`expands a Z${count} run in ${target === 0 ? "Vocal" : "Ins"} into ${count} drawn bars and follows it`, async ({
+        page,
+        harness,
+        press,
+      }) => {
+        const run =
+          count === 2
+            ? ["Z2|G16|A16|", "B16|c16|d16|e16|"]
+            : count === 3
+              ? ["Z3|G16|", "A16|B16|c16|d16|"]
+              : ["Z4|", "G16|A16|B16|c16|"];
+        const rests = ["z16|z16|z16|z16|", "z16|z16|z16|z16|"];
+        await harness.layout.open({
+          score: { text: twoVoice(target === 0 ? run : rests, target === 1 ? run : rests) },
+          parts: ["staff"],
+          editable: false,
+        });
+        await expect(drawnNotes(page).first()).toBeVisible();
+        const marks = await staffMarks(page);
+        expect(marks.filter((mark) => mark.kind === "rest" && mark.voice === target)).toHaveLength(count);
+
+        const spans = barSpans(marks, 0);
+        const insSpans = barSpans(marks, 1);
+        expect(spans).toHaveLength(8);
+        expect(insSpans).toHaveLength(8);
+        for (let index = 0; index < spans.length; index += 1) {
+          expect(Math.abs((spans[index] as BarSpan).x0 - (insSpans[index] as BarSpan).x0)).toBeLessThan(1);
+          expect(Math.abs((spans[index] as BarSpan).x1 - (insSpans[index] as BarSpan).x1)).toBeLessThan(1);
+        }
+
+        const barSeconds = 2.4;
+        const middle = Math.floor((count - 1) / 2);
+        const runBar = spans[middle] as BarSpan;
+        for (const fraction of [0.25, 0.75]) {
+          await setStaffPosition(page, (middle + fraction) * barSeconds);
+          const cursor = await staffCursorBox(page);
+          const expected = runBar.x0 + (runBar.x1 - runBar.x0) * fraction;
+          expect(Math.abs(cursor.x + cursor.width / 2 - expected), `inside the run at ${fraction}`).toBeLessThan(2);
+        }
+
+        const after = spans[count] as BarSpan;
+        await setStaffPosition(page, count * barSeconds + 0.02);
+        const cursor = await staffCursorBox(page);
+        const afterFraction = 0.02 / barSeconds;
+        const afterX = after.x0 + (after.x1 - after.x0) * afterFraction;
+        expect(Math.abs(cursor.x + cursor.width / 2 - afterX), "first bar after the run").toBeLessThan(2);
+
+        // The drawn rest of the run starts the preview at that run bar, though a staff line may be over it.
+        const rest = staffSlot(page).locator(`svg .abcjs-rest.abcjs-v${target}`).nth(middle);
+        await rest.scrollIntoViewIfNeeded();
+        const restBox = await box(rest);
+        const staff = await box(drawing(page));
+        await press(drawing(page), {
+          x: restBox.x + restBox.width / 2 - staff.x,
+          y: restBox.y + restBox.height / 2 - staff.y,
+        });
+        await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().from)).toBe(middle * 1024);
+        await page.evaluate(() => window.harness.previewPlayer().stop());
+      });
+    }
+  }
 
   test("scrolls with the keyboard when the drawing is wider than its box: the region takes the focus and the arrow moves it", async ({
     page,
