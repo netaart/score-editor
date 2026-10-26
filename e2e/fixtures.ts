@@ -109,7 +109,7 @@ interface PageSession {
     kind: string;
     score?: {
       bars: Array<{ start: number; length: number }>;
-      notes: Array<{ id: string; voice: string; start: number; duration: number; midi: number | null }>;
+      notes: Array<{ id: string; voice: string; bar: number; start: number; duration: number; midi: number | null }>;
     };
   };
   grid: { value: number; dotted?: boolean };

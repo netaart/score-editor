@@ -718,6 +718,8 @@ interface StaffMark extends DrawnBox {
   kind: "bar" | "note" | "rest" | "staff";
   voice: number;
   line: number;
+  /** The score's measure, from `abcjs-mm<n>`; null on a staff group, which has no measure of its own. */
+  measure: number | null;
 }
 
 /** Every marked element abcjs drew, with the marks it uses for its voice, line and measure. */
@@ -734,6 +736,7 @@ function staffMarks(page: Page): Promise<StaffMark[]> {
         const voice = /abcjs-v(\d+)/.exec(classes)?.[1];
         const line = /abcjs-l(\d+)/.exec(classes)?.[1];
         if (voice === undefined || line === undefined) return [];
+        const measure = /abcjs-mm(\d+)/.exec(classes)?.[1];
         const box = (node as SVGGraphicsElement).getBoundingClientRect();
         const kind = classes.includes("abcjs-staff")
           ? "staff"
@@ -747,6 +750,7 @@ function staffMarks(page: Page): Promise<StaffMark[]> {
             kind,
             voice: Number(voice),
             line: Number(line),
+            measure: measure === undefined ? null : Number(measure),
             x: box.left - base.left,
             y: box.top - base.top,
             width: box.width,
@@ -759,6 +763,8 @@ function staffMarks(page: Page): Promise<StaffMark[]> {
 
 /** One score bar as the drawing lays it out: its start and end x, and its system's staff span. */
 interface BarSpan {
+  /** The score's measure, from the closing bar line's `abcjs-mm<n>`. */
+  measure: number;
   line: number;
   x0: number;
   x1: number;
@@ -768,7 +774,8 @@ interface BarSpan {
 
 /**
  * Every drawn measure, in score order, for `voice`. After the `Z` expansion a drawn measure is one score bar. A bar
- * starts at its first drawn note or rest, or at the opening line when abcjs drew one, and ends at its closing bar line.
+ * starts where any voice's first onset is drawn, or at the opening line when abcjs drew one, and ends at its closing
+ * bar line. Each span carries its score measure, so a case can find bar n whatever line the drawing puts it on.
  */
 function barSpans(marks: StaffMark[], voice = 0): BarSpan[] {
   const lines = [...new Set(marks.map((mark) => mark.line))].sort((a, b) => a - b);
@@ -789,13 +796,22 @@ function barSpans(marks: StaffMark[], voice = 0): BarSpan[] {
     const opening = notes[0] !== undefined && (bars[0] as StaffMark).x < notes[0].x - 1;
     const closers = opening ? bars.slice(1) : bars;
     for (let index = 0; index < closers.length; index += 1) {
-      const x1 = (closers[index] as StaffMark).x;
+      const closer = closers[index] as StaffMark;
+      if (closer.measure === null) throw new Error(`the bar line on line ${line} has no measure mark`);
+      const x1 = closer.x;
       const x0 =
         index === 0 ? (opening ? (bars[0] as StaffMark).x : (notes[0]?.x ?? x1)) : (closers[index - 1] as StaffMark).x;
-      spans.push({ line, x0, x1, top, bottom });
+      spans.push({ measure: closer.measure, line, x0, x1, top, bottom });
     }
   }
   return spans;
+}
+
+/** The span of the score's bar `measure` (0-based), or a failure naming the bar when the drawing has none. */
+function spanForBar(spans: BarSpan[], measure: number): BarSpan {
+  const span = spans.find((candidate) => candidate.measure === measure);
+  if (!span) throw new Error(`bar ${measure + 1} is not drawn`);
+  return span;
 }
 
 /** The cursor's box in the drawing host's coordinates. */
@@ -1030,17 +1046,19 @@ test.describe("the staff view", () => {
     await fixStaffHeight(page);
     const marks = await staffMarks(page);
     const spans = barSpans(marks, 0);
-    const later = spans[8] as BarSpan;
-    expect(later, "bar 9, on a later system").toBeDefined();
-    expect(later.line, "not the first system").toBeGreaterThan(0);
+    const firstLine = Math.min(...spans.map((span) => span.line));
+    const later = spans.find((span) => span.line > firstLine);
+    expect(later, "the drawing puts some bar on a later system").toBeDefined();
+    if (!later) return;
 
     await setStaffPosition(page, 0);
     expect(await staffScrollTop(page), "bar 1 at the top").toBe(0);
     const pageTop = await page.evaluate(() => window.scrollY);
 
-    await setStaffPosition(page, 8 * ((4 * 60) / 190) + 0.02);
+    const laterSeconds = later.measure * ((4 * 60) / 190) + 0.02;
+    await setStaffPosition(page, laterSeconds);
     await expect
-      .poll(() => staffScrollTop(page), { message: "bar 9's system is brought into view" })
+      .poll(() => staffScrollTop(page), { message: `bar ${later.measure + 1}'s system is brought into view` })
       .toBeGreaterThan(0);
     expect(await page.evaluate(() => window.scrollY), "the reveal scrolls the region, never the page").toBe(pageTop);
     const cursor = await box(staffCursor(page));
@@ -1181,16 +1199,9 @@ test.describe("the staff view", () => {
 
     const marks = await staffMarks(page);
     const spans = barSpans(marks, 0);
-    const barTwo = spans[1] as BarSpan;
+    const barTwo = spanForBar(spans, 1);
     const notes = marks
-      .filter(
-        (mark) =>
-          mark.kind === "note" &&
-          mark.voice === 0 &&
-          mark.line === barTwo.line &&
-          mark.x >= barTwo.x0 - 1 &&
-          mark.x < barTwo.x1,
-      )
+      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.measure === 1)
       .sort((a, b) => a.x - b.x);
     expect(notes.length, "bar 2 has four quarter notes").toBe(4);
     // The bar's start is the anchor at its first tick; the next anchor is A, the first onset after it. Half a beat
@@ -1273,41 +1284,153 @@ test.describe("the staff view", () => {
     expect(await harness.layout.scoreText()).toBe(REAL_SCORE);
   });
 
-  test("starts bar 27, the last system's only bar, at its drawn Ins whole note and not at the centred Vocal rest", async ({
+  test("puts 33 s in bar 27, between its own Ins whole note and closing line, wherever the line breaks", async ({
     page,
     harness,
   }) => {
     await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
     await expect(drawnNotes(page).first()).toBeVisible();
     const marks = await staffMarks(page);
-    const lastLine = Math.max(...marks.map((mark) => mark.line));
+    const barLine = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.measure === 26)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark | undefined;
+    expect(barLine, "bar 27 closes at a drawn bar line").toBeDefined();
+    if (!barLine) return;
+    const line = barLine.line;
     const insNotes = marks
-      .filter((mark) => mark.kind === "note" && mark.voice === 1 && mark.line === lastLine)
+      .filter((mark) => mark.kind === "note" && mark.voice === 1 && mark.measure === 26)
       .sort((a, b) => a.x - b.x);
     const vocalRests = marks
-      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.line === lastLine)
+      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.measure === 26)
       .sort((a, b) => a.x - b.x);
-    const barLine = marks
-      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.line === lastLine)
-      .sort((a, b) => a.x - b.x)[0];
-    expect(insNotes, "the last bar has one Ins whole note").toHaveLength(1);
+    expect(insNotes, "bar 27 has one Ins whole note").toHaveLength(1);
     expect(vocalRests, "and one Vocal whole rest").toHaveLength(1);
-    expect(barLine, "and closes at a bar line").toBeDefined();
-    // The Vocal rest is drawn in the middle of the bar; it is not an onset. The Ins whole note is drawn at one.
     expect((vocalRests[0] as StaffMark).x).toBeGreaterThan((insNotes[0] as StaffMark).x + 8);
 
+    // Bar 27 starts after 26 bars; 33 s is an eighth of the way into it. The bar starts at its own onset when it
+    // opens a system, and at the previous bar line when the line already holds bar 26.
+    const lineBars = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.line === line)
+      .sort((a, b) => a.x - b.x);
+    const previous = lineBars.find((mark) => mark.measure === 25);
+    const start = lineBars[0]?.measure === 26 ? (insNotes[0] as StaffMark).x : previous?.x;
+    expect(start, "bar 27 starts at its onset or at bar 26's closing line").toBeDefined();
+    if (start === undefined) return;
     const barSeconds = (4 * 60) / 190;
-    // Bar 27 starts after 26 bars; 33 s is an eighth of the way into it.
     const fraction = (33 - 26 * barSeconds) / barSeconds;
-    const expected =
-      (insNotes[0] as StaffMark).x + fraction * ((barLine as StaffMark).x - (insNotes[0] as StaffMark).x);
+    const expected = start + fraction * (barLine.x - start);
     await setStaffPosition(page, 33);
     const cursor = await staffCursorBox(page);
-    expect(Math.abs(cursor.x + cursor.width / 2 - expected), "33 s at the drawn Ins onset").toBeLessThan(2);
+    expect(Math.abs(cursor.x + cursor.width / 2 - expected), "33 s at bar 27's start anchor").toBeLessThan(2);
+    expect(cursor.x + cursor.width / 2, "after bar 27's Ins note").toBeGreaterThan((insNotes[0] as StaffMark).x);
+    expect(cursor.x + cursor.width / 2, "before its closing line").toBeLessThan(barLine.x);
     const staffTop = Math.min(
-      ...marks.filter((mark) => mark.kind === "staff" && mark.line === lastLine).map((mark) => mark.y),
+      ...marks.filter((mark) => mark.kind === "staff" && mark.line === line).map((mark) => mark.y),
     );
-    expect(Math.abs(cursor.y - (staffTop - 2)), "on the last system").toBeLessThan(2);
+    expect(Math.abs(cursor.y - (staffTop - 2)), "on bar 27's system").toBeLessThan(2);
+  });
+
+  test("starts a real-score system at the leftmost onset, whichever bar opens it", async ({ page, harness }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    const marks = await staffMarks(page);
+    const score = await page.evaluate(() => {
+      const reading = window.harness.layout.live().reading;
+      if (reading.kind !== "score" || !reading.score) throw new Error("the staff has no readable score");
+      return {
+        bars: reading.score.bars.map((bar) => ({ start: bar.start, length: bar.length })),
+        notes: reading.score.notes.map((note) => ({
+          voice: note.voice,
+          bar: note.bar,
+          start: note.start,
+          duration: note.duration,
+          midi: note.midi,
+        })),
+      };
+    });
+    const lines = [...new Set(marks.map((mark) => mark.line))].sort((a, b) => a - b);
+    let found: { line: number; measure: number; start: number; length: number } | undefined;
+    for (const line of lines) {
+      const first = marks
+        .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.line === line)
+        .sort((a, b) => a.x - b.x)[0];
+      if (!first || first.measure === null) continue;
+      const measure = first.measure;
+      const bar = score.bars[measure];
+      if (!bar) continue;
+      const ins = score.notes.filter((note) => note.voice === "Ins" && note.bar === measure);
+      const onset = ins.find((note) => note.start === bar.start && (note.midi !== null || note.duration < bar.length));
+      if (!onset) continue;
+      const vocalWholeRest = score.notes.some(
+        (note) =>
+          note.voice === "Vocal" &&
+          note.bar === measure &&
+          note.start === bar.start &&
+          note.midi === null &&
+          note.duration >= bar.length,
+      );
+      if (!vocalWholeRest) continue;
+      found = { line, measure, start: bar.start, length: bar.length };
+      break;
+    }
+    expect(
+      found,
+      "the real score draws a system whose first bar has a Vocal whole-bar rest and an Ins onset at its start",
+    ).toBeDefined();
+    if (!found) return;
+
+    const barLine = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.measure === found.measure)
+      .sort((a, b) => a.x - b.x)[0];
+    const staffTop = Math.min(
+      ...marks.filter((mark) => mark.kind === "staff" && mark.line === found.line).map((mark) => mark.y),
+    );
+    expect(barLine, `bar ${found.measure + 1} closes at a line`).toBeDefined();
+    if (!barLine) return;
+
+    // The anchors the drawing gives this bar: every drawn onset at its tick, and the closing line at the bar end.
+    const xAt = new Map<number, number>();
+    for (const [voiceIndex, voice] of ["Vocal", "Ins"].entries()) {
+      const model = score.notes
+        .filter((note) => note.voice === voice && note.bar === found.measure)
+        .sort((a, b) => a.start - b.start);
+      const drawn = marks
+        .filter(
+          (mark) =>
+            (mark.kind === "note" || mark.kind === "rest") &&
+            mark.voice === voiceIndex &&
+            mark.measure === found.measure,
+        )
+        .sort((a, b) => a.x - b.x);
+      expect(drawn.length, `bar ${found.measure + 1} draws every ${voice} event`).toBe(model.length);
+      for (const [index, note] of model.entries()) {
+        if (note.midi === null && note.duration >= found.length) continue;
+        const mark = drawn[index] as StaffMark;
+        const known = xAt.get(note.start);
+        if (known === undefined || mark.x < known) xAt.set(note.start, mark.x);
+      }
+    }
+    const startX = xAt.get(found.start);
+    expect(startX, `bar ${found.measure + 1} has a drawn onset at its start`).toBeDefined();
+    if (startX === undefined) return;
+    xAt.set(found.start, startX);
+    xAt.set(found.start + found.length, barLine.x);
+    const anchors = [...xAt].map(([tick, x]) => ({ tick, x })).sort((a, b) => a.tick - b.tick);
+    const fraction = 0.25;
+    const tick = found.start + fraction * found.length;
+    const before = [...anchors].reverse().find((anchor) => anchor.tick <= tick) as { tick: number; x: number };
+    const after = anchors.find((anchor) => anchor.tick > tick) as { tick: number; x: number };
+    const expected = before.x + ((tick - before.tick) / (after.tick - before.tick)) * (after.x - before.x);
+
+    const barSeconds = (4 * 60) / 190;
+    const seconds = (tick * barSeconds) / 1024;
+    await setStaffPosition(page, seconds);
+    const cursor = await staffCursorBox(page);
+    expect(
+      Math.abs(cursor.x + cursor.width / 2 - expected),
+      `bar ${found.measure + 1}, on line ${found.line}: the system starts at the Ins onset`,
+    ).toBeLessThan(2);
+    expect(Math.abs(cursor.y - (staffTop - 2)), `bar ${found.measure + 1} is on its own system`).toBeLessThan(2);
   });
 
   test("starts bar 1 of a two-voice system where Ins's whole note is drawn while Vocal holds a whole-bar rest", async ({
@@ -1321,17 +1444,16 @@ test.describe("the staff view", () => {
     });
     await expect(drawnNotes(page).first()).toBeVisible();
     const marks = await staffMarks(page);
-    const firstLine = Math.min(...marks.map((mark) => mark.line));
     const insNotes = marks
-      .filter((mark) => mark.kind === "note" && mark.voice === 1 && mark.line === firstLine)
+      .filter((mark) => mark.kind === "note" && mark.voice === 1 && mark.measure === 0)
       .sort((a, b) => a.x - b.x);
     const vocalRest = marks
-      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.line === firstLine)
+      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.measure === 0)
       .sort((a, b) => a.x - b.x)[0] as StaffMark;
     const barLine = marks
-      .filter((mark) => mark.kind === "bar" && mark.voice === 1 && mark.line === firstLine)
+      .filter((mark) => mark.kind === "bar" && mark.voice === 1 && mark.measure === 0)
       .sort((a, b) => a.x - b.x)[0] as StaffMark;
-    expect(insNotes.length, "Ins draws a note in each bar of the system").toBeGreaterThanOrEqual(2);
+    expect(insNotes, "bar 1 has one Ins whole note").toHaveLength(1);
     expect(vocalRest.x).toBeGreaterThan((insNotes[0] as StaffMark).x + 20);
 
     const barSeconds = 2.4;
@@ -1353,12 +1475,11 @@ test.describe("the staff view", () => {
     await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
     await expect(drawnNotes(page).first()).toBeVisible();
     const marks = await staffMarks(page);
-    const line = Math.min(...marks.map((mark) => mark.line));
     const rest = marks
-      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.line === line)
+      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.measure === 0)
       .sort((a, b) => a.x - b.x)[0] as StaffMark;
     const notes = marks
-      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.line === line)
+      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.measure === 0)
       .sort((a, b) => a.x - b.x);
     const firstEighth = notes[0] as StaffMark;
     const secondEighth = notes[1] as StaffMark;
@@ -1395,7 +1516,7 @@ test.describe("the staff view", () => {
     for (let bar = 0; bar < 12; bar += 1) {
       await setStaffPosition(page, bar * barSeconds + 0.02);
       const cursor = await staffCursorBox(page);
-      const span = spans[bar] as BarSpan;
+      const span = spanForBar(spans, bar);
       const after = 0.02 / barSeconds;
       const expected = span.x0 + (span.x1 - span.x0) * after;
       expect(Math.abs(cursor.x + cursor.width / 2 - expected), `bar ${bar + 1} x`).toBeLessThan(2);
@@ -1441,18 +1562,18 @@ test.describe("the staff view", () => {
         expect(insSpans).toHaveLength(8);
         // The bar lines of the two voices line up. A line's first bar starts at its first drawn mark, which
         // differs by voice (a note against a centred rest), so only bar lines are compared.
-        for (let index = 0; index < spans.length; index += 1) {
-          const span = spans[index] as BarSpan;
-          const ins = insSpans[index] as BarSpan;
-          expect(Math.abs(span.x1 - ins.x1), `bar ${index + 1} end`).toBeLessThan(1);
-          if (index > 0 && (spans[index - 1] as BarSpan).line === span.line) {
-            expect(Math.abs(span.x0 - ins.x0), `bar ${index + 1} start`).toBeLessThan(1);
+        for (const span of spans) {
+          const ins = spanForBar(insSpans, span.measure);
+          expect(Math.abs(span.x1 - ins.x1), `bar ${span.measure + 1} end`).toBeLessThan(1);
+          const before = spans.find((candidate) => candidate.measure === span.measure - 1);
+          if (before && before.line === span.line) {
+            expect(Math.abs(span.x0 - ins.x0), `bar ${span.measure + 1} start`).toBeLessThan(1);
           }
         }
 
         const barSeconds = 2.4;
         const middle = Math.floor((count - 1) / 2);
-        const runBar = spans[middle] as BarSpan;
+        const runBar = spanForBar(spans, middle);
         // A run is drawn as whole-bar rests, which are not onsets: take its start from the cursor at the bar's tick.
         await setStaffPosition(page, middle * barSeconds);
         const runStart = await staffCursorX(page);
@@ -1463,7 +1584,7 @@ test.describe("the staff view", () => {
           expect(Math.abs(cursor.x + cursor.width / 2 - expected), `inside the run at ${fraction}`).toBeLessThan(2);
         }
 
-        const after = spans[count] as BarSpan;
+        const after = spanForBar(spans, count);
         await setStaffPosition(page, count * barSeconds);
         const afterStart = await staffCursorX(page);
         await setStaffPosition(page, count * barSeconds + 0.02);
@@ -1505,9 +1626,10 @@ test.describe("the staff view", () => {
         }
         const plainSpans = barSpans(plainMarks, 0);
         expect(plainSpans).toHaveLength(8);
-        for (let index = 0; index < spans.length; index += 1) {
-          expect(Math.abs((spans[index] as BarSpan).x0 - (plainSpans[index] as BarSpan).x0)).toBeLessThan(2);
-          expect(Math.abs((spans[index] as BarSpan).x1 - (plainSpans[index] as BarSpan).x1)).toBeLessThan(2);
+        for (const span of spans) {
+          const plainSpan = spanForBar(plainSpans, span.measure);
+          expect(Math.abs(span.x0 - plainSpan.x0), `bar ${span.measure + 1} start`).toBeLessThan(2);
+          expect(Math.abs(span.x1 - plainSpan.x1), `bar ${span.measure + 1} end`).toBeLessThan(2);
         }
       });
     }
