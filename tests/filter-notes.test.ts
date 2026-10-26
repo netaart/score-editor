@@ -33,6 +33,24 @@ function vocal(music: string, key = "C"): Score {
  */
 const MELODY = vocal("C4D4E4F4|G8A4z4|c8d8-|d8e4z4|");
 
+/**
+ * C major until tick 512, G major from there. Pitch classes by hand: C major is C D E F G A B, G major is G A B C D E F#.
+ *   @0 C4 60 in C        @256 D#4 63 out of C   @512 F#4 66 in G (F in the G key signature)   @768 Bb4 70 out of G
+ *   @1024 G4 67 in G     @1280 F#4 66 in G      @1536 F4 65 (natural sign) out of G          @1792 A4 69 in G
+ */
+const CHANGING = vocal("C4^D4[K:G]F4_B4|G4F4=F4A4|");
+
+/** Two voices of three notes each, for the order across voices and the per-voice count. */
+const TWO_VOICES = read(`${HEADER}
+V: Ins clef=treble name="Ins Melody" snm="Inst."
+K:C
+% a
+V: Vocal
+C4D4E8|
+V: Ins
+G,4A,4B,8|
+`);
+
 const ID = {
   C4: "Vocal:0",
   D4: "Vocal:256",
@@ -103,13 +121,6 @@ describe("the duration condition", () => {
 });
 
 describe("the key condition", () => {
-  /**
-   * C major until tick 512, G major from there. Pitch classes by hand: C major is C D E F G A B, G major is G A B C D E F#.
-   *   @0 C4 60 in C        @256 D#4 63 out of C   @512 F#4 66 in G (F in the G key signature)   @768 Bb4 70 out of G
-   *   @1024 G4 67 in G     @1280 F#4 66 in G      @1536 F4 65 (natural sign) out of G          @1792 A4 69 in G
-   */
-  const CHANGING = vocal("C4^D4[K:G]F4_B4|G4F4=F4A4|");
-
   it("takes the notes whose pitch class is in the key that is in force where the note starts", () => {
     expect(filterNotes(CHANGING, { key: "in" })).toEqual([
       "Vocal:0",
@@ -173,17 +184,8 @@ describe("the count condition", () => {
   });
 
   it("counts each voice on its own", () => {
-    const two = read(`${HEADER}
-V: Ins clef=treble name="Ins Melody" snm="Inst."
-K:C
-% a
-V: Vocal
-C4D4E8|
-V: Ins
-G,4A,4B,8|
-`);
     // Counted along Vocal and then Ins as one line, every 2nd would be Vocal:0, Vocal:512 and Ins:256. Each voice has its own count.
-    expect(filterNotes(two, { count: { every: 2 } })).toEqual(["Vocal:0", "Vocal:512", "Ins:0", "Ins:512"]);
+    expect(filterNotes(TWO_VOICES, { count: { every: 2 } })).toEqual(["Vocal:0", "Vocal:512", "Ins:0", "Ins:512"]);
   });
 });
 
@@ -242,25 +244,15 @@ describe("conditions together", () => {
   });
 
   it("combine the key with a pitch range", () => {
-    const changing = vocal("C4^D4[K:G]F4_B4|G4F4=F4A4|");
     // Out of the key and D#4 (63) or higher: D#4, Bb4 and F4 natural, which are all of the notes out of the key.
-    expect(filterNotes(changing, { key: "out", pitch: { min: 63 } })).toEqual(["Vocal:256", "Vocal:768", "Vocal:1536"]);
+    expect(filterNotes(CHANGING, { key: "out", pitch: { min: 63 } })).toEqual(["Vocal:256", "Vocal:768", "Vocal:1536"]);
     // In the key and G4 (67) or higher: G4 and A4. The two F#4 at 66 are below.
-    expect(filterNotes(changing, { key: "in", pitch: { min: 67 } })).toEqual(["Vocal:1024", "Vocal:1792"]);
+    expect(filterNotes(CHANGING, { key: "in", pitch: { min: 67 } })).toEqual(["Vocal:1024", "Vocal:1792"]);
   });
 
   it("take the notes of both voices, in the order of the score", () => {
-    const two = read(`${HEADER}
-V: Ins clef=treble name="Ins Melody" snm="Inst."
-K:C
-% a
-V: Vocal
-C4D4E8|
-V: Ins
-G,4A,4B,8|
-`);
     // From A3 (57) up: all of Vocal, and A3 and B3 of Ins; the G3 (55) of Ins is below. Vocal comes first, then Ins.
-    expect(filterNotes(two, { pitch: { min: 57 } })).toEqual([
+    expect(filterNotes(TWO_VOICES, { pitch: { min: 57 } })).toEqual([
       "Vocal:0",
       "Vocal:256",
       "Vocal:512",
