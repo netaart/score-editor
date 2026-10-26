@@ -363,6 +363,8 @@ function cutChanged(score: Score, source: Song2Source): boolean {
 }
 
 function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
+  // A voice the source header does not have (the instrumental version adds Ins) needs the body built from the model.
+  if (score.voices.includes("Ins") && !source.text.includes("\nV: Ins ")) return true;
   if (!sectionsMatchSource(score, source)) return true;
   const content = sourceContentByBar(source);
   let oldCount = 0;
