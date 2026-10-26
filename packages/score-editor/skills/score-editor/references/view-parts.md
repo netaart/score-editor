@@ -70,7 +70,8 @@ player calls it with the time of its own playback, or with null to remove the cu
 tick with `tickAtSeconds`, following a tempo change in the score and staying at the end past the last second. The
 cursor is drawn whether or not the session is editable. While the session's preview plays, the same cursor follows
 the player's tick; when it stops, the host's last position is shown again. A press on a drawn note starts the preview
-at that note. The cursor's look and the scroll that keeps it in view are in [DESIGN.md](../../../DESIGN.md#staff-view).
+at that note. The cursor brings itself into the staff's region, never the page, so a host that wants it followed
+keeps the region in view. The cursor's look and the scroll that keeps it in view are in [DESIGN.md](../../../DESIGN.md#staff-view).
 
 ```ts
 const views = {

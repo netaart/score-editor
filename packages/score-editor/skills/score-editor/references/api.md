@@ -169,7 +169,7 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `ProjectPanel` | A `ViewPart` with `element` and `commit()`: the song project panel's root, and the pending field a host takes when it closes its own container. |
-| `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
+| `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. The cursor brings itself into the staff's region, never the page, so a host that wants it followed keeps the region in view. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
 | `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper?, tempoKey?, projectPanel?, tools?, onChooseBars? }` for the toolbar. |
