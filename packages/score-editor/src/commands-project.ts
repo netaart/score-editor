@@ -6,6 +6,7 @@ import { runLyricLineCommand } from "./commands-lyric-lines";
 import type { Diagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import { joinLyrics, LYRICS_MAX_CHARACTERS, lyricCharacterCount, lyricLinesOf, unalignedLyricLines } from "./lyrics";
+import { rewrittenBars } from "./rewritten-bars";
 import type { LyricPhrase, SongProject } from "./score";
 import { fallbackDiagnostic, readScoreText } from "./score-text";
 
@@ -51,7 +52,12 @@ export type ProjectCommand =
   | { readonly type: "setLyricLinePhrase"; readonly line: number; readonly phrase: LyricPhrase | null };
 
 export type ProjectCommandResult =
-  | { readonly ok: true; readonly project: SongProject }
+  | {
+      readonly ok: true;
+      readonly project: SongProject;
+      /** The 1-based bars the command rewrote; absent when none did. */
+      readonly rewrittenBars?: ReadonlyArray<number>;
+    }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
 /** The project half of the command union applyProjectCommand accepts besides ScoreCommand. */
@@ -87,7 +93,14 @@ export function runProjectCommand(
     case "replaceScoreText": {
       const read = readScoreText(dialect, command.text);
       if (!read.ok) return { ok: false, diagnostic: read.diagnostics[0] ?? fallbackDiagnostic() };
-      return { ok: true, project: { ...project, score: read.text } };
+      const before = dialect.parse(project.score).score;
+      const after = dialect.parse(read.text).score;
+      const bars = before !== null && after !== null ? rewrittenBars(before, after) : [];
+      return {
+        ok: true,
+        project: { ...project, score: read.text },
+        ...(bars.length === 0 ? {} : { rewrittenBars: bars }),
+      };
     }
     case "setLyricLineText":
     case "insertLyricLine":

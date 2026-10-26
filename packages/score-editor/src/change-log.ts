@@ -6,6 +6,12 @@ import { joinLyrics, lyricLinesOf } from "./lyrics";
 import type { LyricLine, Score, Section, SongProject } from "./score";
 import type { Language } from "./types";
 
+/** One readable change and, when it names bars, the 1-based bars it names; the review highlights the ones the last edit rewrote. */
+export interface ChangeLogEntry {
+  readonly text: string;
+  readonly bars: ReadonlyArray<number>;
+}
+
 export interface ChangeLogOptions {
   /** The language of the sentences. */
   language: Language;
@@ -256,61 +262,78 @@ export function changeLog(
   current: SongProject,
   options: ChangeLogOptions,
 ): ReadonlyArray<string> {
+  return changeLogEntries(original, current, options).map((entry) => entry.text);
+}
+
+/**
+ * The change log with the bars each entry names, for a review that highlights the bars the last edit rewrote. The
+ * sentences are exactly the ones `changeLog` returns.
+ */
+export function changeLogEntries(
+  original: SongProject,
+  current: SongProject,
+  options: ChangeLogOptions,
+): ReadonlyArray<ChangeLogEntry> {
   const t = messagesFor(options.language);
   const before = scoreOf(original, options.dialect);
   const after = scoreOf(current, options.dialect);
-  const entries: string[] = [];
+  const entries: ChangeLogEntry[] = [];
+  const plain = (text: string): ChangeLogEntry => ({ text, bars: [] });
   const sections = before !== null && after !== null ? diffSections(before, after, t) : null;
 
   if (before !== null && after !== null && sections !== null) {
-    entries.push(...sections.entries);
+    entries.push(...sections.entries.map(plain));
 
     if (before.tempo.unit !== after.tempo.unit || before.tempo.bpm !== after.tempo.bpm) {
-      entries.push(t.changeLogTempo(before.tempo.bpm, after.tempo.bpm));
+      entries.push(plain(t.changeLogTempo(before.tempo.bpm, after.tempo.bpm)));
     } else if (JSON.stringify(before.tempoChanges ?? []) !== JSON.stringify(after.tempoChanges ?? [])) {
-      entries.push(t.changeLogTempoChanges);
+      entries.push(plain(t.changeLogTempoChanges));
     }
 
     if (JSON.stringify(before.keys) !== JSON.stringify(after.keys)) {
       const from = before.keys[0]?.key;
       const to = after.keys[0]?.key;
       entries.push(
-        from !== undefined && to !== undefined && from !== to ? t.changeLogKey(from, to) : t.changeLogKeyChanges,
+        plain(from !== undefined && to !== undefined && from !== to ? t.changeLogKey(from, to) : t.changeLogKeyChanges),
       );
     }
 
     const meters = changedMeters(before, after, sections.pairs, t);
-    if (meters !== null) entries.push(t.changeLogMeter(meters.to, barList(meters.bars, options.language)));
-    entries.push(...changedChords(before, after, sections.pairs, t));
+    if (meters !== null) {
+      entries.push({ text: t.changeLogMeter(meters.to, barList(meters.bars, options.language)), bars: meters.bars });
+    }
+    entries.push(...changedChords(before, after, sections.pairs, t).map(plain));
   }
 
   const beforeLines = effectiveLines(original, before);
   const afterLines = effectiveLines(current, after);
   if (original.lyrics !== current.lyrics || JSON.stringify(beforeLines) !== JSON.stringify(afterLines)) {
-    entries.push(t.changeLogLyrics);
+    entries.push(plain(t.changeLogLyrics));
   }
-  if (original.style !== current.style) entries.push(t.changeLogStyle);
+  if (original.style !== current.style) entries.push(plain(t.changeLogStyle));
   if (original.scoreMode !== current.scoreMode) {
     const mode = (value: "full" | "melody") => (value === "full" ? t.projectModeFull : t.projectModeMelody);
-    entries.push(t.changeLogScoreMode(mode(original.scoreMode), mode(current.scoreMode)));
+    entries.push(plain(t.changeLogScoreMode(mode(original.scoreMode), mode(current.scoreMode))));
   }
   if (original.seed !== current.seed) {
     entries.push(
-      t.changeLogSeed(
-        t.projectSeed,
-        original.seed === null ? t.changeLogSeedNone : String(original.seed),
-        current.seed === null ? t.changeLogSeedNone : String(current.seed),
+      plain(
+        t.changeLogSeed(
+          t.projectSeed,
+          original.seed === null ? t.changeLogSeedNone : String(original.seed),
+          current.seed === null ? t.changeLogSeedNone : String(current.seed),
+        ),
       ),
     );
   }
 
   if (before !== null && after !== null && sections !== null && original.score !== current.score) {
     const bars = changedNoteBars(before, after, sections.pairs);
-    if (bars.length > 0) entries.push(t.changeLogNotes(barList(bars, options.language)));
+    if (bars.length > 0) entries.push({ text: t.changeLogNotes(barList(bars, options.language)), bars });
   }
 
   if (original.score !== current.score && (before === null || after === null || sameScoreContent(before, after))) {
-    entries.push(t.changeLogText);
+    entries.push(plain(t.changeLogText));
   }
   return entries;
 }

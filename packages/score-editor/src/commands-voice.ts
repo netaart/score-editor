@@ -43,10 +43,34 @@ export interface InstrumentalReport {
 /** A command's result beyond its score: what the edit did, in the words a tool's status line needs. */
 export type CommandReport = VoiceOctaveReport | InstrumentalReport;
 
+/** The singable range the voice octave report and the pre-handoff notice share: MIDI 60-82 inclusive. */
+export const SINGABLE_RANGE = { min: 60, max: 82 } as const;
+
+/** What Vocal's tie chains say about its register: the lower median pitch and whether it is singable. */
+export interface VocalRange {
+  /** The lower median of Vocal's tie chains, or null when Vocal has no pitched notes. */
+  readonly medianMidi: number | null;
+  /** Whether the median is inside the singable range 60-82. */
+  readonly singable: boolean;
+}
+
 function medianOf(pitches: ReadonlyArray<number>): number | null {
   if (pitches.length === 0) return null;
   const ordered = [...pitches].sort((left, right) => left - right);
   return ordered[Math.floor((ordered.length - 1) / 2)] as number;
+}
+
+function singable(medianMidi: number | null): boolean {
+  return medianMidi !== null && medianMidi >= SINGABLE_RANGE.min && medianMidi <= SINGABLE_RANGE.max;
+}
+
+/** The register measure the voice octave report and the pre-handoff notice both read. */
+export function vocalRange(score: Score): VocalRange {
+  const pitches = spansOf(score, "Vocal")
+    .filter((span) => span.midi !== null)
+    .map((span) => span.midi as number);
+  const medianMidi = medianOf(pitches);
+  return { medianMidi, singable: singable(medianMidi) };
 }
 
 function octave(score: Score, command: VoiceOctaveCommand): ScoreCommandResult {
@@ -65,17 +89,15 @@ function octave(score: Score, command: VoiceOctaveCommand): ScoreCommandResult {
   const notes = score.notes.map((note) =>
     note.voice === "Vocal" && note.midi !== null ? { ...note, midi: note.midi + delta } : note,
   );
-  const pitches = spansOf(score, "Vocal")
-    .filter((span) => span.midi !== null)
-    .map((span) => (span.midi as number) + delta);
-  const medianMidi = medianOf(pitches);
+  const movedScore = { ...score, notes };
+  const range = vocalRange(movedScore);
   const report: VoiceOctaveReport = {
     kind: "voiceOctave",
     octaves: command.octaves,
-    medianMidi,
-    singable: medianMidi !== null && medianMidi >= 60 && medianMidi <= 82,
+    medianMidi: range.medianMidi,
+    singable: range.singable,
   };
-  return { ok: true, score: { ...score, notes }, report };
+  return { ok: true, score: movedScore, report };
 }
 
 interface Interval {

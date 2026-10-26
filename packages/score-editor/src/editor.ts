@@ -31,6 +31,7 @@ import {
   type SessionChange,
   type ViewName,
 } from "./session";
+import { mountSourceLabel, type SourceLabelPart } from "./source-label";
 import { mountStaffView } from "./staff-view";
 import { mountStaleNotice } from "./stale-notice";
 import { acquireStyles } from "./styles";
@@ -104,6 +105,7 @@ export class Editor implements MountedEditor {
   private saveControl: ViewPart | null = null;
   private saveConflict: ViewPart | null = null;
   private scoreRestore: ViewPart | null = null;
+  private sourceLabel: SourceLabelPart | null = null;
   /** The chrome above the body: toolbar, conflict strip, cut sentence and stale notice, bounded by the music's floor. */
   private readonly chrome: HTMLElement;
   private readonly scroller: HTMLElement;
@@ -193,6 +195,7 @@ export class Editor implements MountedEditor {
     });
     this.parts.push(this.toolbar);
     this.syncScoreSourceParts();
+    this.syncSourceLabel();
     this.mountHandoff();
     this.draftAnchor = doc.createComment("draft conflict");
     this.chrome.appendChild(this.draftAnchor);
@@ -273,6 +276,7 @@ export class Editor implements MountedEditor {
       this.syncScoreSourceParts();
     }
     this.syncDraftParts();
+    this.sourceLabel?.refresh();
     this.handoff?.refresh();
   }
 
@@ -408,6 +412,18 @@ export class Editor implements MountedEditor {
       ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
       say: (words) => this.toolbar.say(words),
     };
+  }
+
+  /** Mounts the source label first in the toolbar's strip, so it is in sight before the strip scrolls. */
+  private syncSourceLabel(): void {
+    if (this.sourceLabel !== null) return;
+    const strip = this.root.querySelector<HTMLElement>(".sce-tools");
+    if (strip === null) return;
+    this.sourceLabel = mountSourceLabel(strip, this.session, {
+      source: () => this.options.source,
+      before: strip.firstChild,
+    });
+    this.parts.push(this.sourceLabel);
   }
 
   /** Rebuilds the score-file controls and the save-as entry for the source in force. */

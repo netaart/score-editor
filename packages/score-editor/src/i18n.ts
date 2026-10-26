@@ -149,6 +149,9 @@ export interface Messages {
   saveOverwriteNote: string;
   saveLoadTheirs: string;
   saveLoadTheirsNote: string;
+  /** The source label in the toolbar: where the edits go. */
+  sourceLabelGenerated: string;
+  sourceLabelScoreFile: string;
   /** The Restore control while the source is a score file: the last saved version, and no draft. */
   restoreSavedQuestion: string;
   restoreSavedWarning: string;
@@ -165,6 +168,10 @@ export interface Messages {
   /** A handoff that was not sent, once for a conflict and once for a failed save. */
   handoffNotSentConflict: string;
   handoffNotSentFailed: string;
+  /** The four pre-handoff notices the review shows and the host is told once per opening. */
+  prehandoffNoSections: string;
+  prehandoffSyllablesFar(syllables: number, notes: number, difference: number): string;
+  prehandoffVocalRange(medianMidi: number): string;
   /** The tempo, key and transpose controls of the toolbar: the group's name, the field's name and what is said aloud. */
   songControls: string;
   tempo: string;
@@ -505,6 +512,8 @@ const en: Messages = {
   saveOverwriteNote: "The other version is replaced and can't be brought back.",
   saveLoadTheirs: "Load the other version",
   saveLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
+  sourceLabelGenerated: "Generated score (original kept)",
+  sourceLabelScoreFile: "Score file (saves to the file)",
   restoreSavedQuestion: "Go back to the last saved version?",
   restoreSavedWarning: "Every change since the last save is discarded. You can't undo this.",
   restoreSavedDone: "The last saved version is back",
@@ -518,6 +527,10 @@ const en: Messages = {
   handoffSavesFirst: (name) => `Saves ${name} first, then sends the song.`,
   handoffNotSentConflict: "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
   handoffNotSentFailed: "Not sent: the score file was not saved. Try again, then regenerate.",
+  prehandoffNoSections: "This score has no sections, so the agent gets no section names.",
+  prehandoffSyllablesFar: (syllables, notes, difference) =>
+    `The whole song has ${syllables} ${syllables === 1 ? "syllable" : "syllables"} and ${notes} note ${notes === 1 ? "onset" : "onsets"}, ${difference} apart.`,
+  prehandoffVocalRange: (medianMidi) => `Vocal's median pitch is ${medianMidi}, outside the singable range 60–82.`,
   songControls: "Tempo, key and transpose",
   tempo: "Tempo (BPM)",
   tempoSet: (bpm) => `Tempo set to ${bpm} BPM`,
@@ -814,6 +827,8 @@ const zh: Messages = {
   saveOverwriteNote: "对方的版本会被你的版本替换，无法找回。",
   saveLoadTheirs: "载入对方的版本",
   saveLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
+  sourceLabelGenerated: "生成的乐谱（原版保留）",
+  sourceLabelScoreFile: "乐谱文件（存回原文件）",
   restoreSavedQuestion: "回到上次保存的版本？",
   restoreSavedWarning: "上次保存之后的修改都会丢掉，无法撤销。",
   restoreSavedDone: "已回到上次保存的版本",
@@ -827,6 +842,10 @@ const zh: Messages = {
   handoffSavesFirst: (name) => `先保存 ${name}，再发送歌曲。`,
   handoffNotSentConflict: "未发送：这份乐谱文件在别处被改过。先选一个版本，再重新生成。",
   handoffNotSentFailed: "未发送：乐谱文件没有保存成功。再试一次，然后重新生成。",
+  prehandoffNoSections: "这份乐谱没有段落，交给 agent 时也就没有段落名。",
+  prehandoffSyllablesFar: (syllables, notes, difference) =>
+    `整首有 ${syllables} 个音节和 ${notes} 个音符起点，相差 ${difference} 个。`,
+  prehandoffVocalRange: (medianMidi) => `人声的中位音是 ${medianMidi}，不在可唱区间 60–82 内。`,
   songControls: "速度、调和移调",
   tempo: "速度（BPM）",
   tempoSet: (bpm) => `速度已设为 ${bpm} BPM`,

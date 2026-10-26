@@ -1,9 +1,10 @@
 // ABOUTME: The toolbar's handoff control: a button that opens a review of the change log and, on confirmation, hands the score to the host.
 // ABOUTME: It follows the session and the draft keeper; the change log is recomputed from the original and the current project every time it opens.
-import { changeLog, handoffInstruction } from "./change-log";
+import { changeLogEntries, handoffInstruction } from "./change-log";
 import type { DialectRegistry } from "./dialect";
 import { create } from "./dom";
 import type { DraftHandoffResult, DraftKeeperStatus } from "./draft-keeper";
+import { preHandoffNotices } from "./handoff-notices";
 import { messagesFor } from "./i18n";
 import { anchorOf, placePopover } from "./popover-menu";
 import type { SongProject } from "./score";
@@ -81,6 +82,7 @@ export function mountHandoffControl(
   const fileNote = create(doc, "p", "sce-handoff-note sce-handoff-file", popover);
   fileNote.hidden = true;
   const rejected = create(doc, "p", "sce-handoff-note", popover);
+  const notices = create(doc, "div", "sce-handoff-notices", popover);
   const actions = create(doc, "div", "sce-handoff-actions", popover);
   const cancel = create(doc, "button", "sce-button", actions);
   cancel.type = "button";
@@ -129,30 +131,55 @@ export function mountHandoffControl(
     if (busy) button.textContent = t.handoffSaving;
   }
 
+  /** The pre-handoff notices of the project as it stands, or none while the dialect cannot read it. */
+  function noticesNow(): ReadonlyArray<Notice> {
+    const config = source();
+    if (config === null) return [];
+    const dialect = config.dialects.find(session.project.modelId) ?? config.dialects.find(config.original.modelId);
+    return dialect === undefined ? [] : preHandoffNotices(dialect, session.project, session.view.language);
+  }
+
   function renderLog(): void {
     const config = source();
     if (config === null) return;
     const t = messagesFor(session.view.language);
     const dialect = config.dialects.find(session.project.modelId) ?? config.dialects.find(config.original.modelId);
-    const entries = changeLog(config.original, session.project, {
+    const entries = changeLogEntries(config.original, session.project, {
       language: session.view.language,
       ...(dialect === undefined ? {} : { dialect }),
     });
+    const rewritten = new Set(session.rewrittenBars);
     changes.replaceChildren(
       ...entries.map((entry) => {
         const item = create(doc, "li", "", changes);
-        item.textContent = entry;
+        item.textContent = entry.text;
+        if (entry.bars.some((bar) => rewritten.has(bar))) item.dataset.rewritten = "";
         return item;
       }),
     );
     changes.hidden = entries.length === 0;
     empty.hidden = entries.length > 0;
     empty.textContent = t.changeLogNone;
+    notices.replaceChildren(
+      ...noticesNow().map((notice) => {
+        const line = create(doc, "p", "sce-handoff-note sce-handoff-notice", notices);
+        line.textContent = notice.message;
+        return line;
+      }),
+    );
+    notices.hidden = notices.childElementCount === 0;
     const first = config.savesFirst?.() ?? null;
     fileNote.hidden = first === null;
     fileNote.textContent = first === null ? "" : t.handoffSavesFirst(first);
     rejected.hidden = session.rejectedText === null;
     popover.setAttribute("aria-describedby", entries.length === 0 ? empty.id : changes.id);
+  }
+
+  /** Sends each pre-handoff notice to the host once, when the review opens; redraws while it stays open send nothing. */
+  function announceNotices(): void {
+    const config = source();
+    if (config === null) return;
+    for (const notice of noticesNow()) config.notify?.(notice);
   }
 
   /** The trigger's normal word, so a language change and the busy state do not fight the missing-input word. */
@@ -212,6 +239,7 @@ export function mountHandoffControl(
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
       renderLog();
+      announceNotices();
       place();
       cancel.focus();
     },

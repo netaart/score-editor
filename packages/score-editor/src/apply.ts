@@ -11,7 +11,13 @@ import type { SongProject } from "./score";
 import { fallbackDiagnostic } from "./score-text";
 
 export type ApplyScoreResult =
-  | { readonly ok: true; readonly text: string; readonly report?: CommandReport }
+  | {
+      readonly ok: true;
+      readonly text: string;
+      readonly report?: CommandReport;
+      /** The 1-based bars the command rewrote; absent when none did. */
+      readonly rewrittenBars?: ReadonlyArray<number>;
+    }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
 export type ApplyProjectResult = {
@@ -19,6 +25,8 @@ export type ApplyProjectResult = {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
   /** What the score command did, when it has more to say than its text. */
   readonly reports?: ReadonlyArray<CommandReport>;
+  /** The 1-based bars the command rewrote; absent when none did. */
+  readonly rewrittenBars?: ReadonlyArray<number>;
 };
 
 /** A diagnostic the dialect left without a bar points where the command acted; one that has its own place keeps it. */
@@ -54,9 +62,12 @@ export function applyScoreCommand(dialect: ScoreDialect, text: string, command: 
   const diagnostics = dialect.check(applied.score);
   const first = diagnostics[0];
   if (first !== undefined) return { ok: false, diagnostic: located(first, commandAt(parsed.score, command)) };
-  return applied.report === undefined
-    ? { ok: true, text: written }
-    : { ok: true, text: written, report: applied.report };
+  return {
+    ok: true,
+    text: written,
+    ...(applied.report === undefined ? {} : { report: applied.report }),
+    ...(applied.rewrittenBars === undefined ? {} : { rewrittenBars: applied.rewrittenBars }),
+  };
 }
 
 /**
@@ -72,12 +83,17 @@ export function applyProjectCommand(
   if (isProjectCommand(command)) {
     const applied = runProjectCommand(dialect, project, command);
     if (!applied.ok) return { project, diagnostics: [applied.diagnostic] };
-    return applyProjectRules(dialect, applied.project, command);
+    const checked = applyProjectRules(dialect, applied.project, command);
+    return applied.rewrittenBars === undefined ? checked : { ...checked, rewrittenBars: applied.rewrittenBars };
   }
 
   const applied = applyScoreCommand(dialect, project.score, command);
   if (!applied.ok) return { project, diagnostics: [applied.diagnostic] };
   const next = withRemappedLyrics(dialect, project, command, applied.text);
   const checked = applyProjectRules(dialect, next, command);
-  return applied.report === undefined ? checked : { ...checked, reports: [applied.report] };
+  return {
+    ...checked,
+    ...(applied.report === undefined ? {} : { reports: [applied.report] }),
+    ...(applied.rewrittenBars === undefined ? {} : { rewrittenBars: applied.rewrittenBars }),
+  };
 }

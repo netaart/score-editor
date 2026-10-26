@@ -79,8 +79,19 @@ export interface SessionOptions {
  * something the user should know about it, such as a style without a BPM after a tempo change. A notice is not a refusal.
  */
 export type DispatchResult =
-  | { readonly ok: true; readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> }
-  | { readonly ok: false; readonly project: SongProject; readonly diagnostics: ReadonlyArray<Diagnostic> };
+  | {
+      readonly ok: true;
+      readonly project: SongProject;
+      readonly diagnostics: ReadonlyArray<Diagnostic>;
+      /** The 1-based bars the command rewrote; absent when none did. */
+      readonly rewrittenBars?: ReadonlyArray<number>;
+    }
+  | {
+      readonly ok: false;
+      readonly project: SongProject;
+      readonly diagnostics: ReadonlyArray<Diagnostic>;
+      readonly rewrittenBars?: ReadonlyArray<number>;
+    };
 
 /** What caused a change the session announces. */
 export type SessionChangeCause =
@@ -174,6 +185,11 @@ export interface EditingSession {
    * like the selection: not in the project and not in the history. It starts at 1/4.
    */
   readonly grid: Grid;
+  /**
+   * The 1-based bars the last edit rewrote, as its result reported them. Undo and redo put back the bars of the step they
+   * moved, and opening another project starts it empty. The review highlights the entries that name them.
+   */
+  readonly rewrittenBars: ReadonlyArray<number>;
   /**
    * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
    * diagnostics; a command that leaves the project as it was adds no step and announces nothing. A command that comes
@@ -279,6 +295,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   /** The history keeps whole song projects, oldest first; the current project is in neither list. */
   const past: SongProject[] = [];
   const future: SongProject[] = [];
+  /** The bars each history step rewrote, in the same order as the two project lists. */
+  const pastRewrite: Array<ReadonlyArray<number>> = [];
+  const futureRewrite: Array<ReadonlyArray<number>> = [];
+  let lastRewrite: ReadonlyArray<number> = [];
   let dialects = options.dialects;
   let selection: ReadonlyArray<string> = [];
   let insertionPoint: InsertionPoint | null = null;
@@ -449,13 +469,17 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     cause: SessionChangeCause,
     command?: ProjectCommand,
     following?: ReadonlyArray<string>,
+    rewritten: ReadonlyArray<number> = [],
   ): void {
     if (following !== undefined) {
       selectionBefore.set(project, selection);
       selectionAfter.set(next, following);
     }
     past.push(project);
+    pastRewrite.push(rewritten);
     future.length = 0;
+    futureRewrite.length = 0;
+    lastRewrite = rewritten;
     project = next;
     projectChanged(cause, command, following);
   }
@@ -483,9 +507,14 @@ export function createEditingSession(options: SessionOptions): EditingSession {
               following = placedSelection(before.score, after, only as PlacingCommand, dialect.constraints);
             }
           }
-          commit(applied.project, "dispatch", named, following);
+          commit(applied.project, "dispatch", named, following, applied.rewrittenBars ?? []);
         }
-        return { ok: true, project, diagnostics: applied.diagnostics };
+        return {
+          ok: true,
+          project,
+          diagnostics: applied.diagnostics,
+          ...(applied.rewrittenBars === undefined ? {} : { rewrittenBars: applied.rewrittenBars }),
+        };
       },
       (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),
     );
@@ -519,6 +548,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       const hadInsertionPoint = insertionPoint !== null;
       past.length = 0;
       future.length = 0;
+      pastRewrite.length = 0;
+      futureRewrite.length = 0;
+      lastRewrite = [];
       project = next;
       selection = [];
       insertionPoint = null;
@@ -594,6 +626,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     get grid() {
       return grid;
     },
+    get rewrittenBars() {
+      return lastRewrite;
+    },
     setGrid(next) {
       const normal = normalizeGrid(next);
       if (normal === null) throw new RangeError("The grid is not one the editor offers.");
@@ -643,7 +678,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     runTool(tool, values = {}) {
       const result = applyToolRequest(tool, { project, selection, values }, dialects, toolContext());
-      if (result.ok && !sameProject(project, result.project)) commit(result.project, "dispatch");
+      if (result.ok && !sameProject(project, result.project)) {
+        commit(result.project, "dispatch", undefined, undefined, result.rewrittenBars ?? []);
+      }
       return result;
     },
     previewTool(tool, values = {}) {
@@ -652,7 +689,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     undo() {
       const previous = past.pop();
       if (previous === undefined) return false;
+      const rewritten = pastRewrite.pop() ?? [];
       future.push(project);
+      futureRewrite.push(rewritten);
+      lastRewrite = rewritten;
       project = previous;
       projectChanged("undo", undefined, selectionBefore.get(previous));
       return true;
@@ -660,7 +700,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     redo() {
       const next = future.pop();
       if (next === undefined) return false;
+      const rewritten = futureRewrite.pop() ?? [];
       past.push(project);
+      pastRewrite.push(rewritten);
+      lastRewrite = rewritten;
       project = next;
       projectChanged("redo", undefined, selectionAfter.get(next));
       return true;

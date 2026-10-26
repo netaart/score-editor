@@ -18,6 +18,7 @@ import { type NoteToolCommand, runNoteToolCommand } from "./commands-tools";
 import { runTruncationCommand } from "./commands-truncation";
 import { type CommandReport, runVoiceCommand, type VoiceCommand } from "./commands-voice";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
+import { rewrittenBars } from "./rewritten-bars";
 import type { Meter, Score, Note as ScoreNote } from "./score";
 import type { DialectConstraints } from "./types";
 
@@ -57,7 +58,13 @@ export type ScoreCommand =
 export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
 export type ScoreCommandResult =
-  | { readonly ok: true; readonly score: Score; readonly report?: CommandReport }
+  | {
+      readonly ok: true;
+      readonly score: Score;
+      readonly report?: CommandReport;
+      /** The 1-based bars the command rewrote, in the numbers the change log names; absent when none did. */
+      readonly rewrittenBars?: ReadonlyArray<number>;
+    }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
 /**
@@ -101,6 +108,13 @@ export function runScoreCommand(
   command: ScoreCommand,
   constraints: DialectConstraints,
 ): ScoreCommandResult {
+  const result = runCommand(score, command, constraints);
+  if (!result.ok || result.score === score) return result;
+  const bars = rewrittenBars(score, result.score);
+  return bars.length === 0 ? result : { ...result, rewrittenBars: bars };
+}
+
+function runCommand(score: Score, command: ScoreCommand, constraints: DialectConstraints): ScoreCommandResult {
   switch (command.type) {
     case "toRest":
       return toRests(score, [command.noteId]);

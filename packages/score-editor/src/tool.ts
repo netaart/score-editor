@@ -269,6 +269,8 @@ export type ToolResult =
       readonly commands: ReadonlyArray<ScoreCommand>;
       /** What the commands reported, for the panel's status line. */
       readonly reports?: ReadonlyArray<CommandReport>;
+      /** The 1-based bars the commands rewrote; absent when none did. */
+      readonly rewrittenBars?: ReadonlyArray<number>;
     }
   | {
       readonly ok: false;
@@ -276,6 +278,7 @@ export type ToolResult =
       readonly diagnostics: ReadonlyArray<Diagnostic>;
       readonly commands: ReadonlyArray<ScoreCommand>;
       readonly reports?: ReadonlyArray<CommandReport>;
+      readonly rewrittenBars?: ReadonlyArray<number>;
     };
 
 interface ToolRequest {
@@ -304,6 +307,8 @@ export interface CommandListResult {
   readonly diagnostics: ReadonlyArray<Diagnostic>;
   /** What the commands did, in their order, when they have more to say than the project. */
   readonly reports?: ReadonlyArray<CommandReport>;
+  /** The 1-based bars the commands rewrote, united across the list; absent when none did. */
+  readonly rewrittenBars?: ReadonlyArray<number>;
 }
 
 /**
@@ -319,6 +324,7 @@ export function applyCommandList(
   let next = project;
   const notices: Diagnostic[] = [];
   const reports: CommandReport[] = [];
+  const rewritten = new Set<number>();
   const seen = new Set<string>();
   for (const command of commands) {
     const applied = applyProjectCommand(dialect, next, command);
@@ -326,6 +332,7 @@ export function applyCommandList(
     if (refusals.length > 0) return { ok: false, project, diagnostics: refusals };
     next = applied.project;
     reports.push(...(applied.reports ?? []));
+    for (const bar of applied.rewrittenBars ?? []) rewritten.add(bar);
     for (const notice of applied.diagnostics) {
       const key = JSON.stringify([notice.code, notice.params, notice.at]);
       if (seen.has(key)) continue;
@@ -333,9 +340,14 @@ export function applyCommandList(
       notices.push(notice);
     }
   }
-  return reports.length === 0
-    ? { ok: true, project: next, diagnostics: notices }
-    : { ok: true, project: next, diagnostics: notices, reports };
+  const bars = [...rewritten].sort((left, right) => left - right);
+  return {
+    ok: true,
+    project: next,
+    diagnostics: notices,
+    ...(reports.length === 0 ? {} : { reports }),
+    ...(bars.length === 0 ? {} : { rewrittenBars: bars }),
+  };
 }
 
 function failure(
@@ -452,9 +464,14 @@ export function applyToolRequest(
   if (!applied.ok) return failure(request.project, applied.diagnostics, commands);
   const problem = toolResultDiagnostic(tool, request.project, applied.project, dialect, context);
   if (problem !== undefined) return failure(request.project, [problem], commands);
-  return applied.reports === undefined
-    ? { ok: true, project: applied.project, diagnostics: applied.diagnostics, commands }
-    : { ok: true, project: applied.project, diagnostics: applied.diagnostics, commands, reports: applied.reports };
+  return {
+    ok: true,
+    project: applied.project,
+    diagnostics: applied.diagnostics,
+    commands,
+    ...(applied.reports === undefined ? {} : { reports: applied.reports }),
+    ...(applied.rewrittenBars === undefined ? {} : { rewrittenBars: applied.rewrittenBars }),
+  };
 }
 
 /** What running a tool would make, computed without a session. Invalid parameters and a failing step return diagnostics. */
