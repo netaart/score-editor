@@ -154,6 +154,16 @@ export interface PageNotice {
   message: string;
 }
 
+/** What the host callback of the handoff received, and the store calls made before it ran. */
+export interface PageHandoff {
+  payload: {
+    attachment: { name: string; mediaType: string; text: string };
+    instruction: string;
+    project: { score: string; style: string; lyrics: string; scoreMode: string; seed: number | null };
+  };
+  calls: Array<Record<string, unknown>>;
+}
+
 /** What the helpers below have the page keep for a test to read: stand-ins and listeners they install themselves. */
 interface PageProbes {
   vibrations: unknown[];
@@ -165,6 +175,7 @@ interface PageProbes {
 interface PageHarness {
   stage: HTMLElement;
   notices: PageNotice[];
+  handoffs: PageHandoff[];
   probes?: Partial<PageProbes>;
   layout: PageLayout;
   host: {
@@ -412,6 +423,16 @@ export class Harness {
   /** The notices the mounted editor has sent to its host so far, in order. */
   notices() {
     return this.page.evaluate(() => window.harness.notices.map((notice) => ({ ...notice })));
+  }
+
+  /** What the handoff callback has received so far, in order, with the store calls made before each. */
+  handoffs(): Promise<PageHandoff[]> {
+    return this.page.evaluate(() =>
+      window.harness.handoffs.map((handoff) => ({
+        payload: handoff.payload,
+        calls: handoff.calls,
+      })),
+    );
   }
 
   /** Waits for the browser to render `count` frames, which is when scroll events reach the page. */
