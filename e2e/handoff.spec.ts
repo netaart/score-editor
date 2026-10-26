@@ -271,6 +271,31 @@ test.describe("handing off", () => {
     expect(handoff.payload.instruction).toContain("- 改了 1 个小节的音符。");
   });
 
+  test("hands off an unchanged original without writing a draft", async ({ page, harness }) => {
+    await harness.mount({
+      score: { text: SCORE },
+      project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+      handoff: true,
+      drafts: true,
+      title: "My Song",
+    });
+    await handoffButton(page).click();
+    await expect(dialog(page).getByText("No changes from the original.")).toBeVisible();
+    await confirmButton(page).click();
+    await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
+    const handoff = (await harness.handoffs())[0];
+    if (handoff === undefined) throw new Error("the host callback did not run");
+    expect(handoff.payload.attachment.text).toBe(SCORE);
+    expect(handoff.calls.filter((call) => call.method === "write")).toEqual([]);
+  });
+
+  test("shows the button when an update adds the callback and the store", async ({ page, harness }) => {
+    await harness.mount({ score: { text: SCORE } });
+    await expect(handoffButton(page)).toHaveCount(0);
+    await harness.update({ handoff: true, drafts: true });
+    await expect(handoffButton(page)).toBeVisible();
+  });
+
   test("has no button while read-only, and calls nothing", async ({ page, harness }) => {
     await seed(harness.page, storedDraft({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") }));
     await harness.mount({
