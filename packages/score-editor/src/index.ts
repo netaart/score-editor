@@ -28,6 +28,7 @@ export {
 } from "./diagnostics";
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
 export { createDialectRegistry } from "./dialect";
+export { mountDraftConflict } from "./draft-conflict";
 // Drafts below the UI.
 export type {
   DraftHandoffResult,
@@ -41,6 +42,19 @@ export type { DraftProject, ScoreDraft } from "./drafts";
 export { contentHash, DRAFT_FORMAT_VERSION, draftText, readDraft } from "./drafts";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
+// The lyric track: the rules a host's own lyric view can reuse.
+export type {
+  LyricBoundaryDrag,
+  LyricBoundaryMove,
+  LyricBoundaryPlan,
+  LyricDrop,
+  LyricDropPlan,
+  LyricEdge,
+  LyricRow,
+  LyricSplit,
+} from "./lyric-edit";
+export { barLineTick, lyricBoundaryPlan, lyricDropPlan, lyricRows, lyricSplitCommand } from "./lyric-edit";
+export { mountLyricTrack } from "./lyric-track";
 export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
 export {
   alignedLyricLines,
@@ -93,9 +107,11 @@ export type {
   ViewState,
 } from "./session";
 export { createEditingSession, VIEW_NAMES } from "./session";
+export type { StaffViewPart } from "./staff-view";
 export { mountStaffView } from "./staff-view";
 export { mountStaleNotice } from "./stale-notice";
 export { mountSynthPreview } from "./synth-preview";
+export { tickAtSeconds } from "./tempo";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
 export type {

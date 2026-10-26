@@ -2,7 +2,9 @@
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
 import { boxCss } from "./box-styles";
+import { draftCss } from "./draft-styles";
 import { filterCss } from "./filter-styles";
+import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
@@ -1060,7 +1062,8 @@ ${labelThinning()}
   background: linear-gradient(to right, var(--sce-_bg) 0 1px, var(--sce-_text) 1px 2px, var(--sce-_bg) 2px 3px);
   pointer-events: none;
 }
-${boxCss}
+${boxCss}${lyricCss}
+${draftCss}
 ${filterCss}`;
 
 interface Injection {

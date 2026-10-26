@@ -8,6 +8,10 @@ colors:
   ink-dark: "#ececee"
   accent-light: "#2457d6"
   accent-dark: "#7da3ff"
+  equal-light: "#2e8b4f"
+  equal-dark: "#4cc27a"
+  unequal-light: "#c79100"
+  unequal-dark: "#f0c040"
 typography:
   base:
     fontFamily: "inherit"
@@ -81,6 +85,8 @@ components:
     height: "40px"
   playhead:
     width: "1px"
+  staff-cursor:
+    width: "1px"
   synth-caption:
     max-width: "12em"
   filter-panel:
@@ -91,6 +97,17 @@ components:
     field-height-coarse: "40px"
   filter-sheet:
     max-height: "75dvh"
+  lyric-phrase:
+    height: "2.3em"
+  lyric-phrase-coarse:
+    height: "3em"
+  lyric-syllable-row:
+    height: "1.6em"
+  lyric-handle:
+    width: "16px"
+  lyric-handle-coarse:
+    width: "44px"
+    height: "44px"
 ---
 
 # Design System: Score Editor
@@ -112,14 +129,14 @@ The one authored move is the cut: when the score text stops before the song does
 - No identity of its own: colours and type come from the host; defaults are neutral.
 - Hairline structure: 1px lines, tonal fills, almost no shadow.
 - Two densities selected by pointer type, not by screen width.
-- Meaning never rests on colour alone: a cut is hatched and dashed, a tie is one joined bar, a selected note is framed, the insertion point is a heavier line with a flag, a missing chord track says so in words.
+- Meaning never rests on colour alone: a cut is hatched and dashed, a tie is one joined bar, a selected note is framed, the insertion point is a heavier line with a flag, a missing chord track says so in words, a lyric phrase whose counts differ has a broken line and the word "differ" in its name.
 - Editing is a state of the session, not of a part: every control and every gesture that edits is there only while `session.view.editable` is true, and the read-only view is the same view with those left out.
-- Text that does not fit its cell is left out whole, never cut mid-word: a cut "Dm" would read as "D".
+- Text that does not fit its cell is left out whole, never cut mid-word: a cut "Dm" would read as "D". The one exception is the text of a lyric line inside its phrase block (see Lyric track).
 - Isolated styles: a host's element and class selectors do not reach in; inside a shadow root nothing does.
 
 ## Colors
 
-The package states no palette. It reads eight theme variables and falls back to neutral values only where the host has not mapped one. The six hex values in the frontmatter are those fallbacks, one pair per light and dark scheme; they are defaults, not a brand.
+The package states no palette. It reads ten theme variables and falls back to neutral values only where the host has not mapped one. The ten hex values in the frontmatter are those fallbacks, one pair per light and dark scheme; they are defaults, not a brand.
 
 ### The theme variable contract (normative)
 
@@ -135,6 +152,8 @@ A host maps its own theme onto these public variables, set on the editor's root 
 | `--sce-color-line-strong` | Bar lines, the edges of section bands, marks and chords, the cut hatch, button and badge borders, popover border | 28% of text mixed into bg |
 | `--sce-color-accent` | Focus ring, checked menu dot | `#2457d6` light, `#7da3ff` dark |
 | `--sce-color-note` | Note fill | the accent value |
+| `--sce-color-equal` | The wash and line of a lyric phrase whose syllable count equals its note-start count | `#2e8b4f` light, `#4cc27a` dark |
+| `--sce-color-unequal` | The wash and line of a lyric phrase whose two counts differ | `#c79100` light, `#f0c040` dark |
 | `--sce-font-family` | Font family | the host's inherited font |
 | `--sce-font-family-mono` | Font family of the score text and its line numbers | `ui-monospace`, `Cascadia Mono`, `SF Mono`, `Menlo`, `Consolas`, `monospace` |
 | `--sce-radius` | Base corner radius | `4px` |
@@ -146,21 +165,26 @@ Defaults follow the host's `color-scheme` through `light-dark()`: a host that se
 
 **Derivation.** Surface, muted, line and line-strong are computed from the mapped background and text with `color-mix(in srgb, ...)` at the percentages above. A host that maps only `--sce-color-bg` and `--sce-color-text` therefore gets a coherent set of greys in any scheme, and every text colour keeps a contrast of at least 4.5:1 (a test maps only those two and checks the title, zoom value, bar numbers, section names, chords, marks, track names and octave labels). A host that maps one of the four greys overrides only that one. Do not add a variable for a derived grey unless a host proves the derivation fails.
 
-**Private variables.** The `--sce-_*` names (`--sce-_bg`, `--sce-_text`, `--sce-_surface`, `--sce-_muted`, `--sce-_line`, `--sce-_line-strong`, `--sce-_accent`, `--sce-_note`, `--sce-_radius`, `--sce-_row`, `--sce-_beat`, `--sce-_keys`, `--sce-_shade`, and the row heights `--sce-_ruler`, `--sce-_band`, `--sce-_chords` and their sum `--sce-_top`, and `--sce-_head-top`, where the editor's track heads pin) are aliases that resolve the public variable or its default. They are not public: hosts must not set them and new work must not document them as an API. Per-instance layout values (`--sce-ticks`, the length of the score in ticks, on the canvas; `--sce-rows`, the pitch rows of a lane) and per-item values (`--t` start, `--d` or `--w` length, `--r` row and, for the selection box, `--h` height, all in ticks or rows) are set by the editor itself.
+**Private variables.** The `--sce-_*` names (`--sce-_bg`, `--sce-_text`, `--sce-_surface`, `--sce-_muted`, `--sce-_line`, `--sce-_line-strong`, `--sce-_accent`, `--sce-_note`, `--sce-_radius`, `--sce-_row`, `--sce-_beat`, `--sce-_keys`, `--sce-_shade`, and the row heights `--sce-_ruler`, `--sce-_band`, `--sce-_chords` and their sum `--sce-_top`, and `--sce-_head-top`, where the editor's track heads pin; for the lyric track `--sce-_equal`, `--sce-_unequal`, the row heights `--sce-_phrase` and `--sce-_syllable`, and `--sce-_view`, the width of the surface the track scrolls in, which the part keeps) are aliases that resolve the public variable or its default. They are not public: hosts must not set them and new work must not document them as an API. Per-instance layout values (`--sce-ticks`, the length of the score in ticks, on the canvas; `--sce-rows`, the pitch rows of a lane) and per-item values (`--t` start, `--d` or `--w` length, `--r` row and, for the selection box, `--h` height, all in ticks or rows) are set by the editor itself.
+
+### The two state hues
+
+Green and yellow cannot be derived from a background and a text colour, so `--sce-color-equal` and `--sce-color-unequal` are the only colours of their kind in the contract, each with a neutral default. A phrase takes the hue only through two derivations: its wash is 20% of the hue over bg, and its line is the hue pulled 70% toward text, so the text on the wash and the line round the block keep their contrast whatever the page's colours are (a test checks text on the wash at 4.5:1 and the line against the page at 3:1, in both default schemes). Neither hue marks anything but the lyric phrases.
 
 ### Neutral defaults
 
 - **Ground** (#ffffff light, #1b1c1f dark): the roll and the button ground.
 - **Ink** (#18181b light, #ececee dark): text.
 - **Cool accent** (#2457d6 light, #7da3ff dark): focus and checked state; also the note fill unless a note colour is mapped.
+- **Equal green** (#2e8b4f light, #4cc27a dark) and **unequal yellow** (#c79100 light, #f0c040 dark): the two states of a lyric phrase.
 
-Derived values used by the build: black-key row shading and the tint of every second section band are 5% of text over transparent; a hovered button is 6% of text over bg and an expanded one 10%; a hovered menu item is 8% of text; a note's border is 30% of text mixed into the note colour; the selection box's wash is 8% of text over transparent, and the tint of a lane while a box is armed or open is 6%.
+Derived values used by the build: black-key row shading and the tint of every second section band are 5% of text over transparent; a hovered button is 6% of text over bg and an expanded one 10%; a hovered menu item is 8% of text; a note's border is 30% of text mixed into the note colour; the selection box's wash is 8% of text over transparent, and the tint of a lane while a box is armed or open is 6%; the drop mark of a lyric line is 10% of text over transparent (14% of muted when the bar is taken), and the lane under a dragged line is 4% of text.
 
 ### Named Rules
 
-**The Borrowed Colour Rule.** The package never names a colour outside the variable contract and its neutral defaults. A new surface takes its colour from an existing variable or a derivation from bg and text. One exception, for the selection box only: where the system forces its colours (`forced-colors: active`) the page's own colours are replaced, so the box is outlined in the system keyword `CanvasText`, the colour the user agent gives text, which is not one the package picks.
+**The Borrowed Colour Rule.** The package never names a colour outside the variable contract and its neutral defaults. A new surface takes its colour from an existing variable or a derivation from bg and text. One exception: where the system forces its colours (`forced-colors: active`) the page's own colours are replaced, so the selection box is outlined in the system keyword `CanvasText`, and the lyric track's phrases, guide line and drop mark use `Canvas`, `CanvasText` and `Highlight`; these are the colours the user agent gives, not ones the package picks, and the line style (solid or broken) and the count carry the lyric states. The lyric track's two state hues are no exception: they are in the variable contract above, with neutral defaults.
 
-**The One Accent Rule.** Accent marks focus and the checked menu dot; the note colour defaults to the same value. Nothing else is tinted: the playhead of the synth preview is the text colour, like the insertion point.
+**The One Accent Rule.** Accent marks focus and the checked menu dot; the note colour defaults to the same value. Nothing else is tinted but the wash and the line of a lyric phrase, which take the two state hues ([The two state hues](#the-two-state-hues)); the playhead of the synth preview is the text colour, like the insertion point.
 
 ## Typography
 
@@ -181,13 +205,13 @@ Sizes are keyword-relative so the user's browser font size applies and a host's 
 
 **The Tabular Numbers Rule.** Every number that can change (bar numbers, octave labels, the zoom value, marks) uses lining, tabular numerals (`font-variant-numeric: lining-nums tabular-nums`) so numbers do not shift as the zoom changes.
 
-**The Keyword Size Rule.** No `px` or `rem` font sizes. The root is a keyword; descendants are `em`.
+**The Keyword Size Rule.** No `px` or `rem` font sizes. The root is a keyword; descendants are `em`. The one exception is the text fields of the lyric track on a coarse pointer, which are `16px`: a phone's browser zooms the page when a field with smaller type takes the focus.
 
 ## Layout
 
 A single scroller holds a canvas. Its width is the pitch column plus the score's length at the current zoom (the length in ticks times the beat width, over 256 ticks to the quarter note, times the zoom). The scroller scrolls both ways. A header block is pinned to the top: the bar ruler, the section bands, the marks row and the chord track, in that order. Under it each voice has a track: a track head (the voice's name) pinned below the header, a pitch column pinned to the left, and a lane. Time runs left to right whatever the page direction. A lane's height is its rows times the row height, with each octave being twelve rows; a voice's rows run from a margin of a few semitones below its lowest note to a margin above its highest, rounded out to whole octaves.
 
-Structure from top to bottom: toolbar strip (minimum 40px; title, zoom group, history group, Delete, Select, spacer, read-only badge), the cut sentence when the score is cut, the header block, then the tracks (`Vocal`, then `Ins` when present). The root fills its parent (`height: 100%`, minimum 288px) and clips overflow; the host decides the size.
+Structure from top to bottom: toolbar strip (minimum 40px; title, zoom group, history group, Delete, Select, Restore original, spacer, read-only badge), the draft conflict strip when it stands, the cut sentence when the score is cut, the header block, then the tracks (`Vocal`, then `Ins` when present, then the lyric track). The root fills its parent (`height: 100%`, minimum 288px) and clips overflow; the host decides the size.
 
 **The time axis.** Zooming sets the width of the elements that carry the axis (the canvas, the four header timelines, the lanes), by writing `calc(var(--sce-ticks) * var(--sce-_beat) * <zoom> / 256)` as their width. Everything placed on the axis (notes, bar numbers, chords, flags, bands, the cut, the grid) is positioned in percent of its axis element from its start and length in ticks. Do not hold the zoom in an inherited custom property: a variable that changes on the root restyles every note (about 70 ms per step at 1500 notes, against about 3 ms for widths). The zoom steps are 10%, 25%, 50%, 100%, 150%, 200% and 400% (1% to 400% reachable with the control wheel), and "Fit whole song" fits the score to the width shown.
 
@@ -200,10 +224,13 @@ Density follows pointer type, not viewport width. A fine pointer gets the compac
 | Row height and note height | 14px | 24px |
 | Toolbar button minimum height, and the width and height of an icon button | 28px | 36px |
 | Menu item minimum height | 30px | 40px |
+| Lyric phrase block and the line it is read on (`--sce-_phrase`) | 2.3em | 3em |
+| Lyric phrase handle, the hit area of an edge | 16px wide | 44px by 44px |
+| Item of the unaligned list, its grip, and the fields of the editor | 28px high, grip 28px wide | 36px high, grip 44px wide; fields 16px type |
 
 A host that maps `--sce-row-height` overrides both. Header rows at the default text size are 24px (ruler), 22px (sections), 22px (marks) and 26px (chords); track heads are 22px. Spacing is a small set used as seen: 8px gaps in the toolbar, 12px toolbar side padding, 10px button side padding, 5px before the text of a flag or chord.
 
-Touch behaviour: the scroller takes one finger for panning in both directions and leaves the page's own pinch (`touch-action: pan-x pan-y pinch-zoom`). A pinch does not zoom the time axis; the buttons and the menu do. A press that ends within 6px of where it began is a tap and selects; a press that moves farther is a swipe, and the browser keeps it as a scroll. The one exception is a finger that has rested on empty lane space for 0.4 s first, which draws a selection box (see Selecting several notes); the lane's `touch-action` is never changed, because the browser fixes it when the finger goes down.
+Touch behaviour: the scroller takes one finger for panning in both directions and leaves the page's own pinch (`touch-action: pan-x pan-y pinch-zoom`). A pinch does not zoom the time axis; the buttons and the menu do. A press that ends within 6px of where it began is a tap and selects; a press that moves farther is a swipe, and the browser keeps it as a scroll. The one exception is a finger that has rested on empty lane space for 0.4 s first, which draws a selection box (see Selecting several notes); the lane's `touch-action` is never changed, because the browser fixes it when the finger goes down. The lyric track keeps that rule: only a phrase handle and a grip have `touch-action: none`, so a swipe on a phrase, on the syllable row or on empty track space is a scroll (see Lyric track).
 
 ## Elevation & Depth
 
@@ -231,7 +258,7 @@ The panel previews with `previewTool` or `session.previewTool`: the returned pro
 
 ### View parts
 
-The arrangement is built from view parts bound to one editing session: the toolbar, the zoom control, the cut notice, the problem view, the time ruler, the chord track, one voice track for each voice, the synth preview control and the Filter panel. Three views share the editor's frame: the arrangement, the staff view and the text view, chosen by the view switch, with the stale notice above the two that draw the project. The staff view, the text view, the stale notice and the view switch are parts of their own too. A host can mount any of them on its own element; the default editor mounts all of them in the layout described above, except that it mounts the staff view and the text view the first time each is shown, so an editor that is never switched to them draws neither (the text view draws a number for each line of the score, about 150 nodes for the 128-bar sample, and the staff view asks for abcjs). Every part's root carries the same context as the editor's root (the theme variables, the reset, the text size) and is a stacking context of its own, so a part is styled and isolated alike wherever it stands; the decisions are in [the spike](docs/spike.md). The root is a `div.sce-root.sce-part`. Inside the default editor it draws no box (`display: contents`), so the layout above is the layout of the parts; mounted alone it is a block as wide as its element.
+The arrangement is built from view parts bound to one editing session: the toolbar (which holds Restore original while a keeper is ready and the editor is editable), the zoom control, the cut notice, the draft conflict strip, the problem view, the time ruler, the chord track, one voice track for each voice, the lyric track, the synth preview control and the Filter panel. Three views share the editor's frame: the arrangement, the staff view and the text view, chosen by the view switch, with the stale notice above the two that draw the project. The staff view, the text view, the stale notice and the view switch are parts of their own too. A host can mount any of them on its own element; the default editor mounts all of them in the layout described above (the draft conflict strip only while the host gave a store), except that it mounts the staff view and the text view the first time each is shown, so an editor that is never switched to them draws neither (the text view draws a number for each line of the score, about 150 nodes for the 128-bar sample, and the staff view asks for abcjs). Every part's root carries the same context as the editor's root (the theme variables, the reset, the text size) and is a stacking context of its own, so a part is styled and isolated alike wherever it stands; the decisions are in [the spike](docs/spike.md). The root is a `div.sce-root.sce-part`. Inside the default editor it draws no box (`display: contents`), so the layout above is the layout of the parts; mounted alone it is a block as wide as its element.
 
 - **The time axis.** The ruler, the chord track and a voice track share the session's zoom and horizontal scroll. Zoom writes the same width formula as above on every part in one pass, and only then scrolls them, so the document lays out once. Mounted alone, each of the three is its own horizontal scroll surface (`overflow-x: auto`) whose scroll offset the session sets and whose user scrolling the session takes back, so parts of different widths scroll together and each stops at its own end without pulling the others back. The ruler and the chord track hide their scrollbar; a track shows it. A part that draws is a focusable region with a name, so Tab reaches it. Each of the three also keeps one polite live region (see Announcements) that survives every redraw. Zoom actions (the menu, the steps, "Fit whole song") measure the first part on the axis; control plus the wheel and the plus and minus keys measure the part that received them. The default editor puts all of its parts in one scroller and gives it to each as the `scroller` option, so none of them is a scroll surface there.
 - **Pinning.** The default editor pins its header block, which holds the ruler and the chord track, above the tracks, and its track heads pin under that block.
@@ -379,6 +406,18 @@ abcjs is loaded with `import()` when the staff view is mounted, and the default 
 - What cannot be isolated, and is accepted: abcjs registers two `resize` listeners on `window` when it loads, which it offers no way to remove (the lifecycle test loads abcjs before taking its baseline of listeners for that reason), and it keeps a text-size cache of its own for the life of the page.
 - `getBBox` needs a displayed box, so the part draws only when its region has a width: a staff view mounted in a hidden container waits until it is shown, and keeps what it drew before while it is hidden.
 
+### Staff play cursor
+
+The staff view's play position is the host's. `mountStaffView` returns a `StaffViewPart`; `setPlayPosition(seconds)` draws the cursor at that time from the start of the score, and `null` takes it away. It is a readout, not an edit, so it is drawn while the session is read-only too. The session's own preview drives the same cursor while it plays, and a press on a drawn note starts the preview at that note. A press lands on the box of the note it is over, not on the element the pointer reports: a staff line drawn across a note head is what the pointer hits, and it must not swallow the press. Seconds become a position through `tickAtSeconds`: each stretch of the score uses the tempo in force in it, and a time past the end stays on the last bar line.
+
+A bar begins at the bar line abcjs draws to close the bar before it. The first bar of a system has no line of its own, so it begins at its first drawn note or rest. The cursor's x is the drawn line's box, not the first note of the bar: a rest or a note written after the line must not move the start, and a bar's later notes must not pull it back. That is why the cursor and the drawn bar lines line up exactly.
+
+The cursor is 1px in the text colour with a 1px edge in the ground colour on each side, so it reads over a staff line and over a note, and it spans the five staff lines plus 2px beyond each. It has no flag, so it is told from the insertion point by shape; it spends no accent, ignores the pointer, and is hidden from assistive technology. It has no transition or easing. Under forced colours it is `CanvasText`.
+
+When a new position is outside the region, the region scrolls so the cursor comes in 16px from its left edge, and, when its staff line is outside, from the top or bottom; the host page itself never scrolls. A position already in view moves the view not at all, so the cursor does not drag the staff under the eye; a line is turned only when the cursor reaches its end. This is the same rule as the arrangement playhead's page turn, applied to the staff's own scroller.
+
+The states a reviewer checks, at desktop and phone width: the cursor at the start, mid-bar, after a tempo change (the test page can open a score with one), at the end, and while the preview plays; also in a read-only session, since that is the host's case.
+
 ### Read-only badge
 
 Pill, 1px strong line, muted text, label size, at the end of the toolbar. It appears only while the session is not editable, and takes the place of the history group. In that state nothing in the view offers an edit: no history or Delete button, no selection frame, no insertion point, no tab stop or pointer cursor on a note, nothing about editing said in the live regions, and Delete, the history keys, the note keys and the insertion point keys do nothing.
@@ -393,7 +432,7 @@ What a screen reader cannot see in the drawing is said in words, in the session'
 
 ### Motion
 
-None. No transition or animation exists, so nothing needs a reduced-motion alternative. Zoom, scroll, selection and the insertion point change the view directly. The one thing that moves by itself is the playhead of the synth preview, and it is not an animation: it is a readout of where the sound is, set from the audio clock on every frame, with no transition or easing, and present only while the person has asked for sound. A reduced-motion setting therefore changes nothing about it.
+None. No transition or animation exists, so nothing needs a reduced-motion alternative. Zoom, scroll, selection and the insertion point change the view directly. The things that move by themselves are the playhead of the synth preview and the staff view's play cursor while the preview plays, and neither is an animation: both are readouts of where the sound is, set from the audio clock on every frame, with no transition or easing, and present only while the person has asked for sound. A reduced-motion setting therefore changes nothing about them.
 
 ### Synth preview
 
@@ -465,6 +504,60 @@ The names of the conditions ("Pitch", "Time", "Length", "Key", "Count"; "音高"
 
 **Verified and not.** Seam 1 (`tests/filter-notes.test.ts`) covers the filter on hand-written scores; seam 5 (`e2e/filter-select.spec.ts`) covers each condition, combining, Invert, Re-apply, closing and opening, read-only, the views, the language, keys, the panel's place and size and the status line, on the desktop and phone projects. Screenshots of every state were taken in Chromium at 1280x720 and in the Pixel 7 emulation. Not checked: a real phone's zoom on focus (the 16px rule follows the browser's documented behaviour and was measured only as computed size), a screen reader's reading of the panel, a browser other than Chromium, and the panel inside a host's own modal.
 
+### Lyric track
+
+A view part of its own (`mountLyricTrack`) on the same time axis, zoom and scroll as the other tracks; in the default editor it is the bottom track, under `Ins`, mounted with the voice tracks and replaced with them. It draws the project's lyric lines from `session.project` (the lines the project stores, or the layout computed from its `lyrics` text), classified against the score: a line whose phrase no longer fits the score is read as not on bars.
+
+**Head and lane.** The head is the voice tracks' head, pinned under the header block, with the name "Lyrics", the New line button and a muted legend, "syllables / note starts", that says what the two numbers of a block are (a screen has no tooltip; the block's name says it in words for a screen reader, so the legend is hidden from it); the three stay at the pitch column's edge while the lane is scrolled past them. The button is as high as the head leaves it (the head is 1.7em, so the button is 4px shorter); on a coarse pointer it is 36px and the head grows to it with 2px above and below. The lane is a phrase row (2.3em, 3em on a coarse pointer) over a syllable row (1.6em). A song with no lines shows one muted sentence, "No lyrics in this song", pinned at the left on the lane's ground (the grid is under it, so the sentence has the ground colour behind it).
+
+**A phrase.** A block over the bars of its line, 2px short of the last bar line, with a 1px line and the corner radius of a note (3px at most). It holds the count, "syllables / note starts" in 600 weight with tabular numerals, then the text of the line. The state is told three ways: the hue (`--sce-color-equal` or `--sce-color-unequal`, see [The two state hues](#the-two-state-hues)), the line (solid when equal, broken when they differ) and the words in the accessible name ("Line 2, bars 3 to 4, 7 syllables and 8 note starts, they differ: ..."; "equal" when they match). A chosen block has the selection frame, 2px in the text colour, drawn inside the block's own line (an inset shadow), so a chosen block whose counts differ keeps its broken line; where the system forces its colours the frame is the border, in `Highlight`. The focus ring is the accent. The count and the text stay at the pitch column's edge while the block is scrolled past it, as a chord's name does, and never leave the block's stretch. The count is left out whole when the block is too narrow for it, and never cut; the text is cut with an ellipsis, the one place the package does so inside a track (a lyric line is a sentence, so a cut one cannot be read as another line, the whole text is in the block's name and in the editor, and leaving it out whole would leave the narrow blocks of a zoomed-out song empty).
+
+**Syllables.** When the two counts are equal, each syllable stands at the start of its note, in a cell that runs to the next note's start, with a 1px strong line at its left. When they differ, the cells are the note starts alone, with a broken line, so the person sees against the text which notes have no syllable. A syllable that does not fit its cell is left out whole (the same strut as the chord track's), so a zoomed-out song shows the ticks of the notes and no cut glyphs. The row is hidden from assistive technology: the text is in the block's name.
+
+**The panel under the lane.** The list "Not aligned" (the spec's name for the lines that are not on bars) with its count and one muted sentence that says how a line gets onto bars, the editor of the chosen line, and the field for a new line. It stays at the pitch column's edge while the lane scrolls, is as wide as 36em or as the surface the track scrolls in (the part keeps `--sce-_view` at that width, with a ResizeObserver), whichever is narrower, so it never needs a scroll of its own, and is hidden while no line is loose, none is chosen and none is being added, so a song with every line on bars costs the track no room. An item of the list is a text button with a grip at its left (whole dots of the muted colour, a tile of 8px with 2px round it, with the line's name as its tooltip); a chosen item has the 2px frame, and the editor of a loose line opens inside that frame under the row, so the row does not move; the editor of a line on bars, and of a new line, sits above the heading. The editor starts with the name of its line ("Line 2"), in 600 weight, since its buttons say "next" and "delete" of something.
+
+**Editing.** Every action below is one command, or one list of commands applied as one step (`session.dispatchAll`), so one undo takes it back; a refusal changes nothing and is said as the other parts say it, in the live region and through `onRefused`, in the editor's language. None of it exists while `session.view.editable` is false, and the read-only track shows the blocks, the counts, the syllables and the list, with no handle, grip, field or key.
+
+| The person | What happens |
+| --- | --- |
+| Clicks or taps a phrase or an item of the list | Chooses the line and opens its text in the editor in the panel. |
+| Types, then Enter or leaves the box | `setLyricLineText`, only when the text changed; Escape gives the typed text up. A refused text stays in the box, which is marked `aria-invalid` (2px line in the text colour) and described by one sentence under it, the diagnostic in the editor's language; both go when the text is changed. The part's live region says it once. |
+| Presses Split at cursor, Merge with next, Delete line | `splitLyricLine` at the caret (with the bar the caret's note is in when the line is on bars and the counts are equal, in proportion to the syllables when not; no bar for a one-bar phrase), `mergeLyricLines`, `deleteLyricLine`. Split does nothing while the box holds text the project has not taken. |
+| Presses New line, types, presses Add or Enter | `insertLyricLine` at the end of the list, without a phrase: the line starts in the unaligned list and is chosen. |
+| Presses on a phrase handle and drags | Moves that edge to the nearest bar line, one bar at least, inside the line's section and clear of the other lines; a line that shares the edge gives up its bars first, and both `setLyricLinePhrase` commands go as one step. A guide line shows where it will land; Escape, a cancelled pointer, a lost capture or a window blur give the drag up. |
+| Presses on a grip and drags onto the lane | `setLyricLinePhrase` with a one-bar phrase on the bar under the pointer, drawn as a mark while the pointer is over the lane; a bar that already has a line is drawn with a broken muted outline and refused. Letting go away from the lane sends nothing. |
+| Types a bar number in the editor of a loose line and presses Place on bar | The same one-bar phrase, with no drag. |
+| Tab, Left and Right, Home and End, Enter or Space, Delete or Backspace, Escape | The phrases are one tab stop; the arrows step to the neighbouring line and choose it; Enter or Space moves to the editor; Delete or Backspace removes the line; Escape drops the choice. The handle of a chosen line is a slider (the stop of that line only), moved one bar by Left and Right, and as far as it may go by Home and End. |
+
+**Gesture choices, and what they rest on.**
+
+- *Only a handle and a grip start a gesture, and only they stop the browser's panning.* `touch-action` is fixed when a finger goes down, and a stream the browser takes for a pan ends in `pointercancel` (W3C Pointer Events Level 3, 4.1.3.3 and 4.2.7; read from the start of the page to character 100000 of 248345). A throwaway probe, not kept in the repo (Chromium with Pixel 7 emulation, touch events sent through the DevTools protocol; WebKit and Gecko were not run), put a finger on a 44px square with `touch-action: none` inside a scroller that pans: ten `pointermove`, one `pointerup`, no `pointercancel`, the scroller did not move. The same square without it got two moves and a `pointercancel`, and a swipe on the empty lane scrolled it by 185px. Seam 5 repeats the swipe cases on a touch screen. So no long press is needed, unlike the selection box of a voice track (see Selecting several notes): the two gestures are told apart by where the finger lands, and the handle is a fingertip wide (44px by 44px) on a coarse pointer, centred on the edge.
+- *The handle is a slider.* `role="slider"` with `aria-valuenow`, `aria-valuemin`, `aria-valuemax` and `aria-valuetext` ("bar 5"), a label that names the edge and the line, Left and Right as the step, and Home and End as the first and the last allowed value (W3C ARIA Authoring Practices, slider pattern; Up and Down are not used, because the axis is horizontal). A sentence of the keys, hidden from the eye, is the description of the list of phrases while the track can edit. Only the chosen line's handles are in the tab order, so Tab does not walk twice as many stops as there are lines.
+- *A drop gives the line one bar.* The bar under the pointer, and nothing the pointer has not shown: the person widens it with the handles. A drop on a taken bar is refused by the model, which names the line that holds it, so the refusal is the same sentence whatever opened it.
+- *A line is placed without a drag by its bar number.* WCAG 2.2 success criterion 2.5.7 (Dragging Movements, AA) asks that what a drag does can also be done by a single pointer without dragging, and says a keyboard alone does not satisfy it unless the keyboard operation also has controls that can be clicked or tapped (W3C Understanding SC 2.5.7). Placing a loose line meets it with the number field and the Place on bar button. **Moving the edge of a phrase has only the drag and the slider's keys; it does not meet 2.5.7 yet.** Home and End on a handle move the edge as far as it may go.
+- *The text is edited in the panel under the lane, not on the block.* A loose line has no block, so one editor serves both kinds of line; a block can be 40px wide in a zoomed-out song and cannot hold a field with its caret; and on a phone the field (16px type, see [Typography](#typography)) and its buttons need the width the panel has, which stays at the pitch column's edge at any scroll.
+- *The click that ends a drag is swallowed*, so letting go over a block does not also choose it; a press that moves less than 4px is a click.
+- *The handles are always there, not only on the chosen line.* A 44px square at every edge covers part of each block on a phone (a quarter of a one-bar phrase at 100%, more than half at a zoom that fits the song), and a swipe that starts on it is a drag, not a scroll. Making the handles live only on the chosen line would stop that at the price of a tap before every edge drag. It was not done: dragging a phrase's boundary is the point of the handle, a person who aims at an edge should not have to choose first, and an edge drag by mistake is one undo. A swipe that starts on the body of a block, in the syllable row or on empty space scrolls.
+- *No autoscroll while a drag is on.* A drag reaches the bars that are in view; the person zooms out first (the zoom control's Fit whole song puts a whole song in reach).
+
+### Draft opening
+
+While a draft keeper is reading the host's store (the `drafts` option of `mount`), the editor shows the original and does not let an edit start. The toolbar says so in the place the read-only badge takes: the same pill, with the words "Opening draft…" ("正在打开草稿…"), and the same absence of editing controls, selection, insertion point and live announcements, because the session is not editable until the keeper is ready. It is one state and one mechanism with read-only, so nothing in the view needs a second look for it, and a person who sees the badge for a moment and then the controls understands that the editor was waiting and not broken. There is no spinner and no motion (see Motion). A store that never answers leaves the badge up; the package does not time out, since how long a read may take is the host's to decide.
+
+### Restore original
+
+A text button in the toolbar after the Select button, labelled "Restore original" ("恢复原谱"), with the Select button's make: ground fill, 1px strong line, 4px radius, 28px high (36px coarse). It is there only while a draft keeper is ready or in conflict and the editor is editable, so a read-only editor and one without a store never show it. It is not muted for lack of edits: a person who is unsure whether a draft exists should still be able to get back to the original, and the question below says what will be lost.
+
+Pressing it opens a question in a native popover (`popover="auto"`, the zoom menu's mechanics shared in `popover-menu.ts`, so it stacks above a host's full-screen layer and light dismiss and Escape close it), under the button and nudged into the window. Surface fill, 1px strong line, 12px padding, 22em wide and never wider than the window less 16px. A question in 600 weight, "Go back to the original score?", then one sentence of what it costs, "Every change you made is discarded and the saved draft is deleted. You can't undo this.", then the two answers at the end of the row, Cancel and "Restore original". The answer that does it is last and heavier; there is no danger colour in the theme contract and none is added, so the destructive word is on the button and the cost is in the sentence. The focus starts on Cancel, so Enter pressed by habit changes nothing. The popover is a dialog with the question as its name and the cost as its description. Confirming calls the keeper's `restoreOriginal()` and, once the store has answered, has the toolbar's live region say "The original score is back". When the removal was refused it says "The original score is back, but the saved draft could not be deleted. The next change tries again.", and the host has had `draft-save-failed`. It is asked once and is not asked again by anything else the editor does.
+
+### Draft conflict strip
+
+When another window wrote the draft first, a strip stands between the toolbar and the views (a part of its own, `mountDraftConflict`; the default editor mounts it after the toolbar). It is the notice strip's make (1px line under it), with the line in the strong line colour and the sentence in 600 weight where the cut notice is plain, so it reads as a decision still open and not as information. The sentence: "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose." Under it two buttons side by side, each of two lines: what it is ("Overwrite with my version", "Load the other version") and under it, muted at 0.92em, what it does ("The other version is replaced by yours.", "It opens here, and your changes in this window are dropped."). The cost is inside the thing that is pressed, so there is no second question; each button is the word and its consequence. The two buttons sit in a row with a 24px gap where there is room and one above the other where there is not, with no breakpoint (the row wraps; each button takes the width of its longer line). The second line is the button's description for a screen reader and is hidden from the accessible name, so it is not read twice. While a choice is being answered by the store both buttons are `aria-disabled`.
+
+The strip never takes the focus and the editor keeps editing under it: a person in the middle of a note is told and not interrupted. The sentence is an `alert`, so a screen reader says it once when the strip appears. Restore original stays available. The failed-save and stale-source messages are not drawn by the editor at all; they reach the host's `notify`.
+
+**What was measured.** In Chromium at 1280px and on a 412px phone profile, light and dark: the second line of a conflict choice on its button reads at 5.64:1 (light) and 6.94:1 (dark), the sentence on the strip at 15.98:1 and 12.82:1; a conflict choice is 43px high and 225px wide in English; Restore original is 28px high (36px on the phone); the question is 286px wide and inside the window at both widths, with the focus on Cancel; the keyboard ring is the 2px accent outline on the choices. The strip and the question were also looked at in Chinese and at a 320px width, where the two choices stack. Not verified: Safari and Firefox, and a screen reader's actual speech (the names, descriptions and alert are read from the accessibility tree).
+
 ## Do's and Don'ts
 
 ### Do:
@@ -488,7 +581,7 @@ The names of the conditions ("Pitch", "Time", "Length", "Key", "Count"; "音高"
 ### Don't:
 
 - **Don't** state a brand: no fixed brand colour, no bundled font, no logo.
-- **Don't** hard-code `px` or `rem` font sizes, or a font family other than through `--sce-font-family`.
+- **Don't** hard-code `px` or `rem` font sizes (but for the one exception in The Keyword Size Rule), or a font family other than through `--sce-font-family`.
 - **Don't** add shadows at rest. A shadow marks a floating thing.
 - **Don't** add decoration or motion, and don't tint a selection or the insertion point with the accent: they are the text colour, so shape and weight carry them.
 - **Don't** hold the zoom, or anything else that changes while the user zooms or scrolls, in an inherited custom property on the root.

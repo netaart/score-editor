@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import { TICKS_PER_QUARTER } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
+import { normalizeLineBreaks } from "./song2-text";
 
 interface FractionNote {
   start: string;
@@ -62,7 +63,7 @@ function ticks(fraction: string): number {
 }
 
 function lf(text: string): string {
-  return text.replace(/\r\n?/g, "\n");
+  return normalizeLineBreaks(text);
 }
 
 describe("song2 vectors", () => {
