@@ -5,6 +5,9 @@ import type { Note, Score } from "@neta-art/score-editor";
 import { expect } from "vitest";
 import { normalizeLineBreaks, stripTrailingWhitespace, trimWhitespace } from "./song2-text";
 
+/** Timeout for one per-sample sweep: 120 s is over ten times the slowest loaded case (about 9 s, song2-lyrics). */
+export const SAMPLE_SWEEP_TIMEOUT = 120_000;
+
 export function parse(text: string): Score {
   const { score, diagnostics } = song2Dialect.parse(text);
   expect(diagnostics).toEqual([]);

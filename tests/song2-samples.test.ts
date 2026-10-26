@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import { describe, expect, it } from "vitest";
+import { SAMPLE_SWEEP_TIMEOUT } from "./song2-support";
 
 interface SampleFact {
   file: string;
@@ -20,7 +21,7 @@ function lf(text: string): string {
 
 describe("song2 samples", () => {
   for (const fact of facts) {
-    it(`${fact.file} reads and writes back unchanged`, () => {
+    it(`${fact.file} reads and writes back unchanged`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const { score, diagnostics } = song2Dialect.parse(text);
 

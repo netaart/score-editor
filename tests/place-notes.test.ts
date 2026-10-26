@@ -10,7 +10,7 @@ import {
   type Note as ScoreNote,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
-import { chainAround, parse, pitched, splitBars } from "./song2-support";
+import { chainAround, parse, pitched, SAMPLE_SWEEP_TIMEOUT, splitBars } from "./song2-support";
 
 const HEADER = `X:1
 T:
@@ -136,16 +136,17 @@ function snapped(tick: number, step: number): number {
 function exercisePlaced(
   label: string,
   text: string,
+  input: Score,
+  before: ReturnType<typeof splitBars>,
   command: ScoreCommand,
   expected: ReadonlyArray<{ voice: string; start: number; end: number; midi: number }>,
   step: number,
 ): void {
-  const input = parse(text);
   const result = applyScoreCommand(song2Dialect, text, command);
   expect(result.ok, `${label}: ${result.ok ? "" : result.diagnostic.code}`).toBe(true);
   if (!result.ok) return;
+  // applyScoreCommand already ran the dialect's check on the text it wrote.
   const output = parse(result.text);
-  expect(song2Dialect.check(output), `${label}: check`).toEqual([]);
 
   const touchedBars = new Set<string>();
   const affected = new Set<string>();
@@ -168,7 +169,6 @@ function exercisePlaced(
     }
   }
 
-  const before = splitBars(text);
   const after = splitBars(result.text);
   // One Z, Z2, Z3 or Z4 writes several bars; a rewrite of one bar rewrites the whole run, so a touched bar
   // touches every bar that run carries.
@@ -242,6 +242,7 @@ function targetOf(score: Score, id: string): { note: ScoreNote; start: number; e
 function exerciseSample(file: string): void {
   const text = readFileSync(new URL(`samples/${file}`, directory), "utf8");
   const input = parse(text);
+  const before = splitBars(text);
   const grid = gridFor(input);
   if (grid === null) return;
   const step = grid.step;
@@ -328,10 +329,10 @@ function exerciseSample(file: string): void {
       tried += 1;
       const span = expected[0] as { voice: string; start: number; end: number; midi: number };
       if (span.end > scoreEnd) {
-        expectPlaceRefused(`${file}: ${name} near the end`, text, command, "note-past-end");
+        expectProjectRefused(`${file}: ${name} near the end`, text, command, "note-past-end");
         continue;
       }
-      exercisePlaced(`${file}: ${name} ${span.start}`, text, command, expected, step);
+      exercisePlaced(`${file}: ${name} ${span.start}`, text, input, before, command, expected, step);
       succeeded.add(voice);
     }
     expect(tried, `${file}: ${name} tried several targets`).toBeGreaterThan(1);
@@ -341,7 +342,7 @@ function exerciseSample(file: string): void {
     // near-end target is the last note in the loop above; it refuses when its copy would run past the end.
     if (name !== "duplicate") {
       const first = sourceOf(voices[0] as string);
-      expectPlaceRefused(
+      expectProjectRefused(
         `${file}: ${name} at the end`,
         text,
         name === "add"
@@ -357,26 +358,39 @@ function exerciseSample(file: string): void {
 
 describe("placing on every sample: untouched bars, one note a time, the target reached", () => {
   for (const fact of facts) {
-    it(`${fact.file}: the sweep holds every invariant`, () => {
+    it(`${fact.file}: the sweep holds every invariant`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
       exerciseSample(fact.file);
     });
   }
 });
+
+/** The project the command is applied to; the bytes before and after are compared by identity. */
+function projectWith(score: string) {
+  return {
+    style: "",
+    lyrics: "",
+    score,
+    scoreMode: "full" as const,
+    seed: null,
+    modelId: "song2",
+    sourceKey: "place-notes-test",
+  };
+}
+
+/** Applies a command through the project entry, which also runs the score entry, and holds the project to its bytes. */
+function expectProjectRefused(label: string, text: string, command: ScoreCommand, code: string): void {
+  const project = projectWith(text);
+  const result = applyProjectCommand(song2Dialect, project, command);
+  expect(result.diagnostics[0]?.code, label).toBe(code);
+  expect(result.project, `${label}: unchanged`).toBe(project);
+}
 
 /** Applies a command that must be refused and holds the score and the project to their bytes. */
 function expectPlaceRefused(label: string, text: string, command: ScoreCommand, code: string): void {
   const result = applyScoreCommand(song2Dialect, text, command);
   expect(result.ok, label).toBe(false);
   if (!result.ok) expect(result.diagnostic.code, label).toBe(code);
-  const project = {
-    style: "",
-    lyrics: "",
-    score: text,
-    scoreMode: "full" as const,
-    seed: null,
-    modelId: "song2",
-    sourceKey: "place-notes-test",
-  };
+  const project = projectWith(text);
   expect(applyProjectCommand(song2Dialect, project, command).project, `${label}: unchanged`).toBe(project);
 }
 

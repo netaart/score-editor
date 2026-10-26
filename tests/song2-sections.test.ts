@@ -10,6 +10,7 @@ import {
   type Section,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
+import { SAMPLE_SWEEP_TIMEOUT } from "./song2-support";
 
 interface SampleFact {
   file: string;
@@ -182,12 +183,11 @@ function keptFacts(
     if (mapped === undefined) continue;
     expect(after.bars[mapped]?.meter, `bar ${bar.index} meter`).toEqual(bar.meter);
   }
+  const afterNotes = new Map(after.notes.map((note) => [`${note.voice}:${note.start}`, note]));
   for (const note of before.notes) {
     const mapped = oldBar(note.bar);
     if (mapped === undefined) continue;
-    const found = after.notes.find(
-      (candidate) => candidate.voice === note.voice && candidate.start === note.start + shift(note.bar),
-    );
+    const found = afterNotes.get(`${note.voice}:${note.start + shift(note.bar)}`);
     expect(found?.midi, `${note.id} MIDI`).toBe(note.midi);
     expect(found?.duration, `${note.id} duration`).toBe(note.duration);
   }
@@ -851,14 +851,13 @@ describe("section commands on every sample", () => {
     const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
     const before = parse(text);
 
-    it(`${fact.file}: delete every section that leaves a score`, () => {
+    it(`${fact.file}: delete every section that leaves a score`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
       for (let index = 0; index < before.sections.length; index += 1) {
         const section = before.sections[index] as Section;
         const result = applyScoreCommand(song2Dialect, text, { type: "deleteSection", section: index });
         expect(result.ok, `delete ${section.name ?? "unnamed"}`).toBe(true);
         if (!result.ok) continue;
         const after = parse(result.text);
-        check(after);
         const count = section.barCount;
         const length = sectionLength(before, section);
         keptFacts(
@@ -870,7 +869,7 @@ describe("section commands on every sample", () => {
       }
     });
 
-    it(`${fact.file}: duplicate every named section without a cut`, () => {
+    it(`${fact.file}: duplicate every named section without a cut`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
       for (let index = 0; index < before.sections.length; index += 1) {
         const section = before.sections[index] as Section;
         if (section.name === null) {
@@ -886,7 +885,6 @@ describe("section commands on every sample", () => {
         expect(result.ok, `duplicate ${section.name}`).toBe(true);
         if (!result.ok) continue;
         const after = parse(result.text);
-        check(after);
         const length = sectionLength(before, section);
         keptFacts(
           before,
@@ -897,7 +895,8 @@ describe("section commands on every sample", () => {
       }
     });
 
-    it(`${fact.file}: move every section earlier and later`, () => {
+    it(`${fact.file}: move every section earlier and later`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
+      const beforePieces = splitBars(text);
       for (let index = 0; index < before.sections.length; index += 1) {
         const section = before.sections[index] as Section;
         for (const direction of ["earlier", "later"] as const) {
@@ -919,7 +918,6 @@ describe("section commands on every sample", () => {
             expect(result.ok, `move ${section.name} ${direction}`).toBe(true);
             if (!result.ok) continue;
             const after = parse(result.text);
-            check(after);
             const neighbourSection = other as Section;
             const involved = (bar: number) =>
               (bar >= section.firstBar && bar < sectionEnd(section)) ||
@@ -938,7 +936,6 @@ describe("section commands on every sample", () => {
             );
             const boundaryBar = (bar: number) =>
               (outgoingTie && bar === involvedStart - 1) || (incomingTie && bar === involvedEnd);
-            const beforePieces = splitBars(text);
             const afterPieces = splitBars(result.text);
             for (const [key, piece] of beforePieces) {
               const at = Number(key.split(":")[1]);
@@ -959,11 +956,10 @@ describe("section commands on every sample", () => {
       }
     });
 
-    it(`${fact.file}: rename every section`, () => {
+    it(`${fact.file}: rename every section`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
       for (let index = 0; index < before.sections.length; index += 1) {
         const output = apply(text, { type: "renameSection", section: index, name: `renamed-${index}` });
         const after = parse(output);
-        check(after);
         expect(after.sections[index]?.name).toBe(`renamed-${index}`);
         expect(after.bars).toEqual(before.bars);
         expect(after.notes).toEqual(before.notes);

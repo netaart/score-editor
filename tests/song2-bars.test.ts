@@ -11,6 +11,7 @@ import {
   type SongProject,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
+import { SAMPLE_SWEEP_TIMEOUT } from "./song2-support";
 
 const HEADER = `X:1
 T:
@@ -623,7 +624,7 @@ z16|C16|D8E4^`);
 
 describe("every sample", () => {
   for (const fact of facts) {
-    it(`${fact.file}`, () => {
+    it(`${fact.file}`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const input = parse(text);
       const pieces = splitBars(text);
@@ -633,7 +634,6 @@ describe("every sample", () => {
       expect(inserted.ok).toBe(true);
       if (!inserted.ok) return;
       const afterInsert = parse(inserted.text);
-      check(afterInsert);
       expect(afterInsert.bars).toHaveLength(input.bars.length + 1);
       for (const note of input.notes) {
         const moved = { ...note, bar: note.bar + 1, start: note.start + firstLength };
@@ -683,23 +683,28 @@ describe("every sample", () => {
       expect(deleted.ok).toBe(true);
       if (!deleted.ok) return;
       const afterDelete = parse(deleted.text);
-      check(afterDelete);
       expect(afterDelete.bars).toHaveLength(input.bars.length - 1);
       const deletedPieces = splitBars(deleted.text);
-      const localFacts = (score: Score, voice: string, bar: number) => {
-        const start = score.bars[bar]?.start ?? 0;
-        return score.notes
-          .filter((note) => note.voice === voice && note.bar === bar)
-          .map((note) => [note.start - start, note.duration, note.midi, note.tie]);
+      const localFacts = (score: Score) => {
+        const byBar = new Map<string, string[]>();
+        for (const note of score.notes) {
+          const start = score.bars[note.bar]?.start ?? 0;
+          const key = `${note.voice}:${note.bar}`;
+          const facts = byBar.get(key) ?? [];
+          facts.push(JSON.stringify([note.start - start, note.duration, note.midi, note.tie]));
+          byBar.set(key, facts);
+        }
+        return byBar;
       };
+      const inputFacts = localFacts(input);
+      const deletedFacts = localFacts(afterDelete);
       for (const [key, piece] of pieces) {
         const [voice, index] = key.split(":");
         const at = Number(index);
         if (at === remove) continue;
         const mapped = at > remove ? at - 1 : at;
         if (
-          JSON.stringify(localFacts(input, voice ?? "", at)) !==
-          JSON.stringify(localFacts(afterDelete, voice ?? "", mapped))
+          JSON.stringify(inputFacts.get(`${voice}:${at}`)) !== JSON.stringify(deletedFacts.get(`${voice}:${mapped}`))
         ) {
           continue;
         }
@@ -729,17 +734,17 @@ describe("every sample", () => {
       expect(changed.ok).toBe(true);
       if (!changed.ok) return;
       const afterMeter = parse(changed.text);
-      check(afterMeter);
       const delta = afterMeter.bars.length - input.bars.length;
       expect(afterMeter.truncation).toEqual(
         input.truncation === null ? null : { ...input.truncation, bar: input.truncation.bar + delta },
       );
       const lastSectionBar = section.firstBar + section.barCount - 1;
+      const changedPieces = splitBars(changed.text);
       for (const [key, piece] of pieces) {
         const [voice, index] = key.split(":");
         const at = Number(index);
         if (at <= lastSectionBar) continue;
-        expect(splitBars(changed.text).get(`${voice}:${at + delta}`)).toBe(piece);
+        expect(changedPieces.get(`${voice}:${at + delta}`)).toBe(piece);
       }
       for (const note of input.notes) {
         if (note.bar <= lastSectionBar) continue;
@@ -756,7 +761,6 @@ describe("every sample", () => {
         expect(filled.ok).toBe(true);
         if (filled.ok) {
           const afterFill = parse(filled.text);
-          check(afterFill);
           expect(afterFill.truncation).toBeNull();
           for (const note of input.notes) {
             expect(
@@ -771,7 +775,6 @@ describe("every sample", () => {
         const deletedCut = applyScoreCommand(song2Dialect, text, { type: "deleteTruncatedBar" });
         if (deletedCut.ok) {
           const afterCutDelete = parse(deletedCut.text);
-          check(afterCutDelete);
           expect(afterCutDelete.truncation).toBeNull();
         } else {
           expect(deletedCut.diagnostic.code).toBe("cut-in-complete-bar");
