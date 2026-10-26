@@ -78,6 +78,24 @@ test.describe("the tempo in the toolbar, refused and told", () => {
     expect(await harness.layout.canUndo()).toBe(false);
   });
 
+  test("an emptied tempo is refused by the command and the field shows the score's tempo again", async ({
+    page,
+    harness,
+  }) => {
+    await openSong(harness, SONG, { style: "pop, 100 BPM" });
+
+    await tempoField(page).fill("");
+    await tempoField(page).blur();
+
+    await expect(
+      toolbar(page).getByRole("status").filter({ hasText: "The tempo NaN BPM is outside 20-400 BPM." }),
+    ).toHaveCount(1);
+    expect((await harness.notices())[0]).toMatchObject({ code: "command-refused", level: "warning" });
+    await expect(tempoField(page)).toHaveValue("100");
+    expect(await scoreText(page)).toBe(SONG);
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
   test("a style without a BPM is left as it is and the toolbar says so; the sentence goes with the next change", async ({
     page,
     harness,
@@ -104,6 +122,7 @@ test.describe("the tempo in the toolbar, refused and told", () => {
 
     await harness.layout.setEditable(true);
     await expect(tempoField(page)).toBeVisible();
+    await expect(toolbar(page).getByRole("group", { name: "Tempo, key and transpose" })).toBeVisible();
     await expect(tempoField(page)).toHaveAttribute("min", "20");
     await expect(tempoField(page)).toHaveAttribute("max", "400");
   });
@@ -232,8 +251,8 @@ test.describe("transposing in the toolbar", () => {
   });
 });
 
-const projectButton = (page: Page) => toolbar(page).getByRole("button", { name: /^Project/ });
-const panel = (page: Page) => toolbar(page).getByRole("region", { name: "Project" });
+const projectButton = (page: Page) => page.getByRole("button", { name: /^Project/ });
+const panel = (page: Page) => page.getByRole("dialog", { name: "Project" });
 const styleBox = (page: Page) => panel(page).getByRole("textbox", { name: "Style description" });
 const modeRadio = (page: Page, name: "Full" | "Melody") => panel(page).getByRole("radio", { name });
 const seedField = (page: Page) => panel(page).getByRole("spinbutton", { name: "Seed" });
@@ -309,6 +328,28 @@ test.describe("the song project panel's fields", () => {
     expect(await harness.layout.canUndo()).toBe(false);
   });
 
+  test("a style is cleared as one undo step, and the empty field says it is not set", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openSong(harness, SONG, { style: "warm pop" });
+    await openPanel(page, press);
+
+    await styleBox(page).focus();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace");
+    await styleBox(page).blur();
+
+    expect((await project(page)).style).toBe("");
+    await expect(panel(page).getByText("Not set. Describe the style you want.")).toBeVisible();
+
+    await harness.layout.undo();
+    expect((await project(page)).style).toBe("warm pop");
+    await expect(styleBox(page)).toHaveValue("warm pop");
+    expect(await harness.layout.canUndo()).toBe(false);
+  });
+
   test("the score mode is chosen with one press, as one undo step", async ({ page, harness, press }) => {
     await openSong(harness, SONG, { scoreMode: "melody" });
     await openPanel(page, press);
@@ -358,7 +399,7 @@ test.describe("the song project panel's fields", () => {
     await openPanel(page, press);
     await styleBox(page).fill("slow jazz");
 
-    await page.evaluate(() => document.querySelector<HTMLElement>(".sce-project-popover")?.hidePopover());
+    await panel(page).evaluate((element) => (element as HTMLElement).hidePopover());
 
     await expect(panel(page)).toBeHidden();
     expect((await project(page)).style).toBe("slow jazz");
@@ -527,6 +568,40 @@ test.describe("the song project panel's lyrics and notices", () => {
     await expect(notice).toHaveCount(1);
     expect(await harness.layout.canUndo()).toBe(false);
   });
+
+  test("a notice the project carries is not repeated in the toolbar's strip when a command carries it again", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
+    await openSong(harness, withChords, { scoreMode: "melody" });
+    await openPanel(page, press);
+    const notice = panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" });
+    await expect(notice).toHaveCount(1);
+    await page.keyboard.press("Escape");
+
+    await press(transposeUp(page));
+
+    await expect.poll(() => scoreText(page)).not.toBe(withChords);
+    await expect(toolbar(page).getByRole("note")).toHaveCount(0);
+    await openPanel(page, press);
+    await expect(notice).toHaveCount(1);
+  });
+
+  test("a fix pressed from the keyboard leaves the focus inside the panel", async ({ page, harness, press }) => {
+    const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
+    await openSong(harness, withChords, { scoreMode: "melody" });
+    await openPanel(page, press);
+    const fix = panel(page).getByRole("button", { name: "Delete all chords" });
+    await fix.focus();
+
+    await page.keyboard.press("Enter");
+
+    expect(await scoreText(page)).not.toContain('"C"');
+    expect((await project(page)).scoreMode).toBe("melody");
+    expect(await panel(page).evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  });
 });
 
 test.describe("the song project panel, read-only and in Chinese", () => {
@@ -546,8 +621,10 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await openPanel(page, press);
 
     await expect(panel(page).getByText("warm pop", { exact: true })).toBeVisible();
+    await expect(panel(page).getByText("warm pop", { exact: true })).toHaveAccessibleName("Style description");
     await expect(panel(page).getByText("Melody", { exact: true }).locator("visible=true")).toBeVisible();
     await expect(panel(page).getByText("5", { exact: true })).toBeVisible();
+    await expect(panel(page).getByText("5", { exact: true })).toHaveAccessibleName("Seed");
     await expect(panel(page).getByText("12 of 2000 characters")).toBeVisible();
     expect(await lyricsRegion(page).evaluate((element) => element.textContent)).toBe("[a]\nla la la");
     await expect(panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" })).toHaveCount(1);
@@ -571,7 +648,7 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await openSong(harness, SONG, { style: "", scoreMode: "full", seed: null }, { language: "zh" });
     const button = toolbar(page).getByRole("button", { name: /^歌曲项目/ });
     await press(button);
-    const zh = toolbar(page).getByRole("region", { name: "歌曲项目" });
+    const zh = page.getByRole("dialog", { name: "歌曲项目" });
     await expect(zh).toBeVisible();
     await expect(zh.getByRole("textbox", { name: "风格描述" })).toBeVisible();
     await expect(zh.getByRole("radio", { name: "完整（full）" })).toBeChecked();
@@ -582,11 +659,31 @@ test.describe("the song project panel, read-only and in Chinese", () => {
   });
 });
 
+test.describe("the song project panel mounted on its own", () => {
+  test("is a named region, and a host that mounted it can take a pending field when it closes", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({
+      score: { text: SONG },
+      project: { style: "warm pop", seed: 42 },
+      parts: ["panel"],
+    });
+    const standalone = page.getByRole("region", { name: "Project" });
+    await expect(standalone).toBeVisible();
+
+    await standalone.getByRole("textbox", { name: "Style description" }).fill("lofi");
+    await harness.layout.commitPart("panel");
+    expect((await project(page)).style).toBe("lofi");
+
+    await standalone.getByRole("spinbutton", { name: "Seed" }).fill("-3");
+    await harness.layout.commitPart("panel");
+    expect((await project(page)).seed).toBe(-3);
+  });
+});
+
 test.describe("the controls in the default editor at the window's width", () => {
   const project = { style: "warm pop, 100 BPM", scoreMode: "melody", seed: 3, lyrics: "[a]\nla la" };
-  const editorProjectButton = (page: Page) => page.getByRole("button", { name: /^Project/ });
-  /** The popover itself: the box that is placed, and that has the panel inside it. */
-  const editorPopover = (page: Page) => page.getByRole("region", { name: "Project" }).locator("xpath=..");
   const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
 
   test("are in the default editor: tempo, key, transpose and the Project button, and the panel opens", async ({
@@ -599,8 +696,10 @@ test.describe("the controls in the default editor at the window's width", () => 
     await expect(page.getByRole("combobox", { name: "Key" })).toHaveValue("C");
     await expect(page.getByRole("button", { name: "Transpose up a semitone" })).toBeVisible();
 
-    await press(editorProjectButton(page));
+    await press(projectButton(page));
     await expect(page.getByRole("textbox", { name: "Style description" })).toHaveValue("warm pop, 100 BPM");
+    // The dialog's name is the panel's name: the region inside it carries no second "Project".
+    await expect(page.getByRole("dialog", { name: "Project" }).getByRole("region", { name: "Project" })).toHaveCount(0);
   });
 
   test("in a 320 pixel box the two transpose buttons stay on one line and nothing is wider than the box", async ({
@@ -617,7 +716,7 @@ test.describe("the controls in the default editor at the window's width", () => 
       page.getByRole("spinbutton", { name: "Tempo (BPM)" }),
       page.getByRole("combobox", { name: "Key" }),
       page.getByRole("button", { name: "Transpose up a semitone" }),
-      editorProjectButton(page),
+      projectButton(page),
     ]) {
       const found = await box(control);
       expect(found.x).toBeGreaterThanOrEqual(0);
@@ -633,9 +732,9 @@ test.describe("the controls in the default editor at the window's width", () => 
   }) => {
     await page.setViewportSize({ width: 500, height: 700 });
     await harness.mount({ score: { text: SONG }, project });
-    await press(editorProjectButton(page));
-    const opened = await box(editorPopover(page));
-    const button = await box(editorProjectButton(page));
+    await press(projectButton(page));
+    const opened = await box(panel(page));
+    const button = await box(projectButton(page));
     expect(opened.x).toBeCloseTo(8, 0);
     expect(opened.x + opened.width).toBeCloseTo(492, 0);
     expect(opened.y).toBeGreaterThanOrEqual(button.y + button.height);
@@ -644,9 +743,9 @@ test.describe("the controls in the default editor at the window's width", () => 
   test("on a wide window the panel stays under its button, inside the window", async ({ page, harness, press }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await harness.mount({ score: { text: SONG }, project });
-    await press(editorProjectButton(page));
-    const opened = await box(editorPopover(page));
-    const button = await box(editorProjectButton(page));
+    await press(projectButton(page));
+    const opened = await box(panel(page));
+    const button = await box(projectButton(page));
     expect(opened.x).toBeGreaterThanOrEqual(8 - 0.5);
     expect(opened.x + opened.width).toBeLessThanOrEqual(1280 - 8 + 0.5);
     expect(opened.y).toBeGreaterThanOrEqual(button.y + button.height);
@@ -661,7 +760,7 @@ test.describe("the controls in the default editor at the window's width", () => 
   }) => {
     test.skip(!isMobile, "a coarse pointer is the phone project's");
     await harness.mount({ score: { text: withChords }, project });
-    await press(editorProjectButton(page));
+    await press(projectButton(page));
     const fontSize = (target: Locator) => target.evaluate((el) => getComputedStyle(el).fontSize);
     for (const field of [
       page.getByRole("spinbutton", { name: "Tempo (BPM)" }),
@@ -676,23 +775,23 @@ test.describe("the controls in the default editor at the window's width", () => 
       page.getByRole("combobox", { name: "Key" }),
       page.getByRole("button", { name: "Transpose up a semitone" }),
       page.getByRole("button", { name: "Transpose down a semitone" }),
-      editorProjectButton(page),
+      projectButton(page),
       page.getByRole("spinbutton", { name: "Seed" }),
       page.getByRole("button", { name: "Clear the seed" }),
       page.getByRole("button", { name: "Delete all chords" }),
     ]) {
       expect((await box(control)).height).toBeGreaterThanOrEqual(36);
     }
-    expect((await box(page.getByRole("radio", { name: "Full" }).locator("xpath=.."))).height).toBeGreaterThanOrEqual(
-      36,
+    const radioRow = await modeRadio(page, "Full").evaluate(
+      (element) => element.parentElement?.getBoundingClientRect().height ?? 0,
     );
+    expect(radioRow).toBeGreaterThanOrEqual(36);
   });
 });
 
 test.describe("the panel hangs from its button", () => {
   const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
-  const projectButton = (page: Page) => page.getByRole("button", { name: /^Project/ });
-  const popover = (page: Page) => page.getByRole("region", { name: "Project" }).locator("xpath=..");
+  const popover = (page: Page) => panel(page);
   const gapUnder = async (page: Page) => {
     const opened = await box(popover(page));
     const button = await box(projectButton(page));
