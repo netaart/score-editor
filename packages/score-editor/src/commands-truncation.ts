@@ -18,7 +18,7 @@ function allowsChords(constraints: DialectConstraints, voice: string): boolean {
   return constraints.voices.find((candidate) => candidate.name === voice)?.allowsChords ?? false;
 }
 
-function clearTiesIntoRests(notes: ReadonlyArray<Note>): Note[] {
+export function clearTiesIntoRests(notes: ReadonlyArray<Note>): Note[] {
   const byVoice = new Map<string, Note[]>();
   for (const note of notes) {
     const list = byVoice.get(note.voice) ?? [];
@@ -34,6 +34,15 @@ function clearTiesIntoRests(notes: ReadonlyArray<Note>): Note[] {
     }
   }
   return notes.map((note) => (cleared.has(note.id) ? { ...note, tie: false } : note));
+}
+
+/** RULES.md C5: a chord at the start of a rest the fill adds belongs to that rest after the write. */
+function attachChordsToFilledNotes(notes: ReadonlyArray<Note>, chords: ReadonlyArray<Chord>): Chord[] {
+  return chords.map((chord) => {
+    if (chord.noteId !== null) return chord;
+    const note = notes.find((candidate) => candidate.voice === "Vocal" && candidate.start === chord.start);
+    return note === undefined ? chord : { ...chord, noteId: note.id };
+  });
 }
 
 function fillTruncatedBar(score: Score, constraints: DialectConstraints): ScoreCommandResult {
@@ -64,12 +73,14 @@ function fillTruncatedBar(score: Score, constraints: DialectConstraints): ScoreC
     }
   }
 
+  const chords = attachChordsToFilledNotes(notes, score.chords);
   const bars = score.bars.map((item) => (item.incomplete ? { ...item, incomplete: false } : item));
   const nextScore: Score = {
     ...score,
     bars,
     notes: orderNotes(score, clearTiesIntoRests(notes)),
-    hasChords: hasChordsAfter(score.chords, null),
+    chords,
+    hasChords: hasChordsAfter(chords, null),
     truncation: null,
   };
   return { ok: true, score: nextScore };
@@ -81,6 +92,14 @@ function deleteTruncatedBar(score: Score, constraints: DialectConstraints): Scor
   const cut = score.truncation;
   const bar = score.bars[cut.bar];
   if (bar === undefined) return commandRefusal("no-incomplete-bar", {});
+  const shortVoice = score.voices.find((voice) => voice !== cut.voice && coverageEnd(score, voice) < cut.bar);
+  if (shortVoice !== undefined) {
+    return commandRefusal(
+      "cut-other-voice-short",
+      { voice: shortVoice, bar: cut.bar + 1 },
+      { voice: shortVoice, bar: cut.bar + 1 },
+    );
+  }
   const otherMaterial = score.notes.some((note) => note.voice !== cut.voice && note.bar === cut.bar);
   if (otherMaterial || cut.bar !== score.bars.length - 1) {
     return commandRefusal("cut-in-complete-bar", { bar: cut.bar + 1 }, { bar: cut.bar + 1 });

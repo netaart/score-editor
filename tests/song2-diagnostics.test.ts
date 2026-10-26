@@ -75,6 +75,7 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "lyric-text-invalid",
   "lyric-lines-not-mergeable",
   "lyric-split-invalid",
+  "cut-other-voice-short",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = [

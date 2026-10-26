@@ -205,6 +205,8 @@ export interface Song2CutTail {
 export interface Song2SourceLine {
   /** 0-based line index in the normalized text. */
   readonly line: number;
+  /** 0-based index of the `V:` line that opens this music line's block. */
+  readonly blockStart: number;
   readonly voice: string;
   readonly endsWithBarline: boolean;
   readonly segments: ReadonlyArray<Song2SourceSegment>;
@@ -247,6 +249,7 @@ interface PendingSegment {
 
 interface PendingLine {
   readonly line: number;
+  readonly blockStart: number;
   readonly voice: string;
   readonly endsWithBarline: boolean;
   readonly segments: ReadonlyArray<PendingSegment>;
@@ -607,6 +610,7 @@ class Song2Parser {
   /** Reads one `V:` block. Returns false when an accepted cut ended the text inside it. */
   // RULES.md B2-B4 and X6-X8: one exact V: line, optional M:/K:, then exactly one music line.
   private readVoiceBlock(voice: VoiceState): boolean {
+    const blockStart = this.index;
     const opening = voice.name === "Vocal" ? VOCAL_OPEN : INS_OPEN;
     if (!this.expectOpening(opening, voice)) return false;
 
@@ -655,7 +659,7 @@ class Song2Parser {
     }
 
     const finalLine = this.index === this.lines.length - 1;
-    const outcome = this.readMusicLine(line, voice, finalLine, this.index + 1);
+    const outcome = this.readMusicLine(line, voice, finalLine, this.index + 1, blockStart);
     this.index += 1;
 
     if (outcome === "partial") {
@@ -728,6 +732,7 @@ class Song2Parser {
     voice: VoiceState,
     finalLine: boolean,
     lineNumber: number,
+    blockStart: number,
   ): "none" | "partial" | "next" {
     const endsWithBar = line.endsWith("|");
     if (!endsWithBar && !finalLine) {
@@ -763,6 +768,7 @@ class Song2Parser {
     }
     const sourceLine: PendingLine = {
       line: lineNumber - 1,
+      blockStart,
       voice: voice.name,
       endsWithBarline: endsWithBar,
       segments,
@@ -1315,6 +1321,7 @@ class Song2Parser {
       sections,
       musicLines: this.sourceLines.map((line) => ({
         line: line.line,
+        blockStart: line.blockStart,
         voice: line.voice,
         endsWithBarline: line.endsWithBarline,
         unfinishedTie: line.unfinishedTie,
