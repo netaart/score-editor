@@ -145,8 +145,16 @@ export function installLanePointer(
    * The last click of this lane, for a double click or double tap: the browser's own `dblclick` is not sent for touch
    * on every platform, so the second click at the same note or grid place is the one that draws or deletes.
    */
-  let lastClick: { time: number; kind: "select" | "clear" | "add" | "delete"; noteId?: string; tick: number } | null =
-    null;
+  let lastClick: {
+    time: number;
+    kind: "select" | "clear" | "add" | "delete";
+    noteId?: string;
+    tick: number;
+    revision: number;
+    grid: string;
+  } | null = null;
+  /** Counts changes of the grid, the project or the shown view: a click from before one is not half of a double. */
+  let clickRevision = 0;
   /** Whether the last press was a finger's; the browser's own `dblclick` is the mouse's, and touch is timed here. */
   let touchPointer = false;
 
@@ -376,6 +384,7 @@ export function installLanePointer(
     if (!at) return;
     const now = Date.now();
     const pencil = pencilMode(session);
+    const grid = `${session.grid.value}:${session.grid.dotted === true}`;
     // A tap that lands after a delete can be the same contact being reported twice: it adds nothing.
     if (lastClick?.kind === "delete" && now - lastClick.time < 450) {
       lastClick = null;
@@ -387,14 +396,19 @@ export function installLanePointer(
       lastClick !== null &&
       now - lastClick.time < 450 &&
       ((lastClick.kind === "add" && g.noteId === undefined) || lastClick.kind === "delete") &&
+      lastClick.revision === clickRevision &&
+      lastClick.grid === grid &&
       Math.abs(lastClick.tick - at.tick) <= 8
     ) {
       lastClick = null;
       return;
     }
     const double =
+      !g.shift &&
       g.touch &&
       lastClick !== null &&
+      lastClick.revision === clickRevision &&
+      lastClick.grid === grid &&
       now - lastClick.time < 450 &&
       (g.noteId === undefined
         ? lastClick.noteId === undefined && Math.abs(lastClick.tick - at.tick) <= 8
@@ -402,7 +416,7 @@ export function installLanePointer(
     if (g.noteId !== undefined) {
       if (double || pencil.on) {
         const result = handleEditingInput(session, { type: "delete-note", noteId: g.noteId });
-        lastClick = { time: now, kind: "delete", tick: at.tick };
+        lastClick = { time: now, kind: "delete", tick: at.tick, revision: clickRevision, grid };
         if (result.refused.length > 0) options.refused(result.refused);
         return;
       }
@@ -410,7 +424,9 @@ export function installLanePointer(
         ? ({ type: "toggle-note", noteId: g.noteId } as const)
         : ({ type: "click-note", noteId: g.noteId } as const);
       const { handled } = handleEditingInput(session, input);
-      lastClick = double ? null : { time: now, kind: "select", noteId: g.noteId, tick: at.tick };
+      lastClick = double
+        ? null
+        : { time: now, kind: "select", noteId: g.noteId, tick: at.tick, revision: clickRevision, grid };
       // A mouse press has focused the note by now. A touch or pen release comes before the browser moves the focus, so
       // moving it from here would draw the keyboard ring on a tap; the browser focuses the note next, without the ring.
       if (handled && !g.touch) options.focus(g.noteId);
@@ -426,12 +442,12 @@ export function installLanePointer(
         tick: at.tick,
         midi,
       });
-      lastClick = { time: now, kind: "add", tick: at.tick };
+      lastClick = { time: now, kind: "add", tick: at.tick, revision: clickRevision, grid };
       if (result.refused.length > 0) options.refused(result.refused);
       else auditionPitch(midi);
       return;
     }
-    lastClick = { time: now, kind: "clear", tick: at.tick };
+    lastClick = { time: now, kind: "clear", tick: at.tick, revision: clickRevision, grid };
     handleEditingInput(session, { type: "click-empty", tick: at.tick });
   }
 
@@ -531,7 +547,7 @@ export function installLanePointer(
   root.addEventListener(
     "dblclick",
     (event) => {
-      if (touchPointer || !session.view.editable || pencilMode(session).on) return;
+      if (touchPointer || event.shiftKey || !session.view.editable || pencilMode(session).on) return;
       const geometry = options.lane();
       if (!geometry || !(event.target instanceof Element)) return;
       event.preventDefault();
@@ -592,6 +608,14 @@ export function installLanePointer(
     },
     { signal },
   );
+
+  // A change of the grid, the project or the shown view ends a double click: the next press means a new thing.
+  const forgetDouble = session.subscribe((change) => {
+    if (!(change.cause === "grid" || change.project || change.cause === "active-view" || change.view)) return;
+    clickRevision += 1;
+    lastClick = null;
+  });
+  signal.addEventListener("abort", forgetDouble, { once: true });
 
   const cancel = (event: PointerEvent) => {
     if (gesture && gesture.id === event.pointerId) finish();

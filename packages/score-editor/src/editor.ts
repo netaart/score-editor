@@ -118,6 +118,7 @@ export class Editor implements MountedEditor {
         viewSwitch: true,
         tempoKey: true,
         projectPanel: true,
+        pencil: true,
         draftKeeper: this.drafts,
       }),
     );

@@ -55,6 +55,12 @@ export interface ToolbarOptions extends EditingPartOptions {
   projectPanel?: boolean;
   /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
+  /**
+   * Whether the toolbar holds the pencil toggle. Off by default, so a toolbar a host already mounts gains no control or
+   * tab stop; the default editor turns it on. A host that mounts the toolbar itself can turn it on when it has a voice
+   * track to draw on.
+   */
+  pencil?: boolean;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -99,11 +105,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.type = "button";
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
-  const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
-  pencilButton.type = "button";
-  pencilButton.setAttribute("aria-pressed", "false");
-  pencilButton.appendChild(lineIcon(doc, PENCIL));
   const pencil = pencilMode(session);
+  const showsPencil = options.pencil === true;
   const select = mountSelectionMenu(row, session);
   const grid = mountGridControl(row, session, live);
   const spacer = create(doc, "span", "sce-spacer", row);
@@ -146,6 +149,13 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   if (synth) row.dataset.synth = "";
   // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
   const filter = mountFilterPanel(row, session);
+  // The pencil is last too, after the Filter button: the controls before it keep their drawing and Tab order, which the
+  // existing toolbar tests pin. It is still in the editing cluster's mode language, just at the end of the row.
+  const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
+  pencilButton.type = "button";
+  pencilButton.setAttribute("aria-pressed", "false");
+  pencilButton.hidden = !showsPencil;
+  pencilButton.appendChild(lineIcon(doc, PENCIL));
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -159,7 +169,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     },
     { signal },
   );
-  pencilButton.addEventListener("click", () => pencil.toggle(), { signal });
+  if (showsPencil) pencilButton.addEventListener("click", () => pencil.toggle(), { signal });
   installEditKeys(root, session, signal, { ...options, onRefused: refused });
 
   /** What the last draw showed, so a change of zoom or scroll, which this part does not draw, costs nothing here. */
@@ -215,8 +225,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (options.viewSwitch) setTitle();
     history.hidden = !editable || !readable;
     remove.hidden = history.hidden || !arrangement;
-    pencilButton.hidden = history.hidden || !arrangement;
-    pencilButton.setAttribute("aria-pressed", String(pencil.on));
+    pencilButton.hidden = !showsPencil || history.hidden || !arrangement;
+    pencilButton.setAttribute("aria-pressed", String(showsPencil && pencil.on));
     badge.hidden = editable;
     badge.textContent = opening ? t.draftOpening : t.readOnly;
     undo.setAttribute("aria-disabled", String(!session.canUndo));

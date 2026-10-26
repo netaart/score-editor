@@ -5,16 +5,17 @@ import {
   centreOf,
   drag,
   expect,
+  type Harness,
   LEAD,
   metrics,
   noteList,
-  openTrack,
   type Point,
+  pointerOf,
   slot,
   test,
-  toolbar,
   vocal,
   vocalOnly,
+  withPointer,
 } from "./fixtures";
 
 /** What the audio spy recorded: one tone per oscillator the page started. */
@@ -45,7 +46,13 @@ function spyOnAudio() {
 const audio = (page: Page) => page.evaluate(() => [...((window as AudioPage).placeAudioLog?.tones ?? [])]);
 const midiHz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 
-const pencilButton = (page: Page) => toolbar(page).getByRole("button", { name: "Draw notes", exact: true });
+const pencilButton = (page: Page) =>
+  slot(page, "toolbar-pencil").getByRole("button", { name: "Draw notes", exact: true });
+
+/** Opens the pencil's toolbar (the default editor's shape) and the Vocal track on one session. */
+async function openPencilTrack(harness: Harness, score: string = LEAD, options: Record<string, unknown> = {}) {
+  await harness.layout.open({ score: { text: score }, parts: ["toolbar-pencil", "vocal"], ...options });
+}
 const note = (page: Page, name: string) => slot(page, "vocal").getByRole("listitem", { name, exact: true });
 
 /** A point in the lane at a tick and a MIDI pitch, worked from the lane's own boxes. */
@@ -77,7 +84,7 @@ test.describe("the pencil", () => {
     isMobile,
     press,
   }) => {
-    await openTrack(harness, LEAD);
+    await openPencilTrack(harness, LEAD);
     await expect(pencilButton(page)).toHaveAttribute("aria-pressed", "false");
 
     await press(pencilButton(page));
@@ -105,7 +112,7 @@ test.describe("the pencil", () => {
     isMobile,
     press,
   }) => {
-    await openTrack(harness, LEAD);
+    await openPencilTrack(harness, LEAD);
     await press(note(page, "C4, bar 1 beat 1, length 1 beat"));
     expect(await harness.layout.selection()).toEqual(["Vocal:0"]);
 
@@ -130,7 +137,7 @@ test.describe("copy, paste and duplicate", () => {
     isMobile,
     press,
   }) => {
-    await openTrack(harness, vocalOnly("C4D4z8|z16|"));
+    await openPencilTrack(harness, vocalOnly("C4D4z8|z16|"));
     await press(note(page, "C4, bar 1 beat 1, length 1 beat"));
     await (isMobile
       ? note(page, "D4, bar 1 beat 2, length 1 beat").tap({ modifiers: ["Shift"] })
@@ -155,7 +162,7 @@ test.describe("copy, paste and duplicate", () => {
   });
 
   test("Ctrl or Cmd with D repeats the selection right after itself, in one step", async ({ page, harness, press }) => {
-    await openTrack(harness, vocalOnly("C4z4z8|z16|"));
+    await openPencilTrack(harness, vocalOnly("C4z4z8|z16|"));
     await press(note(page, "C4, bar 1 beat 1, length 1 beat"));
 
     await page.keyboard.press("Control+d");
@@ -169,19 +176,20 @@ test.describe("copy, paste and duplicate", () => {
   test("Alt and a drag copies the selected notes where the pointer lands and leaves the originals", async ({
     page,
     harness,
+    isMobile,
     press,
   }) => {
-    await openTrack(harness, LEAD);
+    await openPencilTrack(harness, LEAD);
     await press(note(page, "C4, bar 1 beat 1, length 1 beat"));
     const from = await centreOf(note(page, "C4, bar 1 beat 1, length 1 beat, selected"));
     const { beat, row } = await metrics(page, 8);
+    const pointer = await pointerOf(page, harness, isMobile, { alt: true, holdMs: 0 });
 
-    await page.keyboard.down("Alt");
-    await page.mouse.move(from.x, from.y);
-    await page.mouse.down();
-    await page.mouse.move(from.x + 2 * beat, from.y - 2 * row, { steps: 8 });
-    await page.mouse.up();
-    await page.keyboard.up("Alt");
+    await withPointer(pointer, async () => {
+      await pointer.down(from);
+      await pointer.move({ x: from.x + 2 * beat, y: from.y - 2 * row });
+      await pointer.up();
+    });
 
     expect(await noteList(harness)).toEqual([vocal(0, 256, 60), vocal(512, 256, 62), vocal(1024, 1024, 67)]);
     expect(await harness.layout.selection()).toEqual(["Vocal:512"]);
@@ -192,7 +200,7 @@ test.describe("copy, paste and duplicate", () => {
 
 test.describe("hearing the note", () => {
   test("a drawn note sounds its pitch once", async ({ page, harness, isMobile, press }) => {
-    await openTrack(harness, LEAD);
+    await openPencilTrack(harness, LEAD);
     await page.evaluate(spyOnAudio);
     await press(pencilButton(page));
     await tapAt(page, isMobile, await place(page, 2 * 256, 62));
@@ -200,7 +208,7 @@ test.describe("hearing the note", () => {
   });
 
   test("a carried note sounds the pitch where it lands", async ({ page, harness, isMobile, press }) => {
-    await openTrack(harness, LEAD);
+    await openPencilTrack(harness, LEAD);
     await page.evaluate(spyOnAudio);
     await press(note(page, "C4, bar 1 beat 1, length 1 beat"));
     const from = await centreOf(note(page, "C4, bar 1 beat 1, length 1 beat, selected"));
@@ -215,7 +223,7 @@ test.describe("hearing the note", () => {
 
 test.describe("the pencil and the keys where they must not act", () => {
   test("read-only has no pencil and places nothing", async ({ page, harness }) => {
-    await openTrack(harness, LEAD, { editable: false });
+    await openPencilTrack(harness, LEAD, { editable: false });
     await expect(pencilButton(page)).toHaveCount(0);
     const before = await harness.layout.scoreText();
     await page.keyboard.press("b");
@@ -232,7 +240,7 @@ test.describe("the pencil and the keys where they must not act", () => {
     isMobile,
   }) => {
     test.skip(!isMobile, "a swipe needs a touch screen");
-    await openTrack(harness, vocalOnly(...Array(3).fill("C16|C16|C16|C16|")));
+    await openPencilTrack(harness, vocalOnly(...Array(3).fill("C16|C16|C16|C16|")));
     await pencilButton(page).click();
     await expect(pencilButton(page)).toHaveAttribute("aria-pressed", "true");
     const before = await noteList(harness);
