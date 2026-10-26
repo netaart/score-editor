@@ -2,6 +2,7 @@
 // ABOUTME: It selects through the session, so it works while the session is read-only, and it adds nothing to the history.
 
 import { pitchName } from "./arrangement";
+import { watchChromeFloor } from "./chrome-floor";
 import { create, requireDom } from "./dom";
 import { createConditions, currentFilter, readConditions } from "./filter-conditions";
 import { type FilterMessages, filterMessagesFor } from "./filter-messages";
@@ -67,6 +68,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
   button.setAttribute("aria-expanded", "false");
   button.popoverTargetElement = panel;
   button.popoverTargetAction = "toggle";
+  watchChromeFloor(button, panel, signal);
 
   const title = create(doc, "div", "sce-filter-title", panel);
   const rows = create(doc, "div", "sce-filter-rows", panel);

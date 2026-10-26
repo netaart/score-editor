@@ -502,11 +502,17 @@ describe("a tool whose result breaks the score's rules", () => {
     expect(changes).toEqual([]);
   });
 
-  it("says why in both languages", () => {
-    const diagnostic = { code: "tool-result" as const, params: { toolId: "off-grid", reason: "grid" }, at: {} };
+  it("says why in both languages, names the tool as the panel does, and offers a recovery", () => {
+    const diagnostic = {
+      code: "tool-result" as const,
+      params: { toolId: "off-grid", toolName: "Off the grid", toolNameZh: "网格外", reason: "grid" },
+      at: {},
+    };
 
-    expect(formatDiagnostic(diagnostic, "en")).toContain("off the grid");
+    expect(formatDiagnostic(diagnostic, "en")).toContain("Off the grid");
+    expect(formatDiagnostic(diagnostic, "en")).toContain("Nothing changed. Try another value or grid.");
     expect(formatDiagnostic(diagnostic, "zh")).toContain("网格外");
+    expect(formatDiagnostic(diagnostic, "zh")).toContain("换个参数或网格");
   });
 });
 
@@ -572,5 +578,36 @@ describe("a tool that declares the tool context", () => {
       insertionPoint: 128,
     });
     expect(standalone.project).toEqual(preview.project);
+  });
+});
+
+describe("a default that is a function of the tool context", () => {
+  it("is filled with the context's selection bars, and a plain default is unchanged", () => {
+    const firstBar = (context: ToolContext): number => (context.selectionFirstBar ?? 0) + 1;
+    const lastBar = (context: ToolContext): number => (context.selectionLastBar ?? 0) + 1;
+    const tool: ScoreTool = {
+      id: "function-default",
+      name: { en: "Function default", zh: "函数默认值" },
+      parameters: [
+        { name: "from", type: "number", default: firstBar },
+        { name: "to", type: "number", default: lastBar },
+        { name: "plain", type: "number", default: 7 },
+      ],
+      commands() {
+        return [];
+      },
+    };
+    const context: ToolContext = {
+      grid: { value: 16 },
+      insertionPoint: 128,
+      selectionFirstBar: 2,
+      selectionLastBar: 4,
+    };
+
+    const checked = validateToolParameters(tool, {}, context);
+
+    expect(checked.ok).toBe(true);
+    expect(checked.ok && checked.values).toEqual({ from: 3, to: 5, plain: 7 });
+    expect(() => createToolRegistry([tool])).not.toThrow();
   });
 });

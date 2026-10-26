@@ -205,6 +205,8 @@ export interface EditingSession {
   runTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
   /** The project a tool would make from the current project and selection, without changing or announcing anything. */
   previewTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
+  /** The UI state a tool may read: the grid, the insertion point, and the bars of the selected notes. */
+  readonly toolContext: ToolContext;
   /** Selects exactly these notes. Ids that name no note are left out. */
   select(noteIds: ReadonlyArray<string>): void;
   /** Chooses a run of bars, or clears the choice with null. A run beyond the score is trimmed to the bars that exist. */
@@ -295,9 +297,26 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   const queue: SessionChange[] = [];
   let delivering = false;
 
-  /** The UI state a tool may read: the grid its result lands on and the insertion point a split uses. */
+  /** The UI state a tool may read: the grid its result lands on, the insertion point a split uses, the selection's bars. */
   function toolContext(): ToolContext {
-    return { grid, insertionPoint: insertionPoint === null ? null : insertionPoint.tick };
+    let first: number | null = null;
+    let last: number | null = null;
+    const reading = read();
+    if (reading.kind === "score") {
+      const selected = new Set(selection);
+      for (const note of reading.score.notes) {
+        if (!selected.has(note.id)) continue;
+        const bar = note.bar + 1;
+        if (first === null || bar < first) first = bar;
+        if (last === null || bar > last) last = bar;
+      }
+    }
+    return {
+      grid,
+      insertionPoint: insertionPoint === null ? null : insertionPoint.tick,
+      selectionFirstBar: first,
+      selectionLastBar: last,
+    };
   }
 
   function announce(cause: SessionChangeCause, touched: Partial<Omit<SessionChange, "cause">>): void {
@@ -490,6 +509,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get selection() {
       return selection;
+    },
+    get toolContext() {
+      return toolContext();
     },
     replaceProject(next) {
       if (sameProject(project, next)) return;

@@ -19,12 +19,16 @@ export interface PopoverAnchor {
   readonly left: number;
   readonly bottom: number;
   readonly top: number;
+  /** The lowest top the layer may take, so one that hangs from a toolbar button never covers the toolbar. */
+  readonly floor?: number;
 }
 
 /** The anchor an element gives a popover: its box, including the top so a layer can go above it. */
 export function anchorOf(element: HTMLElement): PopoverAnchor {
   const rect = element.getBoundingClientRect();
-  return { left: rect.left, bottom: rect.bottom, top: rect.top };
+  const toolbar = element.closest<HTMLElement>(".sce-toolbar");
+  const floor = toolbar === null ? undefined : toolbar.getBoundingClientRect().bottom + 8;
+  return { left: rect.left, bottom: rect.bottom, top: rect.top, ...(floor === undefined ? {} : { floor }) };
 }
 
 /** Leaves a popover to the stylesheet's own placement, such as a sheet fixed to the bottom edge of a phone. */
@@ -40,7 +44,7 @@ export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement, options:
   popover.style.maxHeight = options.maxHeight === undefined ? "" : `${options.maxHeight}px`;
   popover.style.overflowY = "";
   popover.style.left = options.narrow ? "" : `${anchor.left}px`;
-  popover.style.top = `${anchor.bottom + 4}px`;
+  popover.style.top = `${Math.max(anchor.bottom + 4, anchor.floor ?? 0)}px`;
 }
 
 /**
@@ -51,13 +55,18 @@ export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement, options:
 export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options: KeepInsideOptions = {}): void {
   const view = popover.ownerDocument.defaultView;
   if (!view) return;
-  const room = view.innerHeight - 16;
+  const floor = anchor.floor ?? 8;
+  const room = view.innerHeight - 8 - floor;
   // A growing layer is measured again at full height, so a cap from its first placement cannot clip what it gained.
   if (options.keepTop) {
     popover.style.maxHeight = `${options.maxHeight ?? room}px`;
     popover.style.overflowY = "";
   }
-  const rect = popover.getBoundingClientRect();
+  let rect = popover.getBoundingClientRect();
+  if (rect.top < floor) {
+    popover.style.top = `${floor}px`;
+    rect = popover.getBoundingClientRect();
+  }
   if (!options.narrow) {
     const layout = Math.min(view.innerWidth, popover.ownerDocument.documentElement.clientWidth || view.innerWidth);
     popover.style.left = `${Math.max(8, Math.min(rect.left, layout - 8 - rect.width))}px`;
@@ -65,7 +74,7 @@ export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options:
   const below = rect.bottom - (view.innerHeight - 8);
   if (below <= 0) return;
   if (options.keepTop) {
-    const top = Math.max(8, rect.top - below);
+    const top = Math.max(floor, rect.top - below);
     popover.style.top = `${top}px`;
     const left = view.innerHeight - top - 8;
     popover.style.maxHeight = `${Math.max(1, Math.min(options.maxHeight ?? left, left, room))}px`;
@@ -73,11 +82,11 @@ export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options:
     return;
   }
   const above = anchor.top - 4 - rect.height;
-  if (above >= 8) {
+  if (above >= floor) {
     popover.style.top = `${above}px`;
     return;
   }
-  popover.style.top = "8px";
+  popover.style.top = `${floor}px`;
   popover.style.maxHeight = `${Math.max(1, Math.min(options.maxHeight ?? room, room))}px`;
   popover.style.overflowY = "auto";
 }

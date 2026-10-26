@@ -13,12 +13,17 @@ export interface ToolMessages {
   /** The footer's two buttons. */
   apply: string;
   close: string;
-  /** The status line: nothing chosen, what a preview would do, that it would do nothing, that it was applied, read-only. */
+  /** The status line: nothing chosen, nothing selected, what a preview would do, nothing, applied, read-only. */
   statusIdle: string;
+  statusNoSelection: string;
+  statusChooseFirst: string;
   statusPreview(notes: number): string;
   statusUnchanged: string;
   statusApplied: string;
   statusReadOnly: string;
+  /** The step buttons beside a number field on a coarse pointer. */
+  decrease(name: string): string;
+  increase(name: string): string;
 }
 
 const en: ToolMessages = {
@@ -28,11 +33,15 @@ const en: ToolMessages = {
   group: { note: "Note tools", quantize: "Quantize", transform: "Transform", generate: "Generate", more: "More tools" },
   apply: "Apply",
   close: "Close",
-  statusIdle: "Choose a tool.",
+  statusIdle: "Select notes, then choose a tool.",
+  statusNoSelection: "Select notes first.",
+  statusChooseFirst: "Choose a tool first.",
   statusPreview: (notes) => (notes === 1 ? "Preview: 1 note would change." : `Preview: ${notes} notes would change.`),
   statusUnchanged: "This tool changes nothing with the current selection and settings.",
-  statusApplied: "Applied. One undo step.",
+  statusApplied: "Applied. Undo takes it back.",
   statusReadOnly: "This view is read-only.",
+  decrease: (name) => `Decrease ${name}`,
+  increase: (name) => `Increase ${name}`,
 };
 
 const zh: ToolMessages = {
@@ -42,11 +51,15 @@ const zh: ToolMessages = {
   group: { note: "音符工具", quantize: "量化", transform: "变换", generate: "生成", more: "更多工具" },
   apply: "应用",
   close: "关闭",
-  statusIdle: "选择一个工具。",
+  statusIdle: "先选中音符，再选择工具。",
+  statusNoSelection: "请先选中音符。",
+  statusChooseFirst: "请先选择一个工具。",
   statusPreview: (notes) => `预览：会改动 ${notes} 个音。`,
   statusUnchanged: "以当前的选区和参数，这个工具不会改动任何东西。",
-  statusApplied: "已应用，可以一步撤销。",
+  statusApplied: "已应用，撤销即可恢复。",
   statusReadOnly: "这里是只读视图。",
+  decrease: (name) => `减小${name}`,
+  increase: (name) => `增大${name}`,
 };
 
 export function toolMessagesFor(language: Language): ToolMessages {
