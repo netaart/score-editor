@@ -126,8 +126,30 @@ const zoneOf = (isMobile: boolean) => (isMobile ? 12 : 6);
 /** The zone at an edge of a note whose inside width is `inside`, from the constants in DESIGN.md, "Edge zones". */
 const zoneAt = (inside: number, isMobile: boolean) => (isMobile ? Math.max(8, Math.min(12, inside * 0.3)) : 6);
 
-/** The width of the grip a selected note draws in its own background: 2px when it has one, 0px when it is too narrow. */
-const gripWidth = (target: Locator) => target.evaluate((el) => parseFloat(getComputedStyle(el).backgroundSize));
+/**
+ * Whether the grip at `side` is drawn: the pixel at the centre of that edge zone differs from the note body's. The
+ * sample is kept inside the note's border, so a note too narrow for a zone has no edge pixel to mistake for a grip.
+ */
+async function gripDrawn(page: Page, target: Locator, side: "start" | "end", isMobile: boolean) {
+  const area = await box(target);
+  const frame = await target.evaluate((el) => {
+    const html = el as HTMLElement;
+    return {
+      inside: html.clientWidth,
+      left: html.clientLeft,
+      right: html.offsetWidth - html.clientWidth - html.clientLeft,
+    };
+  });
+  const zone = zoneAt(frame.inside, isMobile);
+  const at = side === "start" ? frame.left + zone / 2 : area.width - frame.right - zone / 2;
+  const x = Math.min(area.width - frame.right - 1, Math.max(frame.left + 1, at));
+  const y = area.height / 2;
+  const [body, grip] = await pixelsAt(page, target, [
+    { x: area.width / 2, y },
+    { x, y },
+  ]);
+  return grip?.join(",") !== body?.join(",");
+}
 
 /** The colours of some pixels of what `target` draws, in CSS pixels from its top-left. */
 async function pixelsAt(page: Page, target: Locator, points: ReadonlyArray<{ x: number; y: number }>) {
@@ -285,7 +307,7 @@ test.describe("dragging an edge", () => {
     await openTrack(harness, vocalOnly("C4z12|G16|"));
     await press(block(page, C4));
     const selected = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
-    expect(await gripWidth(selected)).toBe(2);
+    expect(await gripDrawn(page, selected, "end", isMobile)).toBe(true);
     const grip = await gripCentre(page, selected, "end", isMobile);
     expect(grip.hits).toBeGreaterThan(0);
     expect(Math.abs(grip.centre - grip.expected)).toBeLessThanOrEqual(1);
@@ -301,25 +323,26 @@ test.describe("dragging an edge", () => {
   test("a wide note has grips and a narrow one does not, for either pointer, and a zoom moves the line", async ({
     page,
     harness,
+    isMobile,
   }) => {
     await openTrack(harness, vocalOnly("C4D1z8z3|G16|"));
     await harness.layout.select(["Vocal:0", `Vocal:${BEAT}`]);
     const wide = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
     const narrow = block(page, "D4, bar 1 beat 2, length 0.25 beats, selected");
 
-    // The grips are two layers of the note's own background, each 2px wide when the note is wide enough and 0px when not.
+    // The grip is painted only where the note is wide enough: two background layers on a wide note, nothing on a narrow one.
     await expect(wide).toBeVisible();
     await expect(narrow).toBeVisible();
-    expect(await gripWidth(wide)).toBe(2);
-    expect(await gripWidth(narrow)).toBe(0);
+    expect(await gripDrawn(page, wide, "end", isMobile)).toBe(true);
+    expect(await gripDrawn(page, narrow, "end", isMobile)).toBe(false);
 
-    // Zoomed out, the beat falls under both pointers' threshold and its background layers close to nothing.
+    // Zoomed out, the beat falls under both pointers' threshold and its grips are painted away.
     await harness.layout.setView({ zoom: 0.5 });
-    expect(await gripWidth(wide)).toBe(0);
+    expect(await gripDrawn(page, wide, "end", isMobile)).toBe(false);
 
-    // Zoomed in, the sixteenth rises above both and its layers open again.
+    // Zoomed in, the sixteenth rises above both and its grips are painted again.
     await harness.layout.setView({ zoom: 4 });
-    expect(await gripWidth(narrow)).toBe(2);
+    expect(await gripDrawn(page, narrow, "end", isMobile)).toBe(true);
   });
 
   test("draws the grip at the centre of the zone a press finds, including a finger's share", async ({
