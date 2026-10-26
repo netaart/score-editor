@@ -70,13 +70,22 @@ interface CursorGeometry {
   readonly bars: ReadonlyArray<CursorBar>;
 }
 
+/** A box in the coordinates the cursor is positioned in: pixels from the drawing element's own corner. */
+interface DrawingBox {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 interface AbcElement {
   readonly type?: string;
   readonly x?: number;
 }
 
 interface AbcStaffGroup {
-  readonly startx?: number;
   readonly staffs?: ReadonlyArray<{
     readonly topLine?: number;
     readonly bottomLine?: number;
@@ -117,32 +126,68 @@ function styleDrawing(doc: Document, shadow: ShadowRoot): void {
   shadow.appendChild(style);
 }
 
+/** A drawn element's box, measured from the drawing host's corner: the coordinates the cursor's left and top use. */
+function boxIn(host: HTMLElement, node: Element): DrawingBox {
+  const base = host.getBoundingClientRect();
+  const box = node.getBoundingClientRect();
+  return {
+    left: box.left - base.left,
+    top: box.top - base.top,
+    right: box.right - base.left,
+    bottom: box.bottom - base.top,
+    width: box.width,
+    height: box.height,
+  };
+}
+
 /**
  * Where each bar of `score` sits in the drawing: the bar line that opens it, the line that closes it, and the staff
  * lines above and below. abcjs orders each line's voice by its measures, so the bars of the drawing follow the model.
+ * The boxes are read from the drawn `.abcjs-bar`, `.abcjs-note` and `.abcjs-staff` elements themselves, in the
+ * drawing host's pixels: that is the cursor's containing block, the only space its own left and top mean anything in.
+ * A bar starts at the drawn line that closes the one before it; the first bar of a system has no line of its own, so it
+ * starts at its first drawn note or rest.
  */
-function geometryOf(tune: unknown, score: Score): CursorGeometry {
+function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeometry {
+  const svg = host.shadowRoot?.querySelector("svg");
+  if (!(svg instanceof SVGSVGElement)) return { bars: [] };
   const engraver = (tune as { engraver?: { staffgroups?: ReadonlyArray<AbcStaffGroup> } } | null)?.engraver;
   const groups = engraver?.staffgroups ?? [];
+  const barNodes = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-bar")];
+  const noteNodes = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-note, .abcjs-rest")];
+  const staffNodes = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-staff")];
   const bars: CursorBar[] = [];
   let index = 0;
+  let barAt = 0;
+  let noteAt = 0;
+  let staffAt = 0;
   for (const group of groups) {
     const voice = group.voices?.[0];
     const staff = group.staffs?.[0];
     if (!voice || !staff) continue;
     const middle = staff.absoluteY ?? 0;
-    const top = staff.topLine ?? middle - 10 * STAFF_STEP;
-    const bottom = staff.bottomLine ?? middle + 2 * STAFF_STEP;
+    const drawnStaff = staffNodes[staffAt];
+    staffAt += 1;
+    const staffBox = drawnStaff ? boxIn(host, drawnStaff) : null;
+    const top = staffBox?.top ?? staff.topLine ?? middle - 10 * STAFF_STEP;
+    const bottom = staffBox?.bottom ?? staff.bottomLine ?? middle + 2 * STAFF_STEP;
     const children = voice.children ?? [];
-    const first = children[0];
-    let startX = group.startx ?? first?.x ?? 0;
+    let startX: number | null = null;
     let hasContent = false;
     for (const child of children) {
-      if (child.type === "note" || child.type === "rest") hasContent = true;
-      if (child.type !== "bar" || typeof child.x !== "number") continue;
+      if (child.type === "note" || child.type === "rest") {
+        const note = noteNodes[noteAt];
+        noteAt += 1;
+        hasContent = true;
+        if (startX === null) startX = note ? boxIn(host, note).left : (child.x ?? 0);
+      }
+      if (child.type !== "bar") continue;
+      const barNode = barNodes[barAt];
+      barAt += 1;
+      const barX = barNode ? boxIn(host, barNode).left : (child.x ?? startX ?? 0);
       if (!hasContent) {
         // The bar line at the start of a system opens its first measure rather than closing one.
-        startX = child.x;
+        startX = barX;
         continue;
       }
       const model = score.bars[index];
@@ -151,14 +196,14 @@ function geometryOf(tune: unknown, score: Score): CursorGeometry {
           index,
           start: model.start,
           end: model.start + model.length,
-          x0: startX,
-          x1: child.x,
+          x0: startX ?? barX,
+          x1: barX,
           top,
           bottom,
         });
       }
       index += 1;
-      startX = child.x;
+      startX = barX;
       hasContent = false;
     }
   }
@@ -284,6 +329,30 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
     return best;
   }
 
+  /** A pointer's place in the drawing host's coordinates, whatever element it landed on. */
+  function pointInDrawing(event: MouseEvent): { x: number; y: number } {
+    const base = holder.getBoundingClientRect();
+    return { x: event.clientX - base.left, y: event.clientY - base.top };
+  }
+
+  /** The drawn note a point is on, from the boxes of the notes rather than the element under the pointer. */
+  function noteBoxAt(x: number, y: number): DrawingBox | null {
+    let found: DrawingBox | null = null;
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const note of target.querySelectorAll<SVGGraphicsElement>(".abcjs-note")) {
+      const box = boxIn(holder, note);
+      const dx = x < box.left ? box.left - x : x > box.right ? x - box.right : 0;
+      const dy = y < box.top ? box.top - y : y > box.bottom ? y - box.bottom : 0;
+      const distance = Math.hypot(dx, dy);
+      if (distance < nearest) {
+        nearest = distance;
+        found = box;
+      }
+    }
+    // A one-pixel slack takes the antialiased edge of a note head; an empty part of the staff has no note near it.
+    return nearest <= 1 ? found : null;
+  }
+
   /** The onset of the note nearest to `tick` in `bar`, so a press on a note starts the preview at that note. */
   function onsetNear(bar: CursorBar, tick: number): number {
     if (!score) return tick;
@@ -303,21 +372,14 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
   target.addEventListener(
     "click",
     (event) => {
-      if (destroyed || !(event.target instanceof Element)) return;
-      const note = event.target.closest(".abcjs-note");
-      const svg = event.target.closest("svg");
-      if (!note || !(note instanceof SVGElement) || !(svg instanceof SVGSVGElement)) return;
-      const glyph = (event.target instanceof SVGElement ? event.target : note) as SVGGraphicsElement;
-      let box: DOMRect;
-      try {
-        box = glyph.getBBox();
-      } catch {
-        return;
-      }
-      const bar = barAt(box.x + box.width / 2, box.y + box.height / 2);
+      if (destroyed) return;
+      const point = pointInDrawing(event);
+      const box = noteBoxAt(point.x, point.y);
+      if (!box) return;
+      const bar = barAt(box.left + box.width / 2, box.top + box.height / 2);
       if (!bar) return;
       const span = bar.x1 - bar.x0;
-      const fraction = span > 0 ? Math.min(1, Math.max(0, (box.x + box.width / 2 - bar.x0) / span)) : 0;
+      const fraction = span > 0 ? Math.min(1, Math.max(0, (box.left + box.width / 2 - bar.x0) / span)) : 0;
       const tick = onsetNear(bar, bar.start + fraction * (bar.end - bar.start));
       if (player.playing) player.stop();
       void player.start(tick);
@@ -369,7 +431,7 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
         wrap: { minSpacing: 1.8, maxSpacing: 2.7, preferredMeasuresPerLine: 4 },
         add_classes: true,
       });
-      geometry = geometryOf(tune, score);
+      geometry = geometryOf(tune, score, holder);
       drawnText = text;
       drawnWidth = width;
     } catch {
