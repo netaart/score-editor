@@ -261,7 +261,7 @@ A 1.85em row (24px at the default size). Each bar number sits at the left edge o
 
 ### Section bands
 
-A 1.7em row (25px on a coarse pointer). One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing. While the session is editable a band opens the section menu (next).
+A 1.7em row (25px on a coarse pointer). One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing. While the session is editable a band opens the section menu (see Section menu).
 
 ### Marks row
 
