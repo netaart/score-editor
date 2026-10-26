@@ -42,7 +42,7 @@ export function sectionActions(session: EditingSession, section: number): Readon
   if (reading.kind !== "score") return null;
   if (!Number.isInteger(section) || reading.score.sections[section] === undefined) return null;
 
-  const commanded = (name: SectionActionName, command: ScoreCommand): SectionAction => ({
+  const actionFor = (name: SectionActionName, command: ScoreCommand): SectionAction => ({
     name,
     command,
     unavailable: refusalOf(session, command),
@@ -50,9 +50,9 @@ export function sectionActions(session: EditingSession, section: number): Readon
   return [
     { name: "rename", command: null, unavailable: null },
     { name: "start", command: null, unavailable: null },
-    commanded("move-earlier", { type: "moveSection", section, direction: "earlier" }),
-    commanded("move-later", { type: "moveSection", section, direction: "later" }),
-    commanded("duplicate", { type: "duplicateSection", section }),
-    commanded("delete", { type: "deleteSection", section }),
+    actionFor("move-earlier", { type: "moveSection", section, direction: "earlier" }),
+    actionFor("move-later", { type: "moveSection", section, direction: "later" }),
+    actionFor("duplicate", { type: "duplicateSection", section }),
+    actionFor("delete", { type: "deleteSection", section }),
   ];
 }
