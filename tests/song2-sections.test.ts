@@ -2,7 +2,13 @@
 // ABOUTME: Hand-worked texts come from RULES.md S1-S9 and W7-W11; sample sweeps check every untouched bar and note.
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
-import { applyScoreCommand, formatDiagnostic, type Score, type ScoreCommand, type Section } from "@neta-art/score-editor";
+import {
+  applyScoreCommand,
+  formatDiagnostic,
+  type Score,
+  type ScoreCommand,
+  type Section,
+} from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
 interface SampleFact {
