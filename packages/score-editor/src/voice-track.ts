@@ -19,7 +19,7 @@ import type { Messages } from "./i18n";
 import { createInsertionPointLine, type InsertionPointLine } from "./insertion-point";
 import { installLanePointer } from "./lane-pointer";
 import { sayRefusals } from "./live-region";
-import { dragChannel, ghostsOf, gripKindsOf } from "./note-drag";
+import { dragChannel, ghostsOf, hasEdgeZones } from "./note-drag";
 import { mountNoteFocus, type NoteFocus } from "./note-focus";
 import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from "./playhead";
 import { previewPlayer } from "./preview-player";
@@ -123,13 +123,14 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       const tiedPrev = block.hasAttribute("data-tie-prev");
       const box = (note.duration / drawn.ticks) * width - (tiedNext ? 0 : 1);
       const inside = box - (tiedPrev ? 0 : 2) - (tiedNext ? 0 : 2);
-      const grips = gripKindsOf(inside);
-      if (grips.fine !== block.hasAttribute("data-grip-fine")) {
-        if (grips.fine) block.dataset.gripFine = "";
+      const fine = hasEdgeZones(inside, false);
+      const coarse = hasEdgeZones(inside, true);
+      if (fine !== block.hasAttribute("data-grip-fine")) {
+        if (fine) block.dataset.gripFine = "";
         else delete block.dataset.gripFine;
       }
-      if (grips.coarse !== block.hasAttribute("data-grip-coarse")) {
-        if (grips.coarse) block.dataset.gripCoarse = "";
+      if (coarse !== block.hasAttribute("data-grip-coarse")) {
+        if (coarse) block.dataset.gripCoarse = "";
         else delete block.dataset.gripCoarse;
       }
     }

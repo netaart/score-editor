@@ -37,11 +37,6 @@ export function hasEdgeZones(inside: number, coarse: boolean): boolean {
   return zonesFit(inside, edgeZoneWidth(inside, coarse));
 }
 
-/** Which pointer kinds a selected note of this inside width draws grips for: a wide note may draw both, a narrow none. */
-export function gripKindsOf(inside: number): { readonly fine: boolean; readonly coarse: boolean } {
-  return { fine: hasEdgeZones(inside, false), coarse: hasEdgeZones(inside, true) };
-}
-
 /** Where on a selected note a press landed: on its body, which moves the selection, or on an edge, which resizes it. */
 export type Grab = { readonly kind: "move" } | { readonly kind: "resize"; readonly edge: "start" | "end" };
 
