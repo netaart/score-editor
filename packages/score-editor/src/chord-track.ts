@@ -46,6 +46,7 @@ export function mountChordTrack(el: HTMLElement, session: EditingSession, option
             const next = score.chords[index + 1]?.start ?? end;
             const item = create(doc, "div", "sce-chord");
             item.setAttribute("role", "listitem");
+            item.dataset.noteId = chord.noteId ?? "";
             item.style.cssText = `--t:${chord.start};--w:${next - chord.start}`;
             item.textContent = chord.name;
             chords.appendChild(item);

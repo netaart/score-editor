@@ -52,21 +52,34 @@ interface Drawn extends DrawnChordRow {
   readonly cursor: HTMLButtonElement;
 }
 
-/** The name a score gives the chord at `start`: the last one there, or null. */
-function chordAt(chords: ReadonlyArray<Chord>, start: number): string | null {
+/** The name a score gives the chord on `noteId`: the last one there, or null. */
+function chordAt(chords: ReadonlyArray<Chord>, noteId: string): string | null {
   let name: string | null = null;
-  for (const chord of chords) if (chord.start === start) name = chord.name;
+  for (const chord of chords) if (chord.noteId === noteId) name = chord.name;
   return name;
 }
 
-/** The first start whose chord is not the same in the two scores, with the chord it has in `after`. */
+/** The first note whose chord is not the same in the two scores, with its start and the chord it has in `after`. */
 function firstChordChange(before: Score, after: Score): { start: number; chord: string | null } | null {
-  const starts = [...new Set([...before.chords, ...after.chords].map((chord) => chord.start))].sort((a, b) => a - b);
-  for (const start of starts) {
-    const now = chordAt(after.chords, start);
-    if (now !== chordAt(before.chords, start)) return { start, chord: now };
+  const starts = new Map<string, number>();
+  for (const chord of [...before.chords, ...after.chords]) {
+    if (chord.noteId !== null) starts.set(chord.noteId, chord.start);
+  }
+  const ordered = [...starts.entries()].sort(([a, at], [b, bt]) => at - bt || a.localeCompare(b));
+  for (const [noteId, start] of ordered) {
+    const now = chordAt(after.chords, noteId);
+    if (now !== chordAt(before.chords, noteId)) return { start, chord: now };
   }
   return null;
+}
+
+/** The chord in force before `start`: the last one that starts earlier, in time order. */
+function chordBefore(score: Score, start: number): string | null {
+  let before: string | null = null;
+  for (const chord of [...score.chords].sort((a, b) => a.start - b.start)) {
+    if (chord.start < start) before = chord.name;
+  }
+  return before;
 }
 
 /**
@@ -90,7 +103,7 @@ export function mountChordEditing(
   let press: { x: number; y: number } | null = null;
   /** The focus was on the cursor when the session last changed: the redraw that follows may take it away. */
   let refocus = false;
-  let shown = "";
+  let editableShown: boolean | null = null;
 
   const picker: ChordPicker = mountChordPicker(root, signal, (open) => {
     if (!drawn) return;
@@ -126,10 +139,25 @@ export function mountChordEditing(
    * is asking to change it; otherwise the start nearest to it.
    */
   function slotUnder(d: Drawn, event: MouseEvent): ChordSlot | null {
-    const item = event.target instanceof Element ? event.target.closest(".sce-chord") : null;
-    const chord = item ? d.score.chords[Array.prototype.indexOf.call(d.timeline.children, item)] : undefined;
-    const named = chord ? d.slots.find((slot) => slot.start === chord.start) : undefined;
-    return named ?? nearestChordSlot(d.slots, tickAt(d, event.clientX));
+    const item = event.target instanceof Element ? event.target.closest<HTMLElement>(".sce-chord") : null;
+    const noteId = item?.dataset.noteId;
+    if (noteId) {
+      const named = d.slots.find((slot) => slot.noteId === noteId);
+      if (named) return named;
+      const chord = d.score.chords.find((found) => found.noteId === noteId);
+      const note = d.score.notes.find((found) => found.id === noteId);
+      if (chord && note) {
+        return {
+          noteId: note.id,
+          voice: note.voice,
+          start: note.start,
+          duration: note.duration,
+          chord: chord.name,
+          before: chordBefore(d.score, note.start),
+        };
+      }
+    }
+    return nearestChordSlot(d.slots, tickAt(d, event.clientX));
   }
 
   function frameSlot(element: HTMLElement, slot: ChordSlot): void {
@@ -236,8 +264,7 @@ export function mountChordEditing(
   );
   root.addEventListener("pointerleave", hideHover, { signal });
 
-  // A click rather than the release of the press: the browser closes an open picker as the pointer is released, and the
-  // click that follows is then the one that opens the next. A drag or a swipe makes no tap.
+  // A click, not the release of the press; the reasons are in DESIGN.md#chord-editing.
   root.addEventListener(
     "click",
     (event) => {
@@ -313,7 +340,7 @@ export function mountChordEditing(
     draw(row) {
       picker.close();
       drawn = null;
-      shown = "";
+      editableShown = null;
       const constraints = session.constraints;
       if (row === null || constraints === null) return null;
       const slots = chordSlots(row.score, constraints);
@@ -337,13 +364,12 @@ export function mountChordEditing(
       if (drawn && !drawn.layer.isConnected) {
         picker.close();
         drawn = null;
-        shown = "";
+        editableShown = null;
       }
       const d = drawn;
       const on = editable();
-      const state = `${on}`;
-      if (d && state !== shown) {
-        shown = state;
+      if (d && on !== editableShown) {
+        editableShown = on;
         d.layer.hidden = !on;
         if (!on) {
           picker.close();

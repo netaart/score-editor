@@ -1,5 +1,5 @@
-// ABOUTME: Where a chord can go and which names a chord picker may offer: pure facts read from a score and a dialect's constraints.
-// ABOUTME: No DOM and no text in any language; the chord track and its picker draw them, and a host's own chord control can use them too.
+// ABOUTME: Where a chord can go and which place is nearest: pure facts read from a score and a dialect's constraints.
+// ABOUTME: No DOM and no text in any language; the names are in chord-vocabulary.ts, and a host's own chord control can use both.
 import type { Note, Score } from "./score";
 import type { DialectConstraints } from "./types";
 
@@ -19,7 +19,8 @@ export interface ChordSlot {
 
 /**
  * The places a chord can go, in time order: the start of every note and rest of every voice that `constraints` says
- * allows chords. Where two such voices start something at the same tick, the voice listed first owns the place.
+ * allows chords. Where two such voices start something at the same tick, the voice listed first owns the place. The
+ * cursor and placing use that owner's place; a chord on another voice is reached by pressing its name.
  */
 export function chordSlots(score: Score, constraints: DialectConstraints): ReadonlyArray<ChordSlot> {
   const owners = new Map<number, Note>();
