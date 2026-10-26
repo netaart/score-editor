@@ -1,0 +1,3 @@
+# pnpm 11 and later stop the install when a dependency's build script is not approved; esbuild has one.
+allowBuilds:
+  esbuild: true
