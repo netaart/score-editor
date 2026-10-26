@@ -57,7 +57,7 @@ function parseMeter(text: string): Meter {
   return { numerator: Number(match[1]), denominator: Number(match[2]) };
 }
 
-function factsOf(score: Score, source: Song2Source): SourceFacts {
+function factsOf(source: Song2Source): SourceFacts {
   const lines = source.text.split("\n");
   const byVoiceBar = new Map<string, SourceBar>();
   let oldBarCount = 0;
@@ -74,7 +74,7 @@ function factsOf(score: Score, source: Song2Source): SourceFacts {
       }
     }
   }
-  const keyIndex = 6 + (score.voices.includes("Ins") ? 1 : 0);
+  const keyIndex = lines.findIndex((line) => line.startsWith("K:"));
   return {
     lines,
     musicLines: source.musicLines,
@@ -545,19 +545,30 @@ function writeBody(
   return body;
 }
 
+/** The header line song2 writes for Ins, used only when the model gained the voice. */
+const INS_HEADER = 'V: Ins clef=treble name="Ins Melody" snm="Inst."';
+
+/** The source header up to the key line, with an Ins voice line added when the model has one the source did not. */
+function headerLines(score: Score, facts: SourceFacts): string[] {
+  const head = facts.lines.slice(0, facts.keyIndex);
+  const key = facts.lines.slice(facts.keyIndex, facts.keyIndex + 1);
+  if (!score.voices.includes("Ins") || head.some((line) => line.startsWith("V: Ins"))) return [...head, ...key];
+  return [...head, INS_HEADER, ...key];
+}
+
 /** Writes a complete score whose bars moved: unchanged pieces keep their bytes. */
 export function serializeBarsSong2(score: Score, source: Song2Source): string {
-  const facts = factsOf(score, source);
+  const facts = factsOf(source);
   const alignment = align(score, facts, score.bars.length, facts.oldBarCount);
   const coverage = coverageAll(score, score.bars.length);
   const pieces = buildPieces(score, facts, alignment, score.bars.length, coverage, source.unitDenominator);
-  const lines = [...facts.lines.slice(0, facts.keyIndex + 1), ...writeBody(score, facts, pieces, coverage)];
+  const lines = [...headerLines(score, facts), ...writeBody(score, facts, pieces, coverage)];
   return `${lines.join("\n")}${facts.trailingNewline ? "\n" : ""}`;
 }
 
 /** Writes a cut score after a structural edit: every bar comes from the model, and unchanged pieces keep their bytes. */
 export function serializeTruncatedBarsSong2(score: Score, source: Song2Source): string {
-  const facts = factsOf(score, source);
+  const facts = factsOf(source);
   const alignment = align(score, facts, score.bars.length, facts.oldBarCount);
   const coverage = modelCoverage(score);
   const pieces = buildPieces(score, facts, alignment, score.bars.length, coverage, source.unitDenominator);
@@ -590,12 +601,6 @@ export function serializeTruncatedBarsSong2(score: Score, source: Song2Source): 
     cut !== null && !trailingComments && !cut.short && cut.voice !== "Ins" && lastBodyVoice !== cut.voice
       ? [`V: ${cut.voice}`]
       : [];
-  const lines = [
-    ...facts.lines.slice(0, facts.keyIndex + 1),
-    ...body,
-    ...trailingSections,
-    ...cutBlock,
-    ...trailingLines,
-  ];
+  const lines = [...headerLines(score, facts), ...body, ...trailingSections, ...cutBlock, ...trailingLines];
   return lines.join("\n");
 }

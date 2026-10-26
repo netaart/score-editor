@@ -119,9 +119,6 @@ function notesOf(
 }
 
 function instrumental(score: Score, constraints: DialectConstraints): ScoreCommandResult {
-  if (!score.voices.includes("Ins")) {
-    return commandRefusal("instrumental-voice-missing", { voice: "Ins" }, {});
-  }
   if (score.unitTicks === undefined) return commandRefusal("unit-unknown", {}, {});
   const unitTicks = score.unitTicks;
   const vocal = spansOf(score, "Vocal");
@@ -163,10 +160,22 @@ function instrumental(score: Score, constraints: DialectConstraints): ScoreComma
     kept.push({ voice: "Ins", start: span.start, end: span.end, midi: span.midi, notes: null });
   }
 
-  const voices = score.voices;
+  const voices = score.voices.includes("Ins") ? score.voices : [...score.voices, "Ins"];
   const ends = fillEnds(score);
+  const insEnds = new Map(ends);
+  if (!score.voices.includes("Ins")) {
+    // A new Ins voice has no source bars to tell fillVoice where the voice stops, so it fills every whole bar.
+    for (const bar of score.bars) insEnds.set(`Ins:${bar.index}`, bar.start + bar.length);
+  }
   const vocalNotes = fillVoice(score, "Vocal", [], ends, unitTicks, constraints);
-  const insNotes = fillVoice(score, "Ins", notesOf(score, kept, unitTicks, constraints), ends, unitTicks, constraints);
+  const insNotes = fillVoice(
+    score,
+    "Ins",
+    notesOf(score, kept, unitTicks, constraints),
+    insEnds,
+    unitTicks,
+    constraints,
+  );
   let notes = [...vocalNotes, ...insNotes];
   notes = splitAtKeyChanges(score, notes, unitTicks, constraints.durations);
   notes = repairTies(score, notes, affected);

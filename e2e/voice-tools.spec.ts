@@ -90,6 +90,37 @@ test.describe("the voice tools", () => {
     expect(await scoreText(page, press)).toBe(score);
   });
 
+  test("Instrumental version adds Ins to a Vocal-only score and undoes to the exact text", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const source = vocalOnly('z8C8-|C8z8|"G"z16|');
+    await harness.mount({ score: { text: source } });
+    await openPanel(page, press);
+    await press(tool(page, "Instrumental version"));
+    await expect(status(page)).toContainText("Preview: 1 Vocal note move to Ins");
+    await press(applyButton(page));
+    await expect(status(page)).toContainText("Applied. 1 Vocal note moved to Ins");
+    await press(closeButton(page));
+    expect(await scoreText(page, press)).toBe(`X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=100
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+V: Ins clef=treble name="Ins Melody" snm="Inst."
+K:C
+% a
+V: Vocal
+z16|z16|"G"z16|
+V: Ins
+z8C8-|C8z8|z16|
+`);
+    await press(undoButton(page));
+    expect(await scoreText(page, press)).toBe(source);
+  });
+
   test("the real two-voice score moves to Ins and comes back exactly", async ({ page, harness, press }) => {
     const real = await page.evaluate(() =>
       fetch("/packages/score-editor/skills/score-editor/assets/edit-one-bar/score.abc").then((response) =>
