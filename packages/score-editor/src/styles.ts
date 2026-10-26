@@ -348,6 +348,11 @@ const css = `
   .sce-root .sce-grid-dot {
     background: CanvasText;
   }
+  .sce-root .sce-pencil-button[aria-pressed="true"],
+  .sce-root .sce-view-button[aria-pressed="true"] {
+    outline: 2px solid CanvasText;
+    outline-offset: -2px;
+  }
 }
 /* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
 .sce-root .sce-step {
@@ -690,6 +695,33 @@ ${labelThinning()}
   font-size: 0.92em;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+/* The pinned head carries the pencil's word, so the mode is visible where the finger draws, not only on the button. */
+.sce-root .sce-draw-mode {
+  flex: none;
+  height: 1.45em;
+  margin-inline: auto 8px;
+  padding: 0 6px;
+  border: 1px solid var(--sce-_text);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
+  color: var(--sce-_text);
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+/* Only a mouse has a cursor; the lane is the target of a drawn note while the pencil is on. */
+@media (pointer: fine) {
+  .sce-root .sce-lane[data-pencil] {
+    cursor: cell;
+  }
+}
+/* A finger's gap to Delete was 4px in Chinese at 412px; 4px more costs no row at 412 or 320 in either language. */
+@media (pointer: coarse) {
+  .sce-root .sce-pencil-button {
+    margin-inline-start: 4px;
+  }
 }
 .sce-root .sce-track {
   display: flex;

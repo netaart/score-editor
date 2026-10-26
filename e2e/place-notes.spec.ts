@@ -1,7 +1,9 @@
 // ABOUTME: Seam 5 for placing new notes: the pencil and its key, click and double-click with mouse and finger, copy, paste, duplicate and Alt-drag.
 // ABOUTME: Adding and carrying a note is checked through the page's audio constructor, the way the synth preview spec records sound.
+import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import {
+  box,
   centreOf,
   drag,
   expect,
@@ -45,6 +47,30 @@ function spyOnAudio() {
 
 const audio = (page: Page) => page.evaluate(() => [...((window as AudioPage).placeAudioLog?.tones ?? [])]);
 const midiHz = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
+const skillScore = readFileSync(
+  new URL("../packages/score-editor/skills/score-editor/assets/edit-one-bar/score.abc", import.meta.url),
+  "utf8",
+);
+
+/** The zero-based lines whose text changed. The skill score puts four bars on a line. */
+function changedLines(before: string, after: string): number[] {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  expect(b.length, "the number of score lines stays the same").toBe(a.length);
+  return a.map((line, index) => (line === b[index] ? -1 : index)).filter((index) => index >= 0);
+}
+
+/** The Ins lane's geometry on the real score: a beat, a row, and the MIDI of its top row. */
+async function insMetrics(page: Page, harness: Harness) {
+  const lane = slot(page, "ins").locator(".sce-lane");
+  const list = slot(page, "ins").getByRole("list", { name: "Ins" });
+  const area = await box(lane);
+  const row = (await box(list.getByRole("listitem").first())).height;
+  const notes = (await harness.layout.pitchedNotes()).filter((note) => note.voice === "Ins" && note.midi !== null);
+  const lo = Math.floor((Math.min(...notes.map((note) => note.midi as number)) - 3) / 12) * 12;
+  const hi = Math.ceil((Math.max(...notes.map((note) => note.midi as number)) + 4) / 12) * 12;
+  return { lane: area, beat: area.width / 108, row, top: hi - 1, lo };
+}
 
 const pencilButton = (page: Page) =>
   slot(page, "toolbar-pencil").getByRole("button", { name: "Draw notes", exact: true });
@@ -251,5 +277,236 @@ test.describe("the pencil and the keys where they must not act", () => {
 
     expect((await harness.layout.view()).scrollLeft).toBeGreaterThan(20);
     expect(await noteList(harness)).toEqual(before);
+  });
+});
+
+test.describe("the review fixes", () => {
+  test("the lane says Draw at the pinned head while the pencil is on, and the fine cursor is a cell", async ({
+    page,
+    harness,
+    isMobile,
+    press,
+  }) => {
+    await openPencilTrack(harness, LEAD);
+    const head = slot(page, "vocal").locator(".sce-track-head");
+    const word = head.getByText("Draw", { exact: true });
+    const lane = slot(page, "vocal").locator(".sce-lane");
+    await expect(word).toBeHidden();
+    if (!isMobile) await expect(lane).not.toHaveCSS("cursor", "cell");
+
+    await press(pencilButton(page));
+    await expect(word).toBeVisible();
+    if (!isMobile) await expect(lane).toHaveCSS("cursor", "cell");
+
+    await press(pencilButton(page));
+    await expect(head.getByText("Draw", { exact: true })).toBeHidden();
+    if (!isMobile) await expect(lane).not.toHaveCSS("cursor", "cell");
+  });
+
+  test("the Select menu has Copy, Paste and Duplicate as one group, each muted until it can act", async ({
+    page,
+    harness,
+    isMobile,
+    press,
+  }) => {
+    test.skip(!isMobile, "this is the finger path the review asked for");
+    await openPencilTrack(harness, vocalOnly("C4D4z8|z16|"));
+    const menuButton = slot(page, "toolbar-pencil").getByRole("button", { name: "Select", exact: true });
+    const item = (name: string) => page.getByRole("menuitem", { name, exact: true });
+
+    await press(menuButton);
+    await expect(item("Copy")).toHaveAttribute("aria-disabled", "true");
+    await expect(item("Paste")).toHaveAttribute("aria-disabled", "true");
+    await expect(item("Duplicate")).toHaveAttribute("aria-disabled", "true");
+    await expect(item("Copy")).toHaveAttribute("title", "Copy (Ctrl/Cmd+C)");
+    await expect(item("Paste")).toHaveAttribute("title", "Paste (Ctrl/Cmd+V)");
+    await expect(item("Duplicate")).toHaveAttribute("title", "Duplicate (Ctrl/Cmd+D)");
+    await page.keyboard.press("Escape");
+
+    await press(note(page, "C4, bar 1 beat 1, length 1 beat"));
+    await press(menuButton);
+    await expect(item("Copy")).toHaveAttribute("aria-disabled", "false");
+    await expect(item("Duplicate")).toHaveAttribute("aria-disabled", "false");
+    await expect(item("Paste")).toHaveAttribute("aria-disabled", "true");
+    await press(item("Copy"));
+
+    await page.evaluate(() => window.harness.layout.live().setInsertionPoint({ tick: 1024 }));
+    await press(menuButton);
+    await expect(item("Paste")).toHaveAttribute("aria-disabled", "false");
+    await press(item("Paste"));
+    expect(await noteList(harness)).toEqual([vocal(0, 256, 60), vocal(256, 256, 62), vocal(1024, 256, 60)]);
+    expect(await harness.layout.selection()).toEqual(["Vocal:1024"]);
+
+    expect(await harness.layout.undo()).toBe(true);
+    await page.evaluate(() => window.harness.layout.live().select(["Vocal:0"]));
+    await press(menuButton);
+    await press(item("Duplicate"));
+    expect(await noteList(harness)).toEqual([vocal(0, 256, 60), vocal(256, 256, 60)]);
+    expect(await harness.layout.selection()).toEqual(["Vocal:256"]);
+  });
+
+  test("says the pencil's change in the toolbar's live region, from the button and from B", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openPencilTrack(harness, LEAD);
+    const said = slot(page, "toolbar-pencil").getByRole("status");
+    await press(pencilButton(page));
+    await expect(said).toHaveText("Draw notes on");
+    await page.keyboard.press("b");
+    await expect(said).toHaveText("Draw notes off");
+
+    await harness.layout.setView({ language: "zh" });
+    const chinese = slot(page, "toolbar-pencil").locator(".sce-pencil-button");
+    await press(chinese);
+    await expect(said).toHaveText("画笔已打开");
+    await page.keyboard.press("b");
+    await expect(said).toHaveText("画笔已关闭");
+  });
+
+  test("gives the pencil a language's tooltip, its key in aria-keyshortcuts, and the shared focus ring", async ({
+    page,
+    harness,
+  }) => {
+    await openPencilTrack(harness, LEAD);
+    await expect(pencilButton(page)).toHaveAttribute("title", "Draw notes (B)");
+    await expect(pencilButton(page)).toHaveAttribute("aria-keyshortcuts", "b");
+    await pencilButton(page).focus();
+    await expect(pencilButton(page)).toHaveCSS("outline-width", "2px");
+    await expect(pencilButton(page)).toHaveCSS("outline-offset", "2px");
+
+    await harness.layout.setView({ language: "zh" });
+    const chinese = slot(page, "toolbar-pencil").locator(".sce-pencil-button");
+    await expect(chinese).toHaveAttribute("title", "画笔（B）");
+    await expect(chinese).toHaveAttribute("aria-label", "画笔");
+    await expect(chinese).toBeVisible();
+  });
+
+  test("keeps the pencil's on state through a view change and read-only", async ({ page, harness, press }) => {
+    await harness.mount({ score: { text: LEAD } });
+    const pencil = page.getByRole("button", { name: "Draw notes", exact: true });
+    await press(pencil);
+    await expect(pencil).toHaveAttribute("aria-pressed", "true");
+    await press(page.getByRole("button", { name: "Staff", exact: true }));
+    await press(page.getByRole("button", { name: "Arrangement", exact: true }));
+    await expect(page.getByRole("button", { name: "Draw notes", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Draw", { exact: true })).toBeVisible();
+    await harness.update({ editable: false });
+    await expect(page.getByRole("button", { name: "Draw notes", exact: true })).toHaveCount(0);
+    await harness.update({ editable: true });
+    await expect(page.getByRole("button", { name: "Draw notes", exact: true })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("keeps a finger's gap from Delete without adding a row", async ({ page, harness, isMobile }) => {
+    test.skip(!isMobile, "the gap is the coarse pointer's");
+    for (const width of [412, 320]) {
+      await page.setViewportSize({ width, height: 839 });
+      await harness.mount({ score: { text: LEAD }, language: "zh" });
+      const pencil = page.getByRole("button", { name: "画笔", exact: true });
+      const remove = page.getByRole("button", { name: "删除", exact: true });
+      const [pen, del] = await Promise.all([box(pencil), box(remove)]);
+      if (Math.abs(pen.y - del.y) < 2) {
+        expect(pen.x - (del.x + del.width), `${width}: the gap to Delete`).toBeGreaterThanOrEqual(8);
+      }
+      await expect(pencil).toHaveCSS("margin-inline-start", "4px");
+      await harness.destroy();
+    }
+  });
+
+  test("keeps the pressed pencil and view switch legible under forced colours", async ({ page, harness, press }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await harness.mount({ score: { text: LEAD } });
+    const pencil = page.getByRole("button", { name: "Draw notes", exact: true });
+    await press(pencil);
+    await expect(pencil).toHaveCSS("outline-width", "2px");
+    await expect(pencil).toHaveCSS("outline-offset", "-2px");
+    await expect(pencil).toHaveCSS("outline-style", "solid");
+    const arranged = page.getByRole("button", { name: "Arrangement", exact: true });
+    await expect(arranged).toHaveAttribute("aria-pressed", "true");
+    await expect(arranged).toHaveCSS("outline-width", "2px");
+    await expect(arranged).toHaveCSS("outline-offset", "-2px");
+  });
+});
+
+test.describe("the review's hint and real score", () => {
+  test("the editing hint names the pencil and the copy keys in both languages", async ({ page, harness }) => {
+    await harness.mount({ score: { text: LEAD } });
+    const hint = page.locator('.sce-editor [id^="sce-hint-"]');
+    await expect(hint).toContainText("B");
+    await expect(hint).toContainText("Ctrl or Cmd with C");
+    await expect(hint).toContainText("V");
+    await expect(hint).toContainText("D");
+    await expect(hint).toContainText("Alt with a drag");
+    await harness.update({ language: "zh" });
+    await expect(hint).toContainText("按 B");
+    await expect(hint).toContainText("Ctrl 或 Cmd 加 C");
+    await expect(hint).toContainText("Alt");
+  });
+
+  test("draws a note in the Ins bars that are one whole rest on the real score, and only that line changes", async ({
+    page,
+    harness,
+    isMobile,
+    press,
+  }) => {
+    test.skip(isMobile, "the real-score cases are checked on the desktop project");
+    const before = skillScore;
+    await harness.layout.open({ score: { text: before }, parts: ["toolbar-pencil", "vocal", "ins"] });
+    await press(pencilButton(page));
+    const { lane, beat, row, top } = await insMetrics(page, harness);
+    const midi = 72;
+    const at = { x: lane.x + 2 * beat, y: lane.y + (top - midi + 0.5) * row };
+    await tapAt(page, false, at);
+
+    const after = await harness.layout.scoreText();
+    expect(changedLines(before, after), "only the Ins Z4 line changed").toEqual([12]);
+    expect(after).toContain("Ins");
+    expect(await harness.layout.pitchedNotes()).toContainEqual({ voice: "Ins", start: 512, duration: 256, midi });
+    expect(await page.evaluate((text) => window.harness.layout.live().checkScoreText(text), after)).toEqual([]);
+    expect(await page.evaluate(() => window.harness.layout.live().reading.kind)).toBe("score");
+  });
+
+  test("pastes into the second system of the real score, and only the line holding that bar changes", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the real-score cases are checked on the desktop project");
+    const before = skillScore;
+    await harness.layout.open({ score: { text: before }, parts: ["toolbar-pencil", "vocal", "ins"] });
+    await slot(page, "ins").getByRole("region", { name: "Ins" }).focus();
+    await harness.layout.select(["Ins:5120"]);
+    await page.keyboard.press("Control+c");
+    await page.evaluate(() => window.harness.layout.live().setInsertionPoint({ tick: 6144 }));
+    await page.keyboard.press("Control+v");
+
+    const after = await harness.layout.scoreText();
+    expect(changedLines(before, after), "only the Ins line carrying bar 6 changed").toEqual([16]);
+    expect(await page.evaluate((text) => window.harness.layout.live().checkScoreText(text), after)).toEqual([]);
+    expect(await page.evaluate(() => window.harness.layout.live().reading.kind)).toBe("score");
+  });
+
+  test("duplicates a note across a bar line on the real score, and only its two lines change", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the real-score cases are checked on the desktop project");
+    const before = skillScore;
+    await harness.layout.open({ score: { text: before }, parts: ["toolbar-pencil", "vocal", "ins"] });
+    await slot(page, "ins").getByRole("region", { name: "Ins" }).focus();
+    await harness.layout.select(["Ins:7808"]);
+    await page.keyboard.press("Control+d");
+
+    const after = await harness.layout.scoreText();
+    expect(
+      changedLines(before, after).every((line) => line === 16 || line === 20),
+      "only the two Ins lines",
+    ).toBe(true);
+    expect(changedLines(before, after).length).toBeGreaterThan(0);
+    expect(after).toContain("-|");
+    expect(await page.evaluate((text) => window.harness.layout.live().checkScoreText(text), after)).toEqual([]);
+    expect(await page.evaluate(() => window.harness.layout.live().reading.kind)).toBe("score");
   });
 });

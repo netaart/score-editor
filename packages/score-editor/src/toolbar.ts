@@ -124,6 +124,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
   pencilButton.type = "button";
   pencilButton.setAttribute("aria-pressed", "false");
+  pencilButton.setAttribute("aria-keyshortcuts", "b");
   pencilButton.hidden = !showsPencil;
   pencilButton.appendChild(lineIcon(doc, PENCIL));
   const select = mountSelectionMenu(row, session);
@@ -210,11 +211,12 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       [undo, t.undo, "Ctrl/Cmd+Z"],
       [redo, t.redo, "Ctrl/Cmd+Shift+Z"],
       [remove, t.delete, "Del/Backspace"],
-      [pencilButton, t.drawNotes, "B"],
     ] as const) {
       button.setAttribute("aria-label", label);
       button.title = `${label} (${keys})`;
     }
+    pencilButton.setAttribute("aria-label", t.drawNotes);
+    pencilButton.title = t.drawNotesTip;
     drawn = "";
   }
 
@@ -256,7 +258,10 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (change.project) noticeStrip.clear();
     draw();
   });
-  const unsubscribePencil = pencil.subscribe(draw);
+  const unsubscribePencil = pencil.subscribe(() => {
+    draw();
+    live.say(pencil.on ? t.drawOn : t.drawOff);
+  });
   const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {

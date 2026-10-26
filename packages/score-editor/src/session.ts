@@ -4,6 +4,7 @@
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
 import { type Grid, isGridAllowed, movedIds } from "./commands-notes";
+import { type PlacingCommand, placedSelection } from "./commands-place";
 import { isProjectCommand, type ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
@@ -448,18 +449,14 @@ export function createEditingSession(options: SessionOptions): EditingSession {
         if (!applied.ok) return { ok: false, project, diagnostics: applied.diagnostics };
         if (!sameProject(project, applied.project)) {
           // An edit that places notes follows the notes it made, since their ids are their new starts.
+          const only = commands.length === 1 ? commands[0] : undefined;
           const placing =
-            commands.length === 1 &&
-            ["addNote", "pasteNotes", "duplicateNotes", "copyNotes"].includes(
-              (commands[0] as { readonly type: string }).type,
-            );
+            only !== undefined &&
+            ["addNote", "pasteNotes", "duplicateNotes", "copyNotes"].includes((only as { readonly type: string }).type);
           if (placing && before.kind === "score") {
             const after = dialect.parse(applied.project.score).score;
             if (after !== null) {
-              const known = new Set(before.score.notes.filter((note) => note.midi !== null).map((note) => note.id));
-              following = after.notes
-                .filter((note) => note.midi !== null && !known.has(note.id))
-                .map((note) => note.id);
+              following = placedSelection(before.score, after, only as PlacingCommand, dialect.constraints);
             }
           }
           commit(applied.project, "dispatch", named, following);
