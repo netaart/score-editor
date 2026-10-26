@@ -59,18 +59,22 @@ const editor = mount(el, {
 });
 ```
 
-The toolbar shows **Hand off…** only while the editor is editable and `onHandoff` is given; read-only, or without the
-callback, there is no button. It opens a review dialog with the change log and the action **Regenerate with this
-version**. Pressing that action:
+The toolbar shows **Regenerate…** after the Select and Grid buttons, before Restore original, only while the editor is
+editable and `onHandoff` is given; read-only, or without the callback, there is no button. It opens a review headed
+**Check before regenerating**, with the change log and the action **Regenerate with this version**. Pressing that
+action:
 
-1. saves the draft through the keeper's `handoff()` at once, with the handoff hash of the current joined lyrics and
+1. takes the payload from the project the review showed;
+2. saves the draft through the keeper's `handoff()` at once, with the handoff hash of that project's joined lyrics and
    score;
-2. calls `onHandoff` when the keeper answers `"written"` or `"unchanged"`;
-3. does not call `onHandoff` on `"conflict"` (the conflict strip offers the two ways out) or `"failed"` (the host has
+3. calls `onHandoff` when the keeper answers `"written"` or `"unchanged"`;
+4. does not call `onHandoff` on `"conflict"` (the conflict strip offers the two ways out) or `"failed"` (the host has
    the `draft-save-failed` notice).
 
-A host with no draft store still gets the handoff: there is no draft to save. While the text view holds text the
-project did not take, the review says the last readable score is what is handed off; the control is not disabled. The
-change log is visible only in that review, so it adds no height to the editor.
+While the save runs, the trigger reads **Saving…** and cannot open the review. A host with no draft store still gets
+the handoff: the keeper answers `"unchanged"`, so there is no draft to save. While the text view holds text the project
+did not take, the review says the last readable score is what is handed off; the control is not disabled. The review
+is bounded by the window and scrolls a long change list, so the action stays reachable. The change log is visible only
+in that review.
 
 See [the package README](../../../README.md#change-log-and-handoff) for the same contract next to the draft rules.
