@@ -35,6 +35,38 @@ export interface Messages {
   incompleteBar: string;
   cutOff: string;
   cutNotice(cut: Cut): string;
+  /** The Bars menu, the chosen range, and the two actions on a chosen run. */
+  chooseBars: string;
+  chooseBarsHint: string;
+  insertBar: string;
+  insertBarBefore(bar: number): string;
+  insertBarAtEnd: string;
+  insertBarHint: string;
+  insertBarBeforeDone(bar: number): string;
+  insertBarAtEndDone: string;
+  deleteBars: string;
+  deleteBar(bar: number): string;
+  deleteBarsRange(first: number, last: number): string;
+  deleteBarsHint: string;
+  clearBarSelection: string;
+  barSelection(first: number, last: number): string;
+  barLabel(bar: number, selected: boolean): string;
+  barsDeleted(first: number, last: number): string;
+  /** The meter control: its name, the target section, the result, and the fields of its custom row. */
+  meter: string;
+  meterSection(section: number, first: number, last: number): string;
+  meterSet(section: number, meter: Meter): string;
+  meterBeats: string;
+  meterValue: string;
+  meterCustom: string;
+  meterApply: string;
+  /** The two repairs of an incomplete bar. */
+  fillTruncatedBar: string;
+  deleteTruncatedBar: string;
+  fillTruncatedBarTitle(bar: number, voice: string): string;
+  deleteTruncatedBarTitle(bar: number, voice: string): string;
+  cutFilled(bar: number, voice: string): string;
+  cutDeleted(bar: number, voice: string): string;
   meterText(meter: Meter): string;
   meterName(meter: Meter): string;
   keyText(key: string): string;
@@ -186,6 +218,36 @@ const en: Messages = {
       ? `This score is cut off before the first bar of ${voice}.`
       : `This score is cut off after bar ${bar} of ${voice}.`;
   },
+  chooseBars: "Choose bars",
+  chooseBarsHint: "Choose bars in the ruler",
+  insertBar: "Insert bar",
+  insertBarBefore: (bar) => `Insert bar before bar ${bar}`,
+  insertBarAtEnd: "Insert bar at the end",
+  insertBarHint: "Put a bar at the insertion point",
+  insertBarBeforeDone: (bar) => `Inserted a bar before bar ${bar}`,
+  insertBarAtEndDone: "Inserted a bar at the end",
+  deleteBars: "Delete bars",
+  deleteBar: (bar) => `Delete bar ${bar}`,
+  deleteBarsRange: (first, last) => `Delete bars ${first} to ${last}`,
+  deleteBarsHint: "Choose bars in the ruler first",
+  clearBarSelection: "Clear bar selection",
+  barSelection: (first, last) => (first === last ? `Bar ${first} selected` : `Bars ${first} to ${last} selected`),
+  barLabel: (bar, selected) => `Bar ${bar}${selected ? ", selected" : ""}`,
+  barsDeleted: (first, last) => (first === last ? `Deleted bar ${first}` : `Deleted bars ${first} to ${last}`),
+  meter: "Meter",
+  meterSection: (section, first, last) =>
+    `Section ${section}, ${first === last ? `bar ${first}` : `bars ${first} to ${last}`}`,
+  meterSet: (section, { numerator, denominator }) => `Section ${section} is now ${numerator}/${denominator}`,
+  meterBeats: "Beats per bar",
+  meterValue: "Note value",
+  meterCustom: "Custom",
+  meterApply: "Apply",
+  fillTruncatedBar: "Fill with rests",
+  deleteTruncatedBar: "Delete the incomplete bar",
+  fillTruncatedBarTitle: (bar, voice) => `Fill bar ${bar} of ${voice} with rests`,
+  deleteTruncatedBarTitle: (bar, voice) => `Delete bar ${bar} of ${voice}`,
+  cutFilled: (bar, voice) => `Filled bar ${bar} of ${voice} with rests`,
+  cutDeleted: (bar, voice) => `Deleted bar ${bar} of ${voice}`,
   meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
   meterName: ({ numerator, denominator }) => `Meter ${numerator}/${denominator}`,
   keyText: (key) => `Key ${key}`,
@@ -314,6 +376,36 @@ const zh: Messages = {
       ? `这份乐谱在末尾被截断：${voice} 连第一个小节都还没有写完。`
       : `这份乐谱在末尾被截断：${voice} 写到第 ${bar} 小节为止。`;
   },
+  chooseBars: "选择小节",
+  chooseBarsHint: "在时间尺上选择小节",
+  insertBar: "插入小节",
+  insertBarBefore: (bar) => `在第 ${bar} 小节前插入一小节`,
+  insertBarAtEnd: "在末尾插入一小节",
+  insertBarHint: "在插入点插入一小节",
+  insertBarBeforeDone: (bar) => `已在第 ${bar} 小节前插入一小节`,
+  insertBarAtEndDone: "已在末尾插入一小节",
+  deleteBars: "删除小节",
+  deleteBar: (bar) => `删除第 ${bar} 小节`,
+  deleteBarsRange: (first, last) => `删除第 ${first} 至 ${last} 小节`,
+  deleteBarsHint: "先在时间尺上选择小节",
+  clearBarSelection: "取消选择小节",
+  barSelection: (first, last) => (first === last ? `已选中第 ${first} 小节` : `已选中第 ${first} 至 ${last} 小节`),
+  barLabel: (bar, selected) => `第 ${bar} 小节${selected ? "，已选中" : ""}`,
+  barsDeleted: (first, last) => (first === last ? `已删除第 ${first} 小节` : `已删除第 ${first} 至 ${last} 小节`),
+  meter: "拍号",
+  meterSection: (section, first, last) =>
+    `第 ${section} 段，${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}`,
+  meterSet: (section, { numerator, denominator }) => `第 ${section} 段的拍号已改为 ${numerator}/${denominator}`,
+  meterBeats: "每小节拍数",
+  meterValue: "音符时值",
+  meterCustom: "自定义",
+  meterApply: "应用",
+  fillTruncatedBar: "补成休止",
+  deleteTruncatedBar: "删掉不完整的小节",
+  fillTruncatedBarTitle: (bar, voice) => `用休止补齐 ${voice} 的第 ${bar} 小节`,
+  deleteTruncatedBarTitle: (bar, voice) => `删掉 ${voice} 的第 ${bar} 小节`,
+  cutFilled: (bar, voice) => `已用休止补齐 ${voice} 的第 ${bar} 小节`,
+  cutDeleted: (bar, voice) => `已删掉 ${voice} 的第 ${bar} 小节`,
   meterText: ({ numerator, denominator }) => `${numerator}/${denominator}`,
   meterName: ({ numerator, denominator }) => `拍号 ${numerator}/${denominator}`,
   keyText: (key) => `调号 ${key}`,

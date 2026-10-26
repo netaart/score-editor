@@ -12,11 +12,11 @@ added; calling it twice is harmless.
 
 | Function | Draws | Options |
 | --- | --- | --- |
-| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons and the Select menu; the read-only badge while it is not. | `ToolbarOptions` |
+| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons, the Select menu, the Bars menu and the meter control; the read-only badge while it is not. | `ToolbarOptions` |
 | `mountZoomControl(el, session)` | The zoom-out, readout/menu and zoom-in buttons. Hidden while the session has no readable score. | — |
-| `mountCutNotice(el, session)` | The one sentence saying the score text stops before the song does, or nothing. | — |
+| `mountCutNotice(el, session, options?)` | The one sentence saying the score text stops before the song does, and, on an incomplete bar, Fill with rests and Delete the incomplete bar; nothing on a complete score. | `onRefused?` |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
-| `mountTimeRuler(el, session, options?)` | Bar numbers, section bands, and key/meter/cut marks. | `AxisPartOptions` |
+| `mountTimeRuler(el, session, options?)` | Bar numbers that choose their bar, the chosen run, section bands, and key/meter/cut marks. | `AxisPartOptions` |
 | `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line. | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
 | `mountTextView(el, session)` | The score text in a box with line numbers, a status sentence, and the problems of text that cannot be read. | — |
@@ -28,13 +28,13 @@ added; calling it twice is harmless.
 | `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper }`:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, onChooseBars? }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
 switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
 (zoom and Delete) while another view is shown; `draftKeeper` binds the toolbar to a draft keeper (see [drafts.md](drafts.md)), so that it
 offers Restore original while the keeper is ready or in conflict and the session is editable, and its badge says "Opening draft…"
-while the keeper is still opening. The toolbar's row wraps when its element is narrower than its controls
+while the keeper is still opening; `onChooseBars` receives the bar the Bars menu chose, so a host that mounts a ruler can put the focus on it. The toolbar's row wraps when its element is narrower than its controls
 if it holds the preview control or the switch (the read-only badge and the switch go together to a line of their own, and the
 preview control and its caption take the line after it), or scrolls sideways when it holds neither, so every
 control can still be reached.
@@ -104,7 +104,7 @@ dialect leaves the axis parts empty while the problem view explains it.
 Use this when the user should fix a note in the host's own layout: pick it, turn it into a rest, take that back. The
 parts do it while `session.view.editable` is true, which is the default; while it is false they only show the score, with
 no control, no selection and no keys, and the toolbar shows the read-only badge. Selection and the insertion point are
-the session's (`session.selection`, `session.insertionPoint`), so every part shows the same ones. A phone has no keyboard,
+the session's (`session.selection`, `session.insertionPoint`), and the chosen run of bars is `session.barSelection`, so every part shows the same ones. The toolbar's Bars menu inserts at the insertion point and deletes `session.barSelection`; its meter control changes the section of the first chosen bar, else of the insertion point's bar, using the meters the dialect's constraints allow. A phone has no keyboard,
 so every action has a pointer or touch path too; select all and invert are the exception, which the parts give no touch
 control (a control of your own can send `select-all` and `invert-selection` to `handleEditingInput`).
 
@@ -112,6 +112,9 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 | --- | --- | --- |
 | Clicks or taps a note | A voice track | Selects it; a tied chain is selected as a whole. |
 | Clicks or taps empty lane space | A voice track | Puts the insertion point on the nearest beat line, and clears the selection. |
+| Clicks or taps a bar number | The time ruler | Chooses that bar, or with Shift extends the chosen run to it. |
+| Presses on a bar number and drags across the ruler | The time ruler | Chooses the run from the first bar to the bar under the pointer; a finger does the same on the number. |
+| Presses Left, Right, Home, End, Enter, Space or Escape with the focus on a chosen bar | The time ruler | Moves the chosen run one bar, extends it with Shift, goes to the first or last bar, chooses the focused bar, or clears the run. |
 | Holds Shift while clicking or tapping a note | A voice track | Adds the note to the selection, or takes it and its tied chain out; on empty space nothing happens. |
 | Presses on empty lane space with a mouse and drags | A voice track | Draws a box. The notes it touches are framed while it is open and selected when it is let go; Shift at the press adds; Escape gives it up. |
 | Rests a finger on empty lane space for about 0.4 s, then slides | A voice track | Draws the same box (a swipe that starts at once still scrolls). Resting a finger on a note toggles it, as Shift does. |
@@ -124,7 +127,7 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 Keys are heard by a part while the focus is inside it; a part that handles one keeps it from the browser. Each part
 also keeps one polite live region (`role="status"`, visually hidden) and says in the session's language what happened:
 a voice track says which of its own notes were selected, deleted, or brought back by an undo; the track of the score's
-first voice says where the insertion point moved; a part that heard a refused edit says why and where. No part reads
+first voice says where the insertion point moved; the time ruler says which run of bars was chosen; the toolbar's Bars menu and the cut notice say what they changed, or why and where an edit was refused. No part reads
 another part, so a part mounted alone speaks for what it draws and nothing else.
 
 The score may refuse an edit, for example a tied note whose rest would turn a cut score into a complete one. Nothing

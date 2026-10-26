@@ -107,12 +107,20 @@ export class Editor implements MountedEditor {
     const hintId = `sce-hint-${n}`;
     const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
     this.parts.push(
-      mountToolbar(this.root, this.session, { hintId, onRefused, viewSwitch: true, draftKeeper: this.drafts }),
+      mountToolbar(this.root, this.session, {
+        hintId,
+        onRefused,
+        viewSwitch: true,
+        draftKeeper: this.drafts,
+        onChooseBars: (bar) => {
+          this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`)?.focus();
+        },
+      }),
     );
     this.draftAnchor = doc.createComment("draft conflict");
     this.root.appendChild(this.draftAnchor);
     this.syncDraftParts();
-    this.parts.push(mountCutNotice(this.root, this.session));
+    this.parts.push(mountCutNotice(this.root, this.session, { onRefused }));
     this.stalePane = pane(this.root);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));
     const body = create(doc, "div", "sce-body", this.root);
