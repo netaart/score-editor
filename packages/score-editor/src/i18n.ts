@@ -277,9 +277,10 @@ export interface Messages {
   lyricMerged(line: number): string;
   /** What the badge says in place of "Read only" while a draft keeper is still reading the host's store. */
   draftOpening: string;
-  /** The conflict strip: its name, the sentence that says what happened, and each way out with what it does. */
+  /** The conflict banner: its name, the sentence that says what happened, the button that opens the choices, and each way out. */
   draftConflict: string;
   draftConflictText: string;
+  draftChoose: string;
   draftOverwrite: string;
   draftOverwriteNote: string;
   draftLoadTheirs: string;
@@ -624,6 +625,7 @@ const en: Messages = {
   draftConflict: "Draft conflict",
   draftConflictText:
     "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
+  draftChoose: "Choose",
   draftOverwrite: "Overwrite with my version",
   draftOverwriteNote: "The other version is replaced and can't be brought back.",
   draftLoadTheirs: "Load the other version",
@@ -930,6 +932,7 @@ const zh: Messages = {
   draftOpening: "正在打开草稿…",
   draftConflict: "草稿冲突",
   draftConflictText: "这份草稿在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
+  draftChoose: "选择",
   draftOverwrite: "用我的版本覆盖",
   draftOverwriteNote: "对方的版本会被你的版本替换，无法找回。",
   draftLoadTheirs: "载入对方的版本",

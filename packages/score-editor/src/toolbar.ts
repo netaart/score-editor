@@ -16,6 +16,7 @@ import { mountMeterControl } from "./meter-control";
 import { pencilMode } from "./pencil-mode";
 import { mountProjectControl, type ProjectControl } from "./project-control";
 import { mountProjectNoticeStrip } from "./project-notice-strip";
+import { watchScrollCue } from "./scroll-cue";
 import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -120,12 +121,19 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const noticeStrip = mountProjectNoticeStrip(root, session);
 
   const row = create(doc, "div", "sce-toolbar", root);
+  // Two rows on any toolbar that has a bar: a one-line strip for the editing and song controls, and the bar with the
+  // view switch and the preview control. A toolbar with neither keeps today's single scrolling row.
+  const hasBar = options.viewSwitch === true || options.synthPreview !== false;
+  const strip = hasBar ? create(doc, "div", "sce-tools", row) : row;
+  const bar = hasBar ? create(doc, "div", "sce-bar", row) : null;
+  if (bar !== null) row.dataset.bar = "";
   if (options.viewSwitch) row.dataset.views = "";
   const pencil = pencilMode(session);
   const showsPencil = options.pencil === true;
-  const title = create(doc, "span", "sce-title", row);
-  const zoom = mountZoomControl(row, session);
-  const history = create(doc, "div", "sce-history", row);
+  const title = create(doc, "span", "sce-title", strip);
+  const zoom = mountZoomControl(strip, session);
+  const badge = create(doc, "span", "sce-badge", strip);
+  const history = create(doc, "div", "sce-history", strip);
   history.setAttribute("role", "group");
   const historyButton = (action: "undo" | "redo"): HTMLButtonElement => {
     const button = create(doc, "button", `sce-button sce-icon-button sce-${action}`, history);
@@ -135,49 +143,48 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   };
   const undo = historyButton("undo");
   const redo = historyButton("redo");
-  const remove = create(doc, "button", "sce-button sce-icon-button sce-delete", row);
+  const remove = create(doc, "button", "sce-button sce-icon-button sce-delete", strip);
   remove.type = "button";
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   // The pencil sits in the edit cluster, after Delete and before Select. It is opt-in, so a bare toolbar gains no control
   // or tab stop; the merged Bars/Meter/handoff controls made the end of the row add a phone row, which this place does not.
-  const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", row);
+  const pencilButton = create(doc, "button", "sce-button sce-icon-button sce-pencil-button", strip);
   pencilButton.type = "button";
   pencilButton.setAttribute("aria-pressed", "false");
   pencilButton.setAttribute("aria-keyshortcuts", "b");
   pencilButton.hidden = !showsPencil;
   pencilButton.appendChild(lineIcon(doc, PENCIL));
-  const select = mountSelectionMenu(row, session);
-  const grid = mountGridControl(row, session, live);
-  const bars = mountBarMenu(row, session, {
+  const select = mountSelectionMenu(strip, session);
+  const grid = mountGridControl(strip, session, live);
+  const bars = mountBarMenu(strip, session, {
     live,
     ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
     ...(options.onChooseBars === undefined ? {} : { onChooseBars: options.onChooseBars }),
   });
-  const meter = mountMeterControl(row, session, {
+  const meter = mountMeterControl(strip, session, {
     live,
     ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
   });
-  const spacer = create(doc, "span", "sce-spacer", row);
-  // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
-  // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
-  // (it is there only while the score reads), and what comes after the switch cannot push it to the next line between a
-  // person's typing and the tap that follows. Its place is kept while it is not there, so it cannot move the switch along
-  // the line either (styles.ts).
-  const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
-  const badge = create(doc, "span", "sce-badge", end ?? row);
+  // Restore original and Regenerate… are mounted by the editor into this slot, between the editing cluster and the song
+  // controls: a comment takes no box and keeps the DOM order the Tab order reads.
+  const restoreAnchor = doc.createComment("restore original and regenerate");
+  strip.appendChild(restoreAnchor);
+  // The view switch ends the bar; the preview control follows it. Both are in sight at rest, and the strip's own width
+  // can never move them: it takes a line of its own on a phone and shares one with the bar on a wide box.
+  const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", bar ?? strip) : null;
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
   const song = options.tempoKey
-    ? mountTempoKeyControls(row, session, {
+    ? mountTempoKeyControls(strip, session, {
         refused,
         live,
         showNotices: (notices) => noticeStrip.show(notices),
       })
     : null;
   const projectControl: ProjectControl | null = options.projectPanel
-    ? mountProjectControl(row, root, session, live, options.onRefused, options.requiredInputs)
+    ? mountProjectControl(strip, root, session, live, options.onRefused, options.requiredInputs)
     : null;
   let restore: ViewPart | null = null;
   /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
@@ -186,7 +193,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (keeper !== undefined && keeper.status !== "destroyed") {
       if (restore === null) {
         restore = mountRestoreControl(
-          row,
+          strip,
           session,
           {
             get status() {
@@ -196,7 +203,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
             restoreOriginal: () => keeper.restoreOriginal(),
           },
           (words) => live.say(words),
-          spacer,
+          strip.querySelector(".sce-part-handoff") ?? restoreAnchor,
         );
       }
     } else if (restore !== null) {
@@ -204,12 +211,12 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       restore = null;
     }
   }
-  const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
+  const synth = options.synthPreview === false ? null : mountSynthControl(bar ?? strip, session, live);
   if (synth) row.dataset.synth = "";
   // The Tools button and the Filter button after it end the row as one item, held to the right edge: the Tools panel
   // hangs from the right, so a preview on the arrangement stays in view, and the pair wraps together onto the line
   // Filter already used, so the row keeps its height at a phone's width.
-  const toolsHost = options.tools === undefined ? null : create(doc, "div", "sce-toolbar-tools", row);
+  const toolsHost = options.tools === undefined ? null : create(doc, "div", "sce-toolbar-tools", strip);
   const tools =
     toolsHost === null
       ? null
@@ -218,10 +225,25 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
           ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
         });
   // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
-  const filter = mountFilterPanel(toolsHost ?? row, session);
+  const filter = mountFilterPanel(toolsHost ?? strip, session);
 
   const abort = new AbortController();
   const { signal } = abort;
+  watchScrollCue(strip, "horizontal", signal);
+  // A focused control is scrolled wholly into the strip, not left with its edge under the root: the browser stops as
+  // soon as any part of it is in view.
+  strip.addEventListener(
+    "focusin",
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !strip.contains(target)) return;
+      const frame = strip.getBoundingClientRect();
+      const box = target.getBoundingClientRect();
+      if (box.left < frame.left + 8) strip.scrollLeft -= frame.left + 8 - box.left;
+      else if (box.right > frame.right - 8) strip.scrollLeft += box.right - (frame.right - 8);
+    },
+    { signal },
+  );
   undo.addEventListener("click", () => session.undo(), { signal });
   redo.addEventListener("click", () => session.redo(), { signal });
   remove.addEventListener(

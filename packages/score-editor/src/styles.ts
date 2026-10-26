@@ -159,6 +159,19 @@ const css = `
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/*
+ * A box that clips more content fades at that edge, so the clip reads as "there is more" and not as the end. The
+ * attribute comes from scroll-cue.ts and goes when there is nothing left that way.
+ */
+.sce-root .sce-chrome[data-cue="down"] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}
+.sce-root .sce-chrome[data-cue="up"] {
+  mask-image: linear-gradient(to bottom, transparent, #000 20px);
+}
+.sce-root .sce-chrome[data-cue="both"] {
+  mask-image: linear-gradient(to bottom, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+}
 
 .sce-root .sce-toolbar {
   display: flex;
@@ -173,6 +186,77 @@ const css = `
   scrollbar-width: none;
   background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
+}
+/* The two-row toolbar: one scrolling strip for the editing and song controls, one bar that stays in view. */
+.sce-root .sce-toolbar[data-bar] {
+  flex-wrap: wrap;
+  align-items: stretch;
+  row-gap: 0;
+  padding: 0 12px;
+  overflow: visible;
+}
+.sce-root .sce-tools {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  /* Below half the row the bar takes its own line rather than squeezing the title to nothing. */
+  min-width: 50%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.sce-root .sce-tools > * {
+  flex: none;
+}
+.sce-root .sce-tools[data-cue="right"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+}
+.sce-root .sce-tools[data-cue="left"] {
+  mask-image: linear-gradient(to left, #000 20px, transparent);
+}
+.sce-root .sce-tools[data-cue="both"] {
+  mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent);
+}
+.sce-root .sce-tools .sce-title,
+.sce-root .sce-tools .sce-song-controls {
+  flex: none;
+  max-width: none;
+}
+.sce-root .sce-tools .sce-song-controls {
+  flex-wrap: nowrap;
+}
+.sce-root .sce-bar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  min-width: min(100%, 20em);
+  max-width: 100%;
+  margin-inline-start: auto;
+}
+.sce-root .sce-bar .sce-toolbar-end {
+  margin-inline-start: 0;
+}
+.sce-root .sce-bar .sce-synth {
+  flex: 1 1 10em;
+  min-width: 0;
+}
+/* A narrow box gives the bar the whole line, so the caption keeps its room when the switch and button leave little. */
+@media (max-width: 30em) {
+  .sce-root .sce-bar {
+    flex: 1 1 100%;
+  }
+}
+/* Below about 300px the preview drops to its own row rather than squeezing the caption to a sliver. */
+@media (max-width: 300px) {
+  .sce-root .sce-bar .sce-synth {
+    flex-basis: 100%;
+  }
 }
 .sce-root .sce-title {
   overflow: hidden;
@@ -189,11 +273,11 @@ const css = `
  * the width of its own text when the row is broken into lines, so a control moves to a later row before the title gets
  * narrower; only a title that does not fit on a row of its own is cut, with an ellipsis.
  */
-.sce-root .sce-toolbar:is([data-synth], [data-views]) {
+.sce-root .sce-toolbar:is([data-synth], [data-views]):not([data-bar]) {
   flex-wrap: wrap;
   row-gap: 4px;
 }
-.sce-root .sce-toolbar:is([data-synth], [data-views]) .sce-title {
+.sce-root .sce-toolbar:is([data-synth], [data-views]):not([data-bar]) .sce-title {
   flex: 0 1 auto;
   max-width: 100%;
 }
@@ -201,8 +285,10 @@ const css = `
  * A toolbar that neither wraps nor holds a control to wrap it for scrolls sideways. The title keeps its whole text there
  * instead of being squeezed to nothing, so the name of the view is always in sight; the row scrolls under it.
  */
-.sce-root .sce-toolbar:not([data-synth]):not([data-views]) .sce-title {
+.sce-root .sce-toolbar:not([data-synth]):not([data-views]) .sce-title,
+.sce-root .sce-toolbar[data-bar] .sce-title {
   flex: none;
+  max-width: 100%;
 }
 /*
  * In a toolbar with the view switch, the preview control keeps its place while the score does not read. It comes after the
@@ -334,7 +420,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button, .sce-bars-button, .sce-meter-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button, .sce-bars-button, .sce-meter-button, .sce-draft-choose)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -1346,6 +1432,36 @@ ${labelThinning()}
   /* The caption shares the row with the project and Filter buttons on a phone; 11em keeps all three on one line. */
   .sce-root .sce-synth-caption {
     max-width: 11em;
+  }
+  /* The bar keeps one control row: the button's own height is the bar's least height. */
+  .sce-root .sce-tools {
+    padding-block: 4px;
+  }
+  .sce-root .sce-bar {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+  /* A smaller base than the desktop's 14em lets the bar keep one line and the caption take the rest. */
+  .sce-root .sce-bar .sce-synth {
+    flex-basis: 10em;
+  }
+}
+@media (pointer: coarse) and (max-width: 380px) {
+  /* Save's place is kept while there is no file, so the caption has the same room with and without it. */
+  .sce-root .sce-bar:not(:has(.sce-part-save:not([hidden])))::before {
+    content: "";
+    flex: none;
+    width: 36px;
+    height: 36px;
+  }
+  /* Where the bar has no room for the word and the whole caption, the button keeps its icon and its accessible name. */
+  .sce-root .sce-bar .sce-synth-label {
+    display: none;
+  }
+  .sce-root .sce-bar .sce-synth-button {
+    width: 36px;
+    justify-content: center;
+    padding: 0;
   }
 }
 .sce-root .sce-synth-told {

@@ -65,9 +65,9 @@ const editor = mount(el, {
 editor.hasUnsavedChanges(); // false for a generated score
 ```
 
-- The toolbar gets **Save** in the right-hand group, before the view switch. It chooses one form for the box from the
-  room the widest state's words need, and re-chooses only when the toolbar's width, the language or the font metrics
-  change, never when the state changes. While those words fit in the toolbar's height without the control, the state is
+- The toolbar gets **Save** in its always-visible bar, before the view switch. It chooses one form for the bar from the
+  room the widest state's words need, and re-chooses only when the bar's width, the language or the font metrics
+  change, never when the state changes. While those words fit in the bar's height without the control, the state is
   in words: `Unsaved`, `Saving…` in the button, `Save failed` in the pill with `Save again` on the button, and `Unsaved`
   in a conflict. Where they would add a row, every state uses the icon and one mark (`•`, `!`, `?`, `…` while saving).
   The pill is `aria-hidden`; the button's description carries the state and, after a failure, the recovery sentence. The
@@ -75,11 +75,11 @@ editor.hasUnsavedChanges(); // false for a generated score
   or while a save is in flight or a conflict stands. Ctrl/Cmd+S saves while the focus is inside the editor; outside it
   the browser's and the host's own shortcuts are untouched.
 - A failed save leaves the changes in place and Save again retries with the same version; the host gets
-  `score-save-failed`. The conflict strip scrolls the chrome into view and its Overwrite note says the other version
-  can't be brought back.
-- A conflict shows the same strip and two two-line choices as the draft conflict: **Overwrite with my version** reads
-  the other writer's version and writes ours over it, **Load the other version** puts their text in the session as a new
-  document. The editor never overwrites by itself.
+  `score-save-failed`. The conflict banner scrolls the chrome into view; Choose opens the two choices and the Overwrite
+  note says the other version can't be brought back.
+- A conflict shows the same banner, Choose button and two two-line choices as the draft conflict: **Overwrite with my
+  version** reads the other writer's version and writes ours over it, **Load the other version** puts their text in the
+  session as a new document. The editor never overwrites by itself.
 - Restore original for a file asks about the last saved version; it is muted while the file is clean, its answer is
   `Go back to last save`, it replaces the project, and it resets the history (Undo cannot bring the changes back)
   without reading or writing the host's file.

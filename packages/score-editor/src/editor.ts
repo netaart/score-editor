@@ -23,6 +23,7 @@ import { mountProblemView } from "./problem-view";
 import { mountSaveConflict } from "./save-conflict";
 import { mountScoreSourceControl } from "./save-control";
 import { createScoreFileKeeper, type ScoreFileKeeper } from "./score-source";
+import { watchScrollCue } from "./scroll-cue";
 import {
   createEditingSession,
   type EditingSession,
@@ -167,6 +168,7 @@ export class Editor implements MountedEditor {
     this.root = create(doc, "div", "sce-root sce-editor");
     host.appendChild(this.root);
     this.chrome = create(doc, "div", "sce-chrome", this.root);
+    watchScrollCue(this.chrome, "vertical", this.abort.signal);
     this.live = createLiveRegion(this.root);
 
     const hintId = `sce-hint-${n}`;
@@ -299,10 +301,19 @@ export class Editor implements MountedEditor {
     return this.options.editable !== false;
   }
 
-  /** Mounts the handoff control on the toolbar row, before Restore original when the source has one. */
+  /** The comment in the strip between Restore original and the song controls: Restore and Regenerate keep that order. */
+  private restoreAnchor(strip: HTMLElement): ChildNode | null {
+    for (const node of strip.childNodes) {
+      if (node.nodeType === Node.COMMENT_NODE && node.nodeValue === "restore original and regenerate") return node;
+    }
+    return null;
+  }
+
+  /** Mounts the handoff control in the strip, after Restore original when the source has one. */
   private mountHandoff(): void {
     const row = this.root.querySelector<HTMLElement>(".sce-toolbar");
     if (row === null) return;
+    const strip = row.querySelector<HTMLElement>(".sce-tools") ?? row;
     if (this.handoff !== null) {
       this.handoff.destroy();
       const at = this.parts.indexOf(this.handoff);
@@ -310,11 +321,11 @@ export class Editor implements MountedEditor {
       this.handoff = null;
     }
     this.handoff = mountHandoffControl(
-      row,
+      strip,
       this.session,
       this.handoffKeeper(),
       () => this.handoffSource(),
-      row.querySelector(".sce-part-restore") ?? row.querySelector(".sce-spacer"),
+      this.restoreAnchor(strip),
     );
     this.parts.push(this.handoff);
   }
@@ -412,6 +423,8 @@ export class Editor implements MountedEditor {
 
     const row = this.root.querySelector<HTMLElement>(".sce-toolbar");
     if (row === null) return;
+    const strip = row.querySelector<HTMLElement>(".sce-tools") ?? row;
+    const anchor = this.restoreAnchor(strip);
     if (this.scoreSource !== null) {
       const source = this.scoreSource;
       const file = createScoreFileKeeper({
@@ -424,7 +437,7 @@ export class Editor implements MountedEditor {
       this.scoreFile = file;
       this.saveConflict = mountSaveConflict(this.chrome, this.session, file);
       this.scoreRestore = mountRestoreControl(
-        row,
+        strip,
         this.session,
         {
           get status() {
@@ -435,16 +448,20 @@ export class Editor implements MountedEditor {
           canRestore: () => file.unsaved,
         },
         (words) => this.live.say(words),
-        row.querySelector(".sce-spacer"),
+        strip.querySelector(".sce-part-handoff") ?? anchor,
         true,
       );
     }
-    const end = row.querySelector<HTMLElement>(".sce-toolbar-end") ?? row;
-    this.saveControl = mountScoreSourceControl(end, this.session, {
+    // Save, and the state it shows, stays in the always-visible bar, before the view switch. Save as…, which a generated
+    // score has instead, is a song control and stays at the end of the strip.
+    const bar = row.querySelector<HTMLElement>(".sce-bar");
+    const end = bar?.querySelector<HTMLElement>(".sce-toolbar-end") ?? null;
+    const host = this.scoreSource === null || bar === null ? strip : bar;
+    this.saveControl = mountScoreSourceControl(host, this.session, {
       keeper: this.scoreFile,
       saveAs: () => this.options.onSaveAs,
       scope: this.root,
-      before: end.firstChild,
+      before: this.scoreSource === null || bar === null ? null : end,
       say: (words) => this.toolbar.say(words),
     });
   }

@@ -57,7 +57,12 @@ export function mountScoreSourceControl(
   const saveAs = options.saveAs;
   let awaitingSave = false;
 
-  const toolbar = (): HTMLElement => options.scope.querySelector<HTMLElement>(".sce-toolbar") ?? options.scope;
+  // The room the form is chosen from is the bar's: Save sits there with the view switch and the preview control, and a
+  // wider state must not wrap that bar.
+  const toolbar = (): HTMLElement =>
+    options.scope.querySelector<HTMLElement>(".sce-bar") ??
+    options.scope.querySelector<HTMLElement>(".sce-toolbar") ??
+    options.scope;
   const heightNow = (): number => toolbar().offsetHeight;
 
   /** Saves the file, or hands the current text to the host's save-as callback. */

@@ -1,29 +1,42 @@
 // ABOUTME: The look of the draft controls (the conflict strip, the restore question) as a stylesheet fragment.
 // ABOUTME: styles.ts appends it to the editor's stylesheet; every colour is a derivation of the theme variable contract.
 export const draftCss = `
-/* The conflict strip; see DESIGN.md, "Draft conflict strip". */
+/* The conflict banner; see DESIGN.md, "Draft conflict banner". */
 .sce-root .sce-draft-conflict {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px 12px;
   border-bottom-color: var(--sce-_line-strong);
 }
 .sce-root .sce-draft-conflict-text {
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
   font-weight: 600;
 }
+.sce-root .sce-draft-choose {
+  flex: none;
+}
+/* The two ways out, each still two lines: what it is, and what it does. */
 .sce-root .sce-draft-choices {
+  width: 22em;
+  max-width: calc(100vw - 16px);
+  padding: 8px;
+}
+.sce-root .sce-draft-choices:popover-open {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
+  flex-direction: column;
+  gap: 6px;
 }
 .sce-root .sce-draft-choice {
-  flex: 0 1 auto;
+  flex: none;
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
+  width: 100%;
   min-width: 0;
-  padding-block: 4px;
+  padding: 4px 10px;
   text-align: start;
   white-space: normal;
 }

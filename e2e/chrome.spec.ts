@@ -193,9 +193,8 @@ test.describe("C6: the pin rule", () => {
   }) => {
     test.skip(!isMobile, "the phone project's width is the one the rule was measured at");
     await page.setViewportSize({ width: 412, height: 800 });
-    // The default toolbar is five rows at a phone's width since the Tools panel joined it: 460 leaves the same 255px of
-    // scroller as 420 did for four rows, and 480 is where the lane keeps six rows and the header pins.
-    await harness.stageHeight(480);
+    // With the two-row toolbar 420 leaves enough lane for the pinned header; 288 does not.
+    await harness.stageHeight(420);
     await harness.mount({ score: { text: QUARTERS } });
     await harness.frames(2);
 
@@ -213,15 +212,12 @@ test.describe("C6: the pin rule", () => {
     at = await box(ruler);
     expect(at.y).toBeCloseTo(frame.y, 0);
 
-    await harness.stageHeight(460);
-    await expect.poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1).toBe(true);
-
     await harness.stageHeight(288);
     await expect.poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1).toBe(true);
     frame = await box(scroller);
     expect((await box(page.locator(".sce-track-head").first())).y).toBeCloseTo(frame.y, 0);
 
-    await harness.stageHeight(480);
+    await harness.stageHeight(420);
     await expect.poll(async () => Math.abs((await box(ruler)).y - (await box(scroller)).y)).toBeLessThan(1);
 
     await harness.stageHeight(288);
@@ -298,7 +294,7 @@ test.describe("C11: the existing guards", () => {
     await expect(page.getByRole("listitem", { name: /，已选中$/ })).toHaveCount(1);
   });
 
-  for (const width of [412, 1280] as const) {
+  for (const width of [320, 412, 500, 1280] as const) {
     for (const language of ["en", "zh"] as const) {
       test(`keeps the view switch where it is at ${width} (${language})`, async ({
         page,
@@ -323,4 +319,407 @@ test.describe("C11: the existing guards", () => {
       });
     }
   }
+});
+
+/** The distinct top edges of the toolbar's visible controls: one per row of controls, whatever the font. */
+function controlRows(page: Page, selector = ".sce-toolbar") {
+  return page.evaluate((forSelector) => {
+    const root = document.querySelector<HTMLElement>(forSelector);
+    if (!root) return 0;
+    const tops = new Set<number>();
+    for (const control of root.querySelectorAll<HTMLElement>("button, input, select")) {
+      const rect = control.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
+      tops.add(Math.round(rect.top));
+    }
+    return tops.size;
+  }, selector);
+}
+
+/** Whether `target` lies inside the editor's box left and right. */
+async function insideRootAcross(page: Page, target: Locator) {
+  const outer = await box(page.locator(".sce-editor"));
+  const inner = await box(target);
+  return inner.x >= outer.x - 0.5 && inner.x + inner.width <= outer.x + outer.width + 0.5;
+}
+
+const choose = (page: Page) => page.getByRole("button", { name: "Choose", exact: true });
+const saveFile = (page: Page) => page.getByRole("button", { name: "Save", exact: true });
+const THEIR_SCORE = QUARTERS.replace("C4D4E4F4|G16|", "C4D4E4G4|A16|");
+
+/** Opens a score file, deletes its D and saves into another writer's version, so its conflict banner stands. */
+async function scoreFileConflict(page: Page, harness: Harness, press: (target: Locator) => Promise<void>) {
+  await harness.mount({ score: { text: QUARTERS }, scoreFile: { name: "tune.abc" } });
+  await expect(saveFile(page)).toBeVisible();
+  await press(noteNamed(page, D4));
+  await page.keyboard.press("Delete");
+  await harness.externalScore(THEIR_SCORE);
+  await press(saveFile(page));
+  await expect(page.getByRole("group", { name: "Score file conflict", exact: true })).toBeVisible();
+}
+
+test.describe("C2: the conflict banner and its choices", () => {
+  for (const width of [412, 1280] as const) {
+    test(`opens one dialog under the banner, with both consequences, at ${width}`, async ({
+      page,
+      harness,
+      press,
+      isMobile,
+    }) => {
+      test.skip(width === 1280 && isMobile, "the desktop width is set on the desktop project");
+      await mountState(page, harness, press, "conflict", width);
+      await harness.stageHeight(288);
+
+      const banner = page.getByRole("group", { name: "Draft conflict", exact: true });
+      await expect(banner.getByRole("alert")).toBeVisible();
+      await expect(choose(page)).toHaveAttribute("aria-expanded", "false");
+      expect(await page.evaluate(() => Boolean(document.activeElement?.closest(".sce-part-draft-conflict")))).toBe(
+        false,
+      );
+
+      await press(choose(page));
+
+      const dialog = page.getByRole("dialog", { name: "Draft conflict", exact: true });
+      await expect(dialog).toBeVisible();
+      await expect(choose(page)).toHaveAttribute("aria-expanded", "true");
+      const overwrite = dialog.getByRole("button", { name: "Overwrite with my version", exact: true });
+      const load = dialog.getByRole("button", { name: "Load the other version", exact: true });
+      await expect(overwrite).toBeVisible();
+      await expect(load).toBeVisible();
+      await expect(overwrite).toHaveAccessibleDescription("The other version is replaced and can't be brought back.");
+      await expect(load).toHaveAccessibleDescription("It opens here, and your changes in this window are dropped.");
+      expect(await insideRootAcross(page, dialog)).toBe(true);
+      const root = await box(page.locator(".sce-editor"));
+      if (width !== 1280)
+        expect((await box(dialog)).y + (await box(dialog)).height).toBeLessThanOrEqual(root.y + root.height + 0.5);
+
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      await expect(choose(page)).toBeFocused();
+    });
+  }
+
+  test("reveals the banner and Choose at 288 without a swipe", async ({ page, harness, press, isMobile }) => {
+    test.skip(!isMobile, "the phone project's width is the one measured");
+    await page.setViewportSize({ width: 412, height: 800 });
+    await harness.stageHeight(288);
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await makeConflict(page, press, QUARTERS);
+    await harness.frames(2);
+    const found = await page.evaluate(() => {
+      const chrome = document.querySelector<HTMLElement>(".sce-chrome");
+      const sentence = document.querySelector<HTMLElement>(".sce-draft-conflict-text");
+      const choose = document.querySelector<HTMLElement>(".sce-draft-choose");
+      if (!chrome || !sentence || !choose) return null;
+      const outer = chrome.getBoundingClientRect();
+      const visible = outer.top >= 0 && outer.bottom <= innerHeight + 0.5;
+      const inside = (el: Element) => {
+        const at = el.getBoundingClientRect();
+        return at.top >= outer.top - 0.5 && at.bottom <= outer.top + chrome.clientHeight + 0.5;
+      };
+      return { visible, sentence: inside(sentence), choose: inside(choose) };
+    });
+    expect(found?.visible, "the chrome is inside the window").toBe(true);
+    expect(found?.sentence, "the sentence is in the chrome's visible box").toBe(true);
+    expect(found?.choose, "Choose is in the chrome's visible box").toBe(true);
+  });
+
+  test("the Chinese banner opens the same dialog and closes back to Choose", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "the phone project's width is the one measured");
+    await mountState(page, harness, press, "conflict", 412);
+    await harness.update({ language: "zh" });
+    await harness.stageHeight(288);
+    const chineseBanner = page.getByRole("group", { name: "草稿冲突", exact: true });
+    await press(chineseBanner.getByRole("button", { name: "选择", exact: true }));
+    const dialog = page.getByRole("dialog", { name: "草稿冲突", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "用我的版本覆盖", exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "载入对方的版本", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(chineseBanner.getByRole("button", { name: "选择", exact: true })).toBeFocused();
+  });
+
+  test("the score file's banner uses the same Choose and dialog", async ({ page, harness, press, isMobile }) => {
+    test.skip(!isMobile, "the phone project's width is the one measured");
+    await page.setViewportSize({ width: 412, height: 800 });
+    await harness.stageHeight(420);
+    await scoreFileConflict(page, harness, press);
+    await harness.stageHeight(288);
+    await expect(choose(page)).toHaveAttribute("aria-expanded", "false");
+    await press(choose(page));
+    const dialog = page.getByRole("dialog", { name: "Score file conflict", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Overwrite with my version", exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Load the other version", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(choose(page)).toBeFocused();
+  });
+});
+
+test.describe("C3: the toolbar budget", () => {
+  for (const width of [412, 390, 375, 360, 320] as const) {
+    test(`keeps two rows of controls at ${width}, with and without a save control`, async ({
+      page,
+      harness,
+      isMobile,
+    }) => {
+      test.skip(!isMobile, "the phone project is the coarse-pointer width");
+      await page.setViewportSize({ width, height: 800 });
+      for (const language of ["en", "zh"] as const) {
+        await harness.mount({ score: { text: QUARTERS }, drafts: true, language });
+        const plain = await box(page.locator(".sce-toolbar"));
+        expect(await controlRows(page), `${width} ${language}: two rows of controls`).toBeLessThanOrEqual(2);
+        await harness.destroy();
+
+        await harness.mount({ score: { text: QUARTERS }, scoreFile: { name: "tune.abc" }, language });
+        const withSave = await box(page.locator(".sce-toolbar"));
+        expect(await controlRows(page), `${width} ${language}: Save adds no row`).toBeLessThanOrEqual(2);
+        expect(withSave.height, `${width} ${language}: the toolbar is as tall with a file as without`).toBeCloseTo(
+          plain.height,
+          0,
+        );
+        await harness.destroy();
+      }
+    });
+  }
+
+  test("is one row on the desktop, and two at 1024 and 800", async ({ page, harness, isMobile }) => {
+    test.skip(isMobile, "the widths are set on the desktop project");
+    for (const width of [1280, 1024, 800]) {
+      await page.setViewportSize({ width, height: 700 });
+      for (const language of ["en", "zh"] as const) {
+        await harness.mount({ score: { text: QUARTERS }, drafts: true, language });
+        await expect(page.locator(".sce-undo")).toBeVisible();
+        expect(await controlRows(page), `${width} ${language}: rows of controls`).toBeLessThanOrEqual(
+          width === 1280 ? 1 : 2,
+        );
+        const strip = await box(page.locator(".sce-tools"));
+        const bar = await box(page.locator(".sce-bar"));
+        if (width === 1280) expect(strip.y).toBeCloseTo(bar.y, 0);
+        await harness.destroy();
+      }
+    }
+  });
+});
+
+test.describe("C4: the bar is in view at rest", () => {
+  for (const editable of [true, false]) {
+    test(`holds the switch, the preview and the whole caption, ${editable ? "editable" : "read-only"}`, async ({
+      page,
+      harness,
+      isMobile,
+    }) => {
+      test.skip(isMobile, "the widths are set on the desktop project");
+      for (const width of [412, 360, 320, 260, 190]) {
+        await page.setViewportSize({ width, height: 700 });
+        await harness.mount({ score: { text: QUARTERS }, editable });
+        const bar = page.locator(".sce-bar");
+        const views = bar.getByRole("group", { name: "View" });
+        await expect(views).toBeVisible();
+        expect(await insideRootAcross(page, views), `${width}: the view switch is inside the root`).toBe(true);
+        for (const name of ["Arrangement", "Staff", "Score text"]) {
+          expect(
+            await insideRootAcross(page, views.getByRole("button", { name, exact: true })),
+            `${width}: ${name}`,
+          ).toBe(true);
+        }
+        const preview = bar.getByRole("button", { name: /Preview|Stop/ });
+        const words = bar.locator(".sce-synth-caption");
+        expect(await insideRootAcross(page, preview), `${width}: the preview button`).toBe(true);
+        expect(await insideRootAcross(page, words), `${width}: the caption`).toBe(true);
+        expect((await box(words)).width, `${width}: the caption is not a sliver`).toBeGreaterThanOrEqual(60);
+        await harness.destroy();
+      }
+    });
+  }
+
+  test("keeps Save inside the bar at 412 and 320", async ({ page, harness, isMobile }) => {
+    test.skip(!isMobile, "the phone project is the coarse-pointer width");
+    for (const width of [412, 320]) {
+      await page.setViewportSize({ width, height: 800 });
+      await harness.mount({ score: { text: QUARTERS }, scoreFile: { name: "tune.abc" } });
+      await expect(saveFile(page)).toBeVisible();
+      expect(await insideRootAcross(page, saveFile(page)), `${width}: Save is inside the root`).toBe(true);
+      const bar = page.locator(".sce-bar");
+      expect(await bar.getByRole("button", { name: "Save", exact: true }).count()).toBe(1);
+      await harness.destroy();
+    }
+  });
+});
+
+test.describe("C5: the strip scrolls and the rest stays reachable", () => {
+  test("a swipe moves the strip, Tab reaches the tempo field, and the Project panel opens inside the window", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "a finger is the phone project's");
+    await page.setViewportSize({ width: 412, height: 800 });
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    const strip = page.locator(".sce-tools");
+    const at = await box(strip);
+    await harness.swipe(
+      { x: at.x + at.width - 20, y: at.y + at.height / 2 },
+      { x: at.x + 20, y: at.y + at.height / 2 },
+    );
+    await expect.poll(() => strip.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
+
+    await page.getByRole("button", { name: "Select", exact: true }).focus();
+    for (let step = 0; step < 20; step++) {
+      const label = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? "");
+      if (label === "Tempo (BPM)") break;
+      await page.keyboard.press("Tab");
+    }
+    const tempo = page.getByRole("spinbutton", { name: "Tempo (BPM)" });
+    expect(await insideRootAcross(page, tempo)).toBe(true);
+
+    for (const button of await strip.locator("button:visible").all()) {
+      await button.focus();
+      expect(await insideRootAcross(page, button)).toBe(true);
+    }
+
+    await page.getByRole("button", { name: /^Project/, exact: false }).click();
+    const panel = page.getByRole("dialog", { name: "Project", exact: true });
+    await expect(panel).toBeVisible();
+    const opened = await box(panel);
+    expect(opened.x).toBeGreaterThanOrEqual(0);
+    expect(opened.x + opened.width).toBeLessThanOrEqual(412);
+    expect(opened.y + opened.height).toBeLessThanOrEqual(800);
+  });
+});
+
+test.describe("C9: the Tab order", () => {
+  test("walks the strip's editing and song controls, then the bar's switch and preview", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "keys are checked on the desktop project");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Undo", exact: true }).focus();
+    const walked: string[] = [];
+    for (let step = 0; step < 20; step++) {
+      walked.push(
+        await page.evaluate(() => {
+          const el = document.activeElement as HTMLElement | null;
+          if (!el) return "";
+          const named = el.getAttribute("aria-label");
+          if (named) return named;
+          if (el instanceof HTMLSelectElement)
+            return el.closest("label")?.querySelector(".sce-key-label")?.textContent ?? "";
+          const word = el.querySelector(".sce-project-word");
+          if (word) return word.textContent ?? "";
+          return el.textContent?.trim() ?? "";
+        }),
+      );
+      await page.keyboard.press("Tab");
+    }
+    expect(walked.slice(0, 20)).toEqual([
+      "Undo",
+      "Redo",
+      "Delete",
+      "Draw notes",
+      "Select",
+      "Grid: 1/4",
+      "Bars",
+      "Meter 4/4",
+      "Restore original",
+      "Tempo (BPM)",
+      "Key",
+      "Transpose down a semitone",
+      "Transpose up a semitone",
+      "Project",
+      "Tools",
+      "Filter",
+      "Arrangement",
+      "Staff",
+      "Score text",
+      "Preview",
+    ]);
+  });
+});
+
+test.describe("C10: the desktop banner", () => {
+  test("keeps the sentence and Choose on one line, and the toolbar one row", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the desktop width is the one measured");
+    await page.setViewportSize({ width: 1280, height: 700 });
+    await harness.stageHeight(420);
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
+    await makeConflict(page, press, QUARTERS);
+    const banner = page.getByRole("group", { name: "Draft conflict", exact: true });
+    const sentence = await box(banner.getByRole("alert"));
+    const chooseAt = await box(choose(page));
+    expect(Math.abs(sentence.y + sentence.height / 2 - (chooseAt.y + chooseAt.height / 2))).toBeLessThan(6);
+    expect(sentence.x + sentence.width).toBeLessThanOrEqual(chooseAt.x + 1);
+    expect(await controlRows(page)).toBe(1);
+    expect((await box(banner)).height).toBeLessThanOrEqual((await box(choose(page))).height * 2);
+  });
+});
+
+test.describe("the edge cues", () => {
+  test("the chrome fades at the edge that has more, and stops when it has none", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "the phone project's width is the one measured");
+    await mountState(page, harness, press, "conflict-cut-notice", 412);
+    await page.setViewportSize({ width: 320, height: 800 });
+    await harness.stageHeight(288);
+    const chrome = page.locator(".sce-chrome");
+    const cue = () => chrome.getAttribute("data-cue");
+    expect(await chrome.evaluate((el) => el.scrollHeight > el.clientHeight), "the chrome clips content").toBe(true);
+    expect(await cue()).toBe("down");
+
+    await chrome.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await harness.frames(1);
+    expect(await cue()).toBe("up");
+
+    await chrome.evaluate((el) => {
+      el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) / 2);
+    });
+    await harness.frames(1);
+    expect(await cue()).toBe("both");
+
+    await harness.stageHeight(900);
+    await expect.poll(cue).toBeNull();
+  });
+
+  test("the strip fades at the side that has more, and stops at its end", async ({ page, harness, isMobile }) => {
+    test.skip(!isMobile, "the phone project's width is the one measured");
+    await page.setViewportSize({ width: 412, height: 800 });
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    const strip = page.locator(".sce-tools");
+    const cue = () => strip.getAttribute("data-cue");
+    expect(await cue()).toBe("right");
+
+    await strip.evaluate((el) => {
+      el.scrollLeft = Math.round((el.scrollWidth - el.clientWidth) / 2);
+    });
+    await harness.frames(1);
+    expect(await cue()).toBe("both");
+
+    await strip.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    await harness.frames(1);
+    expect(await cue()).toBe("left");
+  });
 });

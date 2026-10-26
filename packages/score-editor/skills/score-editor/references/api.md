@@ -10,7 +10,7 @@ change. The tests in the repository check that the list stays complete.
 | `mount` | core | Mounts the default editor on an element; returns `MountedEditor`. |
 | `createScoreFileKeeper` | core | Binds a session to a `ScoreFileSource`: saves explicitly, answers a conflict with overwrite or load, restores the last saved version and saves before a handoff. |
 | `createEditingSession` | core | Builds an `EditingSession` from a project and a `DialectRegistry`. |
-| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete, the Select menu, the Bars menu and the meter control; takes `ToolbarOptions`. |
+| `mountToolbar` | core | Mounts the toolbar view part: a sideways-scrolling strip of editing and song controls, and an always-visible bar with Save, the view switch and the preview control; takes `ToolbarOptions`. |
 | `mountZoomControl` | core | Mounts the zoom control view part on `(el, session)`. |
 | `mountCutNotice` | core | Mounts the cut-notice view part, with Fill with rests and Delete the incomplete bar on a cut bar. |
 | `mountProblemView` | core | Mounts the problem view part. |
@@ -21,7 +21,7 @@ change. The tests in the repository check that the list stays complete.
 | `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. Returns a `StaffViewPart`. |
 | `mountStaleNotice` | core | Mounts the stale notice part: one sentence while the text view holds text the project did not take. |
 | `mountViewSwitch` | core | Mounts the view switch part: three buttons that set the session's `activeView`. |
-| `mountDraftConflict` | core | Mounts the draft conflict strip: shown while a `DraftKeeper` is in conflict, with the two ways out. |
+| `mountDraftConflict` | core | Mounts the draft conflict banner: shown while a `DraftKeeper` is in conflict, with one Choose button that opens the two ways out. |
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
 | `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
 | `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
