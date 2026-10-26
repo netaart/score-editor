@@ -5,7 +5,7 @@ import type { DialectRegistry } from "./dialect";
 import { create } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { messagesFor } from "./i18n";
-import { nudgeIntoWindow, placeUnder } from "./popover-menu";
+import { keepInside, placeUnder } from "./popover-menu";
 import type { SongProject } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -120,7 +120,7 @@ export function mountHandoffControl(
   popover.addEventListener(
     "beforetoggle",
     (event) => {
-      if ((event as ToggleEvent).newState === "open") placeUnder(button, popover);
+      if ((event as ToggleEvent).newState === "open") placeUnder(popover, button);
     },
     { signal },
   );
@@ -131,7 +131,7 @@ export function mountHandoffControl(
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
       renderLog();
-      nudgeIntoWindow(popover);
+      keepInside(popover);
       cancel.focus();
     },
     { signal },

@@ -1,7 +1,7 @@
 // ABOUTME: Seam 5 for selecting several notes: Shift-click and Shift-tap, the box, a touch and hold, select all, invert and Escape.
 // ABOUTME: Each case runs with a mouse on the desktop project and with a finger on the phone project, and reads what the session holds.
 import type { Locator, Page } from "@playwright/test";
-import { box, expect, type Harness, type Point, test, vocalOnly } from "./fixtures";
+import { box, expect, type Harness, type Point, pointerOf, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 
@@ -47,45 +47,6 @@ async function centreOf(target: Locator): Promise<Point> {
 async function spot(page: Page, x: number, y: number): Promise<Point> {
   const area = await box(lane(page));
   return { x: area.x + x, y: area.y + y };
-}
-
-/** A way to press, move and lift one pointer: a mouse on the desktop project, a held finger on the phone project. */
-interface Pointer {
-  down(point: Point): Promise<void>;
-  move(point: Point): Promise<void>;
-  up(): Promise<void>;
-  close(): Promise<void>;
-}
-
-/** The pointer the project has. A finger waits 550 ms after it goes down, as a person does to start a box. */
-async function pointerOf(
-  page: Page,
-  harness: Harness,
-  isMobile: boolean,
-  options: { shift?: boolean } = {},
-): Promise<Pointer> {
-  if (!isMobile) {
-    return {
-      async down(point) {
-        if (options.shift) await page.keyboard.down("Shift");
-        await page.mouse.move(point.x, point.y);
-        await page.mouse.down();
-      },
-      move: (point) => page.mouse.move(point.x, point.y, { steps: 8 }),
-      async up() {
-        await page.mouse.up();
-        if (options.shift) await page.keyboard.up("Shift");
-      },
-      close: async () => {},
-    };
-  }
-  const finger = await harness.finger(options.shift ? { shift: true } : {});
-  return {
-    down: (point) => finger.down(point, 550),
-    move: (point) => finger.move(point),
-    up: () => finger.up(),
-    close: () => finger.close(),
-  };
 }
 
 /** A box from `from` to `to`, drawn with the project's pointer and released. */
@@ -954,8 +915,7 @@ test.describe("a subset from the keyboard", () => {
 
     await page.keyboard.press("Alt+Shift+Space");
     await page.keyboard.press("Alt+Control+ArrowRight");
-    // Shift with the arrows is kept for what the spec plans for it, and Control with Shift for the selection keys.
-    await page.keyboard.press("Shift+ArrowRight");
+    // Control with Shift is kept for the selection keys; Shift with the arrows resizes the notes (move-resize.spec.ts).
     await page.keyboard.press("Control+Shift+ArrowRight");
     await page.keyboard.press("Control+Shift+Space");
     await expect(pitch(page, "D4")).toBeFocused();
@@ -1242,19 +1202,20 @@ test.describe("the assembled editor", () => {
     const scroller = page.getByRole("region", { name: "Arrangement" });
     const vocal = page.getByRole("list", { name: "Vocal" });
     await expect(vocal).toBeVisible();
-    // The toolbar takes three rows at a phone's width, which leaves the lane little height: the verse is brought into the
+    // The toolbar takes four rows at a phone's width, which leaves the lane little height: the verse is brought into the
     // frame first, so the box reaches notes whatever the height of the toolbar is.
     await scroller.evaluate((el) => el.scrollTo({ left: 400 }));
     const position = () => harness.scrollOf(scroller);
     const before = await position();
     const frame = await box(scroller);
     const laneArea = await box(vocal);
-    // The four bars of the intro are rests: the lane is empty where the finger goes down, and the box reaches the verse.
-    // The editor pins a header over the lane, so the first free spot is found by looking at what is on the screen.
+    // The intro is rests and the verse has notes: the first empty lane spot at this x is found by looking, so the finger
+    // goes down on the notes layer and not on a note. The editor pins a header over the lane.
     const x = Math.max(laneArea.x, frame.x + 60) + 10;
     const free = await harness.firstYOn(vocal, x, Math.max(laneArea.y, frame.y), frame.y + frame.height);
     expect(free).not.toBeNull();
     const from = { x, y: (free ?? 0) + 8 };
+    expect(await vocal.evaluate((el, point) => document.elementFromPoint(point.x, point.y) === el, from)).toBe(true);
     const to = { x: frame.x + frame.width - 6, y: Math.min(laneArea.y + laneArea.height, frame.y + frame.height) - 6 };
 
     const finger = await harness.finger();

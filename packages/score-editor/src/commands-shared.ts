@@ -4,6 +4,7 @@ import { positionOf } from "./arrangement";
 import type { DiagnosticAt } from "./diagnostics";
 import type { Chord, KeyChange, Meter, Note, Score, Truncation } from "./score";
 import { TICKS_PER_QUARTER } from "./score";
+import { tieChains } from "./tie-chains";
 import type { DurationSet } from "./types";
 
 /** Where a note is, in the voice, bar and beat a person counts; only its id when the score has no such note. */
@@ -21,12 +22,8 @@ export function noteAt(score: Score, noteId: string): DiagnosticAt {
 export function tieChain(notes: ReadonlyArray<Note>, target: Note, orderedVoiceNotes?: ReadonlyArray<Note>): Note[] {
   const voiceNotes =
     orderedVoiceNotes ?? notes.filter((note) => note.voice === target.voice).sort((a, b) => a.start - b.start);
-  const index = voiceNotes.findIndex((note) => note.id === target.id);
-  let first = index;
-  while (first > 0 && (voiceNotes[first - 1] as Note).tie) first -= 1;
-  let last = index;
-  while (last < voiceNotes.length - 1 && (voiceNotes[last] as Note).tie) last += 1;
-  return voiceNotes.slice(first, last + 1);
+  const chain = tieChains(voiceNotes).find((members) => members.some((note) => note.id === target.id));
+  return chain === undefined ? [] : [...chain];
 }
 
 /** True when chord material remains: a finished chord, or an unfinished chord string at the cut (RULES.md C8). */

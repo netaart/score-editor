@@ -105,7 +105,11 @@ interface PageSession {
   selection: string[];
   insertionPoint: { tick: number } | null;
   view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
-  reading: { kind: string; score?: { notes: Array<{ id: string; voice: string; midi: number | null }> } };
+  reading: {
+    kind: string;
+    score?: { notes: Array<{ id: string; voice: string; start: number; duration: number; midi: number | null }> };
+  };
+  grid: { value: number; dotted?: boolean };
   activeView: string;
   rejectedText: { text: string; diagnostics: Array<{ code: string }> } | null;
   canUndo: boolean;
@@ -134,6 +138,7 @@ interface PageLayout {
   replace(options: Record<string, unknown>): Promise<void>;
   replaceDialects(): void;
   mountPart(name: string, hidden?: boolean): void;
+  commitPart(name: string): void;
   /** Drives the mounted staff part's play position in seconds, or clears it for null. */
   setPlayPosition(seconds: number | null): void;
   setSlotHidden(name: string, hidden: boolean): void;
@@ -240,6 +245,11 @@ export class Layout {
     }, names);
   }
 
+  /** Takes a pending field on a part the host mounted itself, as a host does when it closes its own container. */
+  commitPart(name: string) {
+    return this.page.evaluate((target) => window.harness.layout.commitPart(target), name);
+  }
+
   destroyPart(name: string, times = 1) {
     return this.page.evaluate(
       ([target, count]) => window.harness.layout.destroyPart(target as string, count as number),
@@ -301,6 +311,20 @@ export class Layout {
   /** Selects exactly these notes through the session, as a host or a later view part would. */
   select(noteIds: string[]) {
     return this.page.evaluate((ids) => window.harness.layout.live().select(ids), noteIds);
+  }
+
+  /** The grid, as the session holds it. */
+  grid() {
+    return this.page.evaluate(() => ({ ...window.harness.layout.live().grid }));
+  }
+
+  /** The pitched notes of the score as the session reads it: voice, first tick, length in ticks and MIDI number. */
+  pitchedNotes() {
+    return this.page.evaluate(() =>
+      (window.harness.layout.live().reading.score?.notes ?? [])
+        .filter((found) => found.midi !== null)
+        .map(({ voice, start, duration, midi }) => ({ voice, start, duration, midi })),
+    );
   }
 
   /** The insertion point, as the session holds it. */
@@ -405,6 +429,14 @@ export class Harness {
 
   destroy() {
     return this.page.evaluate(() => window.harness.destroy());
+  }
+
+  /** Sets the height of the stage the editor fills, as a host resizing the editor's box does. */
+  async stageHeight(px: number) {
+    await this.page.evaluate((height) => {
+      window.harness.stage.style.height = `${height}px`;
+    }, px);
+    await this.frames(1);
   }
 
   /**
@@ -533,15 +565,16 @@ export class Harness {
   }
 
   /**
-   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` or
-   * inside it; null when none is. A part may pin a header over `target`, so the first free spot is found by looking.
+   * The first `y` from `from` up to `until`, in steps of 4 pixels, where the element on top at `x` is `target` itself
+   * and so is the element 8 pixels below it; null when none is. A note or another child of `target` does not count, and
+   * requiring the second point leaves room for the finger. A part may pin a header over `target`, so the first empty
+   * spot is found by looking.
    */
   firstYOn(target: Locator, x: number, from: number, until: number) {
     return target.evaluate(
       (el, { at, start, end }) => {
-        for (let y = start; y < end; y += 4) {
-          const top = document.elementFromPoint(at, y);
-          if (top && el.contains(top)) return y;
+        for (let y = start; y + 8 < end; y += 4) {
+          if (document.elementFromPoint(at, y) === el && document.elementFromPoint(at, y + 8) === el) return y;
         }
         return null;
       },
@@ -644,6 +677,144 @@ export class Finger {
     await this.cdp.detach();
   }
 }
+
+/**
+ * Taps or clicks the first note of Vocal whose centre is the top element at that point, and gives back its name. It
+ * works through the DOM and the pointer directly, so it does not scroll the note into view the way `locator.tap()` does.
+ */
+export async function tapFirstVisibleNote(page: Page): Promise<string> {
+  const at = await page.evaluate(() => {
+    const notes = document.querySelectorAll<HTMLElement>('[role="list"][aria-label="Vocal"] [role="listitem"]');
+    for (const note of notes) {
+      const rect = note.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+      if (document.elementFromPoint(x, y) !== note) continue;
+      return { x, y, name: note.getAttribute("aria-label") ?? "" };
+    }
+    return null;
+  });
+  if (at === null) throw new Error("no note is hit-testable");
+  if (await page.evaluate(() => matchMedia("(pointer: coarse)").matches)) {
+    await page.touchscreen.tap(at.x, at.y);
+  } else {
+    await page.mouse.click(at.x, at.y);
+  }
+  return at.name;
+}
+
+/** A way to press, move and lift one pointer: a mouse on the desktop project, a finger on the phone project. */
+export interface Pointer {
+  down(point: Point): Promise<void>;
+  move(point: Point): Promise<void>;
+  up(): Promise<void>;
+  close(): Promise<void>;
+}
+
+/**
+ * The pointer the project has. A finger waits `holdMs` after it goes down, 550 ms unless the test says otherwise: as long
+ * as a person rests it to start a box. A gesture that must start before the hold is over (a slide on a selected note)
+ * asks for 0.
+ */
+export async function pointerOf(
+  page: Page,
+  harness: Harness,
+  isMobile: boolean,
+  options: { shift?: boolean; holdMs?: number } = {},
+): Promise<Pointer> {
+  if (!isMobile) {
+    return {
+      async down(point) {
+        if (options.shift) await page.keyboard.down("Shift");
+        await page.mouse.move(point.x, point.y);
+        await page.mouse.down();
+      },
+      move: (point) => page.mouse.move(point.x, point.y, { steps: 8 }),
+      async up() {
+        await page.mouse.up();
+        if (options.shift) await page.keyboard.up("Shift");
+      },
+      close: async () => {},
+    };
+  }
+  const finger = await harness.finger(options.shift ? { shift: true } : {});
+  return {
+    down: (point) => finger.down(point, options.holdMs ?? 550),
+    move: (point) => finger.move(point),
+    up: () => finger.up(),
+    close: () => finger.close(),
+  };
+}
+
+/** A quarter note is 256 ticks and a beat is a quarter. */
+export const BEAT = 256;
+/** Middle C, the pitch most notes in these scores start from. */
+export const MIDDLE_C = 60;
+
+export const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
+export const toolbar = (page: Page) => slot(page, "toolbar");
+export const laneOf = (page: Page) => slot(page, "vocal").locator(".sce-lane");
+export const ghosts = (page: Page) => slot(page, "vocal").locator(".sce-ghost");
+export const said = (page: Page) => slot(page, "vocal").getByRole("status");
+export const trackRegion = (page: Page) => slot(page, "vocal").getByRole("region", { name: "Vocal" });
+/** A note by the start of its name, which holds whether it is selected or not. */
+export const block = (page: Page, label: string) => slot(page, "vocal").getByRole("listitem", { name: label });
+export const gridButton = (page: Page) => toolbar(page).getByRole("button", { name: /^(Grid|网格): / });
+export const gridItem = (page: Page, name: string) => toolbar(page).getByRole("menuitemradio", { name, exact: true });
+
+/** One note of C4 at the first beat, then rests, and a whole note in the second bar: eight beats. */
+export const LEAD = vocalOnly("C4z12|G16|");
+/** Four quarter notes, then a whole note: at 40 pixels a beat they start 0, 40, 80 and 120 pixels into the lane. */
+export const QUARTERS = vocalOnly("C4D4E4F4|G16|");
+
+/** Opens the toolbar and the Vocal track on one session, in the page's layout. */
+export async function openTrack(harness: Harness, score: string = QUARTERS, options: Record<string, unknown> = {}) {
+  await harness.layout.open({ score: { text: score }, parts: ["toolbar", "vocal"], ...options });
+}
+
+export async function centreOf(target: Locator): Promise<Point> {
+  const area = await box(target);
+  return { x: area.x + area.width / 2, y: area.y + area.height / 2 };
+}
+
+/** How wide a beat and how high a row are on this project, in pixels, for a score of `beats` beats. */
+export async function metrics(page: Page, beats: number) {
+  const lane = await box(laneOf(page));
+  const row = (await box(slot(page, "vocal").getByRole("listitem").first())).height;
+  return { lane, beat: lane.width / beats, row };
+}
+
+/** Presses at `from`, slides to `to`, and lets `during` look at the page before the release. */
+export async function drag(
+  page: Page,
+  harness: Harness,
+  isMobile: boolean,
+  from: Point,
+  to: Point,
+  during: () => Promise<void> = async () => {},
+) {
+  const pointer = await pointerOf(page, harness, isMobile, { holdMs: 0 });
+  await withPointer(pointer, async () => {
+    await pointer.down(from);
+    await pointer.move(to);
+    await during();
+    await pointer.up();
+  });
+}
+
+/** Runs a gesture with one pointer and always lets the pointer go, even when the gesture fails. */
+export async function withPointer<T>(pointer: { close(): Promise<void> }, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } finally {
+    await pointer.close();
+  }
+}
+
+/** The notes the session holds, as the voice, start tick, length in ticks and MIDI number of each. */
+export const noteList = (harness: Harness) => harness.layout.pitchedNotes();
+export const vocal = (start: number, duration: number, midi: number) => ({ voice: "Vocal", start, duration, midi });
 
 export const test = base.extend<{
   harness: Harness;

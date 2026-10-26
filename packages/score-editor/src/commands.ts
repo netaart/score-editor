@@ -13,7 +13,7 @@ import type { Meter, Score, Note as ScoreNote } from "./score";
 import type { DialectConstraints } from "./types";
 
 /**
- * A dialect-agnostic edit of a Score. More commands join this union in later tickets.
+ * A dialect-agnostic edit of a Score. More commands join this union in later versions.
  *
  * `toRest` turns one note into a rest. `toRests` does the same to every note it names as one command: it applies to all
  * of them or to none, so the score is written and checked once, on the whole result.
