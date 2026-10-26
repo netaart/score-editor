@@ -123,6 +123,58 @@ test.describe("dragging the selected notes", () => {
 /** The edge zone at each end of a selected note, in pixels: what the project's pointer gets (DESIGN.md, "Moving and resizing"). */
 const zoneOf = (isMobile: boolean) => (isMobile ? 12 : 6);
 
+/** The zone at an edge of a note whose inside width is `inside`, from the constants in DESIGN.md, "Edge zones". */
+const zoneAt = (inside: number, isMobile: boolean) => (isMobile ? Math.max(8, Math.min(12, inside * 0.3)) : 6);
+
+/** The width of the grip a selected note draws in its own background: 2px when it has one, 0px when it is too narrow. */
+const gripWidth = (target: Locator) => target.evaluate((el) => parseFloat(getComputedStyle(el).backgroundSize));
+
+/** The colours of some pixels of what `target` draws, in CSS pixels from its top-left. */
+async function pixelsAt(page: Page, target: Locator, points: ReadonlyArray<{ x: number; y: number }>) {
+  const png = await target.screenshot({ scale: "css" });
+  return page.evaluate(
+    async ({ png, points }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${png}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("no 2d context");
+      context.drawImage(image, 0, 0);
+      return points.map(({ x, y }) => {
+        const atX = Math.min(canvas.width - 1, Math.max(0, Math.round(x)));
+        const atY = Math.min(canvas.height - 1, Math.max(0, Math.round(y)));
+        return Array.from(context.getImageData(atX, atY, 1, 1).data);
+      });
+    },
+    { png: png.toString("base64"), points },
+  );
+}
+
+/** Where the grip's pixels sit across a selected note, and where the middle of its edge zone is. */
+async function gripCentre(page: Page, target: Locator, side: "start" | "end", isMobile: boolean) {
+  const area = await box(target);
+  const frame = await target.evaluate((el) => {
+    const html = el as HTMLElement;
+    return {
+      inside: html.clientWidth,
+      left: html.clientLeft,
+      right: html.offsetWidth - html.clientWidth - html.clientLeft,
+    };
+  });
+  const zone = zoneAt(frame.inside, isMobile);
+  const expected = side === "start" ? frame.left + zone / 2 : area.width - frame.right - zone / 2;
+  const y = area.height / 2;
+  const xs = [-2, -1, 0, 1, 2].map((offset) => expected + offset);
+  const colours = await pixelsAt(page, target, [{ x: area.width / 2, y }, ...xs.map((x) => ({ x, y }))]);
+  const body = colours[0]?.join(",");
+  const hits = xs.filter((_, index) => colours[index + 1]?.join(",") !== body);
+  const centre = hits.reduce((sum, x) => sum + x, 0) / hits.length;
+  return { expected, centre, hits: hits.length };
+}
+
 test.describe("dragging an edge", () => {
   /** A half note at the second beat, selected, with its box. */
   async function half(page: Page, harness: Harness, press: (target: Locator) => Promise<void>) {
@@ -233,8 +285,10 @@ test.describe("dragging an edge", () => {
     await openTrack(harness, vocalOnly("C4z12|G16|"));
     await press(block(page, C4));
     const selected = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
-    const gripped = await selected.evaluate((el) => getComputedStyle(el, "::after").content !== "none");
-    expect(gripped).toBe(true);
+    expect(await gripWidth(selected)).toBe(2);
+    const grip = await gripCentre(page, selected, "end", isMobile);
+    expect(grip.hits).toBeGreaterThan(0);
+    expect(Math.abs(grip.centre - grip.expected)).toBeLessThanOrEqual(1);
     const area = await box(selected);
     const { beat } = await metrics(page, 8);
     const from = { x: area.x + area.width - 4, y: area.y + area.height / 2 };
@@ -252,21 +306,37 @@ test.describe("dragging an edge", () => {
     await harness.layout.select(["Vocal:0", `Vocal:${BEAT}`]);
     const wide = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
     const narrow = block(page, "D4, bar 1 beat 2, length 0.25 beats, selected");
-    const gripped = (target: Locator) => target.evaluate((el) => getComputedStyle(el, "::after").content !== "none");
 
-    // At the default zoom a beat is wide enough for a grip at either pointer, and a sixteenth is not.
+    // The grips are two layers of the note's own background, each 2px wide when the note is wide enough and 0px when not.
     await expect(wide).toBeVisible();
     await expect(narrow).toBeVisible();
-    expect(await gripped(wide)).toBe(true);
-    expect(await gripped(narrow)).toBe(false);
+    expect(await gripWidth(wide)).toBe(2);
+    expect(await gripWidth(narrow)).toBe(0);
 
-    // Zoomed out, the beat falls under both pointers' threshold and loses its grips.
+    // Zoomed out, the beat falls under both pointers' threshold and its background layers close to nothing.
     await harness.layout.setView({ zoom: 0.5 });
-    expect(await gripped(wide)).toBe(false);
+    expect(await gripWidth(wide)).toBe(0);
 
-    // Zoomed in, the sixteenth rises above both and gains them.
+    // Zoomed in, the sixteenth rises above both and its layers open again.
     await harness.layout.setView({ zoom: 4 });
-    expect(await gripped(narrow)).toBe(true);
+    expect(await gripWidth(narrow)).toBe(2);
+  });
+
+  test("draws the grip at the centre of the zone a press finds, including a finger's share", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    await openTrack(harness, vocalOnly("C4z12|G16|"));
+    await press(block(page, C4));
+    const selected = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
+
+    for (const side of ["start", "end"] as const) {
+      const grip = await gripCentre(page, selected, side, isMobile);
+      expect(grip.hits, side).toBeGreaterThan(0);
+      expect(Math.abs(grip.centre - grip.expected), side).toBeLessThanOrEqual(1);
+    }
   });
 
   test("marks the zones with the resize cursor and the body with the move cursor", async ({
@@ -275,18 +345,28 @@ test.describe("dragging an edge", () => {
     press,
     isMobile,
   }) => {
+    test.skip(isMobile, "a phone project has no mouse cursor");
     const area = await half(page, harness, press);
-    const cursor = (pseudo: "::before" | "::after" | null) =>
-      block(page, "C4, bar 1 beat 2").evaluate((el, which) => getComputedStyle(el, which).cursor, pseudo);
-    expect(await cursor(null)).toBe("move");
-    expect(await cursor("::before")).toBe("ew-resize");
-    expect(await cursor("::after")).toBe("ew-resize");
-    // The grip is as wide as the zone a press finds.
-    const grip = await block(page, "C4, bar 1 beat 2").evaluate((el) =>
-      parseFloat(getComputedStyle(el, "::after").width),
-    );
-    expect(grip).toBe(zoneOf(isMobile));
-    expect(area.width).toBeGreaterThan(zoneOf(isMobile) * 3);
+    const selected = block(page, "C4, bar 1 beat 2");
+    const frame = await selected.evaluate((el) => {
+      const html = el as HTMLElement;
+      return {
+        inside: html.clientWidth,
+        left: html.clientLeft,
+        right: html.offsetWidth - html.clientWidth - html.clientLeft,
+      };
+    });
+    const zone = zoneAt(frame.inside, false);
+    const y = area.y + area.height / 2;
+
+    await page.mouse.move(area.x + area.width - frame.right - zone / 2, y);
+    await expect(selected).toHaveCSS("cursor", "ew-resize");
+
+    await page.mouse.move(area.x + area.width / 2, y);
+    await expect(selected).toHaveCSS("cursor", "move");
+
+    await page.mouse.move(area.x - 20, y);
+    await expect(selected).not.toHaveAttribute("data-edge-cursor");
   });
 });
 
@@ -585,12 +665,22 @@ test.describe("forced colors", () => {
     expect(dotFill).not.toBe(buttonFill);
 
     const note = block(page, "C4, bar 1 beat 2, length 2 beats, selected");
-    const noteFill = await note.evaluate((el) => getComputedStyle(el).backgroundColor);
-    for (const side of ["::before", "::after"]) {
-      const grip = await note.evaluate((el, pseudo) => getComputedStyle(el, pseudo).backgroundImage, side);
-      expect(grip).toContain("gradient");
-      expect(grip).not.toContain(noteFill);
-    }
+    const area = await box(note);
+    const frame = await note.evaluate((el) => {
+      const html = el as HTMLElement;
+      return {
+        inside: html.clientWidth,
+        left: html.clientLeft,
+        right: html.offsetWidth - html.clientWidth - html.clientLeft,
+      };
+    });
+    const zone = zoneAt(frame.inside, false);
+    const gripX = area.width - frame.right - zone / 2;
+    const [body, grip] = await pixelsAt(page, note, [
+      { x: area.width / 2, y: area.height / 2 },
+      { x: gripX, y: area.height / 2 },
+    ]);
+    expect(grip).not.toEqual(body);
   });
 });
 
