@@ -12,6 +12,7 @@ import {
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 import { UNREADABLE_SCORE } from "./scores";
+import { normalizeLineBreaks, stripTrailingWhitespace, trimWhitespace } from "./song2-text";
 
 interface SampleFact {
   file: string;
@@ -59,10 +60,9 @@ function wholeRestCount(body: string): number {
  * bytes the reader saw.
  */
 function splitBars(text: string): { pieces: Map<string, string>; otherLines: string[] } {
-  const lines = text
-    .replace(/\r\n?/g, "\n")
+  const lines = normalizeLineBreaks(text)
     .split("\n")
-    .map((line) => line.replace(/[ \t]+$/, ""));
+    .map((line) => stripTrailingWhitespace(line));
   let bodyStart = lines.findIndex((line) => line.startsWith("K:"));
   bodyStart = bodyStart < 0 ? lines.length : bodyStart + 1;
   const pieces = new Map<string, string>();
@@ -89,7 +89,7 @@ function splitBars(text: string): { pieces: Map<string, string>; otherLines: str
     const bodies = line.split("|");
     if (closes) bodies.pop();
     for (const raw of bodies) {
-      const body = raw.replace(/^[ \t]+/, "").replace(/[ \t]+$/, "");
+      const body = trimWhitespace(raw);
       const count = wholeRestCount(body);
       const first = nextBar.get(voice) ?? 0;
       for (let offset = 0; offset < count; offset += 1) {

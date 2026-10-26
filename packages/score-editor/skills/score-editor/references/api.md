@@ -17,9 +17,10 @@ change. The tests in the repository check that the list stays complete.
 | `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
-| `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. |
+| `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. Returns a `StaffViewPart`. |
 | `mountStaleNotice` | core | Mounts the stale notice part: one sentence while the text view holds text the project did not take. |
 | `mountViewSwitch` | core | Mounts the view switch part: three buttons that set the session's `activeView`. |
+| `mountDraftConflict` | core | Mounts the draft conflict strip: shown while a `DraftKeeper` is in conflict, with the two ways out. |
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
 | `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
 | `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
@@ -46,11 +47,18 @@ change. The tests in the repository check that the list stays complete.
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
 | `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
+| `tickAtSeconds` | core | The tick at a time from the score's start, following tempo changes and staying at the end past it. Pure. |
 | `contentHash` | core | The lowercase SHA-256 of the UTF-8 bytes of `JSON.stringify([lyrics, score])`. |
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
 | `sectionActions` | core | What one section offers a menu: rename, start a section at a bar, move earlier, move later, duplicate and delete, each with its command and, when the command layer would refuse it, the refusal. Asks without changing the session. |
+| `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
+| `lyricBoundaryPlan` | core | The phrases that change and the `setLyricLinePhrase` commands, the line that gives up bars first, when an edge of a phrase is dragged to a tick. |
+| `lyricDropPlan` | core | The one-bar phrase, and its command, for a line let go of over a tick; says whether the bar is free. |
+| `lyricSplitCommand` | core | The `splitLyricLine` command for a caret in a line's text, with the bar when the phrase has two bars or more. |
+| `barLineTick` | core | The tick of a bar line, which is what a `LyricBoundaryPlan`'s `boundary` names; a line before the first bar is the start of the score, one past the last bar its end. |
+| `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions`. |
 
 ## Constants and values
 
@@ -60,7 +68,7 @@ change. The tests in the repository check that the list stays complete.
 | `READING_DIAGNOSTIC_CODES` | core | The closed reading diagnostic codes. |
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
-| `LYRICS_MAX_CHARACTERS` | core | 2000; the limit song2 generation accepts for the joined `lyrics` text. |
+| `LYRICS_MAX_CHARACTERS` | core | 4000; the limit song2 generation accepts for the joined `lyrics` text. |
 | `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`. |
 | `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
@@ -72,7 +80,7 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify. |
+| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, drafts. |
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
@@ -96,7 +104,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`. |
-| `Score` | A parsed score: tempo, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, source. |
+| `Score` | A parsed score: tempo, optional `tempoChanges`, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |
@@ -135,9 +143,10 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
+| `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper? }` for the toolbar. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
@@ -162,10 +171,10 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `PreviewPlayer` | `{ playing, tick, from, start(), stop(), subscribe(listener) }`. |
+| `PreviewPlayer` | `{ playing, tick, from, start(fromTick?), stop(), subscribe(listener) }`. |
 | `PreviewStart` | What `start()` resolves: `"started"`, `"nothing-to-play"`, `"unsupported"`, `"blocked"` or `"cancelled"`. |
 | `PreviewNoteOptions` | `{ duration? }` in seconds for `previewNote`. |
-| `PreviewSchedule` | `{ events, fromTick, secondsPerTick, length }`. |
+| `PreviewSchedule` | `{ events, fromTick, secondsPerTick, length }`; `secondsPerTick` is the opening tempo's. |
 | `PreviewEvent` | A `PreviewNoteEvent` or a `PreviewChordEvent`. |
 | `PreviewNoteEvent` | `{ kind: "note", voice, midi, at, length }`. |
 | `PreviewChordEvent` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |
@@ -191,3 +200,16 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- |
 | `SectionAction` | `{ name, command, unavailable }`: one action of a section, the command that does it (`null` for rename and start, which need a name first) and, when the command layer would refuse it, that refusal's `Diagnostic`. |
 | `SectionActionName` | `"rename" \| "start" \| "move-earlier" \| "move-later" \| "duplicate" \| "delete"`, in the order a menu lists them. |
+
+## Lyric track types
+
+| Export | What it is |
+| --- | --- |
+| `LyricRow` | `{ index, line, phrase, alignment }`: one line as the track places it; `phrase` and `alignment` are null in the unaligned area. |
+| `LyricEdge` | `"start" \| "end"`: which edge of a phrase is dragged. |
+| `LyricBoundaryDrag` | `{ line, edge, tick }`: an edge dragged to a tick. |
+| `LyricBoundaryMove` | `{ line, phrase }`: one phrase a drag changes. |
+| `LyricBoundaryPlan` | `{ boundary, moves, commands }`: where the edge lands and what to send, in order. |
+| `LyricDrop` | `{ line, tick }`: a line let go of over a tick. |
+| `LyricDropPlan` | `{ phrase, free, commands }`: the phrase a drop gives, whether its bar is free, and the command. |
+| `LyricSplit` | `{ line, offset }`: a caret, in code points, in a line's text. |

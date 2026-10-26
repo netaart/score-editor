@@ -2,6 +2,7 @@
 // ABOUTME: Pure and headless, so it runs in Node and in a worker; the browser player that sounds the events is another module.
 import { notesByVoice, tieJoins } from "./arrangement";
 import type { Score } from "./score";
+import { secondsAtTick, secondsPerTick } from "./tempo";
 
 /** One note to sound: `at` seconds after the start, for `length` seconds. */
 export interface PreviewNoteEvent {
@@ -30,18 +31,13 @@ export interface PreviewSchedule {
   readonly events: ReadonlyArray<PreviewEvent>;
   /** The tick of the score at time zero: where the preview starts. */
   readonly fromTick: number;
-  /** Seconds in one tick. Time is linear in ticks, so a position is `fromTick + seconds / secondsPerTick`. */
+  /**
+   * Seconds in one tick under the score's opening tempo. A score with changes of tempo is not linear in ticks; turn a
+   * position back into a tick with `tickAtSeconds`.
+   */
   readonly secondsPerTick: number;
   /** Seconds from the start until the music ends, a rest at the end included; 0 when there is nothing to play. */
   readonly length: number;
-}
-
-const WHOLE_NOTE_TICKS = 1024;
-
-/** Seconds in one tick: the tempo names a note value (such as "1/4") and how many of it go in a minute. */
-function secondsPerTick(score: Score): number {
-  const denominator = Number(/^1\/(\d+)$/.exec(score.tempo.unit)?.[1] ?? 4);
-  return 60 / (score.tempo.bpm * (WHOLE_NOTE_TICKS / denominator));
 }
 
 const LETTERS: Readonly<Record<string, number>> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -92,7 +88,8 @@ function chordMidis(name: string): number[] | null {
  * its end. The music ends where its last note or rest does, not at the end of the bar grid of a cut score.
  */
 export function schedulePreview(score: Score, fromTick = 0): PreviewSchedule {
-  const perTick = secondsPerTick(score);
+  const perTick = secondsPerTick(score.tempo);
+  const origin = secondsAtTick(score, fromTick);
   const events: PreviewEvent[] = [];
   let contentEnd = 0;
   for (const [voice, notes] of notesByVoice(score)) {
@@ -114,8 +111,8 @@ export function schedulePreview(score: Score, fromTick = 0): PreviewSchedule {
         kind: "note",
         voice,
         midi: first.midi,
-        at: (first.start - fromTick) * perTick,
-        length: (end - first.start) * perTick,
+        at: secondsAtTick(score, first.start) - origin,
+        length: secondsAtTick(score, end) - secondsAtTick(score, first.start),
       });
     }
   }
@@ -129,11 +126,11 @@ export function schedulePreview(score: Score, fromTick = 0): PreviewSchedule {
       kind: "chord",
       name: chord.name,
       midis,
-      at: (start - fromTick) * perTick,
-      length: (end - start) * perTick,
+      at: secondsAtTick(score, start) - origin,
+      length: secondsAtTick(score, end) - secondsAtTick(score, start),
     });
   });
   events.sort((a, b) => a.at - b.at);
-  const length = events.length === 0 ? 0 : (contentEnd - fromTick) * perTick;
+  const length = events.length === 0 ? 0 : Math.max(0, secondsAtTick(score, contentEnd) - origin);
   return { events, fromTick, secondsPerTick: perTick, length };
 }

@@ -80,6 +80,11 @@ export interface Truncation {
 /** A parsed score. `source` is dialect-private data the core never reads; the dialect uses it to write unchanged text. */
 export interface Score {
   readonly tempo: Tempo;
+  /**
+   * Tempo changes after the opening `tempo`, in tick order. A dialect that can write one fills this; `song2` cannot,
+   * so it is absent there. Positions in seconds count each stretch at the tempo in force in it.
+   */
+  readonly tempoChanges?: ReadonlyArray<{ readonly at: number; readonly tempo: Tempo }>;
   /** Display order: `Vocal` first, then `Ins` when present. */
   readonly voices: ReadonlyArray<string>;
   readonly bars: ReadonlyArray<Bar>;

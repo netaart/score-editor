@@ -1,6 +1,6 @@
 // ABOUTME: Playwright fixtures of seam 5: a harness that drives the test page, a press that taps or clicks, and real touch input.
 // ABOUTME: Tests talk to the page only through window.harness and through what a user can see and do.
-import { test as base, type CDPSession, type Locator, type Page } from "@playwright/test";
+import { test as base, type CDPSession, expect, type Locator, type Page } from "@playwright/test";
 
 export interface Point {
   x: number;
@@ -18,6 +18,85 @@ export async function box(target: Locator) {
 export function vocalOnly(...music: string[]): string {
   const header = ["X:1", "T:", "M:4/4", "L:1/16", "Q:1/4=100", 'V: Vocal clef=treble name="Vocal Melody" snm="Vocal"'];
   return [...header, "K:C", "% a", ...music.flatMap((line) => ["V: Vocal", line]), ""].join("\n");
+}
+
+/** The corner of the lyric track where its pitch column begins, which the lane scrolls under. */
+export const lyricKeys = (root: Locator) => root.locator(".sce-keys");
+
+/** The panel under the lyric track's lane, which holds the unaligned list and the editor. */
+export const lyricPanel = (root: Locator) => root.locator(".sce-lyric-panel");
+
+/** The line a lyric edge drag would land on, drawn in the lane while the pointer is down. */
+export const lyricGuide = (root: Locator) => root.locator(".sce-lyric-guide");
+
+/** The bar a lyric line would take if it were let go, drawn in the lane while the pointer is down. */
+export const lyricDropMark = (root: Locator) => root.locator(".sce-lyric-drop");
+
+/** A grip in the lyric track's unaligned list, which a pointer drags onto bars. */
+export const lyricGrips = (root: Locator) => root.locator(".sce-lyric-grip");
+
+/** One cell of the lyric track's syllable row: a note start with its syllable, or empty when the counts differ. */
+export const lyricSyllableCells = (root: Locator) => root.locator(".sce-lyric-syl");
+
+/** The head of the lyric track: its name, its New line button and its legend. */
+export const lyricHead = (root: Locator) => root.locator(".sce-lyric-head");
+
+/** The scroller the default editor shares between its tracks. */
+export const editorScroller = (page: Page) => page.locator(".sce-scroller");
+
+/** The ground colour the package's UI is drawn on, read from the root of the part the element is in. */
+export const groundOf = (target: Locator) =>
+  target.evaluate((el) => {
+    const root = el.closest(".sce-root");
+    if (!root) throw new Error("the element is not in a part");
+    return getComputedStyle(root).backgroundColor;
+  });
+
+/**
+ * Counts the event listeners on every element the page gains from now on, kept so one that a redraw removed can still be
+ * asked what it listened to: the way to see listeners piling up on a part that draws again.
+ */
+export async function listenerCounter(page: Page) {
+  await page.evaluate(() => {
+    const seen = new Set<Element>();
+    new MutationObserver((records) => {
+      for (const record of records)
+        for (const node of record.addedNodes)
+          if (node instanceof Element) for (const element of [node, ...node.querySelectorAll("*")]) seen.add(element);
+    }).observe(document, { childList: true, subtree: true });
+    window.harness.probes ??= {};
+    window.harness.probes.elements = seen;
+  });
+  const cdp = await page.context().newCDPSession(page);
+  return {
+    /** The listeners on all of those elements, as the browser's debugger counts them. */
+    async listeners() {
+      const { result: list } = await cdp.send("Runtime.evaluate", {
+        expression: "Array.from(window.harness.probes?.elements ?? [])",
+      });
+      if (!list.objectId) throw new Error("no list of elements");
+      const { result: items } = await cdp.send("Runtime.getProperties", {
+        objectId: list.objectId,
+        ownProperties: true,
+      });
+      let total = 0;
+      for (const item of items) {
+        const objectId = /^\d+$/.test(item.name) ? item.value?.objectId : undefined;
+        if (!objectId) continue;
+        total += (await cdp.send("DOMDebugger.getEventListeners", { objectId })).listeners.length;
+      }
+      return total;
+    },
+    detach: () => cdp.detach(),
+  };
+}
+
+/**
+ * Waits until the list `read` gives has `count` entries. The page fills such a list as the editor works (the calls a fake
+ * store was made, the notices a host was sent), so a test waits for it instead of counting once.
+ */
+export async function expectCount(read: () => Promise<ReadonlyArray<unknown>>, count: number) {
+  await expect.poll(async () => (await read()).length).toBe(count);
 }
 
 /** The editing session as the test page exposes it to the helpers below. */
@@ -55,6 +134,8 @@ interface PageLayout {
   replace(options: Record<string, unknown>): Promise<void>;
   replaceDialects(): void;
   mountPart(name: string, hidden?: boolean): void;
+  /** Drives the mounted staff part's play position in seconds, or clears it for null. */
+  setPlayPosition(seconds: number | null): void;
   setSlotHidden(name: string, hidden: boolean): void;
   destroyPart(name: string, times?: number): void;
   roots(): Record<string, string>;
@@ -78,6 +159,7 @@ interface PageProbes {
   vibrations: unknown[];
   pointerId: number | null;
   keysSeen: boolean[];
+  elements?: Set<Element>;
 }
 
 interface PageHarness {
@@ -96,7 +178,7 @@ interface PageHarness {
     readonly playing: boolean;
     readonly tick: number | null;
     readonly from: number | null;
-    start(): Promise<string>;
+    start(fromTick?: number): Promise<string>;
     stop(): void;
   };
   mount(options?: Record<string, unknown>): Promise<void>;

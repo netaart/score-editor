@@ -652,6 +652,28 @@ const drawing = (page: Page) => staffSlot(page).getByRole("img", { name: "The sc
 /** What abcjs drew, by the classes it puts on its elements: they reach through the open shadow root the drawing sits in. */
 const drawnNotes = (page: Page) => staffSlot(page).locator("svg .abcjs-note");
 const drawnRests = (page: Page) => staffSlot(page).locator("svg .abcjs-rest");
+/** The staff view's cursor, in the drawing's shadow root like the notes it stands over. */
+const staffCursor = (page: Page) => staffSlot(page).locator(".sce-staff-cursor");
+/** The x of each bar line abcjs drew, in drawing coordinates. */
+const staffBarXs = (page: Page) =>
+  staffSlot(page)
+    .locator("svg .abcjs-bar")
+    .evaluateAll((nodes) =>
+      nodes
+        .map((node) => (node as SVGGraphicsElement).getBBox())
+        .map((box) => box.x)
+        .sort((a, b) => a - b),
+    );
+/** Where the cursor stands, in pixels in the drawing: the same coordinates as the SVG boxes beside it. */
+async function staffCursorX(page: Page) {
+  const found = await box(staffCursor(page));
+  const drawingAt = await box(drawing(page));
+  return found.x + found.width / 2 - drawingAt.x;
+}
+/** Drives the staff part's play position as a host player does. */
+const setStaffPosition = (page: Page, seconds: number | null) =>
+  page.evaluate((value) => window.harness.layout.setPlayPosition(value), seconds);
+
 const ABCJS_URL = "**/e2e/page/vendor/abcjs.js";
 /** Two frames: whatever a change started in the page, such as a request for abcjs, has been started by then. */
 const framesPass = (page: Page) =>
@@ -763,6 +785,107 @@ test.describe("the staff view", () => {
     expect(await harness.layout.insertionPoint()).toBeNull();
     expect(await harness.layout.canUndo()).toBe(false);
     await expect(drawnNotes(page)).toHaveCount(5);
+  });
+
+  test("puts the host's play position on the bar at that second, mid-bar and at the end, and takes it away for null", async ({
+    page,
+    harness,
+  }) => {
+    // QUARTERS is 4/4 at 100: a bar is 2.4 s, and its two bars have a bar line at the end of each. abcjs may also
+    // draw the line the first bar starts at, so the first drawn line can be the opening one or the end of bar 1.
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page)).toHaveCount(5);
+    const bars = await staffBarXs(page);
+    expect(bars.length).toBeGreaterThanOrEqual(2);
+    const opening = bars.length > 2;
+    const barTwo = bars[opening ? 1 : 0] as number;
+    const end = bars[opening ? 2 : 1] as number;
+
+    await setStaffPosition(page, 0);
+    await expect(staffCursor(page)).toBeVisible();
+    const start = await staffCursorX(page);
+    if (opening) expect(Math.abs(start - (bars[0] as number))).toBeLessThan(4);
+    else {
+      expect(start).toBeGreaterThan(0);
+      expect(start).toBeLessThan(barTwo);
+    }
+
+    await setStaffPosition(page, 2.4);
+    expect(Math.abs((await staffCursorX(page)) - barTwo)).toBeLessThan(4);
+
+    // 3.6 s is half way through the second bar, which is where the cursor is drawn.
+    await setStaffPosition(page, 3.6);
+    expect(Math.abs((await staffCursorX(page)) - (barTwo + (end - barTwo) / 2))).toBeLessThan(4);
+
+    await setStaffPosition(page, 1000);
+    expect(Math.abs((await staffCursorX(page)) - end)).toBeLessThan(4);
+
+    await setStaffPosition(page, null);
+    await expect(staffCursor(page)).toBeHidden();
+  });
+
+  test("follows a tempo change in the middle of the score: 0.5 s into the second bar is an eighth of it at 60 BPM", async ({
+    page,
+    harness,
+  }) => {
+    // The first bar at 120 lasts 2 s; from bar 2 the tempo is 60, so the bar lasts 4 s. 2.5 s is an eighth into bar 2.
+    await harness.layout.open({
+      score: { text: vocalOnly("C4D4E4F4|G4A4B4c4|C16|") },
+      parts: ["staff"],
+      tempoChanges: [{ at: 1024, tempo: { unit: "1/4", bpm: 60 } }],
+    });
+    await expect(drawnNotes(page)).toHaveCount(9);
+    const bars = await staffBarXs(page);
+    expect(bars.length).toBeGreaterThanOrEqual(3);
+    const opening = bars.length > 3;
+    const barTwo = bars[opening ? 1 : 0] as number;
+    const barThree = bars[opening ? 2 : 1] as number;
+
+    await setStaffPosition(page, 2.5);
+
+    const expected = barTwo + (barThree - barTwo) / 8;
+    expect(Math.abs((await staffCursorX(page)) - expected)).toBeLessThan(4);
+  });
+
+  test("shows the preview on the same cursor, from the start while it plays, and the host's position again when it stops", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff", "synth"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+    await setStaffPosition(page, 2.4);
+    const hostX = await staffCursorX(page);
+
+    await press(slot(page, "synth").getByRole("button"));
+    await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().from)).toBe(0);
+    const startX = await staffCursorX(page);
+    await expect
+      .poll(() => staffCursorX(page), { message: "the cursor follows the preview" })
+      .toBeGreaterThan(startX + 10);
+
+    await press(slot(page, "synth").getByRole("button"));
+    await expect
+      .poll(async () => Math.abs((await staffCursorX(page)) - hostX), { message: "the host's position is back" })
+      .toBeLessThan(2);
+  });
+
+  test("starts the preview from the note a person presses on the staff", async ({ page, harness, press }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff", "synth"] });
+    await expect(drawnNotes(page)).toHaveCount(5);
+
+    // The fifth note is the whole note G at the start of bar 2, tick 1024 at 4/4. Press where the note is drawn,
+    // not on a child of it: a staff line can be over the note head and is what the pointer lands on.
+    const note = await box(drawnNotes(page).nth(4));
+    const staff = await box(drawing(page));
+    await press(drawing(page), {
+      x: note.x + note.width / 2 - staff.x,
+      y: note.y + note.height / 2 - staff.y,
+    });
+
+    await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().from)).toBe(1024);
+    await expect(staffCursor(page)).toBeVisible();
+    await page.evaluate(() => window.harness.previewPlayer().stop());
   });
 
   test("scrolls with the keyboard when the drawing is wider than its box: the region takes the focus and the arrow moves it", async ({

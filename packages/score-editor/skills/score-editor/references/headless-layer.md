@@ -25,11 +25,11 @@ interface SongProject {
 the unaligned area. Only that binding is stored; syllables, note onsets and whether their counts are equal are computed.
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
-(`TICKS_PER_QUARTER` is 256): `tempo`, `voices`, `bars`, `keys`, `sections`, `notes`, `chords`, `truncation`,
-`hasChords`, an optional `unitTicks`, and a dialect-private `source` the core never reads. `unitTicks` is how many
-ticks one written duration number lasts, so a command can ask the dialect's `constraints.durations` what it can
-write; a score that does not state it is refused by the note commands with `unit-unknown`.
-`noteId(voice, start)` builds the stable id the model uses.
+(`TICKS_PER_QUARTER` is 256): `tempo`, an optional `tempoChanges` of `{ at, tempo }` points, `voices`, `bars`, `keys`,
+`sections`, `notes`, `chords`, `truncation`, `hasChords`, an optional `unitTicks`, and a dialect-private `source` the
+core never reads. `unitTicks` is how many ticks one written duration number lasts, so a command can ask the dialect's
+`constraints.durations` what it can write; a score that does not state it is refused by the note commands with
+`unit-unknown`. `noteId(voice, start)` builds the stable id the model uses.
 
 `Bar`, `Note`, `Chord`, `Section`, `Tempo`, `Meter`, `KeyChange` and `Truncation` describe those parts. `Meter` is a
 fraction of a whole note; `Note.midi` is 0-127 or `null` for a rest; `Note.tie` continues into the next note of the
@@ -135,6 +135,28 @@ The rules — what a label matches, where unaligned lines go, what counts as a s
 lines and when `lyrics` is rewritten — are the contract in the package README's
 [lyrics section](../../../README.md#lyrics-on-the-song-project). Do not restate them here.
 
+### The rules of the lyric track
+
+The types are `LyricRow`, `LyricEdge`, `LyricBoundaryDrag`, `LyricBoundaryMove`, `LyricBoundaryPlan`, `LyricDrop`, `LyricDropPlan` and `LyricSplit`.
+
+A host that draws its own lyric view reuses what the default track does, with no DOM. `lyricRows(score, lines)` gives each
+line (`LyricRow`) its place in the list, the phrase it sits on and its alignment, with a phrase that does not fit the
+score counted as unaligned. `lyricBoundaryPlan(score, lines, { line, edge, tick })` says where a dragged edge of a phrase
+lands (the nearest bar line, held inside the line's section, one bar at least, clear of other lines) and the
+`setLyricLinePhrase` commands to send; a line that shares the edge moves with it, and the one that gives up bars goes
+first. `lyricDropPlan` gives a line one bar, the bar under a tick. `lyricSplitCommand` builds the `splitLyricLine`
+command for a caret. `barLineTick(score, index)` gives the tick of the bar line a plan's `boundary` names, to draw a guide
+there; an index before the first bar gives the start of the score and one past the last bar its end. Send a plan's
+commands as one list (`applyCommandList`, or `session.dispatchAll`) so one gesture is one undo step.
+
+```ts
+import { applyCommandList, lyricBoundaryPlan, lyricLinesOf } from "@neta-art/score-editor";
+
+const lines = lyricLinesOf(project, score);
+const plan = lyricBoundaryPlan(score, lines, { line: 1, edge: "end", tick: 5 * 1024 }); // null if line 1 is unaligned
+if (plan && plan.commands.length > 0) project = applyCommandList(song2Dialect, project, plan.commands).project;
+```
+
 ## The dialect and its constraints
 
 `ScoreDialect` is `{ id, constraints, parse, serialize, check }`. `DialectConstraints` declares the voices, keys,
@@ -151,7 +173,7 @@ machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-ref
 browser player and the playhead are in [view-parts.md](view-parts.md#the-synth-preview).
 
 ```ts
-import { schedulePreview } from "@neta-art/score-editor";
+import { schedulePreview, tickAtSeconds } from "@neta-art/score-editor";
 import type { PreviewChordEvent, PreviewEvent, PreviewNoteEvent, PreviewSchedule } from "@neta-art/score-editor";
 
 const { score } = song2Dialect.parse(project.score);
@@ -165,14 +187,19 @@ if (score) {
     }
   }
   console.log(schedule.length, "seconds; a tick lasts", schedule.secondsPerTick);
+  console.log("the host's player is at tick", tickAtSeconds(score, 12.5));
 }
 ```
 
 - Events are the `Vocal` and `Ins` notes (a tied chain once, from its first note to the end of its last; a rest is
   silent) and each chord span, in time order. `at` and `length` are seconds counted from `fromTick`.
-- Seconds come from the score's tempo, of which a score has one (`score.tempo`; the format has no tempo changes).
-  Positions come from the score's own ticks, so a bar in 3/4 or 6/8 and a change of meter are already in them.
+- Seconds come from the score's tempo. A score has an opening `tempo` and may carry `tempoChanges`, each `{ at, tempo }`
+  from a tick on; each stretch between changes is counted at its own tempo. The `song2` format has no tempo change, so
+  its scores carry only `tempo`. Positions come from the score's own ticks, so a bar in 3/4 or 6/8 and a change of
+  meter are already in them.
 - From a start tick, a note that began before it is not sounded again, and the chord in force at the start is heard to
   its end. A cut score ends where its music ends, not at the end of the bar the cut is in. `length` is 0 when there is
   nothing to play.
-- A position in the score is `fromTick + seconds / secondsPerTick`, which is how the player places its playhead.
+- `tickAtSeconds(score, seconds)` is the reverse for a host player's clock: the tick at that time from the start, a
+  tempo change included, the last tick past the end and the first at or before zero. `secondsPerTick` is the opening
+  tempo's, so use `tickAtSeconds` rather than dividing when a score has changes.

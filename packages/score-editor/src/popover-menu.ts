@@ -10,6 +10,27 @@ export interface PopoverMenu {
   rule(): void;
 }
 
+/** Where a popover hangs: the left edge of what opens it, and the line it sits 4px under (a button's box, or a band's). */
+export interface PopoverAnchor {
+  readonly left: number;
+  readonly bottom: number;
+}
+
+/** Puts a popover that is about to open under its anchor, on the anchor's left edge. */
+export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement): void {
+  popover.style.left = `${anchor.left}px`;
+  popover.style.top = `${anchor.bottom + 4}px`;
+}
+
+/** Moves an open popover left until it is inside the window, 8px from its edge, when it ran off to the right. */
+export function nudgeIntoWindow(popover: HTMLElement): void {
+  const view = popover.ownerDocument.defaultView;
+  if (!view) return;
+  const rect = popover.getBoundingClientRect();
+  const overflow = rect.right - (view.innerWidth - 8);
+  if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
+}
+
 export interface PopoverMenuOptions {
   /** The item that takes the focus when the menu opens; the first item when this gives none. */
   initialFocus?(items: ReadonlyArray<HTMLButtonElement>): HTMLElement | undefined;
@@ -17,21 +38,16 @@ export interface PopoverMenuOptions {
    * Where the menu hangs, when that is not the button's own box: its left edge, and the line it sits 4px under. A button
    * that is wider than the part of it in view, such as a band, says where its visible start is.
    */
-  anchor?(): { readonly left: number; readonly bottom: number };
+  anchor?(): PopoverAnchor;
 }
 
 /**
- * Places a popover under `anchor`, moved left when its right edge would run off the window. The menu and the section
- * form hang from the same point, so they place themselves the same way.
+ * Places an open popover under `anchor` and inside the window. The menu and the section form hang from the same point,
+ * so they place themselves the same way.
  */
-export function placePopover(element: HTMLElement, anchor: { readonly left: number; readonly bottom: number }): void {
-  element.style.left = `${anchor.left}px`;
-  element.style.top = `${anchor.bottom + 4}px`;
-  const view = element.ownerDocument.defaultView;
-  if (!view) return;
-  const box = element.getBoundingClientRect();
-  const across = box.right - (view.innerWidth - 8);
-  if (across > 0) element.style.left = `${Math.max(8, box.left - across)}px`;
+export function placePopover(element: HTMLElement, anchor: PopoverAnchor): void {
+  placeUnder(anchor, element);
+  nudgeIntoWindow(element);
 }
 
 /**
@@ -57,12 +73,20 @@ export function mountPopoverMenu(
   button.popoverTargetAction = "toggle";
 
   menu.addEventListener(
+    "beforetoggle",
+    (event) => {
+      if ((event as ToggleEvent).newState !== "open") return;
+      placeUnder(options.anchor?.() ?? button.getBoundingClientRect(), menu);
+    },
+    { signal },
+  );
+  menu.addEventListener(
     "toggle",
     (event) => {
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      placePopover(menu, options.anchor?.() ?? button.getBoundingClientRect());
+      nudgeIntoWindow(menu);
       (options.initialFocus?.(items) ?? items[0])?.focus();
     },
     { signal },
