@@ -84,13 +84,6 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
-  const bars = mountBarMenu(row, session, {
-    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
-    ...(options.onChooseBars === undefined ? {} : { onChooseBars: options.onChooseBars }),
-  });
-  const meter = mountMeterControl(row, session, {
-    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
-  });
   const spacer = create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -119,6 +112,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
+  // After the preview control, so the tab order of the editing controls that came before it is unchanged.
+  const bars = mountBarMenu(row, session, {
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+    ...(options.onChooseBars === undefined ? {} : { onChooseBars: options.onChooseBars }),
+  });
+  const meter = mountMeterControl(row, session, {
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+  });
 
   const abort = new AbortController();
   const { signal } = abort;
