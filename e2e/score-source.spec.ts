@@ -1001,3 +1001,119 @@ test.describe("the save control re-chooses with the box, the language and the fo
     expect(clean.height, "Save does not grow a narrow fine-pointer toolbar").toBeLessThanOrEqual(base);
   });
 });
+
+test.describe("a host-driven save", () => {
+  test("writes an edited file through the source, adopts its version and clears the unsaved state", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openFile(harness);
+    await deleteD(page, press);
+
+    const result = await harness.save();
+
+    expect(result).toBe("saved");
+    expect(await harness.scoreCalls()).toEqual([
+      { method: "save", text: WITHOUT_D, expected: "file-1", result: "save-1" },
+    ]);
+    expect(await harness.hasUnsavedChanges()).toBe(false);
+    expect((await harness.scoreFile())?.file).toEqual({ text: WITHOUT_D, version: "save-1" });
+    await expect(unsavedPill(page)).toBeHidden();
+    await expect(saveButton(page)).toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("saves the real two-voice score as the text it now holds", async ({ page, harness, press }) => {
+    await harness.mount({ score: { text: REAL_SCORE }, scoreFile: { name: "real.abc" } });
+    await press(page.locator('[aria-label="Vocal"] [role="listitem"]').first());
+    await page.keyboard.press("Delete");
+
+    const result = await harness.save();
+
+    expect(result).toBe("saved");
+    const calls = await harness.scoreCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ method: "save", expected: "file-1", result: "save-1" });
+    expect(calls[0]?.text).not.toBe(REAL_SCORE);
+    expect(calls[0]?.text).toContain("V: Ins");
+    expect(await harness.hasUnsavedChanges()).toBe(false);
+  });
+
+  test("a second save while one is in flight writes nothing and says unchanged", async ({ page, harness, press }) => {
+    await openFile(harness);
+    await deleteD(page, press);
+    await harness.holdScoreSave();
+
+    const first = harness.save();
+    await expect(page.getByRole("button", { name: "Saving…", exact: true })).toBeVisible();
+    const second = await harness.save();
+    expect(second).toBe("unchanged");
+    await harness.releaseScoreSave();
+    expect(await first).toBe("saved");
+    expect((await harness.scoreCalls()).map((call) => call.method)).toEqual(["save"]);
+  });
+
+  test("a failed write leaves the file unsaved and shows the failed state", async ({ page, harness, press }) => {
+    await openFile(harness);
+    await deleteD(page, press);
+    await harness.failScoreNext("save");
+
+    const result = await harness.save();
+
+    expect(result).toBe("failed");
+    expect(await harness.hasUnsavedChanges()).toBe(true);
+    await expect(page.locator(".sce-save-button")).toHaveAccessibleName("Save again");
+    await expect(page.locator(".sce-save-state")).toHaveText("Save failed");
+    expect((await harness.scoreCalls())[0]).toMatchObject({ method: "save", result: "failed" });
+  });
+
+  test("in conflict it writes nothing and the conflict choices stay", async ({ page, harness, press }) => {
+    await openFile(harness);
+    await deleteD(page, press);
+    await harness.externalScore(THEIR_SCORE);
+
+    const result = await harness.save();
+
+    expect(result).toBe("conflict");
+    await expect(conflictStrip(page)).toBeVisible();
+    await expect(chooseButton(page)).toBeVisible();
+    expect((await harness.scoreFile())?.file).toEqual({ text: THEIR_SCORE, version: "other-1" });
+    expect((await harness.scoreCalls()).filter((call) => call.method === "save")).toEqual([
+      { method: "save", text: WITHOUT_D, expected: "file-1", result: "conflict" },
+    ]);
+  });
+
+  test("a generated score writes nothing and does not call Save as", async ({ page, harness, press }) => {
+    await harness.mount({ score: { text: QUARTERS }, saveAs: true });
+    await deleteD(page, press);
+
+    const result = await harness.save();
+
+    expect(result).toBe("unchanged");
+    expect(await harness.scoreCalls()).toEqual([]);
+    expect(await page.evaluate(() => window.harness.saveAs)).toEqual([]);
+  });
+
+  test("a read-only editor writes nothing", async ({ page, harness, press }) => {
+    await openFile(harness);
+    await deleteD(page, press);
+    await harness.update({ editable: false });
+
+    const result = await harness.save();
+
+    expect(result).toBe("unchanged");
+    expect(await harness.scoreCalls()).toEqual([]);
+    expect(await harness.hasUnsavedChanges()).toBe(true);
+  });
+
+  test("after destroy it writes nothing", async ({ page, harness, press }) => {
+    await openFile(harness);
+    await deleteD(page, press);
+    await harness.destroy();
+
+    const result = await harness.save();
+
+    expect(result).toBe("unchanged");
+    expect(await harness.scoreCalls()).toEqual([]);
+  });
+});
