@@ -72,7 +72,11 @@ change. The tests in the repository check that the list stays complete.
 | `barLineTick` | core | The tick of a bar line, which is what a `LyricBoundaryPlan`'s `boundary` names; a line before the first bar is the start of the score, one past the last bar its end. |
 | `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions` and returns a `LyricTrackPart`. |
 | `changeLog` | core | Reads the original and current projects with a dialect and returns one sentence per kind of change, in the chosen language. |
+| `changeLogEntries` | core | The same sentences as `changeLog`, each with the 1-based `bars` it names (empty when it names none), for a review that highlights the bars the last edit rewrote. |
+| `preHandoffNotices` | core | The four pre-handoff notices a project carries: no sections, syllables far from the notes, Vocal outside 60–82, a melody project with chords; each a host `Notice` in the chosen language. |
+| `vocalRange` | core | Vocal's tie-chain lower median pitch and whether it is inside the singable range 60–82, as `VocalRange`. |
 | `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`. |
+| `mountSourceLabel` | core | Mounts the source label view part: "Generated score (original kept)" or "Score file (saves to the file)", following the session's language and a source read through its getter; takes `SourceLabelOptions` and returns `SourceLabelPart`. |
 
 ## Constants and values
 
@@ -83,7 +87,8 @@ change. The tests in the repository check that the list stays complete.
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
 | `LYRICS_MAX_CHARACTERS` | core | 4000; the limit song2 generation accepts for the joined `lyrics` text. |
-| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`, `"score-save-failed"`, `"score-load-failed"`, `"handoff-not-sent"`. |
+| `SINGABLE_RANGE` | core | `{ min: 60, max: 82 }`: the inclusive MIDI range `vocalRange` and the pre-handoff notice share. |
+| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`, `"score-save-failed"`, `"score-load-failed"`, `"handoff-not-sent"`, `"prehandoff-no-sections"`, `"prehandoff-syllables-far"`, `"prehandoff-vocal-range"`, `"prehandoff-melody-chords"`. |
 | `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `NOTE_TOOLS` | core | The built-in note tools as `ScoreTool`s: split at the insertion point, chop on the grid, join same pitch, legato, reverse, flip, snap to key, length ×2 and ÷2, set length and fit into bars. |
@@ -102,8 +107,11 @@ change. The tests in the repository check that the list stays complete.
 | `ProjectField`, `RequiredInput` | A project field the host may mark required for a handoff: `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
+| `ChangeLogEntry` | One `changeLogEntries` sentence and the 1-based `bars` it names. |
+| `VocalRange` | `{ medianMidi, singable }`, the register measure `vocalRange` and the pre-handoff notice read. |
+| `SourceLabelOptions`, `SourceLabelPart` | What `mountSourceLabel` reads (`{ source, before? }`) and returns (`refresh()` and `destroy()`). |
 | `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
-| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, dispatch, tools, history, subscribe. |
+| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, the last edit's rewritten bars, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
 | `BarSelection` | A chosen run of bars: `{ from, count }`, `from` base 0. UI state, outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |

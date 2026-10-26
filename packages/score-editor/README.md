@@ -46,7 +46,7 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 
 ## Commands
 
-`applyScoreCommand` takes one `ScoreCommand` and changes the score text; it refuses a `ProjectCommand`. `applyProjectCommand` takes a `ScoreCommand` or a `ProjectCommand`, the one-word name of the second union, for edits to the project itself. A refusal is what the headless layer above describes; a notice is the third, non-failure diagnostic class, and it comes with the changed project. `isNoticeDiagnostic` tells it from a refusal.
+`applyScoreCommand` takes one `ScoreCommand` and changes the score text; it refuses a `ProjectCommand`. `applyProjectCommand` takes a `ScoreCommand` or a `ProjectCommand`, the one-word name of the second union, for edits to the project itself. A refusal is what the headless layer above describes; a notice is the third, non-failure diagnostic class, and it comes with the changed project. `isNoticeDiagnostic` tells it from a refusal. A successful result also carries `rewrittenBars`, the 1-based bars the command rewrote, omitted when none was; a tie change names the bar on each side of the barline, a tempo change names none, and `session.rewrittenBars` keeps the last edit's list through undo and redo.
 
 A cut score's `Truncation` has an optional `unfinishedChord: true` when the cut ends inside an unfinished chord string (RULES.md C8 and X4). It is absent otherwise, and it is why `hasChords` stays true for such a tail; removing all chords drops both the flag and the tail bytes.
 
@@ -316,6 +316,8 @@ visible box when it appears. Restore original asks about the last saved version,
 its answer is **Go back to last save**; it resets the history, so Undo cannot bring the changes back. The change log and
 the handoff use the last saved project as their original. No draft call is made, even when `drafts` is also given.
 
+The toolbar's first strip item is the source label: **Generated score (original kept)** or **Score file (saves to the file)**, in the interface language (「生成的乐谱（原版保留）」/「乐谱文件（存回原文件）」). It follows the language and a source that changes after Save as through `update`, and it is first in the strip, so it is in sight before the strip scrolls; it adds no toolbar row at 1280, 412, 360 or 320. A host that lays out its own chrome mounts it with `mountSourceLabel(el, session, { source: () => options.source })`.
+
 A **generated score** (the absent source) keeps drafts as before and adds **Save as…** while `onSaveAs` is given; the
 callback receives the current score text. `onSaveAs` is not shown in read-only mode.
 
@@ -400,7 +402,11 @@ const instruction = handoffInstruction({
 });
 ```
 
+`changeLogEntries` is the structured form: the same sentences in order, each with the 1-based bars it names. The review uses it to mark the entries that name a bar the last edit rewrote, with the accent line and tint; `changeLog` stays the string list.
+
 `handoffInstruction` writes the prefilled text: the title, the request to regenerate with song2 and pass the attached score through `--text`, the final style description and joined lyrics (already synced, not to be changed), the score mode and the seed when there is one, and the change log. The joined lyrics come from the current score and lyric lines, not from the stored `lyrics` field alone.
+
+`preHandoffNotices(dialect, project, language)` returns the four notices a project carries before a handoff: no section markers, the whole song's syllable count far from its note count (more than one syllable per lyric line away), Vocal's lower median outside the singable range 60-82, and a melody project with chords. The review shows one line for each above its actions, and follows edits while it stays open. The editor also sends each through `notify` once each time the review opens, with the codes `prehandoff-no-sections`, `prehandoff-syllables-far`, `prehandoff-vocal-range` and `prehandoff-melody-chords`, so a host that toasts every notice may skip these: the review already shows them. A project with none shows no line and sends nothing.
 
 With `onHandoff`, and while the editor is editable, the toolbar has a **Regenerate…** button in the strip after Restore original and before the song controls. It opens a native popover headed **Check before regenerating**, with the change log and the action **Regenerate with this version**; the focus starts on Cancel. Pressing the action closes the popover, saves the draft through the keeper's `handoff()` so the draft carries the handoff hash, and then calls the host with a `HandoffPayload`:
 
