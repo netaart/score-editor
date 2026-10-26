@@ -50,7 +50,13 @@ describe("package entries in a node environment", () => {
     for (const name of functions) expect(typeof editor[name as keyof typeof editor], name).toBe("function");
     expect(typeof editor.TICKS_PER_QUARTER).toBe("number");
     expect(typeof editor.DRAFT_FORMAT_VERSION).toBe("number");
-    expect([...editor.NOTICE_CODES]).toEqual(["command-refused", "draft-source-changed", "draft-save-failed"]);
+    expect([...editor.NOTICE_CODES]).toEqual([
+      "command-refused",
+      "draft-source-changed",
+      "draft-save-failed",
+      "score-save-failed",
+      "score-load-failed",
+    ]);
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });
 
