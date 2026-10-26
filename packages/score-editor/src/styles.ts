@@ -3,6 +3,7 @@
 import { MAX_LABEL_STEP } from "./arrangement";
 import { boxCss } from "./box-styles";
 import { draftCss } from "./draft-styles";
+import { handoffCss } from "./handoff-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
 
@@ -1058,7 +1059,8 @@ ${labelThinning()}
   pointer-events: none;
 }
 ${boxCss}${lyricCss}
-${draftCss}`;
+${draftCss}
+${handoffCss}`;
 
 interface Injection {
   remove(): void;
