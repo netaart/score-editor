@@ -41,7 +41,7 @@ export interface ResizeNotesCommand {
 export type MoveResizeCommand = MoveNotesCommand | ResizeNotesCommand;
 
 /** One event as the user sees it: a note with its whole tie chain, or one rest. */
-interface NoteSpan {
+export interface NoteSpan {
   readonly voice: string;
   readonly start: number;
   readonly end: number;
@@ -78,7 +78,7 @@ export function gridStepOf(grid: Grid): number | null {
   return grid.dotted === true ? (base * 3) / 2 : base;
 }
 
-function gridLabel(grid: Grid): string {
+export function gridLabel(grid: Grid): string {
   return `1/${String(grid.value)}`;
 }
 
@@ -99,7 +99,7 @@ function canWriteUnits(units: number, durations: DurationSet): boolean {
 }
 
 /** True when one grid step is a whole number of the score's written units and that many units are writable. */
-function gridAllowed(score: Score, step: number, constraints: DialectConstraints): boolean {
+export function gridAllowed(score: Score, step: number, constraints: DialectConstraints): boolean {
   const unitTicks = score.unitTicks;
   if (unitTicks === undefined || !Number.isInteger(step) || step <= 0) return false;
   if (!Number.isInteger(unitTicks) || unitTicks <= 0 || step % unitTicks !== 0) return false;
@@ -116,7 +116,7 @@ export function isGridAllowed(score: Score, grid: Grid, constraints: DialectCons
  * The notes of one voice grouped into what the user sees as one note: a pitched note and every note its tie continues
  * into, or one rest. The voice's notes are passed already sorted, so `tieChain` does not sort them again per chain.
  */
-function spansOf(score: Score, voice: string): NoteSpan[] {
+export function spansOf(score: Score, voice: string): NoteSpan[] {
   const notes = score.notes.filter((note) => note.voice === voice).sort((left, right) => left.start - right.start);
   const spans: NoteSpan[] = [];
   let index = 0;
@@ -157,7 +157,7 @@ function barIndexAt(score: Score, tick: number): number {
 }
 
 /** Writes an interval as the note or rest pieces the dialect can write, split at every bar line and tied between. */
-function piecesFor(score: Score, span: NoteSpan, unitTicks: number, durations: DurationSet): Note[] {
+export function piecesFor(score: Score, span: NoteSpan, unitTicks: number, durations: DurationSet): Note[] {
   const pieces: Note[] = [];
   let at = span.start;
   while (at < span.end) {
@@ -191,7 +191,7 @@ function restSpan(voice: string, start: number, end: number): NoteSpan {
  * How far a voice's material reaches in each bar: a complete bar's end, or the last finished token of a bar where
  * the voice is cut. A bar with no material for that voice has no entry, so an untouched short voice grows no rests.
  */
-function fillEnds(score: Score): Map<string, number> {
+export function fillEnds(score: Score): Map<string, number> {
   const ends = new Map<string, number>();
   for (const note of score.notes) {
     const key = `${note.voice}:${note.bar}`;
@@ -211,7 +211,7 @@ function fillEnds(score: Score): Map<string, number> {
 }
 
 /** Fills every gap of one voice in one bar with rests, including the space a moved or shortened note leaves. */
-function fillVoice(
+export function fillVoice(
   score: Score,
   voice: string,
   notes: Note[],
@@ -245,7 +245,7 @@ function fillVoice(
 }
 
 /** Clears a tie whose continuation is gone, is a rest, or has another pitch; RULES.md P10 and P12. */
-function repairTies(score: Score, notes: Note[], affected: ReadonlySet<string>): Note[] {
+export function repairTies(score: Score, notes: Note[], affected: ReadonlySet<string>): Note[] {
   const original = new Map(score.notes.map((note) => [note.id, note]));
   const originalNext = new Map<string, Note>();
   for (const voice of score.voices) {
@@ -308,7 +308,7 @@ function splitEventAt(notes: Note[], at: number, unitTicks: number, durations: D
 }
 
 /** Splits every event that a mid-bar key change now falls inside, so `[K:...]` has a token boundary (W7). */
-function splitAtKeyChanges(score: Score, notes: Note[], unitTicks: number, durations: DurationSet): Note[] {
+export function splitAtKeyChanges(score: Score, notes: Note[], unitTicks: number, durations: DurationSet): Note[] {
   for (const change of score.keys) {
     if (change.at <= 0) continue;
     // A key change is shared by both voices, so every event still crossing it needs a boundary, not just the first.
@@ -320,7 +320,7 @@ function splitAtKeyChanges(score: Score, notes: Note[], unitTicks: number, durat
 }
 
 /** Keeps every chord at its position and points it at the Vocal event that now starts there, splitting one if needed. */
-function placeChords(
+export function placeChords(
   score: Score,
   notes: Note[],
   unitTicks: number,

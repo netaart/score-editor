@@ -7,6 +7,7 @@ import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./command
 import { type MoveNotesCommand, type ResizeNotesCommand, runNoteCommand } from "./commands-notes";
 import { runSectionCommand } from "./commands-sections";
 import { noteAt, tieChain } from "./commands-shared";
+import { type NoteToolCommand, runNoteToolCommand } from "./commands-tools";
 import { runTruncationCommand } from "./commands-truncation";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
@@ -37,7 +38,8 @@ export type ScoreCommand =
   | { readonly type: "renameSection"; readonly section: number; readonly name: string }
   | { readonly type: "nameSection"; readonly bar: number; readonly name: string }
   | MoveNotesCommand
-  | ResizeNotesCommand;
+  | ResizeNotesCommand
+  | NoteToolCommand;
 
 export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
@@ -117,5 +119,16 @@ export function runScoreCommand(
     case "moveNotes":
     case "resizeNotes":
       return runNoteCommand(score, command, constraints);
+    case "splitNotes":
+    case "chopNotes":
+    case "joinNotes":
+    case "legatoNotes":
+    case "reverseNotes":
+    case "flipNotes":
+    case "snapNotesToKey":
+    case "scaleNoteLengths":
+    case "setNoteLength":
+    case "fitNotesToRange":
+      return runNoteToolCommand(score, command, constraints);
   }
 }

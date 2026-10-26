@@ -2,14 +2,33 @@
 // ABOUTME: Tools never touch a session or the DOM; the session and the preview apply the commands their function returns.
 import { applyProjectCommand } from "./apply";
 import type { ScoreCommand } from "./commands";
+import { type Grid, gridStepOf } from "./commands-notes";
 import type { ProjectCommand } from "./commands-project";
 import { type Diagnostic, isNoticeDiagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
-import type { SongProject } from "./score";
+import type { Score, SongProject } from "./score";
 import type { Language } from "./types";
 
 /** A tool's display name in both interface languages. */
 export type ToolText = Readonly<Record<Language, string>>;
+
+/** The groups the Tools panel lists: the spec's four, and the one a tool without a group falls into. */
+export const TOOL_GROUPS = ["note", "quantize", "transform", "generate"] as const;
+
+/** A group of the Tools panel. A tool declared without one is listed under "more", which the panel shows only when it has a tool. */
+export type ToolGroup = (typeof TOOL_GROUPS)[number] | "more";
+
+/**
+ * The UI state a tool may read besides its own arguments. It is passed to the commands builder, never read from a session,
+ * so a tool stays a pure function: the grid the result lands on, and the insertion point a split uses.
+ */
+export interface ToolContext {
+  readonly grid: Grid;
+  /** The tick of the session's insertion point, or null when none is placed. */
+  readonly insertionPoint: number | null;
+}
+
+const DEFAULT_TOOL_CONTEXT: ToolContext = { grid: { value: 4 }, insertionPoint: null };
 
 /** The value a tool parameter can carry. */
 export type ToolParameterValue = string | number | boolean;
@@ -58,12 +77,17 @@ export type ToolCommandBuilder = (
   project: SongProject,
   selection: ReadonlyArray<string>,
   values: ToolParameterValues,
+  context: ToolContext,
 ) => ReadonlyArray<ScoreCommand>;
 
 /** A custom tool: identity, display name, optional parameter declaration, and the pure function that builds its commands. */
 export interface ScoreTool {
   readonly id: string;
   readonly name: ToolText;
+  /** One muted line under the name in the panel, saying what the tool does and what it needs. */
+  readonly description?: ToolText;
+  /** The group the panel lists it under; absent means "more". */
+  readonly group?: ToolGroup;
   readonly parameters?: ReadonlyArray<ToolParameter>;
   readonly commands: ToolCommandBuilder;
 }
@@ -292,22 +316,108 @@ function failure(
   return { ok: false, project, diagnostics, commands };
 }
 
+/** One pitched tie chain of a score: the note as a person sees it, from the start of its first piece to the end of its last. */
+interface ToolSpan {
+  readonly voice: string;
+  readonly start: number;
+  readonly end: number;
+  readonly midi: number;
+}
+
+function pitchedSpans(score: Score): ToolSpan[] {
+  const spans: ToolSpan[] = [];
+  for (const voice of score.voices) {
+    const notes = score.notes
+      .filter((note) => note.voice === voice && note.midi !== null)
+      .sort((a, b) => a.start - b.start);
+    for (let index = 0; index < notes.length; index += 1) {
+      const first = notes[index] as (typeof notes)[number];
+      let last = first;
+      while (last.tie) {
+        const next = notes[index + 1];
+        if (next === undefined || next.start !== last.start + last.duration || next.midi !== last.midi) break;
+        index += 1;
+        last = next;
+      }
+      spans.push({ voice, start: first.start, end: last.start + last.duration, midi: first.midi as number });
+    }
+  }
+  return spans;
+}
+
+function spanKey(span: ToolSpan): string {
+  return `${span.voice}:${span.start}:${span.end}:${span.midi}`;
+}
+
+/**
+ * A tool's result must keep the score's rules the commands already keep for their own edits: one note at a time in a
+ * voice, and every note it creates or changes starting and ending on the grid in force. A tool that composes commands in
+ * a way that breaks either is refused whole, so the score and its history stay as they were.
+ */
+function toolResultDiagnostic(
+  tool: ScoreTool,
+  before: SongProject,
+  after: SongProject,
+  dialect: ScoreDialect,
+  context: ToolContext,
+): Diagnostic | undefined {
+  const read = dialect.parse(after.score);
+  const score = read.score;
+  if (score === null) return undefined;
+  const spans = pitchedSpans(score);
+
+  let reached = -1;
+  let voice = "";
+  for (const span of [...spans].sort((a, b) => a.voice.localeCompare(b.voice) || a.start - b.start)) {
+    if (span.voice !== voice) {
+      voice = span.voice;
+      reached = -1;
+    }
+    if (span.start < reached) return { code: "tool-result", params: { toolId: tool.id, reason: "overlap" }, at: {} };
+    reached = Math.max(reached, span.end);
+  }
+
+  const step = gridStepOf(context.grid);
+  if (step === null) return undefined;
+  const original = dialect.parse(before.score).score;
+  const known = new Set(original === null ? [] : pitchedSpans(original).map(spanKey));
+  for (const span of spans) {
+    if (known.has(spanKey(span))) continue;
+    if (span.start % step !== 0 || (span.end - span.start) % step !== 0) {
+      return { code: "tool-result", params: { toolId: tool.id, reason: "grid" }, at: {} };
+    }
+  }
+  return undefined;
+}
+
 /** Validates, builds once, resolves the dialect, and applies the commands: the path a preview and a run share. */
 export function applyToolRequest(
   tool: ScoreTool,
   request: ToolRequest,
   source: DialectRegistry | ScoreDialect,
+  context: ToolContext = DEFAULT_TOOL_CONTEXT,
 ): ToolResult {
   const checked = validateToolParameters(tool, request.values);
   if (!checked.ok) return failure(request.project, checked.diagnostics, []);
   if (typeof tool.commands !== "function") return failure(request.project, [commandsDiagnostic(tool)], []);
 
-  const commands = tool.commands(request.project, request.selection, checked.values);
+  // A tool that declares the context parameter receives it; a 0.1.0-shaped tool with three parameters is called as it was.
+  const three = tool.commands as unknown as (
+    project: SongProject,
+    selection: ReadonlyArray<string>,
+    values: ToolParameterValues,
+  ) => ReadonlyArray<ScoreCommand>;
+  const commands =
+    tool.commands.length >= 4
+      ? tool.commands(request.project, request.selection, checked.values, context)
+      : three(request.project, request.selection, checked.values);
   const dialect = dialectOf(request.project, source);
   if (dialect === undefined) return failure(request.project, [noDialectDiagnostic(request.project.modelId)], commands);
 
   const applied = applyCommandList(dialect, request.project, commands);
   if (!applied.ok) return failure(request.project, applied.diagnostics, commands);
+  const problem = toolResultDiagnostic(tool, request.project, applied.project, dialect, context);
+  if (problem !== undefined) return failure(request.project, [problem], commands);
   return { ok: true, project: applied.project, diagnostics: applied.diagnostics, commands };
 }
 
@@ -318,6 +428,7 @@ export function previewTool(
   selection: ReadonlyArray<string>,
   values: ToolParameterValues,
   source: DialectRegistry | ScoreDialect,
+  context: ToolContext = DEFAULT_TOOL_CONTEXT,
 ): ToolResult {
-  return applyToolRequest(tool, { project, selection, values }, source);
+  return applyToolRequest(tool, { project, selection, values }, source, context);
 }

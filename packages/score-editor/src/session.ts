@@ -9,7 +9,7 @@ import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import { DEFAULT_GRID, normalizeGrid, sameGrid } from "./grid";
 import type { Score, SongProject } from "./score";
-import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
+import type { ScoreTool, ToolContext, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
 import type { Language } from "./types";
 
@@ -276,6 +276,11 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   const listeners: Array<{ call: SessionListener; active: boolean }> = [];
   const queue: SessionChange[] = [];
   let delivering = false;
+
+  /** The UI state a tool may read: the grid its result lands on and the insertion point a split uses. */
+  function toolContext(): ToolContext {
+    return { grid, insertionPoint: insertionPoint === null ? null : insertionPoint.tick };
+  }
 
   function announce(cause: SessionChangeCause, touched: Partial<Omit<SessionChange, "cause">>): void {
     queue.push({ cause, project: false, selection: false, insertionPoint: false, view: false, ...touched });
@@ -551,12 +556,12 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       return applyCommands(commands);
     },
     runTool(tool, values = {}) {
-      const result = applyToolRequest(tool, { project, selection, values }, dialects);
+      const result = applyToolRequest(tool, { project, selection, values }, dialects, toolContext());
       if (result.ok && !sameProject(project, result.project)) commit(result.project, "dispatch");
       return result;
     },
     previewTool(tool, values = {}) {
-      return computePreview(tool, project, selection, values, dialects);
+      return computePreview(tool, project, selection, values, dialects, toolContext());
     },
     undo() {
       const previous = past.pop();

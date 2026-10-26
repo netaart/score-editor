@@ -177,6 +177,16 @@ function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPl
     case "nameSection":
     case "moveNotes":
     case "resizeNotes":
+    case "splitNotes":
+    case "chopNotes":
+    case "joinNotes":
+    case "legatoNotes":
+    case "reverseNotes":
+    case "flipNotes":
+    case "snapNotesToKey":
+    case "scaleNoteLengths":
+    case "setNoteLength":
+    case "fitNotesToRange":
       return identityPlacements(score);
     default:
       return assertNever(command);
