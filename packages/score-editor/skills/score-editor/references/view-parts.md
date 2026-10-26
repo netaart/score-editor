@@ -12,7 +12,7 @@ added; calling it twice is harmless.
 
 | Function | Draws | Options |
 | --- | --- | --- |
-| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons, the Select and Grid menus, the Bars menu and the meter control; the read-only badge while it is not. | `ToolbarOptions` |
+| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons, the Select and Grid menus, the Bars menu and the meter control; the read-only badge while it is not. Returns a `ToolbarPart`, whose `setTools` replaces the Tools panel's host tools. | `ToolbarOptions` |
 | `mountZoomControl(el, session)` | The zoom-out, readout/menu and zoom-in buttons. Hidden while the session has no readable score. | — |
 | `mountCutNotice(el, session, options?)` | The one sentence saying the score text stops before the song does, and, on an incomplete bar, Fill with rests and Delete the incomplete bar; nothing on a complete score. | `onRefused?` |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
@@ -24,18 +24,19 @@ added; calling it twice is harmless.
 | `mountStaleNotice(el, session)` | One sentence while the text view holds text the project did not take, or nothing. | — |
 | `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
+| `mountToolPanel(el, session, options?)` | The Tools button and its panel: every registered tool, grouped, with a control per declared parameter, a preview and Apply (see [The Tools panel](#the-tools-panel)). Hidden while the session is read-only or another view is shown. | `ToolPanelOptions` |
 | `mountFilterPanel(el, session)` | The Filter button and its panel for selecting notes by condition (see [Selecting by filter](#selecting-by-filter)). Shown in read-only mode too. | — |
 | `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). | `AxisPartOptions` |
 | `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, onChooseBars? }`:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, tempoKey?: boolean, projectPanel?: boolean, tools?: ScoreTool[], onChooseBars?: (bar: number) => void }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
 switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
 (zoom and Delete) while another view is shown; `draftKeeper` binds the toolbar to a draft keeper (see [drafts.md](drafts.md)), so that it
 offers Restore original while the keeper is ready or in conflict and the session is editable, and its badge says "Opening draft…"
-while the keeper is still opening; `onChooseBars` receives the bar the Bars menu chose, so a host that mounts a ruler can put the focus on it. The toolbar's row wraps when its element is narrower than its controls
+while the keeper is still opening; `tools` (an array, possibly empty) adds the Tools button and its panel before the Filter button, with the built-in note tools always listed; `tempoKey` and `projectPanel` are the song controls and the Project button; `onChooseBars` receives the bar the Bars menu chose, so a host that mounts a ruler can put the focus on it. The toolbar's row wraps when its element is narrower than its controls
 if it holds the preview control or the switch (the read-only badge and the switch go together to a line of their own, and the
 preview control and its caption take the line after it), or scrolls sideways when it holds neither, so every
 control can still be reached.
@@ -343,7 +344,7 @@ Use this when a person should pick notes by condition instead of by pointing: a 
 | --- | --- |
 | `mountFilterPanel(el, session)` | A view part: a button labelled "Filter" ("筛选") and its panel. Returns a `ViewPart`. |
 
-`mountToolbar` mounts it by default, last in its row. Mount it yourself on an element of your own when the toolbar is
+`mountToolbar` mounts it by default, last in its row, after the Tools panel when the toolbar has one; the two are held to the row's right edge as one pair, so the Tools panel hangs from the right and leaves the arrangement in view for a preview. Mount it yourself on an element of your own when the toolbar is
 not used; there is no option to leave it out.
 
 ```ts
@@ -369,6 +370,48 @@ mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws what the panel s
   closes. On a phone (a coarse pointer and a window at most 640 px wide) the panel is a sheet from the bottom edge;
   elsewhere it hangs from its button, over it when there is no room below.
 - Its texts follow `session.view.language` and are part of this part, not of the host's message catalogue.
+
+## The Tools panel
+
+Use this when a person should reach the built-in note tools and the host's own tools from the toolbar, set their
+parameters, see the result before taking it, and undo it in one step. The tools themselves are pure functions, described
+in [custom-tools.md](custom-tools.md); this part is the panel that draws and runs them.
+
+| Export | What it is |
+| --- | --- |
+| `mountToolPanel(el, session, { tools? })` | A view part: a button labelled "Tools" ("工具"), the panel it opens, and the built-in note tools plus the host's. Returns a `ToolPanelPart`, whose `setTools` replaces the host's list. |
+| `NOTE_TOOLS` | The built-in note tools as `ScoreTool`s, for a host that builds a registry of its own. |
+| `TOOL_GROUPS`, `ToolGroup` | The four groups and the tools' group type. `"more"` is where a tool without a group is listed. |
+| `ToolContext` | `{ grid, insertionPoint }`: every tool receives it as the fourth `commands` argument; a three-parameter function ignores it. |
+| `ToolPanelOptions` | `{ tools?, onRefused? }`. |
+
+```ts
+import { mountToolPanel, NOTE_TOOLS } from "@neta-art/score-editor";
+
+mountToolPanel(row, session, { tools: [myTool] }); // the built-in note tools and mine
+mountToolPanel(row, session, { tools: [] }); // only the built-in note tools
+```
+
+- The panel lists the built-in note tools and the tools in `tools`, grouped as "Note tools", "Quantize", "Transform",
+  "Generate", and "More tools"; a group with no tool is left out. Each tool row is a button; choosing it opens its
+  parameter controls beneath it, one tool at a time.
+- A control per declared parameter: a number field with `min`/`max`/`step`, a checkbox, a menu of a choice's `values`, a
+  text field; each starts at its default. A parameter without a `label` shows its `name`. Changing a control previews
+  again; the panel clamps nothing and shows a `tool-parameter` diagnostic in the status line when a value is refused.
+- The preview is `session.previewTool`, so it changes no project and adds no history step. While it is shown the voice
+  tracks draw the result's changed notes as dashed outlines at the place they would take, the same mark a drag makes;
+  the status line says how many notes would change or that nothing would. The outlines end when the panel closes, the
+  view changes, the session turns read-only, or the part is destroyed. They follow a change of parameter, selection,
+  project or grid while the panel is open.
+- Apply is one `session.runTool`, so one undo step. The status line says "Applied. One undo step."; a refusal leaves the
+  project and the history alone, says why, and goes to `onRefused` (which `mount` turns into the host's notice). The
+  panel stays open and does not preview the next run until another control, the selection or the grid changes, so a
+  second press cannot silently undo the first.
+- The button is an editing control: hidden while the session is read-only, while the score does not read, and while the
+  staff or text view is shown. The panel is a native popover; on a coarse pointer at a window of at most 640 px it is a
+  sheet from the bottom edge, at most 75% of the window's height. Its texts follow `session.view.language`.
+- `mount` passes its `tools` option here; `mountToolbar` with `tools` mounts it in the toolbar row before the Filter
+  button. A host that mounts the part itself puts it where it likes.
 
 ## The section menu
 
@@ -400,3 +443,4 @@ for (const action of sectionActions(session, 1) ?? []) {
   }
 }
 ```
+

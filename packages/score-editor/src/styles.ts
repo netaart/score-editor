@@ -11,6 +11,7 @@ import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
 import { sectionMenuCss } from "./section-styles";
 import { songCss } from "./song-styles";
+import { toolCss } from "./tool-styles";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
 const BLACK_KEY_ROWS = [1, 3, 5, 8, 10];
@@ -1299,6 +1300,7 @@ ${sectionMenuCss}
 ${chordCss}
 ${songCss}
 ${filterCss}
+${toolCss}
 ${dragCss}`;
 
 interface Injection {

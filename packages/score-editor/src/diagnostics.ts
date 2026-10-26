@@ -75,6 +75,7 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "lyric-lines-not-mergeable",
   "lyric-split-invalid",
   "cut-other-voice-short",
+  "tool-result",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -176,6 +177,7 @@ interface Catalog {
   readonly lyricLinesNotMergeable: Text;
   readonly lyricSplitInvalid: Text;
   readonly cutOtherVoiceShort: Text;
+  readonly toolResult: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -1004,6 +1006,23 @@ function chineseCutOtherVoiceShort(params: DiagnosticParams): string {
   return `另一个声部${voice === "" ? "" : `（${value(params, "voice")}）`}缺少完整小节，不能删除这个小节；请改用填充截断小节。`;
 }
 
+/** A tool's own result broke a rule the command layer keeps: the score and the history were left as they were. */
+function englishToolResult(params: DiagnosticParams): string {
+  const tool = quoted(value(params, "toolId"));
+  if (value(params, "reason") === "overlap") {
+    return `The tool${tool} would put two notes at once in one voice, so the score was left as it was.`;
+  }
+  return `The tool${tool} would put a note off the grid, so the score was left as it was.`;
+}
+
+function chineseToolResult(params: DiagnosticParams): string {
+  const tool = quoted(value(params, "toolId"));
+  if (value(params, "reason") === "overlap") {
+    return `工具${tool}的结果会在同一个声部里让两个音同时响，乐谱保持原样。`;
+  }
+  return `工具${tool}的结果会有音符落在网格外，乐谱保持原样。`;
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -1069,6 +1088,7 @@ const en: Catalog = {
   lyricLinesNotMergeable: englishLyricLinesNotMergeable,
   lyricSplitInvalid: englishLyricSplitInvalid,
   cutOtherVoiceShort: englishCutOtherVoiceShort,
+  toolResult: englishToolResult,
 };
 
 const zh: Catalog = {
@@ -1136,6 +1156,7 @@ const zh: Catalog = {
   lyricLinesNotMergeable: chineseLyricLinesNotMergeable,
   lyricSplitInvalid: chineseLyricSplitInvalid,
   cutOtherVoiceShort: chineseCutOtherVoiceShort,
+  toolResult: chineseToolResult,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -1271,6 +1292,8 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.lyricSplitInvalid(diagnostic.params);
     case "cut-other-voice-short":
       return catalog.cutOtherVoiceShort(diagnostic.params);
+    case "tool-result":
+      return catalog.toolResult(diagnostic.params);
     default:
       return "";
   }

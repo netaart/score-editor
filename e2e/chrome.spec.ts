@@ -193,8 +193,9 @@ test.describe("C6: the pin rule", () => {
   }) => {
     test.skip(!isMobile, "the phone project's width is the one the rule was measured at");
     await page.setViewportSize({ width: 412, height: 800 });
-    // At 420 the four-row toolbar leaves 255px of scroller, below the six-row threshold; 440 is where it pins.
-    await harness.stageHeight(440);
+    // The default toolbar is five rows at a phone's width since the Tools panel joined it: 460 leaves the same 255px of
+    // scroller as 420 did for four rows, and 480 is where the lane keeps six rows and the header pins.
+    await harness.stageHeight(480);
     await harness.mount({ score: { text: QUARTERS } });
     await harness.frames(2);
 
@@ -212,7 +213,7 @@ test.describe("C6: the pin rule", () => {
     at = await box(ruler);
     expect(at.y).toBeCloseTo(frame.y, 0);
 
-    await harness.stageHeight(420);
+    await harness.stageHeight(460);
     await expect.poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1).toBe(true);
 
     await harness.stageHeight(288);
@@ -220,7 +221,7 @@ test.describe("C6: the pin rule", () => {
     frame = await box(scroller);
     expect((await box(page.locator(".sce-track-head").first())).y).toBeCloseTo(frame.y, 0);
 
-    await harness.stageHeight(440);
+    await harness.stageHeight(480);
     await expect.poll(async () => Math.abs((await box(ruler)).y - (await box(scroller)).y)).toBeLessThan(1);
 
     await harness.stageHeight(288);

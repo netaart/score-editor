@@ -21,10 +21,17 @@ import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import { mountSynthControl } from "./synth-preview";
 import { mountTempoKeyControls } from "./tempo-key";
+import type { ScoreTool } from "./tool";
+import { mountToolPanel } from "./tool-panel";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
 import { mountZoomControl } from "./zoom-control";
+
+/** The toolbar part: `setTools` replaces the Tools panel's host tools, and does nothing without the `tools` option. */
+export interface ToolbarPart extends ViewPart {
+  setTools(tools: ReadonlyArray<ScoreTool>): void;
+}
 
 export interface ToolbarOptions extends EditingPartOptions {
   /**
@@ -58,6 +65,11 @@ export interface ToolbarOptions extends EditingPartOptions {
   /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
   /**
+   * The host's tools. Giving this option, even an empty list, puts the Tools button and panel in the row before the Filter
+   * button; the built-in note tools are always listed. Off by default, so a toolbar a host already mounts gains no control.
+   */
+  tools?: ReadonlyArray<ScoreTool>;
+  /**
    * Puts the focus on the bar the Bars menu chose. The default editor passes its ruler's way there; a host that mounts
    * the toolbar without a ruler can leave it out, and the menu still chooses the bar in the session.
    */
@@ -87,7 +99,7 @@ const PENCIL = ["3,13 4.5,9 11,2.5 13.5,5 7,11.5 3,13", "9.5,4 12,6.5"];
  * asked, the screen-reader hint. The controls are in that order in the row and in the tab order, the Filter button last.
  * It follows the session's language.
  */
-export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
+export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ToolbarPart {
   requireDom("mountToolbar");
   const doc = el.ownerDocument;
   const releaseStyles = acquireStyles(el);
@@ -171,8 +183,19 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
+  // The Tools button and the Filter button after it end the row as one item, held to the right edge: the Tools panel
+  // hangs from the right, so a preview on the arrangement stays in view, and the pair wraps together onto the line
+  // Filter already used, so the row keeps its height at a phone's width.
+  const toolsHost = options.tools === undefined ? null : create(doc, "div", "sce-toolbar-tools", row);
+  const tools =
+    toolsHost === null
+      ? null
+      : mountToolPanel(toolsHost, session, {
+          tools: options.tools ?? [],
+          ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+        });
   // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
-  const filter = mountFilterPanel(row, session);
+  const filter = mountFilterPanel(toolsHost ?? row, session);
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -238,6 +261,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     ].join();
     if (shown === drawn) return;
     drawn = shown;
+    // An empty pair still costs a flex gap and its auto margin, and would rebalance the row while the parts are hidden.
+    if (toolsHost !== null) toolsHost.hidden = !(arrangement && readable);
     if (hint) hint.textContent = editable ? t.hintEditing : t.hint;
     if (options.viewSwitch) setTitle();
     history.hidden = !editable || !readable;
@@ -260,6 +285,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {
+    setTools(next) {
+      tools?.setTools(next);
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -275,6 +303,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       noticeStrip.destroy();
       song?.destroy();
       projectControl?.destroy();
+      tools?.destroy();
       filter.destroy();
       grid.destroy();
       restore?.destroy();

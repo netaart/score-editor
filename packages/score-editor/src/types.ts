@@ -3,6 +3,7 @@
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry } from "./dialect";
 import type { SongProject } from "./score";
+import type { ScoreTool } from "./tool";
 
 /** Interface languages the package ships text for. The host picks one. */
 export type Language = "zh" | "en";
@@ -79,6 +80,11 @@ export interface MountOptions {
   dialects: DialectRegistry;
   /** The host's draft storage; see "In the default editor" in the package README. */
   drafts?: DraftStore;
+  /**
+   * The host's custom tools, added after the built-in note tools in the Tools panel. `update({ tools })` rebuilds the
+   * panel's list, closing it when the tool it showed is gone.
+   */
+  tools?: ReadonlyArray<ScoreTool>;
   /** The work's title for the handoff instruction; the project's source key when absent or blank. */
   title?: string;
   /**

@@ -25,6 +25,7 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 | `language: Language` | Interface language, `"zh"` or `"en"`. |
 | `editable?: boolean` | Defaults to true. While true the toolbar offers undo, redo, Delete and a Select menu, a click or tap selects a note or sets the insertion point, and the editing keys act; see [view-parts.md](view-parts.md#editing-in-the-parts). While false the score is only shown and the toolbar shows a read-only badge. |
 | `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language. `command-refused` is an edit the user asked for that the score would not take, with nothing changed; the message says why and where. `draft-source-changed` and `draft-save-failed` come from the draft keeper (see `drafts`); the editor draws nothing of its own for them. |
+| `tools?: ScoreTool[]` | The host's custom tools, added beside the built-in note tools in the Tools panel. `update({ tools })` rebuilds the panel's list, closes it when the tool it showed is gone, and keeps the values of tools that stay. |
 | `drafts?: DraftStore` | The host's draft store. With it, and while `editable`, the editor keeps the user's edits as a draft under `project.sourceKey`, restores it on open, offers Restore original and shows the conflict strip; see [drafts.md](drafts.md#in-the-default-editor). Without it, or while read-only, nothing is kept and the store is never called. |
 | `title?: string` | The work's title in the handoff instruction; the project's `sourceKey` when absent or blank. |
 | `onHandoff?: (handoff: HandoffPayload) => void` | Adds the handoff button while `editable`. It receives the `score.abc` attachment text, the prefilled instruction and the final project after the draft is saved with the handoff hash; see [handoff.md](handoff.md). Without it there is no button. |
@@ -33,7 +34,7 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 
 | Member | Meaning |
 | --- | --- |
-| `update(options: Partial<MountOptions>)` | Applies only the given keys. A language change rewrites the interface without rebuilding the view, and `editable` switches editing on or off without remounting. A `project` with another `sourceKey`, `lyrics` or score text is a new original, so the draft keeper starts over on it; the same project again changes nothing. `drafts` set, replaced or `undefined` starts, replaces or ends the keeper. Does nothing after `destroy`. |
+| `update(options: Partial<MountOptions>)` | Applies only the given keys. A language change rewrites the interface without rebuilding the view, and `editable` switches editing on or off without remounting. A `project` with another `sourceKey`, `lyrics` or score text is a new original, so the draft keeper starts over on it; the same project again changes nothing. `drafts` set, replaced or `undefined` starts, replaces or ends the keeper. `tools` rebuilds the Tools panel's list. Does nothing after `destroy`. |
 | `destroy()` | Removes every listener, node and style sheet it added; a draft keeper writes what it still holds. Safe to call twice. |
 
 An element holds at most one editor: destroy the first before mounting again.
@@ -49,6 +50,7 @@ const editor = mount(document.querySelector("#editor")!, {
   project, // a SongProject with modelId "song2"
   dialects: createDialectRegistry([song2Dialect]),
   drafts: store, // optional: a DraftStore; see drafts.md
+  tools: [myTool], // optional: custom tools in the Tools panel; see custom-tools.md
   title: "My Song", // optional: the title in the handoff instruction
   onHandoff: (handoff) => putInChat(handoff), // optional: adds the handoff button; see handoff.md
   notify: (notice) => showToast(notice.message),

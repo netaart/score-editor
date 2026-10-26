@@ -6,10 +6,13 @@ import {
   createEditingSession,
   createToolRegistry,
   type EditingSession,
+  formatDiagnostic,
   previewTool,
   type ScoreTool,
   type SongProject,
+  type ToolContext,
   type ToolParameter,
+  type ToolParameterValues,
   validateToolParameters,
 } from "@neta-art/score-editor";
 import { describe, expect, it, vi } from "vitest";
@@ -153,7 +156,16 @@ describe("tool parameters", () => {
 
     expect(result.ok).toBe(true);
     expect(result.project.score).toBe(SCORE_WITHOUT_E);
-    expect(build).toHaveBeenCalledWith(project, ["Vocal:256", "Vocal:512"], { every: 2 });
+    // Every tool is called with the context; a builder written with three parameters ignores it.
+    expect(build).toHaveBeenCalledWith(
+      project,
+      ["Vocal:256", "Vocal:512"],
+      { every: 2 },
+      {
+        grid: { value: 4 },
+        insertionPoint: null,
+      },
+    );
   });
 
   it("refuses a wrong type or an out-of-range value before the builder runs", () => {
@@ -453,5 +465,112 @@ describe("every parameter type", () => {
       expect(checked.ok).toBe(false);
       expect(checked.ok === false && checked.diagnostics[0]?.code).toBe("tool-parameter");
     }
+  });
+});
+
+describe("a tool whose result breaks the score's rules", () => {
+  /** Sets an eighth-note length while the session's grid is 1/4: the notes land off the grid in force. */
+  const offGrid: ScoreTool = {
+    id: "off-grid",
+    name: { en: "Off the grid", zh: "网格外" },
+    parameters: [],
+    commands(_project, selection) {
+      return [{ type: "setNoteLength", noteIds: selection, lengthTicks: 128, grid: { value: 8 } }];
+    },
+  };
+
+  it("is refused whole, leaves the project and the history alone, and is previewed as the refusal", () => {
+    const session = open();
+    session.select(["Vocal:0"]);
+    const before = session.project;
+    const changes = listen(session);
+
+    const preview = session.previewTool(offGrid, {});
+    const result = session.runTool(offGrid, {});
+
+    expect(preview.ok).toBe(false);
+    expect(preview.diagnostics[0]?.code).toBe("tool-result");
+    for (const attempt of [preview, result]) {
+      expect(attempt.project).toBe(before);
+      expect(attempt.diagnostics[0]).toMatchObject({
+        code: "tool-result",
+        params: { toolId: "off-grid", reason: "grid" },
+      });
+    }
+    expect(session.project).toBe(before);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("says why in both languages", () => {
+    const diagnostic = { code: "tool-result" as const, params: { toolId: "off-grid", reason: "grid" }, at: {} };
+
+    expect(formatDiagnostic(diagnostic, "en")).toContain("off the grid");
+    expect(formatDiagnostic(diagnostic, "zh")).toContain("网格外");
+  });
+});
+
+describe("a tool that declares the tool context", () => {
+  /** Splits the selection where the insertion point is, on the grid in force: both come from the context argument. */
+  const splitHere: ScoreTool = {
+    id: "split-here",
+    name: { en: "Split here", zh: "在这里切分" },
+    commands(_project, selection, _values, context) {
+      if (selection.length === 0) return [];
+      return [{ type: "splitNotes", noteIds: selection, at: context.insertionPoint, grid: context.grid }];
+    },
+  };
+
+  it("gives the context to a tool that declares it with a default or with rest parameters", () => {
+    const withDefault: ScoreTool = {
+      id: "context-default",
+      name: { en: "With a default", zh: "带默认值" },
+      commands(_project, selection, _values, context = { grid: { value: 4 }, insertionPoint: null }) {
+        if (selection.length === 0) return [];
+        return [{ type: "splitNotes", noteIds: selection, at: context.insertionPoint, grid: context.grid }];
+      },
+    };
+    const withRest: ScoreTool = {
+      id: "context-rest",
+      name: { en: "With rest parameters", zh: "带剩余参数" },
+      commands(...args: [SongProject, ReadonlyArray<string>, ToolParameterValues, ToolContext]) {
+        const [, selection, , context] = args;
+        if (selection.length === 0) return [];
+        return [{ type: "splitNotes", noteIds: selection, at: context.insertionPoint, grid: context.grid }];
+      },
+    };
+
+    for (const tool of [withDefault, withRest]) {
+      const session = createEditingSession({ project, dialects, grid: { value: 16 } });
+      session.setInsertionPoint({ tick: 128 });
+      session.select(["Vocal:0"]);
+
+      const preview = session.previewTool(tool, {});
+
+      expect(preview.ok, tool.id).toBe(true);
+      expect(preview.project.score, tool.id).toBe(SCORE.replace("C4D4E4F4|", "C2C2D4E4F4|"));
+    }
+  });
+
+  it("receives the session's grid and insertion point, and the same context without a session", () => {
+    const session = createEditingSession({
+      project,
+      dialects,
+      grid: { value: 16 },
+    });
+    session.setInsertionPoint({ tick: 128 });
+    session.select(["Vocal:0"]);
+    const before = session.project;
+
+    const preview = session.previewTool(splitHere, {});
+
+    expect(preview.ok).toBe(true);
+    expect(preview.project.score).toBe(SCORE.replace("C4D4E4F4|", "C2C2D4E4F4|"));
+    expect(session.project).toBe(before);
+    const standalone = previewTool(splitHere, project, ["Vocal:0"], {}, dialects, {
+      grid: { value: 16 },
+      insertionPoint: 128,
+    });
+    expect(standalone.project).toEqual(preview.project);
   });
 });

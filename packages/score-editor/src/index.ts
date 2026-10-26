@@ -126,6 +126,9 @@ export { mountSynthPreview } from "./synth-preview";
 export { tickAtSeconds } from "./tempo";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
+export { NOTE_TOOLS } from "./note-tools";
+export type { ToolPanelOptions, ToolPanelPart } from "./tool-panel";
+export { mountToolPanel } from "./tool-panel";
 export type {
   BooleanToolParameter,
   ChoiceToolParameter,
@@ -134,6 +137,8 @@ export type {
   ScoreTool,
   TextToolParameter,
   ToolCommandBuilder,
+  ToolContext,
+  ToolGroup,
   ToolParameter,
   ToolParameterCheck,
   ToolParameterValue,
@@ -142,8 +147,8 @@ export type {
   ToolResult,
   ToolText,
 } from "./tool";
-export { applyCommandList, createToolRegistry, previewTool, validateToolParameters } from "./tool";
-export type { ToolbarOptions } from "./toolbar";
+export { applyCommandList, createToolRegistry, previewTool, TOOL_GROUPS, validateToolParameters } from "./tool";
+export type { ToolbarOptions, ToolbarPart } from "./toolbar";
 export { mountToolbar } from "./toolbar";
 export type {
   AxisPartOptions,

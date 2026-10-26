@@ -22,6 +22,7 @@ import {
   mountTextView,
   mountTimeRuler,
   mountToolbar,
+  mountToolPanel,
   mountViewSwitch,
   mountVoiceTrack,
   mountZoomControl,
@@ -225,6 +226,37 @@ function conflictKeeper() {
 }
 
 /**
+ * The custom tools a test can register, by name. `safe` rests the last selected note; `breaking` asks for notes off the
+ * grid in force, so the tool layer refuses the whole run and the score stays as it was.
+ */
+const SAFE_TOOL = {
+  id: "rest-last",
+  group: "more",
+  name: { en: "Rest the last note", zh: "最后一个音变休止" },
+  description: { en: "Turn the last selected notes into rests.", zh: "把选区最后的几个音变成休止符。" },
+  parameters: [{ name: "count", label: { en: "How many", zh: "几个" }, type: "number", min: 1, default: 1 }],
+  commands(_project, selection, values) {
+    const count = Number(values.count);
+    return selection.slice(-count).map((noteId) => ({ type: "toRest", noteId }));
+  },
+};
+
+const BREAKING_TOOL = {
+  id: "off-grid",
+  group: "more",
+  name: { en: "Off the grid", zh: "网格外" },
+  description: {
+    en: "Asks for notes off the grid in force, so it is refused.",
+    zh: "结果会落在当前网格外，因此会被拦下。",
+  },
+  commands(_project, selection) {
+    return [{ type: "setNoteLength", noteIds: selection, lengthTicks: 128, grid: { value: 8 } }];
+  },
+};
+
+const TOOL_SETS = { safe: [SAFE_TOOL], breaking: [BREAKING_TOOL], both: [SAFE_TOOL, BREAKING_TOOL], none: [] };
+
+/**
  * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for
  * them, and the lists of the parts the older specs walk through do not include them.
  */
@@ -257,6 +289,8 @@ const EXTRA_PARTS = {
   lyrics: (el, session) => mountLyricTrack(el, session),
   // The default editor's toolbar shape for placing notes: the pencil is an opt-in control.
   "toolbar-pencil": (el, session) => mountToolbar(el, session, { synthPreview: false, pencil: true }),
+  // The Tools panel as a part of its own, with the page's two custom tools beside the built-in note tools.
+  tools: (el, session) => mountToolPanel(el, session, { tools: TOOL_SETS.both, onRefused: refusedBy(session) }),
 };
 
 const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS, ...EXTRA_PARTS };
@@ -556,6 +590,7 @@ window.harness = {
     shadow,
     dialect,
     hostLayer,
+    tools,
     ...options
   } = {}) {
     project = await projectFrom(blank, score, fields);
@@ -586,15 +621,16 @@ window.harness = {
       project,
       dialects: registry(dialect),
       notify: (notice) => notices.push(notice),
+      ...(tools === undefined ? {} : { tools: TOOL_SETS[tools] }),
       ...hostOptions(options),
     });
   },
-  async update({ score, project: fields, ...options } = {}) {
+  async update({ score, project: fields, tools, ...options } = {}) {
     if (score !== undefined || fields !== undefined) {
       project = await projectFrom(project, score, fields);
       options.project = project;
     }
-    editor.update(hostOptions(options));
+    editor.update({ ...(tools === undefined ? {} : { tools: TOOL_SETS[tools] }), ...hostOptions(options) });
   },
   destroy() {
     editor?.destroy();

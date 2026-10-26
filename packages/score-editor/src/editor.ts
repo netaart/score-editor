@@ -30,7 +30,7 @@ import { mountStaleNotice } from "./stale-notice";
 import { acquireStyles } from "./styles";
 import { mountTextView } from "./text-view";
 import { mountTimeRuler } from "./time-ruler";
-import { mountToolbar } from "./toolbar";
+import { mountToolbar, type ToolbarPart } from "./toolbar";
 import type { DraftStore, Language, MountedEditor, MountOptions, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountVoiceTrack } from "./voice-track";
@@ -47,6 +47,7 @@ export class Editor implements MountedEditor {
   private readonly releaseStyles: () => void;
   private readonly abort = new AbortController();
   private readonly session: EditingSession;
+  private readonly toolbar: ToolbarPart;
   private readonly drafts: DraftBinding;
   /** The chrome above the body: toolbar, conflict strip, cut sentence and stale notice, bounded by the music's floor. */
   private readonly chrome: HTMLElement;
@@ -113,24 +114,24 @@ export class Editor implements MountedEditor {
 
     const hintId = `sce-hint-${n}`;
     const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
-    this.parts.push(
-      mountToolbar(this.chrome, this.session, {
-        hintId,
-        onRefused,
-        viewSwitch: true,
-        tempoKey: true,
-        projectPanel: true,
-        pencil: true,
-        draftKeeper: this.drafts,
-        onChooseBars: (bar) => {
-          const number = this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);
-          if (!number) return;
-          delete number.dataset.pointerFocus;
-          number.dataset.keyFocus = "";
-          number.focus();
-        },
-      }),
-    );
+    this.toolbar = mountToolbar(this.chrome, this.session, {
+      hintId,
+      onRefused,
+      viewSwitch: true,
+      tempoKey: true,
+      projectPanel: true,
+      pencil: true,
+      draftKeeper: this.drafts,
+      tools: this.options.tools ?? [],
+      onChooseBars: (bar) => {
+        const number = this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);
+        if (!number) return;
+        delete number.dataset.pointerFocus;
+        number.dataset.keyFocus = "";
+        number.focus();
+      },
+    });
+    this.parts.push(this.toolbar);
     const toolbar = this.root.querySelector<HTMLElement>(".sce-toolbar");
     if (toolbar !== null) {
       this.handoff = mountHandoffControl(
@@ -200,6 +201,7 @@ export class Editor implements MountedEditor {
     const before = this.options;
     this.options = { ...before, ...patch };
     if (patch.language !== undefined) this.session.setView({ language: patch.language });
+    if (patch.tools !== undefined) this.toolbar.setTools(patch.tools);
     if (this.options.editable !== before.editable) this.applyEditable();
     if (patch.dialects !== undefined) this.session.replaceDialects(patch.dialects);
     const store = this.draftStore();

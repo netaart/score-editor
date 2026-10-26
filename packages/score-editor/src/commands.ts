@@ -14,6 +14,7 @@ import {
 } from "./commands-place";
 import { runSectionCommand } from "./commands-sections";
 import { noteAt, tieChain } from "./commands-shared";
+import { type NoteToolCommand, runNoteToolCommand } from "./commands-tools";
 import { runTruncationCommand } from "./commands-truncation";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { Meter, Score, Note as ScoreNote } from "./score";
@@ -48,7 +49,8 @@ export type ScoreCommand =
   | AddNoteCommand
   | PasteNotesCommand
   | DuplicateNotesCommand
-  | CopyNotesCommand;
+  | CopyNotesCommand
+  | NoteToolCommand;
 
 export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
@@ -133,5 +135,16 @@ export function runScoreCommand(
     case "duplicateNotes":
     case "copyNotes":
       return runPlaceCommand(score, command, constraints);
+    case "splitNotes":
+    case "chopNotes":
+    case "joinNotes":
+    case "legatoNotes":
+    case "reverseNotes":
+    case "flipNotes":
+    case "snapNotesToKey":
+    case "scaleNoteLengths":
+    case "setNoteLength":
+    case "fitNotesToRange":
+      return runNoteToolCommand(score, command, constraints);
   }
 }
