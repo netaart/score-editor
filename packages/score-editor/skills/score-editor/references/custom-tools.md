@@ -78,7 +78,8 @@ const all = tools.list();
 
 The Tools panel reads `tools.list()` and draws one control per declaration in the session's language: a number field
 with `min`/`max`/`step`, a checkbox for a boolean, a menu of `values` for a choice, a text field for text. A parameter
-without a `label` shows its `name`. A `default` may be a value or a function of the `ToolContext`, computed when the
+without a `label` shows its `name`. A whole-song tool declares `needsSelection: false`; one that keeps the score's own
+timing declares `needsGrid: false` (both default to true). A `default` may be a value or a function of the `ToolContext`, computed when the
 tool opens; `selectionFirstBar` and `selectionLastBar` make a bar range follow the selection. On a coarse pointer a number
 field also gets 40 px − and + buttons that step by `step` and stop at `min`/`max`, while a typed value outside the
 declaration is still refused. A host gets the panel with `mount({ tools })`, `mountToolbar({ tools })` or

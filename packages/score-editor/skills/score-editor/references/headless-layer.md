@@ -94,6 +94,17 @@ chain as one note. All four land on the grid and obey the one-note-a-time rule (
 is shortened); each refusal code is listed with the command in the package README. The session follows the notes a placing
 command makes, so they are selected afterwards.
 
+The voice edits are `VoiceOctaveCommand` (`octaves`: 1, -1, 2 or -2) and `InstrumentalVersionCommand`; both are members
+of `VoiceCommand` and of `ScoreCommand`. The octave command moves only Vocal's pitched notes, leaves Ins, the chords and
+the keys alone, and refuses the whole move with `voice-octave-range` when a note would leave MIDI 0-127. The instrumental
+version moves Vocal's pitched tie chains into Ins; an existing Ins note gives way, cut short or split around the moved
+notes or dropped when fully covered, and Vocal keeps rests and chords. It refuses with `instrumental-voice-missing` when
+the score has no Ins voice and `unit-unknown` when it has no written duration unit. A successful `ApplyScoreResult.report`
+(or `CommandListResult.reports` / `ToolResult.reports`) carries `VoiceOctaveReport`
+(`{ kind: "voiceOctave", octaves, medianMidi, singable }`) or `InstrumentalReport`
+(`{ kind: "instrumentalVersion", moved, shortened, dropped }`); `CommandReport` is their union. The two built-in Tools
+panel tools are Voice octave and Instrumental version in the Transform group; they need no selection and no grid.
+
 The note edits are `MoveNotesCommand` and `ResizeNotesCommand`, both members of `MoveResizeCommand` and of `ScoreCommand`.
 They take several note ids and act on each note's whole tie chain. Their `grid` is a `Grid`: its `value` is a
 `GridValue`, one of 4, 8, 16 or 32, and `dotted` makes a step half as long again. A grid step is allowed only when the

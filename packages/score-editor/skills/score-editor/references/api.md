@@ -113,6 +113,8 @@ change. The tests in the repository check that the list stays complete.
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
+| `VoiceOctaveCommand`, `InstrumentalVersionCommand`, `VoiceCommand` | The two voice edits and their union; members of `ScoreCommand`. Voice octave refuses with `voice-octave-range`; the instrumental version with `instrumental-voice-missing` or `unit-unknown`. |
+| `VoiceOctaveReport`, `InstrumentalReport`, `CommandReport` | What a voice command reports: `{ kind: "voiceOctave", octaves, medianMidi, singable }` and `{ kind: "instrumentalVersion", moved, shortened, dropped }`. `ApplyScoreResult.report`, `CommandListResult.reports` and `ToolResult.reports` carry them. |
 | `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
 | `AddNoteCommand`, `PasteNotesCommand`, `DuplicateNotesCommand`, `CopyNotesCommand`, `CopiedNote` | The placing commands (a new note, a paste at the insertion point, a repeat after the selection, and the Alt-drag copy) and the copied note they take; members of `ScoreCommand`. |
 | `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. The session holds the one in force (`session.grid`, `setGrid`, `allowsGrid`); see [editing-session.md](editing-session.md). |
@@ -163,8 +165,8 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `ApplyScoreResult` | `{ ok: true, text }` or `{ ok: false, diagnostic }`. |
-| `ApplyProjectResult` | `{ project, diagnostics }`; the project keeps its old score text on a refusal. |
+| `ApplyScoreResult` | `{ ok: true, text, report? }` or `{ ok: false, diagnostic }`; `report` is the command's `CommandReport` when it has one. |
+| `ApplyProjectResult` | `{ project, diagnostics, reports? }`; the project keeps its old score text on a refusal. |
 
 ## View part types
 
@@ -197,10 +199,11 @@ change. The tests in the repository check that the list stays complete.
 | `TextToolParameter` | Free text. |
 | `ToolParameterValue`, `ToolParameterValues` | One value, and values by parameter name. |
 | `ToolCommandBuilder` | `(project, selection, values, context) => ScoreCommand[]`; pure. Every tool is called with a `ToolContext` fourth; a function written with three parameters ignores it. |
+| `ScoreTool.needsSelection`, `ScoreTool.needsGrid` | Optional booleans, both default true; false lets the panel run a whole-song tool with no selection and keeps the generic result check from requiring its unchanged timing on the current grid. |
 | `ToolContext` | `{ grid, insertionPoint, selectionFirstBar, selectionLastBar }`: the grid in force, the insertion point's tick or null, and the selection's 1-based bars or null. |
 | `ToolGroup` | `"note" \| "quantize" \| "transform" \| "generate" \| "more"`; a tool without a group is listed under "more". |
 | `ToolParameterCheck` | The validated values, or the `tool-parameter` diagnostics. |
-| `ToolResult` | `{ ok, project, diagnostics, commands }` from a preview or a run. |
+| `ToolResult` | `{ ok, project, diagnostics, commands, reports? }` from a preview or a run; `reports` carries what its commands reported. |
 | `ToolRegistry` | `register`, `list` and `find` for the host's tools. |
 
 ## Preview types
