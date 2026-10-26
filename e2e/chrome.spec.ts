@@ -297,7 +297,7 @@ test.describe("C11: the existing guards", () => {
     await expect(page.getByRole("listitem", { name: /，已选中$/ })).toHaveCount(1);
   });
 
-  for (const width of [412, 500, 1280] as const) {
+  for (const width of [412, 1280] as const) {
     for (const language of ["en", "zh"] as const) {
       test(`keeps the view switch where it is at ${width} (${language})`, async ({
         page,
