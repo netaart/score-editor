@@ -572,7 +572,7 @@ test.describe("the toolbar part with the view switch", () => {
     expect(preview.x >= switchAt.x + switchAt.width || preview.y >= switchAt.y + switchAt.height).toBe(true);
   });
 
-  test("is walked in the order it is drawn: undo and redo, Delete, the Select and Grid menus, the three views, then the preview", async ({
+  test("is walked in the order it is drawn: undo and redo, Delete, Select, Grid, Bars, Meter, the three views, then the preview", async ({
     page,
     harness,
   }) => {
@@ -581,7 +581,7 @@ test.describe("the toolbar part with the view switch", () => {
     await bar.getByRole("button", { name: "Undo", exact: true }).focus();
 
     const walked: string[] = [];
-    for (let step = 0; step < 9; step++) {
+    for (let step = 0; step < 11; step++) {
       walked.push(
         await page.evaluate(() => {
           const el = document.activeElement;
@@ -591,8 +591,8 @@ test.describe("the toolbar part with the view switch", () => {
       await page.keyboard.press("Tab");
     }
 
-    expect(walked.slice(0, 6)).toEqual(["Undo", "Redo", "Delete", "Select", "Grid: 1/4", "Arrangement"]);
-    expect(walked.slice(6, 9)).toEqual(["Staff", "Score text", "Preview"]);
+    expect(walked.slice(0, 7)).toEqual(["Undo", "Redo", "Delete", "Select", "Grid: 1/4", "Bars", "Meter 2/4"]);
+    expect(walked.slice(7, 11)).toEqual(["Arrangement", "Staff", "Score text", "Preview"]);
   });
 
   test("names the shown view in its title, and leaves out what only means something on the arrangement", async ({

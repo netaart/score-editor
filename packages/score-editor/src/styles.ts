@@ -199,26 +199,6 @@ const css = `
   display: inline-flex;
   visibility: hidden;
 }
-/* The Bars and meter controls sit by the Select menu, while the preview control keeps its DOM place and tab order. */
-.sce-root .sce-bars-button {
-  order: 3;
-}
-.sce-root .sce-meter-button {
-  order: 4;
-}
-.sce-root .sce-spacer {
-  order: 5;
-  flex: 1 1 auto;
-}
-.sce-root .sce-toolbar-end {
-  order: 6;
-}
-.sce-root .sce-synth {
-  order: 7;
-}
-.sce-root .sce-toolbar > .sce-badge {
-  order: 6;
-}
 .sce-root .sce-badge {
   flex: none;
   padding: 2px 8px;
@@ -259,13 +239,20 @@ const css = `
 }
 .sce-root .sce-cut-sentence {
   flex: 1 1 auto;
+  text-wrap: pretty;
+}
+.sce-root .sce-cut-refusal {
+  flex: 1 1 100%;
+  padding: 0 12px 6px;
+  color: var(--sce-_text);
+  font-size: 0.92em;
 }
 .sce-root .sce-notice-actions {
   display: inline-flex;
   flex: none;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 6px 12px 6px 0;
+  padding: 0 12px;
 }
 .sce-root .sce-problem {
   flex: 1 1 auto;
@@ -326,7 +313,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button, .sce-bars-button, .sce-meter-button)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -402,6 +389,9 @@ const css = `
   transform: scaleX(-1);
 }
 @media (pointer: coarse) {
+  .sce-root .sce-toolbar {
+    gap: 4px;
+  }
   .sce-root .sce-button {
     min-height: 36px;
   }
@@ -639,6 +629,16 @@ const css = `
   color: var(--sce-_text);
   font-weight: 600;
 }
+.sce-root .sce-bar-number:focus,
+.sce-root .sce-bar-number[data-pointer-focus]:focus {
+  outline: none;
+}
+.sce-root .sce-bar-number[data-key-focus]:focus,
+.sce-root .sce-bar-number:focus-visible:not([data-pointer-focus]),
+.sce-root .sce-meter-input:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: 2px;
+}
 /* The chosen run reads as a band under the numbers, with a 2px text-colour edge at each end and a quiet wash. */
 .sce-root .sce-bar-selection {
   position: absolute;
@@ -661,7 +661,7 @@ ${labelThinning()}
     min-width: 2.5em;
   }
   .sce-root .sce-bar-number {
-    min-width: 32px;
+    min-width: 36px;
   }
 }
 
@@ -842,8 +842,25 @@ ${labelThinning()}
   padding: 8px;
 }
 .sce-root .sce-meter-summary {
-  padding: 2px 6px 8px;
+  padding: 2px 6px 4px;
   color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-meter-effect {
+  padding: 0 6px 8px;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-menu-hint {
+  padding: 4px 8px 6px;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-menu-refusal {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--sce-_line);
+  color: var(--sce-_text);
   font-size: 0.92em;
 }
 .sce-root .sce-meter-presets {
@@ -1242,6 +1259,12 @@ ${labelThinning()}
   /* Chinese breaks after its comma, and not between any two characters. */
   word-break: keep-all;
   text-wrap: balance;
+}
+@media (pointer: coarse) {
+  /* The caption shares the row with the project and Filter buttons on a phone; 11em keeps all three on one line. */
+  .sce-root .sce-synth-caption {
+    max-width: 11em;
+  }
 }
 .sce-root .sce-synth-told {
   color: var(--sce-_text);

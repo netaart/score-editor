@@ -23,6 +23,8 @@ function buildRuler(
     label.dataset.bar = String(bar.index);
     label.tabIndex = -1;
     label.style.setProperty("--t", String(bar.start));
+    label.setAttribute("aria-label", t.barLabel(bar.index + 1, false));
+    label.title = t.barTitle(bar.index + 1);
     label.textContent = String(bar.index + 1);
     numbers.appendChild(label);
   }
@@ -120,7 +122,11 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
           session.setBarSelection({ from, count: Math.abs(anchor - bar) + 1 });
         };
         const focusBar = (bar: number): void => {
-          root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`)?.focus();
+          const node = root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);
+          if (!node) return;
+          delete node.dataset.pointerFocus;
+          node.dataset.keyFocus = "";
+          node.focus();
         };
         const selected = () => (session.view.editable ? session.barSelection : null);
 
@@ -142,6 +148,8 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
             if (!target) return;
             const bar = Number(target.dataset.bar);
             const anchor = event.shiftKey ? (selected()?.from ?? bar) : bar;
+            target.dataset.pointerFocus = "";
+            delete target.dataset.keyFocus;
             event.preventDefault();
             try {
               root.setPointerCapture(event.pointerId);
@@ -150,7 +158,6 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
             }
             drag = { pointerId: event.pointerId, anchor, bar };
             choose(anchor, bar);
-            target.focus();
           },
           { signal },
         );
@@ -165,6 +172,7 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
             const range = selected();
             if (range === null) {
               session.setBarSelection({ from: bar, count: 1 });
+              live.say(messagesFor(session.view.language).barFirstChosen(bar + 1));
               return;
             }
             const first = range.from;
@@ -192,9 +200,7 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
         );
         const endDrag = (event: PointerEvent): void => {
           if (drag === null || event.pointerId !== drag.pointerId) return;
-          const { bar } = drag;
           drag = null;
-          if (event.type !== "pointercancel") focusBar(bar);
         };
         root.addEventListener("pointerup", endDrag, { signal });
         root.addEventListener("pointercancel", endDrag, { signal });
@@ -207,6 +213,7 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
             const target =
               event.target instanceof Element ? event.target.closest<HTMLElement>(".sce-bar-number") : null;
             if (!target) return;
+            delete target.dataset.pointerFocus;
             const last = score.bars.length - 1;
             const here = Number(target.dataset.bar);
             const range = selected();
@@ -268,7 +275,7 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
             node.setAttribute("aria-label", t.barLabel(index + 1, true));
           } else {
             delete node.dataset.selected;
-            node.removeAttribute("aria-label");
+            node.setAttribute("aria-label", t.barLabel(index + 1, false));
           }
         }
         const band = root?.querySelector<HTMLElement>(".sce-bar-selection");

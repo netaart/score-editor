@@ -120,7 +120,11 @@ export class Editor implements MountedEditor {
         projectPanel: true,
         draftKeeper: this.drafts,
         onChooseBars: (bar) => {
-          this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`)?.focus();
+          const number = this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);
+          if (!number) return;
+          delete number.dataset.pointerFocus;
+          number.dataset.keyFocus = "";
+          number.focus();
         },
       }),
     );

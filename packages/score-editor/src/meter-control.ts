@@ -1,12 +1,13 @@
 // ABOUTME: The toolbar's meter control: the target section's meter, the common meters the dialect allows, and a custom row.
 // ABOUTME: It acts on the section of the first chosen bar, else of the insertion point's bar, else the first section.
 import { barIndexAt, gridTicks } from "./arrangement";
+import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { messagesFor } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
 import { meterAllowed, meterChoices } from "./meter";
 import { keepInside, placeUnder } from "./popover-menu";
-import type { Meter, Score } from "./score";
+import { type Meter, type Score, TICKS_PER_QUARTER } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
@@ -45,9 +46,21 @@ function denominators(min: number, max: number, powerOfTwo: boolean): number[] {
   return values;
 }
 
+/** What a meter does to the target's bars: the count after the change, and whether its last bar is short. */
+function effectOf(score: Score, target: Target, meter: Meter): { bars: number; short: boolean } {
+  const first = score.bars[target.first];
+  const last = score.bars[target.last];
+  if (!first || !last || meter.numerator < 1 || meter.denominator < 1) return { bars: 0, short: false };
+  const length = last.start + last.length - first.start;
+  const barTicks = (4 * TICKS_PER_QUARTER * meter.numerator) / meter.denominator;
+  const whole = Math.floor(length / barTicks);
+  const short = length % barTicks !== 0;
+  return { bars: Math.max(1, whole), short };
+}
+
 /**
- * Mounts the meter control on `el`, at the end of the toolbar's controls. It is drawn while the session is editable, has
- * a score and shows the arrangement; its popover offers the common meters the dialect's rule allows and a custom pair.
+ * Mounts the meter control on `el`, after Bars and before the view controls. It is drawn while the session is editable,
+ * has a score and shows the arrangement; its popover offers the common meters the dialect's rule allows and a custom pair.
  */
 export interface MeterControlOptions extends EditingPartOptions {
   /** The toolbar's one live region; the control says its changes and refusals there. */
@@ -72,102 +85,182 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
   menu.setAttribute("role", "dialog");
   button.popoverTargetElement = menu;
   button.popoverTargetAction = "toggle";
+
+  let target: Target | null = null;
+  let offered: Meter[] = [];
   let choices: HTMLButtonElement[] = [];
+  let effect: HTMLElement | null = null;
+  let refusal: HTMLElement | null = null;
+  let beats: HTMLInputElement | null = null;
+  let value: HTMLSelectElement | null = null;
+  let lastRefusal: Diagnostic | null = null;
 
   function closeAndFocus(): void {
     menu.hidePopover();
     button.focus();
   }
 
-  function apply(target: Target, meter: Meter): void {
+  function nameOf(t: ReturnType<typeof messagesFor>, section: Target): string {
+    const score = session.reading.kind === "score" ? session.reading.score : null;
+    return score?.sections[section.section]?.name ?? t.unnamedSection;
+  }
+
+  function effectText(t: ReturnType<typeof messagesFor>, meter: Meter): string {
+    if (target === null) return "";
+    const score = session.reading.kind === "score" ? session.reading.score : null;
+    if (score === null) return "";
+    const { bars, short } = effectOf(score, target, meter);
+    return t.meterEffect(nameOf(t, target), target.first + 1, target.last + 1, meter, bars, short);
+  }
+
+  function showRefusal(diagnostic: Diagnostic | undefined): void {
+    lastRefusal = diagnostic ?? null;
+    if (diagnostic === undefined || refusal === null) {
+      if (refusal !== null) {
+        refusal.textContent = "";
+        refusal.hidden = true;
+      }
+      return;
+    }
+    refusal.textContent = formatDiagnostic(diagnostic, session.view.language);
+    refusal.hidden = false;
+  }
+
+  function clearRefusal(): void {
+    lastRefusal = null;
+    if (refusal === null) return;
+    refusal.textContent = "";
+    refusal.hidden = true;
+  }
+
+  function selectMeter(meter: Meter, moveFocus = false): void {
+    const t = messagesFor(session.view.language);
+    offered.forEach((found, at) => {
+      const choice = choices[at];
+      if (!choice) return;
+      const checked = found.numerator === meter.numerator && found.denominator === meter.denominator;
+      choice.setAttribute("aria-checked", String(checked));
+      choice.tabIndex = checked ? 0 : -1;
+      if (checked && moveFocus) choice.focus();
+    });
+    if (beats !== null) beats.value = String(meter.numerator);
+    if (value !== null) value.value = String(meter.denominator);
+    if (effect !== null) effect.textContent = effectText(t, meter);
+  }
+
+  function apply(meter: Meter): void {
+    if (target === null) return;
+    const t = messagesFor(session.view.language);
+    const effectSentence = effectText(t, meter);
     const result = session.dispatch({ type: "setSectionMeter", section: target.section, meter });
     if (!result.ok) {
       refused(result.diagnostics);
+      showRefusal(result.diagnostics[0]);
       return;
     }
-    options.live.say(messagesFor(session.view.language).meterSet(target.section + 1, meter));
+    clearRefusal();
+    options.live.say(t.meterSet(nameOf(t, target), meter, effectSentence));
     closeAndFocus();
   }
 
-  function renderMenu(target: Target): void {
+  function renderMenu(next: Target): void {
+    target = next;
     const t = messagesFor(session.view.language);
-    menu.setAttribute(
-      "aria-label",
-      `${t.meter}: ${t.meterSection(target.section + 1, target.first + 1, target.last + 1)}`,
-    );
+    const name = nameOf(t, next);
+    menu.setAttribute("aria-label", `${t.meter}: ${t.meterSection(name, next.first + 1, next.last + 1)}`);
     menu.replaceChildren();
+
     const summary = create(doc, "div", "sce-meter-summary", menu);
-    summary.textContent = t.meterSection(target.section + 1, target.first + 1, target.last + 1);
+    summary.textContent = t.meterSection(name, next.first + 1, next.last + 1);
+    effect = create(doc, "div", "sce-meter-effect", menu);
 
     const group = create(doc, "div", "sce-meter-presets", menu);
     group.setAttribute("role", "radiogroup");
     group.setAttribute("aria-label", t.meter);
     const constraints = session.constraints;
-    const offered = constraints === null ? [] : meterChoices(constraints);
-    if (constraints !== null && meterAllowed(target.meter, constraints.meter)) {
+    offered = constraints === null ? [] : meterChoices(constraints);
+    if (constraints !== null && meterAllowed(next.meter, constraints.meter)) {
       if (
         !offered.some(
-          (found) => found.numerator === target.meter.numerator && found.denominator === target.meter.denominator,
+          (found) => found.numerator === next.meter.numerator && found.denominator === next.meter.denominator,
         )
       ) {
-        offered.push(target.meter);
+        offered.push(next.meter);
       }
     }
     choices = offered.map((meter) => {
       const choice = create(doc, "button", "sce-menu-item sce-meter-choice", group);
       choice.type = "button";
       choice.setAttribute("role", "radio");
-      const checked = meter.numerator === target.meter.numerator && meter.denominator === target.meter.denominator;
-      choice.setAttribute("aria-checked", String(checked));
+      choice.tabIndex = -1;
       choice.textContent = t.meterText(meter);
-      choice.addEventListener("click", () => apply(target, meter), { signal });
+      choice.addEventListener("click", () => selectMeter(meter), { signal });
       return choice;
     });
 
-    if (constraints === null) return;
-    const custom = create(doc, "div", "sce-meter-custom", menu);
-    create(doc, "span", "sce-meter-custom-label", custom).textContent = t.meterCustom;
-    const beatsLabel = create(doc, "label", "sce-meter-field", custom);
-    create(doc, "span", "sce-meter-field-label", beatsLabel).textContent = t.meterBeats;
-    const beats = create(doc, "input", "sce-meter-input", beatsLabel);
-    beats.type = "number";
-    beats.min = String(constraints.meter.numerator.min);
-    beats.max = String(constraints.meter.numerator.max);
-    beats.step = "1";
-    beats.value = String(target.meter.numerator);
-    const valueLabel = create(doc, "label", "sce-meter-field", custom);
-    create(doc, "span", "sce-meter-field-label", valueLabel).textContent = t.meterValue;
-    const value = create(doc, "select", "sce-meter-input", valueLabel);
-    for (const denominator of denominators(
-      constraints.meter.denominator.min,
-      constraints.meter.denominator.max,
-      constraints.meter.denominator.powerOfTwo,
-    )) {
-      const option = create(doc, "option", "", value);
-      option.value = String(denominator);
-      option.textContent = String(denominator);
+    if (constraints !== null) {
+      const custom = create(doc, "div", "sce-meter-custom", menu);
+      create(doc, "span", "sce-meter-custom-label", custom).textContent = t.meterCustom;
+      const beatsLabel = create(doc, "label", "sce-meter-field", custom);
+      create(doc, "span", "sce-meter-field-label", beatsLabel).textContent = t.meterBeats;
+      beats = create(doc, "input", "sce-field sce-meter-input", beatsLabel);
+      beats.type = "number";
+      beats.min = String(constraints.meter.numerator.min);
+      beats.max = String(constraints.meter.numerator.max);
+      beats.step = "1";
+      value = null;
+      const valueLabel = create(doc, "label", "sce-meter-field", custom);
+      create(doc, "span", "sce-meter-field-label", valueLabel).textContent = t.meterValue;
+      value = create(doc, "select", "sce-field sce-meter-input", valueLabel);
+      for (const denominator of denominators(
+        constraints.meter.denominator.min,
+        constraints.meter.denominator.max,
+        constraints.meter.denominator.powerOfTwo,
+      )) {
+        const option = create(doc, "option", "", value);
+        option.value = String(denominator);
+        option.textContent = String(denominator);
+      }
+      const applyButton = create(doc, "button", "sce-button sce-meter-apply", custom);
+      applyButton.type = "button";
+      applyButton.textContent = t.meterApply;
+      const submit = () => {
+        const numerator = Number(beats?.value);
+        const denominator = Number(value?.value);
+        if (Number.isFinite(numerator) && Number.isFinite(denominator)) apply({ numerator, denominator });
+      };
+      applyButton.addEventListener("click", submit, { signal });
+      for (const field of [beats as HTMLElement, value as HTMLElement]) {
+        field.addEventListener(
+          "keydown",
+          (event) => {
+            if (event.key !== "Enter") return;
+            event.preventDefault();
+            submit();
+          },
+          { signal },
+        );
+        field.addEventListener(
+          "input",
+          () => {
+            const numerator = Number(beats?.value);
+            const denominator = Number(value?.value);
+            if (Number.isFinite(numerator) && Number.isFinite(denominator) && effect !== null) {
+              effect.textContent = effectText(t, { numerator, denominator });
+            }
+          },
+          { signal },
+        );
+      }
+    } else {
+      beats = null;
+      value = null;
     }
-    value.value = String(target.meter.denominator);
-    const applyButton = create(doc, "button", "sce-button sce-meter-apply", custom);
-    applyButton.type = "button";
-    applyButton.textContent = t.meterApply;
-    const submit = () => {
-      const numerator = Number(beats.value);
-      const denominator = Number(value.value);
-      apply(target, { numerator, denominator });
-    };
-    applyButton.addEventListener("click", submit, { signal });
-    for (const field of [beats, value] as HTMLElement[]) {
-      field.addEventListener(
-        "keydown",
-        (event) => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          submit();
-        },
-        { signal },
-      );
-    }
+
+    refusal = create(doc, "div", "sce-menu-refusal sce-meter-refusal", menu);
+    refusal.hidden = true;
+    if (lastRefusal !== null) showRefusal(lastRefusal);
+    selectMeter(next.meter);
   }
 
   let language: Language | null = null;
@@ -177,33 +270,34 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
       language = session.view.language;
       root.lang = language;
     }
-    const t = messagesFor(session.view.language);
     const { reading, view } = session;
     const score = reading.kind === "score" ? reading.score : null;
-    const target = score === null ? null : targetOf(score, session);
-    const shown = score !== null && target !== null && view.editable && arrangementShown(session);
+    const next = score === null ? null : targetOf(score, session);
+    const shown = score !== null && next !== null && view.editable && arrangementShown(session);
     const state = [
       shown,
-      target?.section,
-      target?.first,
-      target?.last,
-      target?.meter.numerator,
-      target?.meter.denominator,
+      next?.section,
+      next?.first,
+      next?.last,
+      next?.meter.numerator,
+      next?.meter.denominator,
       view.language,
     ].join();
     if (state === drawn) return;
     drawn = state;
+    target = next;
     root.hidden = !shown;
-    if (!shown || target === null) {
+    if (!shown || next === null) {
       button.textContent = "";
       button.removeAttribute("aria-label");
       button.removeAttribute("title");
       return;
     }
-    const label = `${t.meter} ${t.meterText(target.meter)}`;
+    const t2 = messagesFor(session.view.language);
+    const label = `${t2.meter} ${t2.meterText(next.meter)}`;
     button.textContent = label;
     button.setAttribute("aria-label", label);
-    button.title = t.meterSection(target.section + 1, target.first + 1, target.last + 1);
+    button.title = t2.meterSection(nameOf(t2, next), next.first + 1, next.last + 1);
   }
 
   menu.addEventListener(
@@ -215,8 +309,8 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
         view === null ? undefined : Math.max(0, view.innerHeight - button.getBoundingClientRect().bottom - 12);
       placeUnder(menu, button, room === undefined ? {} : { maxHeight: room });
       const { reading } = session;
-      const target = reading.kind === "score" ? targetOf(reading.score, session) : null;
-      if (target !== null) renderMenu(target);
+      const next = reading.kind === "score" ? targetOf(reading.score, session) : null;
+      if (next !== null) renderMenu(next);
     },
     { signal },
   );
@@ -252,7 +346,8 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
       else if (event.key === "End") next = choices.length - 1;
       if (next < 0) return;
       event.preventDefault();
-      choices[next]?.focus();
+      const meter = offered[next];
+      if (meter !== undefined) selectMeter(meter, true);
     },
     { signal },
   );

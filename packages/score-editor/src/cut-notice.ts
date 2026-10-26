@@ -1,6 +1,7 @@
 // ABOUTME: The cut notice view part: the one sentence that says the score text stops before the song does, and where.
 // ABOUTME: It holds the two repairs of an incomplete bar, Fill with rests and Delete, and is hidden when the score is complete.
 import { cutOf } from "./arrangement";
+import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create, requireDom } from "./dom";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
@@ -24,6 +25,8 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession, options
   notice.setAttribute("role", "note");
   const sentence = create(doc, "span", "sce-cut-sentence", notice);
   const actions = create(doc, "span", "sce-notice-actions", strip);
+  const refusal = create(doc, "span", "sce-cut-refusal", strip);
+  refusal.hidden = true;
   const fill = create(doc, "button", "sce-button sce-cut-fill", actions);
   fill.type = "button";
   const remove = create(doc, "button", "sce-button sce-cut-delete", actions);
@@ -32,6 +35,18 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession, options
   let reading = session.reading;
   let language: Language | null = null;
   let editable = session.view.editable;
+  let cutKey = "";
+  let lastRefusal: Diagnostic | null = null;
+  function showRefusal(diagnostic: Diagnostic | undefined): void {
+    lastRefusal = diagnostic ?? null;
+    if (diagnostic === undefined) {
+      refusal.textContent = "";
+      refusal.hidden = true;
+      return;
+    }
+    refusal.textContent = formatDiagnostic(diagnostic, session.view.language);
+    refusal.hidden = false;
+  }
   function render(): void {
     reading = session.reading;
     language = session.view.language;
@@ -39,6 +54,13 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession, options
     root.lang = language;
     const t = messagesFor(language);
     const cut = reading.kind === "score" ? cutOf(reading.score) : null;
+    const nextKey = cut === null ? "" : `${cut.voice}:${cut.bar}:${cut.short}`;
+    if (nextKey !== cutKey) {
+      cutKey = nextKey;
+      showRefusal(undefined);
+    } else if (lastRefusal !== null) {
+      showRefusal(lastRefusal);
+    }
     strip.hidden = !cut;
     sentence.textContent = cut ? t.cutNotice(cut) : "";
     const repair = cut?.short === true && editable;
@@ -69,8 +91,10 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession, options
     const result = session.dispatch({ type: command });
     if (!result.ok) {
       refused(result.diagnostics);
+      showRefusal(result.diagnostics[0]);
       return;
     }
+    showRefusal(undefined);
     live.say(command === "fillTruncatedBar" ? t.cutFilled(cut.bar, cut.voice) : t.cutDeleted(cut.bar, cut.voice));
   }
 

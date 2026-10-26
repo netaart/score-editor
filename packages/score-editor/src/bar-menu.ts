@@ -1,6 +1,7 @@
 // ABOUTME: The toolbar's Bars menu: choose bars, insert a bar at the insertion point, delete the chosen bars, clear them.
 // ABOUTME: It follows the session's bar selection and insertion point, and says a refusal the way the other parts do.
 import { barIndexAt, gridTicks } from "./arrangement";
+import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { messagesFor } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
@@ -41,36 +42,71 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
   const button = create(doc, "button", "sce-button sce-bars-button", root);
   button.type = "button";
   const menu = mountPopoverMenu(root, button, signal);
+  const hint = create(doc, "div", "sce-menu-hint", menu.element);
   const choose = menu.item("menuitem", () => {
     const bar = session.barSelection?.from ?? insertTarget(session) ?? 0;
     if (session.barSelection === null) session.setBarSelection({ from: bar, count: 1 });
     options.onChooseBars?.(Math.min(bar, Math.max(0, barCount(session) - 1)));
   });
-  const insert = menu.item("menuitem", () => {
-    const target = insertTarget(session);
-    if (target === null) return;
-    const before = barCount(session);
-    const result = session.dispatch({ type: "insertBar", bar: target });
-    if (!result.ok) {
-      refused(result.diagnostics);
-      return;
-    }
-    const t = messagesFor(session.view.language);
-    options.live.say(target >= before ? t.insertBarAtEndDone : t.insertBarBeforeDone(target + 1));
-  });
-  const remove = menu.item("menuitem", () => {
-    const range = session.barSelection;
-    if (range === null) return;
-    const result = session.dispatch({ type: "deleteBars", from: range.from, count: range.count });
-    if (!result.ok) {
-      refused(result.diagnostics);
-      return;
-    }
-    const t = messagesFor(session.view.language);
-    options.live.say(t.barsDeleted(range.from + 1, range.from + range.count));
-  });
+  const insert = menu.item(
+    "menuitem",
+    () => {
+      const target = insertTarget(session);
+      if (target === null) return;
+      const before = barCount(session);
+      const result = session.dispatch({ type: "insertBar", bar: target });
+      if (!result.ok) {
+        refused(result.diagnostics);
+        showRefusal(result.diagnostics[0]);
+        return true;
+      }
+      clearRefusal();
+      const t = messagesFor(session.view.language);
+      options.live.say(target >= before ? t.insertBarAtEndDone : t.insertBarBeforeDone(target + 1));
+    },
+    { keepOpen: true },
+  );
+  const remove = menu.item(
+    "menuitem",
+    () => {
+      const range = session.barSelection;
+      if (range === null) return;
+      const result = session.dispatch({ type: "deleteBars", from: range.from, count: range.count });
+      if (!result.ok) {
+        refused(result.diagnostics);
+        showRefusal(result.diagnostics[0]);
+        return true;
+      }
+      clearRefusal();
+      const t = messagesFor(session.view.language);
+      options.live.say(t.barsDeleted(range.from + 1, range.from + range.count));
+    },
+    { keepOpen: true },
+  );
   menu.rule();
-  const clear = menu.item("menuitem", () => session.setBarSelection(null));
+  const clear = menu.item("menuitem", () => {
+    clearRefusal();
+    session.setBarSelection(null);
+  });
+  const refusal = create(doc, "div", "sce-menu-refusal", menu.element);
+  refusal.hidden = true;
+  let lastRefusal: Diagnostic | null = null;
+
+  function showRefusal(diagnostic: Diagnostic | undefined): void {
+    lastRefusal = diagnostic ?? null;
+    if (diagnostic === undefined) {
+      clearRefusal();
+      return;
+    }
+    refusal.textContent = formatDiagnostic(diagnostic, session.view.language);
+    refusal.hidden = false;
+  }
+
+  function clearRefusal(): void {
+    lastRefusal = null;
+    refusal.textContent = "";
+    refusal.hidden = true;
+  }
 
   function barCount(target: EditingSession): number {
     return target.reading.kind === "score" ? target.reading.score.bars.length : 0;
@@ -86,8 +122,10 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
       button.textContent = t.bars;
       button.title = t.chooseBarsHint;
       menu.element.setAttribute("aria-label", t.bars);
+      hint.textContent = t.barsHow;
       choose.textContent = t.chooseBars;
       clear.textContent = t.clearBarSelection;
+      if (lastRefusal !== null) refusal.textContent = formatDiagnostic(lastRefusal, language);
       drawn = "";
     }
     const t = messagesFor(session.view.language);
@@ -104,7 +142,7 @@ export function mountBarMenu(el: HTMLElement, session: EditingSession, options: 
     const bars = score?.bars.length ?? 0;
     const insertEnabled = target !== null;
     insert.textContent =
-      target === null ? t.insertBar : target >= bars ? t.insertBarAtEnd : t.insertBarBefore(target + 1);
+      target === null ? t.insertBarNeedsPoint : target >= bars ? t.insertBarAtEnd : t.insertBarBefore(target + 1);
     insert.title = t.insertBarHint;
     insert.setAttribute("aria-disabled", String(!insertEnabled));
 

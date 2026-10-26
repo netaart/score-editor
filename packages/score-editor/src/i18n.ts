@@ -31,6 +31,10 @@ export interface Messages {
   /** What the live region says when a grid the score cannot write is put back to the default; `dropped` is the old grid. */
   gridDropped(dropped: Grid): string;
   bars: string;
+  /** How a person chooses a run: the menu hint and the sentence after the first tap. */
+  barsHow: string;
+  barTitle(bar: number): string;
+  barFirstChosen(bar: number): string;
   timeRuler: string;
   sections: string;
   unnamedSection: string;
@@ -50,6 +54,7 @@ export interface Messages {
   insertBarBefore(bar: number): string;
   insertBarAtEnd: string;
   insertBarHint: string;
+  insertBarNeedsPoint: string;
   insertBarBeforeDone(bar: number): string;
   insertBarAtEndDone: string;
   deleteBars: string;
@@ -62,8 +67,10 @@ export interface Messages {
   barsDeleted(first: number, last: number): string;
   /** The meter control: its name, the target section, the result, and the fields of its custom row. */
   meter: string;
-  meterSection(section: number, first: number, last: number): string;
-  meterSet(section: number, meter: Meter): string;
+  /** The target section as its band names it, and what a chosen meter does to its bars. */
+  meterSection(name: string, first: number, last: number): string;
+  meterEffect(name: string, first: number, last: number, meter: Meter, bars: number, short: boolean): string;
+  meterSet(name: string, meter: Meter, effect: string): string;
   meterBeats: string;
   meterValue: string;
   meterCustom: string;
@@ -272,6 +279,9 @@ const en: Messages = {
   gridDropped: (dropped) =>
     `The grid went back to ${enGridValue({ value: 4 })}: this score cannot write ${enGridValue(dropped)}`,
   bars: "Bars",
+  barsHow: "Click a bar number, or tap one and then another",
+  barTitle: (bar) => `Bar ${bar}: click to choose, or tap it and then another bar`,
+  barFirstChosen: (bar) => `Bar ${bar} chosen; tap another bar to extend`,
   timeRuler: "Time ruler",
   sections: "Sections",
   unnamedSection: "Unnamed",
@@ -296,6 +306,7 @@ const en: Messages = {
   insertBarBefore: (bar) => `Insert bar before bar ${bar}`,
   insertBarAtEnd: "Insert bar at the end",
   insertBarHint: "Put a bar at the insertion point",
+  insertBarNeedsPoint: "Insert bar (click a lane first)",
   insertBarBeforeDone: (bar) => `Inserted a bar before bar ${bar}`,
   insertBarAtEndDone: "Inserted a bar at the end",
   deleteBars: "Delete bars",
@@ -307,9 +318,10 @@ const en: Messages = {
   barLabel: (bar, selected) => `Bar ${bar}${selected ? ", selected" : ""}`,
   barsDeleted: (first, last) => (first === last ? `Deleted bar ${first}` : `Deleted bars ${first} to ${last}`),
   meter: "Meter",
-  meterSection: (section, first, last) =>
-    `Section ${section}, ${first === last ? `bar ${first}` : `bars ${first} to ${last}`}`,
-  meterSet: (section, { numerator, denominator }) => `Section ${section} is now ${numerator}/${denominator}`,
+  meterSection: (name, first, last) => `${name}, ${first === last ? `bar ${first}` : `bars ${first} to ${last}`}`,
+  meterEffect: (name, first, last, { numerator, denominator }, bars, short) =>
+    `At ${numerator}/${denominator}, ${first === last ? `bar ${first}` : `bars ${first} to ${last}`} of ${name} become ${bars} ${bars === 1 ? "bar" : "bars"}${short ? ", the last one short" : ""}; later bars renumber. Notes stay where they are.`,
+  meterSet: (name, { numerator, denominator }, effect) => `${name} is now ${numerator}/${denominator}. ${effect}`,
   meterBeats: "Beats per bar",
   meterValue: "Note value",
   meterCustom: "Custom",
@@ -480,6 +492,9 @@ const zh: Messages = {
   gridUnavailable: "这份乐谱写不出这一格",
   gridDropped: (dropped) => `网格已回到 ${zhGridValue({ value: 4 })}：这份乐谱写不出 ${zhGridValue(dropped)}`,
   bars: "小节",
+  barsHow: "点击小节号，或者先点一个再点另一个",
+  barTitle: (bar) => `第 ${bar} 小节：点击选择，或者先点一个再点另一个`,
+  barFirstChosen: (bar) => `已选中第 ${bar} 小节；再点另一个小节可以延长范围`,
   timeRuler: "时间尺",
   sections: "段落",
   unnamedSection: "未命名",
@@ -503,6 +518,7 @@ const zh: Messages = {
   insertBarBefore: (bar) => `在第 ${bar} 小节前插入一小节`,
   insertBarAtEnd: "在末尾插入一小节",
   insertBarHint: "在插入点插入一小节",
+  insertBarNeedsPoint: "插入小节（先点一下音轨）",
   insertBarBeforeDone: (bar) => `已在第 ${bar} 小节前插入一小节`,
   insertBarAtEndDone: "已在末尾插入一小节",
   deleteBars: "删除小节",
@@ -514,9 +530,11 @@ const zh: Messages = {
   barLabel: (bar, selected) => `第 ${bar} 小节${selected ? "，已选中" : ""}`,
   barsDeleted: (first, last) => (first === last ? `已删除第 ${first} 小节` : `已删除第 ${first} 至 ${last} 小节`),
   meter: "拍号",
-  meterSection: (section, first, last) =>
-    `第 ${section} 段，${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}`,
-  meterSet: (section, { numerator, denominator }) => `第 ${section} 段的拍号已改为 ${numerator}/${denominator}`,
+  meterSection: (name, first, last) =>
+    `${name}，${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}`,
+  meterEffect: (name, first, last, { numerator, denominator }, bars, short) =>
+    `改成 ${numerator}/${denominator} 后，${name} 的${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}会变成 ${bars} 小节${short ? "，最后一小节不完整" : ""}；后面的小节会重新编号。音符的位置不变。`,
+  meterSet: (name, { numerator, denominator }, effect) => `${name} 的拍号已改为 ${numerator}/${denominator}。${effect}`,
   meterBeats: "每小节拍数",
   meterValue: "音符时值",
   meterCustom: "自定义",

@@ -117,14 +117,6 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     live,
     ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
   });
-  const song = options.tempoKey
-    ? mountTempoKeyControls(row, session, {
-        refused,
-        live,
-        showNotices: (notices) => noticeStrip.show(notices),
-      })
-    : null;
-  const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
   const spacer = create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -136,6 +128,14 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
+  const song = options.tempoKey
+    ? mountTempoKeyControls(row, session, {
+        refused,
+        live,
+        showNotices: (notices) => noticeStrip.show(notices),
+      })
+    : null;
+  const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
   let restore: ViewPart | null = null;
   /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
   function syncRestore(): void {

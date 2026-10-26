@@ -98,8 +98,11 @@ async function expectInStep(page: Page, harness: Harness, names: string[]) {
   return (await harness.layout.view()).scrollLeft;
 }
 
-/** Presses Tab until `target` has the focus, as a keyboard user gets to a part. */
-async function tabTo(page: Page, target: Locator, limit = 16) {
+/**
+ * Presses Tab until `target` has the focus, as a keyboard user gets to a part. The layout mounts both its own zoom part and
+ * the toolbar's, so the reach is the toolbar's stops plus those two: Bars and Meter are the last two.
+ */
+async function tabTo(page: Page, target: Locator, limit = 18) {
   for (let presses = 0; presses < limit; presses++) {
     await page.keyboard.press("Tab");
     if (await target.evaluate((el) => el === el.ownerDocument.activeElement)) return;
