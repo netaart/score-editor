@@ -58,6 +58,7 @@ change. The tests in the repository check that the list stays complete.
 | `chordChoices` | core | What a chord picker may offer from a `ChordVocabulary`: letters with their spellings, the types the grammar can write, and whether a bass note is allowed, as `ChordChoices`. Pure. |
 | `splitChordName` | core | Splits a chord name into `ChordNameParts` by a vocabulary; null when the vocabulary does not allow the name. The grammar `setChord` checks. Pure. |
 | `filterNotes` | core | The ids of the notes that satisfy a `NoteFilter` (pitch, time, length, in or out of key, one in every N, invert) in a `Score`. Pure. |
+| `mountToolPanel` | core | Mounts the Tools button and its panel on `(el, session, { tools? })`: lists the built-in note tools and the host's, draws a control per declaration, previews and applies as one history step; takes `ToolPanelOptions`. |
 | `mountFilterPanel` | core | Mounts the Filter button and its panel on `(el, session)`: selects notes by condition through `session.select`; shown in read-only mode too. |
 | `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
 | `lyricBoundaryPlan` | core | The phrases that change and the `setLyricLinePhrase` commands, the line that gives up bars first, when an edge of a phrase is dragged to a tick. |
@@ -78,6 +79,8 @@ change. The tests in the repository check that the list stays complete.
 | `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`. |
 | `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
+| `NOTE_TOOLS` | core | The built-in note tools as `ScoreTool`s: split at the insertion point, chop on the grid, join same pitch, legato, reverse, flip, snap to key, length ×2 and ÷2, set length and fit into bars. |
+| `TOOL_GROUPS` | core | The four Tools panel groups: `["note", "quantize", "transform", "generate"]`. |
 | `song2Id` | song2 | `"song2"`. |
 | `song2Constraints` | song2 | The `DialectConstraints` of the `song2` format. |
 | `song2Dialect` | song2 | The `ScoreDialect` for `song2`: parse, serialize and check. |
@@ -86,7 +89,7 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, drafts. |
+| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, drafts, tools. |
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
@@ -153,7 +156,8 @@ change. The tests in the repository check that the list stays complete.
 | `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper?, tempoKey?, projectPanel? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper?, tempoKey?, projectPanel?, tools? }` for the toolbar. |
+| `ToolPanelOptions` | `{ tools?, onRefused? }` for the Tools panel: the host's tools beside the built-in note tools. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
@@ -161,7 +165,7 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `ScoreTool` | `{ id, name, parameters?, commands }`. |
+| `ScoreTool` | `{ id, name, description?, group?, parameters?, commands }`. |
 | `ToolText` | A display name in both interface languages. |
 | `ToolParameter` | One declaration: a `NumberToolParameter`, `BooleanToolParameter`, `ChoiceToolParameter` or `TextToolParameter`. |
 | `NumberToolParameter` | A number with optional `min`, `max` and `step`. |
@@ -169,7 +173,9 @@ change. The tests in the repository check that the list stays complete.
 | `ChoiceToolParameter` | A value from a fixed `values` list. |
 | `TextToolParameter` | Free text. |
 | `ToolParameterValue`, `ToolParameterValues` | One value, and values by parameter name. |
-| `ToolCommandBuilder` | `(project, selection, values) => ScoreCommand[]`; pure. |
+| `ToolCommandBuilder` | `(project, selection, values, context?) => ScoreCommand[]`; pure. A tool that declares the fourth parameter receives a `ToolContext`; one with three is called with three. |
+| `ToolContext` | `{ grid, insertionPoint }`: the grid in force and the insertion point's tick, or null. |
+| `ToolGroup` | `"note" \| "quantize" \| "transform" \| "generate" \| "more"`; a tool without a group is listed under "more". |
 | `ToolParameterCheck` | The validated values, or the `tool-parameter` diagnostics. |
 | `ToolResult` | `{ ok, project, diagnostics, commands }` from a preview or a run. |
 | `ToolRegistry` | `register`, `list` and `find` for the host's tools. |

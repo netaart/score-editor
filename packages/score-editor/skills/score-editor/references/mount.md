@@ -25,6 +25,7 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 | `language: Language` | Interface language, `"zh"` or `"en"`. |
 | `editable?: boolean` | Defaults to true. While true the toolbar offers undo, redo, Delete and a Select menu, a click or tap selects a note or sets the insertion point, and the editing keys act; see [view-parts.md](view-parts.md#editing-in-the-parts). While false the score is only shown and the toolbar shows a read-only badge. |
 | `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language. `command-refused` is an edit the user asked for that the score would not take, with nothing changed; the message says why and where. `draft-source-changed` and `draft-save-failed` come from the draft keeper (see `drafts`); the editor draws nothing of its own for them. |
+| `tools?: ScoreTool[]` | The host's custom tools, added beside the built-in note tools in the Tools panel. The list is read at mount; changing it with `update` does not rebuild the panel in this version. |
 | `drafts?: DraftStore` | The host's draft store. With it, and while `editable`, the editor keeps the user's edits as a draft under `project.sourceKey`, restores it on open, offers Restore original and shows the conflict strip; see [drafts.md](drafts.md#in-the-default-editor). Without it, or while read-only, nothing is kept and the store is never called. |
 
 `MountedEditor`:
@@ -47,6 +48,7 @@ const editor = mount(document.querySelector("#editor")!, {
   project, // a SongProject with modelId "song2"
   dialects: createDialectRegistry([song2Dialect]),
   drafts: store, // optional: a DraftStore; see drafts.md
+  tools: [myTool], // optional: custom tools in the Tools panel; see custom-tools.md
   notify: (notice) => showToast(notice.message),
 });
 
