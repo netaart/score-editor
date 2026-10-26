@@ -664,10 +664,11 @@ const staffBarXs = (page: Page) =>
         .map((box) => box.x)
         .sort((a, b) => a - b),
     );
-/** Where the cursor stands, in pixels in the drawing. */
+/** Where the cursor stands, in pixels in the drawing: the same coordinates as the SVG boxes beside it. */
 async function staffCursorX(page: Page) {
   const found = await box(staffCursor(page));
-  return found.x + found.width / 2;
+  const drawingAt = await box(drawing(page));
+  return found.x + found.width / 2 - drawingAt.x;
 }
 /** Drives the staff part's play position as a host player does. */
 const setStaffPosition = (page: Page, seconds: number | null) =>
@@ -869,12 +870,18 @@ test.describe("the staff view", () => {
       .toBeLessThan(2);
   });
 
-  test("starts the preview from the note a person presses on the staff", async ({ page, harness }) => {
+  test("starts the preview from the note a person presses on the staff", async ({ page, harness, press }) => {
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff", "synth"] });
     await expect(drawnNotes(page)).toHaveCount(5);
 
-    // The fifth note is the whole note G at the start of bar 2, tick 1024 at 4/4.
-    await drawnNotes(page).nth(4).locator("path").first().click();
+    // The fifth note is the whole note G at the start of bar 2, tick 1024 at 4/4. Press where the note is drawn,
+    // not on a child of it: a staff line can be over the note head and is what the pointer lands on.
+    const note = await box(drawnNotes(page).nth(4));
+    const staff = await box(drawing(page));
+    await press(drawing(page), {
+      x: note.x + note.width / 2 - staff.x,
+      y: note.y + note.height / 2 - staff.y,
+    });
 
     await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().from)).toBe(1024);
     await expect(staffCursor(page)).toBeVisible();
