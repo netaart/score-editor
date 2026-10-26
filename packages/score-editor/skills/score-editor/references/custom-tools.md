@@ -78,7 +78,10 @@ const all = tools.list();
 
 The Tools panel reads `tools.list()` and draws one control per declaration in the session's language: a number field
 with `min`/`max`/`step`, a checkbox for a boolean, a menu of `values` for a choice, a text field for text. A parameter
-without a `label` shows its `name`. A host gets the panel with `mount({ tools })`, `mountToolbar({ tools })` or
+without a `label` shows its `name`. A `default` may be a value or a function of the `ToolContext`, computed when the
+tool opens; `selectionFirstBar` and `selectionLastBar` make a bar range follow the selection. On a coarse pointer a number
+field also gets 40 px − and + buttons that step by `step` and stop at `min`/`max`, while a typed value outside the
+declaration is still refused. A host gets the panel with `mount({ tools })`, `mountToolbar({ tools })` or
 `mountToolPanel`; the built-in note tools (`NOTE_TOOLS`) are always listed. See
 [view-parts.md](view-parts.md#the-tools-panel).
 

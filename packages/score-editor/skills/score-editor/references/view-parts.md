@@ -382,7 +382,7 @@ in [custom-tools.md](custom-tools.md); this part is the panel that draws and run
 | `mountToolPanel(el, session, { tools? })` | A view part: a button labelled "Tools" ("工具"), the panel it opens, and the built-in note tools plus the host's. Returns a `ToolPanelPart`, whose `setTools` replaces the host's list. |
 | `NOTE_TOOLS` | The built-in note tools as `ScoreTool`s, for a host that builds a registry of its own. |
 | `TOOL_GROUPS`, `ToolGroup` | The four groups and the tools' group type. `"more"` is where a tool without a group is listed. |
-| `ToolContext` | `{ grid, insertionPoint }`: every tool receives it as the fourth `commands` argument; a three-parameter function ignores it. |
+| `ToolContext` | `{ grid, insertionPoint, selectionFirstBar, selectionLastBar }`: every tool receives it as the fourth `commands` argument; a three-parameter function ignores it. A parameter default may be a function of it. |
 | `ToolPanelOptions` | `{ tools?, onRefused? }`. |
 
 ```ts
@@ -396,20 +396,27 @@ mountToolPanel(row, session, { tools: [] }); // only the built-in note tools
   "Generate", and "More tools"; a group with no tool is left out. Each tool row is a button; choosing it opens its
   parameter controls beneath it, one tool at a time.
 - A control per declared parameter: a number field with `min`/`max`/`step`, a checkbox, a menu of a choice's `values`, a
-  text field; each starts at its default. A parameter without a `label` shows its `name`. Changing a control previews
-  again; the panel clamps nothing and shows a `tool-parameter` diagnostic in the status line when a value is refused.
+  text field; each starts at its default, computed from the `ToolContext` when the default is a function. A parameter
+  without a `label` shows its `name`. On a coarse pointer a number field gets 40 px − and + buttons that step by `step`
+  and stop at `min`/`max`. Changing a control previews again; the panel clamps nothing and shows a `tool-parameter`
+  diagnostic in the status line when a typed value is refused.
 - The preview is `session.previewTool`, so it changes no project and adds no history step. While it is shown the voice
   tracks draw the result's changed notes as dashed outlines at the place they would take, the same mark a drag makes;
-  the status line says how many notes would change or that nothing would. The outlines end when the panel closes, the
-  view changes, the session turns read-only, or the part is destroyed. They follow a change of parameter, selection,
-  project or grid while the panel is open.
-- Apply is one `session.runTool`, so one undo step. The status line says "Applied. One undo step."; a refusal leaves the
-  project and the history alone, says why, and goes to `onRefused` (which `mount` turns into the host's notice). The
-  panel stays open and does not preview the next run until another control, the selection or the grid changes, so a
-  second press cannot silently undo the first.
+  the status line says how many notes would change or that nothing would. Each outline has a 1 px ground halo; if no
+  outline is in the uncovered arrangement, the preview scrolls that arrangement's own view to one. The outlines end when
+  the panel closes, the view changes, the session turns read-only, or the part is destroyed. They follow a change of
+  parameter, selection, project or grid while the panel is open.
+- Apply is one `session.runTool`, so one undo step. The status line says "Applied. Undo takes it back."; a refusal
+  leaves the project and the history alone, names the tool as the list does, says how to recover, and goes to
+  `onRefused` (which `mount` turns into the host's notice). Apply with no tool chosen answers "Choose a tool first."
+  The panel stays open and does not preview the next run until another control, the selection or the grid changes, so a
+  second press cannot silently undo the first. One polite live region speaks on a committed value, Apply and a refusal,
+  not on each keystroke.
 - The button is an editing control: hidden while the session is read-only, while the score does not read, and while the
-  staff or text view is shown. The panel is a native popover; on a coarse pointer at a window of at most 640 px it is a
-  sheet from the bottom edge, at most 75% of the window's height. Its texts follow `session.view.language`.
+  staff or text view is shown. The panel is a native popover; a panel that hangs from a toolbar button starts at least
+  8 px under the toolbar and shrinks and scrolls inside to fit the window. On a coarse pointer at a window of at most
+  640 px it is a sheet from the bottom edge, capped so the music floor stays in view above it, with its status and
+  buttons on one footer line. Its texts follow `session.view.language`.
 - `mount` passes its `tools` option here; `mountToolbar` with `tools` mounts it in the toolbar row before the Filter
   button. A host that mounts the part itself puts it where it likes.
 
