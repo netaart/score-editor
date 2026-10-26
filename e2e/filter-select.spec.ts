@@ -83,15 +83,34 @@ test.describe("where the panel sits", () => {
       const button = await box(filterButton(page));
       expect(frame.y).toBeGreaterThanOrEqual(0);
       expect(frame.y + frame.height).toBeLessThanOrEqual(height);
-      const under = frame.y >= button.y + button.height;
-      if (height === 720) expect(under).toBe(true);
-      else if (button.y - frame.height >= 8) expect(frame.y + frame.height).toBeLessThanOrEqual(button.y);
-      else if (!under) expect(frame.y + frame.height).toBeGreaterThanOrEqual(height - 9);
+      // The design's branches, chosen from the boxes: under when the panel fits below, over when it fits above,
+      // otherwise as high as the window allows.
+      const below = height - (button.y + button.height) - 8;
+      if (frame.height <= below) {
+        expect(frame.y).toBeGreaterThanOrEqual(button.y + button.height);
+      } else if (button.y - frame.height >= 8) {
+        expect(frame.y + frame.height).toBeLessThanOrEqual(button.y);
+      } else {
+        expect(frame.y + frame.height).toBeGreaterThanOrEqual(height - 9);
+      }
       // Its last control can be pressed, the panel scrolling if the window is too short to show it whole.
       await press(panel(page).getByRole("button", { name: "Done", exact: true }));
       await expect(panel(page)).toBeHidden();
     });
   }
+
+  test("stands under its button when the window has room below it", async ({ page, harness, press, isMobile }) => {
+    test.skip(isMobile, "On a phone the panel is a sheet from the bottom edge, which has its own case.");
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await harness.mount({ score: { sample: "vocal-only-melody" } });
+    await press(page.getByRole("button", { name: "Filter", exact: true }));
+
+    const frame = await box(panel(page));
+    const button = await box(page.getByRole("button", { name: "Filter", exact: true }));
+    expect(frame.height).toBeLessThanOrEqual(720 - (button.y + button.height) - 8);
+    expect(frame.y).toBeGreaterThanOrEqual(button.y + button.height);
+    expect(frame.y + frame.height).toBeLessThanOrEqual(720);
+  });
 });
 
 test.describe("the pitch condition", () => {
@@ -313,7 +332,7 @@ test.describe("a score with no pitched note", () => {
     harness,
     press,
   }) => {
-    await openTrack(harness, vocalOnly("z4z4|"));
+    await openTrack(harness, vocalOnly("z16|"));
     await openPanel(page, press);
 
     await press(check(page, "Pitch"));
