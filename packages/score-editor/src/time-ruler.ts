@@ -132,7 +132,11 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
             const bar = Number(target.dataset.bar);
             const anchor = event.shiftKey ? (selected()?.from ?? bar) : bar;
             event.preventDefault();
-            root.setPointerCapture(event.pointerId);
+            try {
+              root.setPointerCapture(event.pointerId);
+            } catch {
+              // The pointer is gone already; the release that follows is the pointercancel.
+            }
             drag = { pointerId: event.pointerId, anchor, bar };
             choose(anchor, bar);
             target.focus();
