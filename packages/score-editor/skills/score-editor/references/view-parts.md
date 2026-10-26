@@ -280,10 +280,8 @@ words share one note. The two choices that need a name open a small form under t
 stays in the form with the refusal under it, and the refusal also goes to `onRefused`. A read-only session draws the
 bands and no menu.
 
-The bands are not tab stops, because the Tab key walks from the Arrangement region straight to the notes. With the
-focus on the ruler's region (in the default editor, the Arrangement region), Shift and F10 or the Menu key opens the
-menu of the section at the insertion point, or of the first section when there is none. A band that has the focus
-(clicked, or given back when a menu closes) is walked with Left, Right, Home and End, and opened with Enter or Space.
+Bands are not Tab stops: the Tab key walks from the Arrangement region straight to the notes. The section-menu keys
+are in [DESIGN.md](../../../../../DESIGN.md#section-menu).
 
 `sectionActions(session, section)` is the same answer for a control of your own: the six actions of one section, as
 `SectionAction`s named by `SectionActionName` in the menu's order, each with the command that does it and `unavailable`, the

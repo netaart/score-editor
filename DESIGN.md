@@ -175,7 +175,7 @@ Sizes are keyword-relative so the user's browser font size applies and a host's 
 
 **The Tabular Numbers Rule.** Every number that can change (bar numbers, octave labels, the zoom value, marks) uses lining, tabular numerals (`font-variant-numeric: lining-nums tabular-nums`) so numbers do not shift as the zoom changes.
 
-**The Keyword Size Rule.** No `px` or `rem` font sizes. The root is a keyword; descendants are `em`.
+**The Keyword Size Rule.** No `px` or `rem` font sizes. The root is a keyword; descendants are `em`. The one exception is a form field's `max(16px, 1em)` on a coarse pointer: below 16px a phone zooms the page when the field takes the focus, as the text view's box notes.
 
 ## Layout
 
@@ -194,6 +194,7 @@ Density follows pointer type, not viewport width. A fine pointer gets the compac
 | Row height and note height | 14px | 24px |
 | Toolbar button minimum height, and the width and height of an icon button | 28px | 36px |
 | Menu item minimum height | 30px | 40px |
+| Section band row | 1.7em (22px at the default text size) | max(1.7em, 25px) |
 
 A host that maps `--sce-row-height` overrides both. Header rows at the default text size are 24px (ruler), 22px (sections), 22px (marks) and 26px (chords); track heads are 22px. Spacing is a small set used as seen: 8px gaps in the toolbar, 12px toolbar side padding, 10px button side padding, 5px before the text of a flag or chord.
 
@@ -261,22 +262,6 @@ A 1.85em row (24px at the default size). Each bar number sits at the left edge o
 ### Section bands
 
 A 1.7em row (25px on a coarse pointer). One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing. While the session is editable a band opens the section menu (next).
-
-### Section menu
-
-While the session is editable each section band is a button laid over the whole band, so a press anywhere on it opens the menu and the pinned name keeps its place. A chevron follows the name (the 5px mark of the zoom value and the Select button); hover tints the band by 6% of text, only where a pointer hovers, the open state by 10%, and keyboard focus draws the 2px accent outline inside the band, because a ring outside it would be hidden by the rows around it. A read-only session draws the band as before: no button, no chevron, no menu, no key.
-
-**Menu.** The popover menu of the zoom control and the Select menu (`popover-menu.ts`), hung under the start of the band's pinned name, since the band's own start may be scrolled away. It is as wide as its text, so a menu near the right edge is not squeezed, and is then nudged into the window. Choices in three groups: Rename (the unnamed opening says "Name this section") and "Start a section at a bar"; Move earlier, Move later and Duplicate; Delete section. The three that ask for text end in an ellipsis. Delete comes last, because the first choice takes the focus and Enter on a destructive first choice is the wrong default, and it says "section", because the toolbar's Delete only turns notes into rests. The choices are made when the menu first opens, so a band holds two nodes until it is pressed.
-
-**A choice that cannot be done.** A choice the commands would refuse is `aria-disabled` and muted. Their words are its `aria-description`, and for the eye they stand once, under the last of a run of muted choices that are refused in the same words, aligned with the labels: a note under each choice said one sentence three times in the unnamed section's menu. The words are not written here. The menu dry-runs each command (`sectionActions`), so a rule that changes in the commands changes the menu, and the menu adds no refusal of its own. Pressing a muted choice does nothing and leaves the menu open, so the words can be read on a touch screen, where there is no tooltip, and it says them in the live region.
-
-**Form.** Rename, Name this section and Start a section at a bar ask for text in a popover (`role="dialog"`) under the band, not a modal: the task needs neither interruption nor protected focus. A line of context comes first (which bars the section covers), then the Bar field (Start only) and the Name field, then Cancel and a confirm in 600 weight that names the act ("Rename", "Name", "Start section"). Enter submits; Escape, Cancel and a press outside close it and give the focus back to the band. The bar offered is inside the section and does not start it: the insertion point's bar when it is such a bar, else the section's second bar. The field takes any number, and says under itself, before the form is sent, when the bar starts a section and so renames it. A refusal after a submit shows under the field it is about (`role="alert"`); that field takes `aria-invalid` and a 2px text-colour border, so it is a shape and not a colour, and takes the focus; the refusal also goes to `onRefused`. The form sends what was typed, and the commands alone decide what a bar or a name may be.
-
-**Keys.** Bands are not tab stops: the Tab order of the arrangement is pinned, with one tab stop among the notes. Shift and F10, or the Menu key, on the ruler or the arrangement opens the menu of the section at the insertion point (the first section when there is none); Left, Right, Home and End walk the bands; Enter or Space opens the one in focus; a right click opens it too. After a choice the focus goes to the band of the section acted on (the copy, the moved section, the new section, or the one that took a deleted section's place) and the view scrolls to it, and a polite live region says what was done.
-
-**Touch.** Menu items are 40px and the form's fields 36px with type of at least 16px (below that a phone zooms the page when a field takes the focus, as the text view's box notes). The row of bands is 25px and the control reaches 12px up into the row of bar numbers, which takes no press: 36px of target, as the rule for controls asks, without taking height from a phone's frame. A 36px row did take it: in the multi-select spec the finger-drawn selection box no longer found empty lane to start on. Nothing reaches down into the marks row.
-
-**Considered and not built.** Bar numbers as buttons (about 235 of them on a real song, thinned out at low zoom, and no path for a keyboard); the insertion point alone as the way to name a bar (it is hidden state, and a tick and not a bar); a modal dialog.
 
 ### Marks row
 
@@ -445,6 +430,22 @@ The synth preview is the one thing in the package that makes sound, so it has th
 
 **What the preview does about other sound.** It ignores it when it starts: it does not pause, duck or take over a host's audio, because that audio is the host's and an ambient, mixable sound is what the specification gives a context by default; and the evidence above is that the two go on side by side, neither paused (that they are heard together was not observed). It yields when another element starts: when an `<audio>` or `<video>` element in the page's document starts to play while the preview plays, the preview stops, because a media element is the stronger kind of audio in the specification ("playback" over "ambient"), a person who starts a track or a video did not mean the preview to go on over it, and a rough synthetic rendering is the one to give way. Escape also stops it, from wherever the focus is, so a person who hears it and has the focus in a lane does not have to find the toolbar again. The handler listens on the document, in the bubbling phase, and neither prevents the default nor stops the event, so a host's own Escape handler (a dialog it closes) still gets the key; a handler of the host's that stops the event below the document keeps it from the preview, which is then stopped by its button. A host whose audio is in a shadow root, an iframe or a detached `new Audio()` is not heard by the preview, and can call `previewPlayer(session).stop()` itself.
 
+### Section menu
+
+While the session is editable each section band is a button laid over the whole band, so a press anywhere on it opens the menu and the pinned name keeps its place. A chevron follows the name (the 5px mark of the zoom value and the Select button); hover tints the band by 6% of text, only where a pointer hovers, the open state by 10%, and keyboard focus draws the 2px accent outline inside the band, because a ring outside it would be hidden by the rows around it. A read-only session draws the band as before: no button, no chevron, no menu, no key.
+
+**Menu.** The popover menu of the zoom control and the Select menu (`popover-menu.ts`), hung under the start of the band's pinned name, since the band's own start may be scrolled away. It is as wide as its text, so a menu near the right edge is not squeezed, and is then nudged into the window. Choices in three groups: Rename (the unnamed opening says "Name this section") and "Start a section at a bar"; Move earlier, Move later and Duplicate; Delete section. The three that ask for text end in an ellipsis. Delete comes last, because the first choice takes the focus and Enter on a destructive first choice is the wrong default, and it says "section", because the toolbar's Delete only turns notes into rests. The choices are made when the menu first opens, so a band holds two nodes until it is pressed.
+
+**A choice that cannot be done.** A choice the commands would refuse is `aria-disabled` and muted. Their words are its `aria-description`, and for the eye they stand once, under the last of a run of muted choices that are refused in the same words, aligned with the labels: a note under each choice said one sentence three times in the unnamed section's menu. The words are not written here. The menu dry-runs each command (`sectionActions`), so a rule that changes in the commands changes the menu, and the menu adds no refusal of its own. Pressing a muted choice does nothing and leaves the menu open, so the words can be read on a touch screen, where there is no tooltip, and it says them in the live region.
+
+**Form.** Rename, Name this section and Start a section at a bar ask for text in a popover (`role="dialog"`) under the band, not a modal: the task needs neither interruption nor protected focus. A line of context comes first (which bars the section covers), then the Bar field (Start only) and the Name field, then Cancel and a confirm in 600 weight that names the act ("Rename", "Name", "Start section"). Enter submits; Escape, Cancel and a press outside close it and give the focus back to the band. The bar offered is inside the section and does not start it: the insertion point's bar when it is such a bar, else the section's second bar. The field takes any number, and says under itself, before the form is sent, when the bar starts a section and so renames it. A refusal after a submit shows under the field it is about (`role="alert"`); that field takes `aria-invalid` and a 2px text-colour border, so it is a shape and not a colour, and takes the focus; the refusal also goes to `onRefused`. The form sends what was typed, and the commands alone decide what a bar or a name may be.
+
+**Keys.** Bands are not tab stops: the Tab order of the arrangement is pinned, with one tab stop among the notes. Shift and F10, or the Menu key, on the ruler or the arrangement opens the menu of the section at the insertion point (the first section when there is none); Left, Right, Home and End walk the bands; Enter or Space opens the one in focus; a right click opens it too. After a choice the focus goes to the band of the section acted on (the copy, the moved section, the new section, or the one that took a deleted section's place) and the view scrolls to it, and a polite live region says what was done.
+
+**Touch.** Menu items are 40px and the form's fields 36px with type of at least 16px (below that a phone zooms the page when a field takes the focus, as the text view's box notes). The row of bands is 25px and the control reaches 12px up into the row of bar numbers, which takes no press, so the target is at least 37px, as the rule for controls asks, without taking height from a phone's frame. A 36px row did take it: in the multi-select spec the finger-drawn selection box no longer found empty lane to start on. Nothing reaches down into the marks row.
+
+**Considered and not built.** Bar numbers as buttons (about 235 of them on a real song, thinned out at low zoom, and no path for a keyboard); the insertion point alone as the way to name a bar (it is hidden state, and a tick and not a bar); a modal dialog.
+
 ## Do's and Don'ts
 
 ### Do:
@@ -452,7 +453,7 @@ The synth preview is the one thing in the package that makes sound, so it has th
 - **Do** take every colour from the theme variable contract or a `color-mix` of bg and text; add a new public variable only when a host cannot be served by derivation.
 - **Do** keep the neutral defaults described as defaults, and keep hosts' mapping optional: mapping only bg and text must stay readable.
 - **Do** size type with `small` at the root and `em` below, size header rows and pinned heads in `em`, and use tabular lining numerals for any number.
-- **Do** give every new interactive element a 2px accent outline with 2px offset on `:focus-visible`, and a coarse-pointer size (36px or larger for controls).
+- **Do** give every new interactive element a 2px accent outline with 2px offset on `:focus-visible`, and a coarse-pointer size (36px or larger for controls). The section band's control draws the 2px accent outline inside the band instead, because an outside ring is hidden by the rows around it; its target is the 25px row plus the 12px it reaches above, at least 37px (see the Section menu Touch paragraph).
 - **Do** say a state with a shape or words as well as colour, as the cut (hatch, dashed edge, a sentence) and the tie (one joined bar) do.
 - **Do** leave out text that does not fit its cell, whole, instead of cutting it; thin numbers out rather than crowd them.
 - **Do** place anything on the time axis in percent of its axis element, and change the zoom only by setting those elements' widths.
@@ -468,7 +469,7 @@ The synth preview is the one thing in the package that makes sound, so it has th
 ### Don't:
 
 - **Don't** state a brand: no fixed brand colour, no bundled font, no logo.
-- **Don't** hard-code `px` or `rem` font sizes, or a font family other than through `--sce-font-family`.
+- **Don't** hard-code `px` or `rem` font sizes, or a font family other than through `--sce-font-family`. The one exception is a form field's `max(16px, 1em)` on a coarse pointer, because below 16px a phone zooms the page when the field takes the focus.
 - **Don't** add shadows at rest. A shadow marks a floating thing.
 - **Don't** add decoration or motion, and don't tint a selection or the insertion point with the accent: they are the text colour, so shape and weight carry them.
 - **Don't** hold the zoom, or anything else that changes while the user zooms or scrolls, in an inherited custom property on the root.

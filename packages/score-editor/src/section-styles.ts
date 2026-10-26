@@ -126,12 +126,10 @@ export const sectionMenuCss = `
   font-weight: 600;
 }
 /*
- * A band is 22px tall, under the 24px WCAG 2.5.8 asks of a target and the 36px DESIGN.md asks of a control on a coarse
- * pointer. So on a coarse pointer the row of bands is 25px (a 24px control and the 1px rule under it), and the control
- * reaches 12px up into the row of bar numbers, which takes no press, for 36px in all. The row does not grow further because
- * a phone's frame has little height to give: at 36px the finger-drawn selection box of the multi-select spec no longer found
- * empty lane to start on. Nothing reaches down into the row of key and meter marks. Only the row of bands grows, and the
- * offset the tracks hang from follows it.
+ * The row does not grow further because a phone's frame has little height to give: at 36px the finger-drawn selection box
+ * of the multi-select spec no longer found empty lane to start on. The control reaches 12px above the row, for the at
+ * least 37px target DESIGN.md, Section menu, Touch gives. Nothing reaches down into the row of key and meter marks. Only
+ * the row of bands grows, and the offset the tracks hang from follows it.
  */
 @media (pointer: coarse) {
   .sce-root.sce-root {
