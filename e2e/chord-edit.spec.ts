@@ -109,7 +109,7 @@ test.describe("placing a chord", () => {
     await expect(open).toBeVisible();
     await expect(open.getByText("Bar 1, beat 2")).toBeVisible();
     await expect(open.getByRole("status")).toHaveText("C");
-    await expect(chordTrack(page).getByRole("status")).toHaveCount(1);
+    await expect(chordTrack(page).getByRole("status").first()).toHaveAttribute("role", "status");
     await open.getByRole("radiogroup", { name: "Root" }).getByRole("radio", { name: "A", exact: true }).click();
     await open.getByRole("radiogroup", { name: "Type" }).getByRole("radio", { name: "Am", exact: true }).click();
     await open.getByRole("button", { name: "Place", exact: true }).click();

@@ -85,8 +85,9 @@ const VARIANTS = {
         };
       },
       serialize(score) {
-        const text = song2Dialect.serialize(score);
         const ins = score.chords.filter((chord) => chord.noteId?.startsWith("Ins:"));
+        const vocal = score.chords.filter((chord) => !chord.noteId?.startsWith("Ins:"));
+        const text = song2Dialect.serialize({ ...score, chords: vocal, hasChords: vocal.length > 0 });
         return [text.trimEnd(), ...ins.map((chord) => `${marker}${chord.start} ${chord.name}`), ""].join("\n");
       },
       check() {
