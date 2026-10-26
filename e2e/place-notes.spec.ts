@@ -510,3 +510,48 @@ test.describe("the review's hint and real score", () => {
     expect(await page.evaluate(() => window.harness.layout.live().reading.kind)).toBe("score");
   });
 });
+
+test.describe("the lane word stays where the head is pinned", () => {
+  test("keeps Draw in the scroller's view at the start, middle and end, on the voice's line", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.mount({ score: { sample: "compact-three-sections" }, drafts: true, handoff: true });
+    await press(page.getByRole("button", { name: "Draw notes", exact: true }));
+    const scroller = page.locator(".sce-scroller");
+    const heads = page.locator(".sce-track-head");
+    const count = await heads.count();
+    expect(count).toBeGreaterThan(0);
+
+    const check = async (where: string) => {
+      const frame = await box(scroller);
+      for (let index = 0; index < count; index += 1) {
+        const head = heads.nth(index);
+        const word = head.locator(".sce-draw-mode");
+        const name = head.locator(".sce-track-name");
+        const keys = page.locator(".sce-track").nth(index).locator(".sce-keys");
+        await expect(word, `${where}: the word is shown`).toBeVisible();
+        const [at, named, column] = await Promise.all([box(word), box(name), box(keys)]);
+        const left = Math.max(frame.x, column.x + column.width);
+        expect(at.x, `${where}: the word is not under the pitch column`).toBeGreaterThanOrEqual(left - 0.5);
+        expect(at.x + at.width, `${where}: the word is inside the scroller`).toBeLessThanOrEqual(
+          frame.x + frame.width + 0.5,
+        );
+        expect(Math.abs(at.y + at.height / 2 - (named.y + named.height / 2)), `${where}: same line as the name`) //
+          .toBeLessThan(2);
+      }
+    };
+
+    await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBe(0);
+    await check("start");
+    await scroller.evaluate((el) => {
+      el.scrollLeft = Math.floor((el.scrollWidth - el.clientWidth) / 2);
+    });
+    await check("middle");
+    await scroller.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    await check("end");
+  });
+});
