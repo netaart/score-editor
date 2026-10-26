@@ -3,13 +3,13 @@
 import type { ScoreCommand } from "./commands";
 import type { ProjectCommand } from "./commands-project";
 import { formatDiagnostic } from "./diagnostics";
-import { create, requireDom } from "./dom";
+import { create, hasFocus, requireDom } from "./dom";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, type LiveRegion, sayRefusals } from "./live-region";
 import { joinLyrics, LYRICS_MAX_CHARACTERS, lyricCharacterCount, lyricLinesOf } from "./lyrics";
 import { carriedNotices } from "./project-notices";
 import type { SongProject } from "./score";
-import type { EditingSession } from "./session";
+import type { EditingSession, ScoreReading } from "./session";
 import { acquireStyles } from "./styles";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 
@@ -22,12 +22,6 @@ export interface ProjectPanel extends ViewPart {
 
 let panels = 0;
 
-/** Whether `field` has the focus: a value typed into it is the person's, and a redraw does not take it away. */
-function hasFocus(field: HTMLElement): boolean {
-  const scope = field.getRootNode();
-  return (scope instanceof Document || scope instanceof ShadowRoot) && scope.activeElement === field;
-}
-
 /** The mode the project holds, or null when the host gave none (a host that is not typed can leave it out). */
 function modeOf(project: SongProject): "full" | "melody" | null {
   const mode: unknown = project.scoreMode;
@@ -37,13 +31,14 @@ function modeOf(project: SongProject): "full" | "melody" | null {
 /**
  * The panel itself, drawn into `parent`, which must sit in a `.sce-root`. The toolbar draws it into its Project popover
  * and lends it its own live region, so a toolbar speaks with one voice; `mountProjectPanel` is the same panel as a part of
- * its own.
+ * its own. The popover passes `named: false`, since its dialog already carries the name.
  */
 export function drawProjectPanel(
   parent: HTMLElement,
   session: EditingSession,
   live: LiveRegion,
   onRefused: EditingPartOptions["onRefused"],
+  named = true,
 ): ProjectPanel {
   const doc = parent.ownerDocument;
   const abort = new AbortController();
@@ -67,21 +62,27 @@ export function drawProjectPanel(
     hint.id = id(`${field.dataset.field}-hint`);
     return hint;
   };
-  /** The value of a field while the session cannot edit: text, not a control. */
-  const valueIn = (field: HTMLElement) => create(doc, "p", "sce-panel-value", field);
+  /** The value of a field while the session cannot edit: text, not a control, named by the field's label. */
+  const valueIn = (field: HTMLElement, label: HTMLElement) => {
+    const value = create(doc, "p", "sce-panel-value", field);
+    value.setAttribute("aria-labelledby", label.id);
+    return value;
+  };
 
   const styleRow = row("style");
   const styleLabel = create(doc, "label", "sce-panel-label", styleRow);
+  styleLabel.id = id("style-label");
   const styleBox = create(doc, "textarea", "sce-field sce-panel-style", styleRow);
   styleBox.id = id("style");
   styleBox.rows = 3;
   styleLabel.htmlFor = styleBox.id;
-  const styleValue = valueIn(styleRow);
+  const styleValue = valueIn(styleRow, styleLabel);
   const styleHint = hintIn(styleRow);
   styleBox.setAttribute("aria-describedby", styleHint.id);
 
   const modeRow = row("mode", "fieldset");
   const modeLabel = create(doc, "legend", "sce-panel-label", modeRow);
+  modeLabel.id = id("mode-label");
   const choices = create(doc, "div", "sce-panel-choices", modeRow);
   const radios = new Map<"full" | "melody", { input: HTMLInputElement; name: HTMLElement; hint: HTMLElement }>();
   for (const mode of ["full", "melody"] as const) {
@@ -99,11 +100,12 @@ export function drawProjectPanel(
     input.setAttribute("aria-describedby", hint.id);
     radios.set(mode, { input, name, hint });
   }
-  const modeValue = valueIn(modeRow);
+  const modeValue = valueIn(modeRow, modeLabel);
   const modeHint = hintIn(modeRow);
 
   const seedRow = row("seed");
   const seedLabel = create(doc, "label", "sce-panel-label", seedRow);
+  seedLabel.id = id("seed-label");
   const seedLine = create(doc, "div", "sce-panel-seed", seedRow);
   const seedField = create(doc, "input", "sce-field sce-panel-seed-input", seedLine);
   seedField.id = id("seed");
@@ -113,7 +115,7 @@ export function drawProjectPanel(
   seedLabel.htmlFor = seedField.id;
   const seedClear = create(doc, "button", "sce-button sce-panel-seed-clear", seedLine);
   seedClear.type = "button";
-  const seedValue = valueIn(seedRow);
+  const seedValue = valueIn(seedRow, seedLabel);
   const seedHint = hintIn(seedRow);
   seedField.setAttribute("aria-describedby", seedHint.id);
 
@@ -131,14 +133,17 @@ export function drawProjectPanel(
   let language: Language | null = null;
   let t = messagesFor(session.view.language);
   /** What the last draw showed, so a change of zoom or scroll, which this part does not draw, costs nothing here. */
-  let shown: { project: SongProject; reading: unknown; editable: boolean } | null = null;
+  let shown: { project: SongProject; reading: ScoreReading; editable: boolean } | null = null;
 
   const refused = sayRefusals(live, session, onRefused);
 
   /** Dispatches one command. A refusal is said; a taken command is told in `done`. The fields go back to the project's values. */
-  function run(command: ScoreCommand | ProjectCommand, done: () => string): void {
+  function run(command: ScoreCommand | ProjectCommand, done: () => string, afterFix = false): void {
+    const focusWasInside = root.contains(doc.activeElement);
     const result = session.dispatch(command);
     draw(true);
+    // A fix removes the button that was pressed, so the focus stays in the panel instead of falling to the document.
+    if (afterFix && focusWasInside && !root.contains(doc.activeElement)) root.focus({ preventScroll: true });
     if (result.ok) live.say(done());
     else refused(result.diagnostics);
   }
@@ -178,7 +183,8 @@ export function drawProjectPanel(
     language = session.view.language;
     t = messagesFor(language);
     root.lang = language;
-    root.setAttribute("aria-label", t.projectName);
+    if (named) root.setAttribute("aria-label", t.projectName);
+    else root.removeAttribute("aria-label");
     styleLabel.textContent = t.projectStyle;
     modeLabel.textContent = t.projectMode;
     for (const [mode, { name, hint }] of radios) {
@@ -210,7 +216,7 @@ export function drawProjectPanel(
         const button = create(doc, "button", "sce-button sce-panel-fix", actions);
         button.type = "button";
         button.textContent = label;
-        button.addEventListener("click", () => run(command, done), { signal });
+        button.addEventListener("click", () => run(command, done, true), { signal });
       }
     }
   }
@@ -291,7 +297,7 @@ export function mountProjectPanel(
   el: HTMLElement,
   session: EditingSession,
   options: EditingPartOptions = {},
-): ViewPart {
+): ProjectPanel {
   requireDom("mountProjectPanel");
   const doc = el.ownerDocument;
   const releaseStyles = acquireStyles(el);
@@ -301,6 +307,10 @@ export function mountProjectPanel(
   const panel = drawProjectPanel(root, session, live, options.onRefused);
   let destroyed = false;
   return {
+    element: panel.element,
+    commit() {
+      panel.commit();
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;

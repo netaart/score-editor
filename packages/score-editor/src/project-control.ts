@@ -3,6 +3,7 @@
 import { create } from "./dom";
 import { messagesFor } from "./i18n";
 import type { LiveRegion } from "./live-region";
+import { keepInside, placeUnder } from "./popover-menu";
 import { carriedNotices } from "./project-notices";
 import { drawProjectPanel } from "./project-panel";
 import type { EditingSession } from "./session";
@@ -36,7 +37,7 @@ export function mountProjectControl(
   button.setAttribute("aria-expanded", "false");
   button.popoverTargetElement = popover;
   button.popoverTargetAction = "toggle";
-  const panel = drawProjectPanel(popover, session, live, onRefused);
+  const panel = drawProjectPanel(popover, session, live, onRefused, false);
 
   /** Puts the popover under the button: on a narrow window it spans the window, and its height is the room below the button. */
   function place(): void {
@@ -44,22 +45,16 @@ export function mountProjectControl(
     const rect = button.getBoundingClientRect();
     const narrow = view?.matchMedia("(max-width: 40em)").matches ?? false;
     popover.toggleAttribute("data-narrow", narrow);
-    popover.style.top = `${rect.bottom + 4}px`;
-    popover.style.left = narrow ? "" : `${rect.left}px`;
-    popover.style.maxHeight = `${Math.max((view?.innerHeight ?? 0) - rect.bottom - 12, 0)}px`;
-  }
-  /** Moves a placed popover left where it would run off the window; it must be shown to be measured. */
-  function keepInside(): void {
-    const view = doc.defaultView;
-    if (!view || popover.hasAttribute("data-narrow")) return;
-    const overflow = popover.getBoundingClientRect().right - (view.innerWidth - 8);
-    if (overflow > 0) popover.style.left = `${Math.max(8, popover.getBoundingClientRect().left - overflow)}px`;
+    placeUnder(popover, button, {
+      narrow,
+      maxHeight: Math.max((view?.innerHeight ?? 0) - rect.bottom - 12, 0),
+    });
   }
   /** The toolbar wraps again when its controls come and go or the window changes, which moves the button the popover hangs from. */
   function follow(): void {
     if (!popover.matches(":popover-open")) return;
     place();
-    keepInside();
+    keepInside(popover, popover.hasAttribute("data-narrow"));
   }
 
   popover.addEventListener(
@@ -76,7 +71,7 @@ export function mountProjectControl(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      keepInside();
+      keepInside(popover, popover.hasAttribute("data-narrow"));
       panel.element.focus({ preventScroll: true });
     },
     { signal },
