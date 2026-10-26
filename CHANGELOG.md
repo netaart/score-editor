@@ -57,8 +57,9 @@ No new exports and no new dialect API; the reader and the writer changed as the 
 
 ### Changed
 
-- **The staff cursor.** It now sits on each bar's first drawn onset, not its first written note, is drawn in the note
-  colour, and its band is 20% of the row. (`30a659a`, `395e52c`, `78d1328`, `6994ed5`)
+- **The staff cursor.** It now sits on each bar's first drawn onset, not its first written note, and is drawn in the
+  note colour: a 2 px line with a 3 px band of the same colour at 20% on each side, so it reads apart from the black
+  bar lines. (`30a659a`, `395e52c`, `78d1328`, `6994ed5`)
 - **`Z2`–`Z4` runs.** song2 reads each run as that many whole-bar rests in the bar's meter; the staff draws one bar per
   rest, and a `Score` may carry the optional `drawingText` a drawing view reads instead of the written text.
   (`fc55daa`, `0c343c1`)
