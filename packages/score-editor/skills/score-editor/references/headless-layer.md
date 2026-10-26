@@ -31,7 +31,9 @@ dialect-private `source` the core never reads. `unitTicks` is how many ticks one
 command can ask the dialect's `constraints.durations` what it can write; a score that does not state it is refused by
 the note commands with `unit-unknown`. `drawingText` is the text a view that draws the score should read when it differs
 from the written text: `song2` expands each `Z2`–`Z4` run into separate one-bar rests there, while the project and the
-text view keep the run. `noteId(voice, start)` builds the stable id the model uses.
+text view keep the run. A dialect whose scores carry `tempoChanges` must put each change into `drawingText` as an inline
+tempo field at that bar, so the staff shows why the cursor's speed changes; no registered dialect has one.
+`noteId(voice, start)` builds the stable id the model uses.
 
 `Bar`, `Note`, `Chord`, `Section`, `Tempo`, `Meter`, `KeyChange` and `Truncation` describe those parts. `Meter` is a
 fraction of a whole note; `Note.midi` is 0-127 or `null` for a rest; `Note.tie` continues into the next note of the
