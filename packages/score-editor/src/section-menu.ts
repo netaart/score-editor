@@ -59,11 +59,11 @@ function bandIndices(bands: ReadonlyMap<number, unknown>): number[] {
   return [...bands.keys()].sort((a, b) => a - b);
 }
 
-/** Where a menu or the form hangs from: the start of the band's name, which stays in view, and the line under the band. */
-function anchorOf(band: HTMLElement): { left: number; bottom: number } {
+/** Where a menu or the form hangs from: the start of the band's name, the line under the band, and the band's top. */
+function anchorOf(band: HTMLElement): { left: number; bottom: number; top: number } {
   const box = band.getBoundingClientRect();
   const name = band.querySelector(".sce-section-name")?.getBoundingClientRect();
-  return { left: Math.max(8, name?.left ?? box.left), bottom: box.bottom };
+  return { left: Math.max(8, name?.left ?? box.left), bottom: box.bottom, top: box.top };
 }
 
 export function createSectionMenus(session: EditingSession, options: AxisPartOptions = {}): SectionMenus {
@@ -290,7 +290,10 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
         updateForm();
         element.showPopover();
         const band = draw.bands.get(section);
-        if (band) placePopover(element, anchorOf(band));
+        if (band) {
+          const place = anchorOf(band);
+          placePopover(element, place, place.top);
+        }
         const focus = how === "start" ? bar.input : name.input;
         focus.focus();
         focus.select();

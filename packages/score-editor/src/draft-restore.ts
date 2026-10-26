@@ -57,7 +57,7 @@ export function mountRestoreControl(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      nudgeIntoWindow(popover);
+      nudgeIntoWindow(popover, button.getBoundingClientRect().top);
       cancel.focus();
     },
     { signal },

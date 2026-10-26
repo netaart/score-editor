@@ -16,19 +16,34 @@ export interface PopoverAnchor {
   readonly bottom: number;
 }
 
-/** Puts a popover that is about to open under its anchor, on the anchor's left edge. */
+/** Puts a popover that is about to open under its anchor, on the anchor's left edge, with no old height limit. */
 export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement): void {
+  popover.style.maxHeight = "";
+  popover.style.overflowY = "";
   popover.style.left = `${anchor.left}px`;
   popover.style.top = `${anchor.bottom + 4}px`;
 }
 
-/** Moves an open popover left until it is inside the window, 8px from its edge, when it ran off to the right. */
-export function nudgeIntoWindow(popover: HTMLElement): void {
+/**
+ * Moves an open popover inside the window, 8px from its edges. It is nudged left when it runs off to the right. When its
+ * bottom runs off, it goes above `anchorTop` when it fits there; otherwise it starts 8px from the top and scrolls.
+ */
+export function nudgeIntoWindow(popover: HTMLElement, anchorTop?: number): void {
   const view = popover.ownerDocument.defaultView;
   if (!view) return;
   const rect = popover.getBoundingClientRect();
   const overflow = rect.right - (view.innerWidth - 8);
   if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
+  const below = rect.bottom - (view.innerHeight - 8);
+  if (below <= 0) return;
+  const above = anchorTop === undefined ? undefined : anchorTop - 4 - rect.height;
+  if (above !== undefined && above >= 8) {
+    popover.style.top = `${above}px`;
+    return;
+  }
+  popover.style.top = "8px";
+  popover.style.maxHeight = `${view.innerHeight - 16}px`;
+  popover.style.overflowY = "auto";
 }
 
 export interface PopoverMenuOptions {
@@ -45,16 +60,16 @@ export interface PopoverMenuOptions {
  * Places an open popover under `anchor` and inside the window. The menu and the section form hang from the same point,
  * so they place themselves the same way.
  */
-export function placePopover(element: HTMLElement, anchor: PopoverAnchor): void {
+export function placePopover(element: HTMLElement, anchor: PopoverAnchor, anchorTop?: number): void {
   placeUnder(anchor, element);
-  nudgeIntoWindow(element);
+  nudgeIntoWindow(element, anchorTop);
 }
 
 /**
  * Makes the menu that `button` opens, as the last child of `root`. The menu is a native popover, so it stacks above a
- * host's full-screen layer, and it sits under the button, moved left when it would run off the window. The first item,
- * or the one `initialFocus` names, takes the focus when it opens, and Up, Down, Home and End move between the items.
- * Everything it adds is removed with `root`.
+ * host's full-screen layer, and it sits under the button, moved left or above it when it would run off the window. The
+ * first item, or the one `initialFocus` names, takes the focus when it opens, and Up, Down, Home and End move between
+ * the items. Everything it adds is removed with `root`.
  */
 export function mountPopoverMenu(
   root: HTMLElement,
@@ -86,7 +101,7 @@ export function mountPopoverMenu(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      nudgeIntoWindow(menu);
+      nudgeIntoWindow(menu, button.getBoundingClientRect().top);
       (options.initialFocus?.(items) ?? items[0])?.focus();
     },
     { signal },
