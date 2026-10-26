@@ -891,6 +891,31 @@ test.describe("the save control re-chooses with the box, the language and the fo
     }
   });
 
+  test("a resize re-chooses the form while the file is dirty", async ({ page, harness, press, isMobile }) => {
+    test.skip(isMobile, "the box is resized on the desktop project");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.evaluate(() => {
+      window.harness.stage.style.width = "1280px";
+    });
+    await openFile(harness);
+    await deleteD(page, press);
+
+    await page.evaluate(() => {
+      window.harness.stage.style.width = "320px";
+    });
+    await harness.frames(2);
+    const narrow = await saveLooks(page);
+    const widest = await widestWordsHeight(page, "en");
+    const icon = await iconFormHeight(page);
+
+    await harness.destroy();
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
+    const base = (await box(page.locator(".sce-toolbar"))).height;
+    expect(narrow.form, "the new box chooses its own form").toBe(widest > base ? "true" : "false");
+    expect([base, icon], "only the box's own rows, and the state is dirty").toContain(narrow.height);
+  });
+
   test("a settled font re-chooses the form, and the state does not", async ({ page, harness, press, isMobile }) => {
     test.skip(isMobile, "the font is changed on the desktop project");
     await page.setViewportSize({ width: 1280, height: 900 });
