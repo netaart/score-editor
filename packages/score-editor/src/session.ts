@@ -9,7 +9,7 @@ import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
-import type { Language } from "./types";
+import type { DialectConstraints, Language } from "./types";
 
 /** What reading the project's score came to: a score, or the reason there is none. */
 export type ScoreReading =
@@ -20,6 +20,12 @@ export type ScoreReading =
 /** Where a paste or an inserted bar lands: a position on the shared time axis, in ticks. */
 export interface InsertionPoint {
   readonly tick: number;
+}
+
+/** A run of bars chosen in the ruler: `from` is 0-based and `count` is at least one. UI state, not in the history. */
+export interface BarSelection {
+  readonly from: number;
+  readonly count: number;
 }
 
 /** The UI state that several view parts must show alike. It is not part of the document and not in the history. */
@@ -74,6 +80,7 @@ export type DispatchResult =
 /** What caused a change the session announces. */
 export type SessionChangeCause =
   | "dispatch"
+  | "bar-selection"
   | "undo"
   | "redo"
   | "select"
@@ -124,8 +131,15 @@ export interface EditingSession {
   readonly selection: ReadonlyArray<string>;
   /** The insertion point, or null when none is set. UI state: not in the history. */
   readonly insertionPoint: InsertionPoint | null;
+  /**
+   * The run of bars chosen in the ruler, or null when none is chosen. UI state like the note selection: it is separate
+   * from it, not in the history, and a change of the project clears it because the bars it names may have moved.
+   */
+  readonly barSelection: BarSelection | null;
   /** The view state: zoom, horizontal scroll, language and whether the user may edit, shared by every part bound to the session. */
   readonly view: ViewState;
+  /** The dialect's declared constraints, or null while the project's model has no dialect; the meter control reads its rule. */
+  readonly constraints: DialectConstraints | null;
   /**
    * Which view is shown. UI state like the selection: not in the history and not a field of `view`. The default editor shows
    * this view; a host that lays its own views out reads it to show the same one, or sets it from its own switcher.
@@ -170,6 +184,8 @@ export interface EditingSession {
   previewTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
   /** Selects exactly these notes. Ids that name no note are left out. */
   select(noteIds: ReadonlyArray<string>): void;
+  /** Chooses a run of bars, or clears the choice with null. A run beyond the score is trimmed to the bars that exist. */
+  setBarSelection(range: BarSelection | null): void;
   /** Puts the insertion point at `point`, or removes it with null. A tick must be a whole number, zero or more. */
   setInsertionPoint(point: InsertionPoint | null): void;
   /** Shows another view. Throws a RangeError for a name that is not in `VIEW_NAMES`. */
@@ -224,6 +240,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   let dialects = options.dialects;
   let selection: ReadonlyArray<string> = [];
   let insertionPoint: InsertionPoint | null = null;
+  let barSelection: BarSelection | null = null;
   let activeView: ViewName = options.activeView ?? "arrangement";
   let rejectedText: RejectedText | null = null;
   let view: ViewState = {
@@ -289,10 +306,26 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     return a.length === b.length && a.every((id, at) => id === b[at]);
   }
 
+  function sameBarSelection(a: BarSelection | null, b: BarSelection | null): boolean {
+    return a === b || (a !== null && b !== null && a.from === b.from && a.count === b.count);
+  }
+
+  /** A range trimmed to the bars the score has; a range that names none, or no score, leaves no choice. */
+  function barsStillInScore(range: BarSelection | null): BarSelection | null {
+    if (range === null) return null;
+    const reading = read();
+    if (reading.kind !== "score" || reading.score.bars.length === 0) return null;
+    if (!Number.isInteger(range.from) || !Number.isInteger(range.count) || range.count < 1) return null;
+    const from = Math.max(0, Math.min(range.from, reading.score.bars.length - 1));
+    const last = Math.min(reading.score.bars.length - 1, range.from + range.count - 1);
+    return last < from ? null : { from, count: last - from + 1 };
+  }
+
   function projectChanged(cause: SessionChangeCause, command?: ProjectCommand): void {
     const kept = idsStillInScore(selection);
     const selectionChanged = !sameIds(kept, selection);
     selection = kept;
+    barSelection = null;
     rejectedText = null;
     announce(cause, { project: true, selection: selectionChanged, ...(command === undefined ? {} : { command }) });
   }
@@ -345,6 +378,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       project = next;
       selection = [];
       insertionPoint = null;
+      barSelection = null;
       rejectedText = null;
       announce("replace", { project: true, selection: hadSelection, insertionPoint: hadInsertionPoint });
     },
@@ -380,6 +414,15 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get insertionPoint() {
       return insertionPoint;
+    },
+    get barSelection() {
+      return barSelection;
+    },
+    get constraints() {
+      return withDialect<DialectConstraints | null>(
+        (dialect) => dialect.constraints,
+        () => null,
+      );
     },
     get activeView() {
       return activeView;
@@ -417,6 +460,12 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       if (sameIds(next, selection)) return;
       selection = next;
       announce("select", { selection: true });
+    },
+    setBarSelection(range) {
+      const next = barsStillInScore(range);
+      if (sameBarSelection(next, barSelection)) return;
+      barSelection = next;
+      announce("bar-selection", {});
     },
     dispatch(command) {
       return applyCommands([command], isProjectCommand(command) ? command : undefined);

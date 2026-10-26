@@ -68,6 +68,7 @@ export {
   syllableCount,
   unalignedLyricLines,
 } from "./lyrics";
+export { COMMON_METERS, meterAllowed, meterChoices } from "./meter";
 export { mount } from "./mount";
 // The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
@@ -93,6 +94,7 @@ export type {
 } from "./score";
 export { noteId, TICKS_PER_QUARTER } from "./score";
 export type {
+  BarSelection,
   DispatchResult,
   EditingSession,
   InsertionPoint,

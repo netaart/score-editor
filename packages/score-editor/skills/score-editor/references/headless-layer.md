@@ -161,7 +161,7 @@ if (plan && plan.commands.length > 0) project = applyCommandList(song2Dialect, p
 
 `ScoreDialect` is `{ id, constraints, parse, serialize, check }`. `DialectConstraints` declares the voices, keys,
 tempo range, section marker, lyric rule, durations, meter rule and chord vocabulary (`ChordVocabulary`, `DurationSet`,
-`MeterRule`). The editor narrows its interface by those declarations; see [dialect-registry.md](dialect-registry.md).
+`MeterRule`). The editor narrows its interface by those declarations; see [dialect-registry.md](dialect-registry.md). For a meter control, `meterAllowed` says whether one `Meter` is inside the rule, `meterChoices` returns the common meters it allows, and `COMMON_METERS` is that common list before filtering.
 
 `Language` is `"zh" | "en"`. `Notice` is a one-time message for the host's own toast system, `NoticeCode` its
 machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-refused"`, sent when the score would not take an edit the user asked for).

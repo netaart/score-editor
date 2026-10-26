@@ -32,6 +32,8 @@ const session = createEditingSession({
 | `reading` | A `ScoreReading`, cached until the score text, model or dialects change. |
 | `selection` | `ReadonlyArray<string>` of note ids. UI state. Ids of notes that no longer exist are dropped. |
 | `insertionPoint` | `InsertionPoint \| null` (`{ tick }`). UI state. |
+| `barSelection` | `BarSelection \| null` (`{ from, count }`, `from` base 0). A run of bars chosen in the ruler. UI state, separate from `selection` and outside the history; a project change clears it. |
+| `constraints` | The `DialectConstraints` of the project's dialect, or null when no dialect is registered; the meter control reads its `meter` rule. |
 | `view` | `ViewState`: `{ zoom, scrollLeft, language, editable }`, shared by all parts. `editable` says whether the user may change the score: parts offer editing controls and take selection and editing keys only while it is true. It does not stop `dispatch`; whoever drives the session directly decides what it sends. |
 | `activeView` | `ViewName` (`"arrangement"`, `"staff"` or `"text"`, listed in `VIEW_NAMES`): which view is shown. UI state like the selection, outside the history and not a field of `view`. The default editor shows this view; a host with its own layout reads it, or sets it from its own switch. |
 | `rejectedText` | `RejectedText \| null` (`{ text, diagnostics }`): text the text view holds that cannot be read, so the project kept the last score that could. Any change of the project, and `replaceProject`, drops it. |
@@ -53,6 +55,7 @@ const session = createEditingSession({
 | `previewTool(tool, values?)` | Returns what the tool would produce without dispatching, changing the history or notifying anyone. |
 | `undo()` / `redo()` | Move one whole project step. Return false when there is none. |
 | `select(noteIds)` | Selects exactly these notes; ids that name no note are left out. It works while the session is read-only, so a host's own control can select when the parts refuse to. |
+| `setBarSelection(range \| null)` | Chooses a run of bars, or clears it with null. A run beyond the score is trimmed to the bars that exist; a run that names none is null. Like `select`, it works while the session is read-only. |
 | `setInsertionPoint(point \| null)` | Sets the insertion point; `tick` is a whole number, zero or more. Throws `RangeError` otherwise. |
 | `setView(patch)` | Changes zoom, scroll, language or editable by the given keys. Zoom is clamped to 0.01-4, scroll to zero or more. |
 | `replaceProject(next)` | Starts a new document from outside: history, selection and insertion point go; view state stays. No-op when every field is the same. |
@@ -60,8 +63,8 @@ const session = createEditingSession({
 | `subscribe(listener)` | Calls `listener(change)` after every change and returns the unsubscribe function. |
 
 `SessionChange` is `{ cause, project, selection, insertionPoint, view, command? }`. The four booleans say which state the change
-touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,
-`"replace"`, `"active-view"` or `"rejected-text"`; the last two touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
+touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"bar-selection"`, `"insertion-point"`, `"view"`,
+`"replace"`, `"active-view"` or `"rejected-text"`; `bar-selection`, `active-view` and `rejected-text` touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
 of the change; its error goes to `reportError`.
 
 `DispatchResult` is either `{ ok: true, project, diagnostics }` or `{ ok: false, project, diagnostics }`. The
