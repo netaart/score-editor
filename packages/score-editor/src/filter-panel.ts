@@ -255,8 +255,6 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       [timeFirst, conditions.time.first],
       [timeLast, conditions.time.last],
     ] as const) {
-      field.min = "1";
-      field.max = String(bars);
       field.value = String(kept);
     }
     time.check.checked = conditions.time.on;
@@ -293,8 +291,6 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     keyChoice.value = conditions.key.mode;
     key.check.checked = conditions.key.on;
 
-    countEvery.min = "1";
-    countSkip.min = "0";
     countEvery.value = conditions.count.every === null ? "" : String(conditions.count.every);
     countSkip.value = conditions.count.skip === null ? "" : String(conditions.count.skip);
     count.check.checked = conditions.count.on;
@@ -332,10 +328,12 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     let conditionsOn = 0;
     let invalid = false;
     const { pitch: p } = conditions;
-    if (p.on && p.min !== null && p.max !== null) {
-      filter.pitch = { min: p.min, max: p.max };
+    if (p.on) {
       conditionsOn += 1;
-      if (p.min > p.max) invalid = true;
+      if (p.min !== null && p.max !== null) {
+        filter.pitch = { min: p.min, max: p.max };
+        if (p.min > p.max) invalid = true;
+      }
     }
     if (conditions.time.on) {
       const from = barStart(score.bars, conditions.time.first);
@@ -344,22 +342,29 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       conditionsOn += 1;
       if (from !== undefined && to !== undefined && from >= to) invalid = true;
     }
-    if (conditions.length.on && conditions.length.min !== null && conditions.length.max !== null) {
-      filter.duration = { min: conditions.length.min, max: conditions.length.max };
+    if (conditions.length.on) {
       conditionsOn += 1;
-      if (conditions.length.min > conditions.length.max) invalid = true;
+      if (conditions.length.min !== null && conditions.length.max !== null) {
+        filter.duration = { min: conditions.length.min, max: conditions.length.max };
+        if (conditions.length.min > conditions.length.max) invalid = true;
+      }
     }
     if (conditions.key.on) {
       filter.key = conditions.key.mode;
       conditionsOn += 1;
     }
     if (conditions.count.on) {
-      // A number that is missing is not a count, and a count that is not one takes no note.
+      // Skip is optional and defaults to 0; a missing Every, or a supplied number that is not a count, takes no note.
       const every = conditions.count.every ?? Number.NaN;
-      const skip = conditions.count.skip ?? Number.NaN;
+      const skip = conditions.count.skip ?? 0;
       filter.count = { every, skip };
       conditionsOn += 1;
-      if (!Number.isInteger(every) || every < 1 || !Number.isInteger(skip) || skip < 0) invalid = true;
+      if (
+        !Number.isInteger(every) ||
+        every < 1 ||
+        (conditions.count.skip !== null && (!Number.isInteger(skip) || skip < 0))
+      )
+        invalid = true;
     }
     if (conditions.invert) filter.invert = true;
     return { filter, count: conditionsOn, invalid };
@@ -373,6 +378,11 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
     const { reading } = session;
     if (reading.kind !== "score") return;
     const { filter, count, invalid } = currentFilter(reading.score);
+    if (countSkip.value === "" && conditions.count.skip === null) {
+      // A cleared Skip is 0, the filter's default, so the field shows the number that is in force.
+      conditions.count.skip = 0;
+      countSkip.value = "0";
+    }
     applying = true;
     try {
       session.select(count === 0 ? [] : filterNotes(reading.score, filter));
