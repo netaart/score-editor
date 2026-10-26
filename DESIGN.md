@@ -770,21 +770,24 @@ When the strip appears the editor scrolls the chrome, and only the chrome, until
 ### Score source, save and save-as
 
 A score file is a document, so it is saved only when asked. The toolbar's right-hand group, before the view switch,
-holds a word button **Save** and its state. The state is shown in words where measured fit allows: **Unsaved** while
-the score differs from the last save, **Saving…** in the button while a write is in flight (with no pill and no mark),
-**Save failed** in the pill with the action **Save again** on the button, and **Unsaved** in a conflict with Save
-disabled. The pill and the button never say the same word. The pill is `aria-hidden`; the button's description carries
-the state, and after a failed save it carries the recovery sentence. A successful save says **Saved** in the toolbar's
-live region, and a failure says the recovery sentence there. The control decides by measuring the toolbar with and
-without the state word rather than by a window breakpoint; only where the word would add a row does a single mark
-carry the state, one glyph per state (a dot for unsaved, `!` for failed, `?` for conflict). The button has the other
+holds a word button **Save** and its state. The control chooses **one form for the box**, from the room the widest
+state needs: the longest of the pill word plus the button word over clean, dirty, saving, failed and conflict. It
+re-chooses only when the toolbar's width, the language or the font metrics change (a resize, `update({ language })`, a
+font settling), never because the state changed; between states only the word or the mark inside the chosen form
+changes. While the widest state's words leave the toolbar as tall as it is without the control, the state is shown in
+words: **Unsaved** while the score differs from the last save, **Saving…** in the button while a write is in flight
+(with no pill and no mark), **Save failed** in the pill with the action **Save again** on the button, and **Unsaved** in
+a conflict with Save disabled. Where those words would add a row, every state uses the icon and its mark: one glyph per
+state (a dot for unsaved, `!` for failed, `?` for conflict, `…` while saving). The form is measured in the element, not
+by a window breakpoint, so the control adds no toolbar row at any width compared with the same editor without it,
+wherever its narrowest form fits that box. The pill and the button never say the same word. The pill is `aria-hidden`;
+the button's description carries the state, and after a failed save it carries the recovery sentence. A successful save
+says **Saved** in the toolbar's live region, and a failure says the recovery sentence there. The button has the other
 word buttons' make (ground fill, 1px strong line, 4px radius, 28px high, 36px on a coarse pointer); it is
 `aria-disabled` while there is nothing to write, while a save is in flight or while a conflict stands, and its tooltip
 names Ctrl/Cmd+S. The shortcut is heard only while the focus is inside the editor, so the browser's own save and the
 host's shortcuts are untouched outside it. The pill's emphasis is its own 600 weight while the file is unsaved (in a
-conflict too); the failed look is its own text-colour line. With the host's fonts the control adds one toolbar row at
-412px in English (205 to 245px) and none in Chinese or at 320px; the planned two-row phone toolbar is where that row
-goes away.
+conflict too); the failed look is its own text-colour line.
 
 A generated score gets the same slot as one word button **Save as…**, only while the host gave `onSaveAs` and while the
 editor is editable. It has the same icon and compact form as Save. Its accessible name is **Save as score file**; it

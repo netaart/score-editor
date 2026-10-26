@@ -65,9 +65,11 @@ const editor = mount(el, {
 editor.hasUnsavedChanges(); // false for a generated score
 ```
 
-- The toolbar gets **Save** in the right-hand group, before the view switch. The state is in words where measured fit
-  allows: `Unsaved`, `Saving…` in the button, `Save failed` in the pill with `Save again` on the button, and `Unsaved` in
-  a conflict. Where the word would add a row, one glyph carries the state (`•`, `!`, `?`); a saving state has no dot.
+- The toolbar gets **Save** in the right-hand group, before the view switch. It chooses one form for the box from the
+  room the widest state's words need, and re-chooses only when the toolbar's width, the language or the font metrics
+  change, never when the state changes. While those words fit in the toolbar's height without the control, the state is
+  in words: `Unsaved`, `Saving…` in the button, `Save failed` in the pill with `Save again` on the button, and `Unsaved`
+  in a conflict. Where they would add a row, every state uses the icon and one mark (`•`, `!`, `?`, `…` while saving).
   The pill is `aria-hidden`; the button's description carries the state and, after a failure, the recovery sentence. The
   toolbar's live region says `Saved` or the recovery sentence. Save is `aria-disabled` while there is nothing to write,
   or while a save is in flight or a conflict stands. Ctrl/Cmd+S saves while the focus is inside the editor; outside it

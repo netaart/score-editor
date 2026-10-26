@@ -43,7 +43,7 @@ export const scoreSourceCss = `
 .sce-root.sce-part-save[data-word="true"] .sce-save-mark {
   display: none;
 }
-/* At 320px the action word also gives way to the icon and its mark. */
+/* The icon form, chosen for the box when the widest state's words would add a row: the action word gives way to the mark. */
 .sce-root.sce-part-save[data-compact="true"] .sce-save-label {
   display: none;
 }

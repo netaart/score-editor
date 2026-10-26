@@ -297,20 +297,21 @@ const editor = mount(el, {
 editor.hasUnsavedChanges(); // the same answer, asked just before closing
 ```
 
-The toolbar has **Save** in its right-hand group, before the view switch. Its state is shown in words where they fit
-(measured in the element, not by a breakpoint): **Unsaved**, **Saving…** in the button, **Save failed** in the pill with
-**Save again** on the button, and **Unsaved** in a conflict. Where the word would add a row, one glyph carries the state
-(`•`, `!`, `?`); a saving state has no dot. The pill is `aria-hidden`; the button's description carries the state, and a
-failed save also has the recovery sentence there and as its tooltip. The toolbar's live region says **Saved** after a
-successful write and the recovery sentence after a failure. Ctrl/Cmd+S saves while the focus is inside the editor. While
-there is nothing to save, or a save is in flight or a conflict stands, Save is `aria-disabled`. A version conflict shows
-the draft conflict's strip with **Overwrite with my version** (read their version, then write ours over it; the other
-version can't be brought back) and **Load the other version** (their text opens as a new document; your changes here are
-dropped); the strip is scrolled into the chrome's visible box when it appears. Restore original asks about the last saved
-version, is muted while the file is clean, and its answer is **Go back to last save**; it resets the history, so Undo
-cannot bring the changes back. The change log and the handoff use the last saved project as their original. No draft call
-is made, even when `drafts` is also given. With the host's fonts the control adds one toolbar row at 412px in English and
-none in Chinese or at 320px; the planned two-row phone toolbar is where that row goes away.
+The toolbar has **Save** in its right-hand group, before the view switch. It chooses one form for the box from the room
+the widest state needs (the pill word plus the button word over clean, dirty, saving, failed and conflict), re-chooses
+only when the toolbar's width, the language or the font metrics change, and never because the state changed. While the
+widest state's words fit in the height the toolbar has without the control, the state is in words: **Unsaved**,
+**Saving…** in the button, **Save failed** in the pill with **Save again** on the button, and **Unsaved** in a conflict.
+Where the words would add a row, every state uses the icon and one mark (`•`, `!`, `?`, `…` while saving). The pill is
+`aria-hidden`; the button's description carries the state, and a failed save also has the recovery sentence there and as
+its tooltip. The toolbar's live region says **Saved** after a successful write and the recovery sentence after a
+failure. Ctrl/Cmd+S saves while the focus is inside the editor. While there is nothing to save, or a save is in flight
+or a conflict stands, Save is `aria-disabled`. A version conflict shows the draft conflict's strip with **Overwrite with
+my version** (read their version, then write ours over it; the other version can't be brought back) and **Load the other
+version** (their text opens as a new document; your changes here are dropped); the strip is scrolled into the chrome's
+visible box when it appears. Restore original asks about the last saved version, is muted while the file is clean, and
+its answer is **Go back to last save**; it resets the history, so Undo cannot bring the changes back. The change log and
+the handoff use the last saved project as their original. No draft call is made, even when `drafts` is also given.
 
 A **generated score** (the absent source) keeps drafts as before and adds **Save as…** while `onSaveAs` is given; the
 callback receives the current score text. `onSaveAs` is not shown in read-only mode.

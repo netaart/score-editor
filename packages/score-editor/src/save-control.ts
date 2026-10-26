@@ -119,6 +119,63 @@ export function mountScoreSourceControl(
   let language: Language | null = null;
   let drawn = "";
   let lastWidth = -1;
+  /** The one form this box, language and font metrics get; null until the first draw. */
+  let form: "words" | "icon" | null = null;
+  let formKey = "";
+
+  // A fixed string in the button's font, measured off the layout: when the font metrics move, the width moves.
+  const fontCanvas = doc.createElement("canvas").getContext("2d");
+  let probeFont = "";
+  function metricWidth(): number {
+    if (fontCanvas === null) return 0;
+    const style = doc.defaultView?.getComputedStyle(button);
+    if (style === undefined) return 0;
+    const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    if (font !== probeFont) {
+      probeFont = font;
+      fontCanvas.font = font;
+    }
+    return fontCanvas.measureText("Save again Save failed Saving… Unsaved 重新保存 保存失败 保存中… 未保存").width;
+  }
+
+  /** What the form is chosen from: the box, the language and the font metrics, never the save state. */
+  function formKeyNow(): string {
+    return `${toolbar().clientWidth}\u0000${session.view.language}\u0000${metricWidth()}`;
+  }
+
+  /** The words of the five save states, whose widest sets the room the one form needs. */
+  function wordCandidates(forLanguage: Language): Array<{ action: string; stateWord: string }> {
+    return [
+      wordsFor("clean", false, false, forLanguage),
+      wordsFor("dirty", true, false, forLanguage),
+      wordsFor("saving", true, false, forLanguage),
+      wordsFor("dirty", true, true, forLanguage),
+      wordsFor("conflict", true, false, forLanguage),
+    ].map(({ action, stateWord }) => ({ action, stateWord }));
+  }
+
+  /**
+   * Picks one form for the box from the widest state's words. The toolbar is measured with the control hidden, so the
+   * room is the toolbar's own and not a window breakpoint; words are kept only while every state's words leave that
+   * height alone, and otherwise every state uses the icon and its mark. Measured again only for a new form key.
+   */
+  function chooseForm(key: string): "words" | "icon" {
+    root.hidden = true;
+    const base = heightNow();
+    root.hidden = false;
+    let widest = base;
+    for (const candidate of wordCandidates(session.view.language)) {
+      root.dataset.compact = "false";
+      root.dataset.word = candidate.stateWord === "" ? "false" : "true";
+      label.textContent = candidate.action;
+      state.textContent = candidate.stateWord;
+      state.hidden = candidate.stateWord === "";
+      mark.hidden = true;
+      widest = Math.max(widest, heightNow());
+    }
+    formKey = key;
+    return widest > base ? "icon" : "words";
+  }
 
   function draw(): void {
     const callback = keeper === null ? saveAs?.() : undefined;
@@ -136,13 +193,10 @@ export function mountScoreSourceControl(
       drawn = "";
     }
     const t = messagesFor(session.view.language);
-    const status = keeper?.status ?? "clean";
-    const unsaved = keeper?.unsaved ?? false;
-    const failed = keeper?.failed ?? false;
-    const shown = `${language}:${keeper === null ? "save-as" : `${status}:${unsaved}:${failed}`}`;
-    if (shown === drawn) return;
-    drawn = shown;
     if (keeper === null) {
+      const shown = `${language}:save-as`;
+      if (shown === drawn) return;
+      drawn = shown;
       root.dataset.kind = "save-as";
       root.dataset.compact = String(options.scope.clientWidth < 360);
       root.dataset.word = "false";
@@ -155,6 +209,19 @@ export function mountScoreSourceControl(
       mark.hidden = true;
       return;
     }
+
+    const status = keeper.status;
+    const unsaved = keeper.unsaved;
+    const failed = keeper.failed;
+    const key = formKeyNow();
+    let measured = false;
+    if (form === null || key !== formKey) {
+      form = chooseForm(key);
+      measured = true;
+    }
+    const shown = `${language}:${status}:${unsaved}:${failed}:${form}`;
+    if (!measured && shown === drawn) return;
+    drawn = shown;
 
     root.dataset.kind = "save";
     const { failure, saving, action, stateWord, markWord, description } = wordsFor(
@@ -175,34 +242,15 @@ export function mountScoreSourceControl(
     state.dataset.state = failure ? "failed" : unsaved ? "dirty" : status;
     mark.textContent = markWord;
 
-    // Decide by measured fit in the element: never by a fixed window breakpoint. Start from the icon and no state word.
-    root.dataset.compact = "true";
-    root.dataset.word = "false";
-    state.hidden = true;
-    mark.hidden = true;
-    const iconHeight = heightNow();
-    root.dataset.compact = "false";
-    const labelHeight = heightNow();
-    if (labelHeight > iconHeight) {
-      root.dataset.compact = "true";
+    root.dataset.compact = form === "icon" ? "true" : "false";
+    if (form === "icon") {
       root.dataset.word = "false";
       state.hidden = true;
       mark.hidden = markWord === "";
-    } else if (stateWord === "") {
-      root.dataset.word = "false";
-      state.hidden = true;
-      mark.hidden = true;
     } else {
-      state.hidden = false;
-      root.dataset.word = "true";
-      const stateHeight = heightNow();
-      if (stateHeight > labelHeight) {
-        root.dataset.word = "false";
-        state.hidden = true;
-        mark.hidden = false;
-      } else {
-        mark.hidden = true;
-      }
+      root.dataset.word = stateWord === "" ? "false" : "true";
+      state.hidden = stateWord === "";
+      mark.hidden = true;
     }
     root.dataset.unsaved = String(unsaved);
 
@@ -220,11 +268,24 @@ export function mountScoreSourceControl(
   const unsubscribeKeeper = keeper?.subscribe(draw);
   const Observer = doc.defaultView?.ResizeObserver;
   if (Observer) {
-    const observer = new Observer(() => {
-      if (options.scope.clientWidth !== lastWidth) draw();
-    });
+    const observer = new Observer(() => draw());
     observer.observe(options.scope);
     signal.addEventListener("abort", () => observer.disconnect(), { once: true });
+  }
+  // Fonts can arrive after the first draw, and then the room the words need has changed under the chosen form.
+  const fonts = doc.fonts;
+  if (fonts !== undefined) {
+    const onFonts = () => {
+      form = null;
+      draw();
+    };
+    fonts.addEventListener("loadingdone", onFonts);
+    signal.addEventListener("abort", () => fonts.removeEventListener("loadingdone", onFonts), { once: true });
+    void fonts.ready.then(() => {
+      if (signal.aborted) return;
+      form = null;
+      draw();
+    });
   }
   let destroyed = false;
   return {
