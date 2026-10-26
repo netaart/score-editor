@@ -419,13 +419,15 @@ test.describe("the review fixes", () => {
     await harness.mount({ score: { text: LEAD } });
     const pencil = page.getByRole("button", { name: "Draw notes", exact: true });
     await press(pencil);
-    await expect(pencil).toHaveCSS("outline-width", "2px");
-    await expect(pencil).toHaveCSS("outline-offset", "-2px");
-    await expect(pencil).toHaveCSS("outline-style", "solid");
+    const mark = (target: typeof pencil) =>
+      target.evaluate((el) => {
+        const style = getComputedStyle(el, "::after");
+        return { content: style.content, border: style.borderTopWidth };
+      });
+    expect(await mark(pencil)).toEqual({ content: expect.not.stringMatching("none"), border: "2px" });
     const arranged = page.getByRole("button", { name: "Arrangement", exact: true });
     await expect(arranged).toHaveAttribute("aria-pressed", "true");
-    await expect(arranged).toHaveCSS("outline-width", "2px");
-    await expect(arranged).toHaveCSS("outline-offset", "-2px");
+    expect(await mark(arranged)).toEqual({ content: expect.not.stringMatching("none"), border: "2px" });
   });
 });
 
