@@ -9,11 +9,11 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- | --- |
 | `mount` | core | Mounts the default editor on an element; returns `MountedEditor`. |
 | `createEditingSession` | core | Builds an `EditingSession` from a project and a `DialectRegistry`. |
-| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete and the Select menu; takes `ToolbarOptions`. |
+| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete, the Select menu, the Bars menu and the meter control; takes `ToolbarOptions`. |
 | `mountZoomControl` | core | Mounts the zoom control view part on `(el, session)`. |
-| `mountCutNotice` | core | Mounts the cut-notice view part. |
+| `mountCutNotice` | core | Mounts the cut-notice view part, with Fill with rests and Delete the incomplete bar on a cut bar. |
 | `mountProblemView` | core | Mounts the problem view part. |
-| `mountTimeRuler` | core | Mounts the time-ruler view part; takes `AxisPartOptions`. |
+| `mountTimeRuler` | core | Mounts the time-ruler view part, whose bar numbers choose a run; takes `AxisPartOptions`. |
 | `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. While the session is editable, a press places, changes or removes a chord through a picker. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
@@ -37,6 +37,9 @@ change. The tests in the repository check that the list stays complete.
 | `alignLyricLine` | core | Compares a line's syllables with its onsets; returns one note per syllable when equal. |
 | `lyricCharacterCount` | core | Counts the characters of a lyrics text as Unicode code points. |
 | `formatDiagnostic` | core | Turns a `Diagnostic` into a sentence in `en` or `zh`. |
+| `meterAllowed` | core | Whether a `Meter` is a positive-integer fraction inside a dialect's `MeterRule`. |
+| `meterChoices` | core | The common meters a dialect's rule allows, for a meter control's radio list. |
+| `COMMON_METERS` | core | The common meter values `meterChoices` filters through a dialect's rule. |
 | `isNoticeDiagnostic` | core | Says whether a diagnostic is a notice, so a changed project is not mistaken for a refusal. |
 | `noteId` | core | Builds a note id from voice and start tick. |
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
@@ -94,8 +97,9 @@ change. The tests in the repository check that the list stays complete.
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
 | `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
-| `EditingSession` | The headless editing session: project, reading, selection, insertion point, grid, view, shown view, rejected text, dispatch, tools, history, subscribe. |
+| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
+| `BarSelection` | A chosen run of bars: `{ from, count }`, `from` base 0. UI state, outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus its notices when `ok`, or the untouched project and a refusal. |

@@ -1,6 +1,7 @@
 // ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the Select and Grid menus, the read-only badge, the synth preview control, the Filter button and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
+import { mountBarMenu } from "./bar-menu";
 import { create, requireDom } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { mountRestoreControl } from "./draft-restore";
@@ -11,6 +12,7 @@ import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountMeterControl } from "./meter-control";
 import { mountProjectControl } from "./project-control";
 import { mountProjectNoticeStrip } from "./project-notice-strip";
 import { mountSelectionMenu } from "./selection-menu";
@@ -54,6 +56,11 @@ export interface ToolbarOptions extends EditingPartOptions {
   projectPanel?: boolean;
   /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
+  /**
+   * Puts the focus on the bar the Bars menu chose. The default editor passes its ruler's way there; a host that mounts
+   * the toolbar without a ruler can leave it out, and the menu still chooses the bar in the session.
+   */
+  onChooseBars?: (bar: number) => void;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -76,6 +83,10 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const root = create(doc, "div", "sce-root sce-part sce-part-toolbar");
   el.appendChild(root);
   const live = createLiveRegion(root);
+  const refused = sayRefusals(live, session, options.onRefused);
+  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
+  // project changes by anything else, as the text view keeps its notice.
+  const noticeStrip = mountProjectNoticeStrip(root, session);
 
   const row = create(doc, "div", "sce-toolbar", root);
   if (options.viewSwitch) row.dataset.views = "";
@@ -97,6 +108,15 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
   const grid = mountGridControl(row, session, live);
+  const bars = mountBarMenu(row, session, {
+    live,
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+    ...(options.onChooseBars === undefined ? {} : { onChooseBars: options.onChooseBars }),
+  });
+  const meter = mountMeterControl(row, session, {
+    live,
+    ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+  });
   const spacer = create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -106,12 +126,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const end = options.viewSwitch ? create(doc, "div", "sce-toolbar-end", row) : null;
   const badge = create(doc, "span", "sce-badge", end ?? row);
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
-  // What a taken command itself had to say (a style without a BPM after a tempo change) stays under the row until the
-  // project changes by anything else, as the text view keeps its notice.
-  const noticeStrip = mountProjectNoticeStrip(root, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
-  const refused = sayRefusals(live, session, options.onRefused);
   const song = options.tempoKey
     ? mountTempoKeyControls(row, session, {
         refused,
@@ -219,6 +235,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      bars.destroy();
+      meter.destroy();
       noticeStrip.destroy();
       song?.destroy();
       projectControl?.destroy();

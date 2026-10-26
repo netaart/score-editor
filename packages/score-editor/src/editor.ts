@@ -121,6 +121,13 @@ export class Editor implements MountedEditor {
         tempoKey: true,
         projectPanel: true,
         draftKeeper: this.drafts,
+        onChooseBars: (bar) => {
+          const number = this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);
+          if (!number) return;
+          delete number.dataset.pointerFocus;
+          number.dataset.keyFocus = "";
+          number.focus();
+        },
       }),
     );
     const toolbar = this.root.querySelector<HTMLElement>(".sce-toolbar");
@@ -137,7 +144,7 @@ export class Editor implements MountedEditor {
     this.draftAnchor = doc.createComment("draft conflict");
     this.chrome.appendChild(this.draftAnchor);
     this.syncDraftParts();
-    this.parts.push(mountCutNotice(this.chrome, this.session));
+    this.parts.push(mountCutNotice(this.chrome, this.session, { onRefused }));
     this.stalePane = pane(this.chrome);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));
     const body = create(doc, "div", "sce-body", this.root);

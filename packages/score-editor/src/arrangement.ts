@@ -214,7 +214,7 @@ export function stepZoom(zoom: number, direction: "in" | "out"): number | null {
 
 /** The labelled bars shown are every `step`-th, the smallest power of two that leaves room for a number. */
 export const MAX_LABEL_STEP = 32;
-const LABEL_ROOM = 32;
+const LABEL_ROOM = 36;
 
 export function barLabelStep(barPixels: number): number {
   let step = 1;

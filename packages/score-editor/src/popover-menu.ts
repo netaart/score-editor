@@ -85,7 +85,11 @@ export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options:
 export interface PopoverMenu {
   readonly element: HTMLElement;
   /** Adds an item. Choosing it closes the menu first and then runs `choose`. */
-  item(role: "menuitem" | "menuitemradio", choose: () => void): HTMLButtonElement;
+  item(
+    role: "menuitem" | "menuitemradio",
+    choose: () => unknown,
+    options?: { readonly keepOpen?: boolean },
+  ): HTMLButtonElement;
   /** Adds a rule between two groups of items. */
   rule(): void;
 }
@@ -173,15 +177,19 @@ export function mountPopoverMenu(
 
   return {
     element: menu,
-    item(role, choose) {
+    item(role, choose, options = {}) {
       const item = create(doc, "button", "sce-menu-item", menu);
       item.type = "button";
       item.setAttribute("role", role);
       item.addEventListener(
         "click",
         () => {
-          menu.hidePopover();
-          choose();
+          if (!options.keepOpen) {
+            menu.hidePopover();
+            choose();
+            return;
+          }
+          if (choose() !== true) menu.hidePopover();
         },
         { signal },
       );

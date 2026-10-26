@@ -244,4 +244,17 @@ export const songCss = `
     width: 4.2em;
   }
 }
+
+@media (pointer: coarse) {
+  /* A phone's 412px row is one line short unless the song controls are this compact; the buttons keep their 36px target. */
+  .sce-root .sce-song-controls {
+    gap: 4px;
+  }
+  .sce-root .sce-tempo-input {
+    width: 4em;
+  }
+  .sce-root .sce-key-select {
+    width: 4.5em;
+  }
+}
 `;

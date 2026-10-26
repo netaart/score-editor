@@ -124,12 +124,14 @@ test.describe("opening the menu of a section", () => {
     await openSong(harness);
     const band = await box(bandButton(page, "Section verse"));
     // WCAG 2.5.8 (AA) asks for 24 by 24 CSS pixels; DESIGN.md asks 36px of a control on a coarse pointer. The row is
-    // 25px and the ::before adds 12px above it, so the target is at least 37px.
+    // 25px and the ::before adds 12px above it, so the target is at least 37px. The reach is measured clear of the bar
+    // number that starts the band: that number is the handle for choosing bars and sits above the band's reach.
     if (isMobile) expect(band.height).toBeGreaterThanOrEqual(24);
+    const x = band.x + 60;
     const above = (offset: number) =>
       page.evaluate(
         ({ x, y }) => document.elementFromPoint(x, y)?.closest(".sce-section-open")?.getAttribute("aria-label") ?? null,
-        { x: band.x + band.width / 2, y: band.y - offset },
+        { x, y: band.y - offset },
       );
     expect(await above(-4)).toBe("Section verse");
     expect(await above(10)).toBe(isMobile ? "Section verse" : null);
