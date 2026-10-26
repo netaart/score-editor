@@ -12,6 +12,7 @@ import {
   mountChordTrack,
   mountCutNotice,
   mountDraftConflict,
+  mountFilterPanel,
   mountLyricTrack,
   mountProblemView,
   mountProjectPanel,
@@ -155,6 +156,7 @@ const VIEW_PARTS = {
       projectPanel: true,
       onRefused: refusedBy(session),
     }),
+  filter: (el, session) => mountFilterPanel(el, session),
   "draft-conflict": (el, session) => mountDraftConflict(el, session, conflictKeeper()),
 };
 

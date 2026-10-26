@@ -75,7 +75,7 @@ export function mountPopoverMenu(
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
       keepInside(menu);
-      (options.initialFocus?.(items) ?? items[0])?.focus();
+      (options.initialFocus?.(items) ?? items.find((item) => !item.hidden))?.focus();
     },
     { signal },
   );
@@ -83,16 +83,18 @@ export function mountPopoverMenu(
     "keydown",
     (event) => {
       if (!(event.target instanceof HTMLButtonElement)) return;
-      const at = items.indexOf(event.target);
-      if (at < 0) return;
-      let next = -1;
-      if (event.key === "ArrowDown") next = (at + 1) % items.length;
-      else if (event.key === "ArrowUp") next = (at - 1 + items.length) % items.length;
-      else if (event.key === "Home") next = 0;
-      else if (event.key === "End") next = items.length - 1;
-      if (next < 0) return;
+      if (!items.includes(event.target)) return;
+      // An item that is left out (hidden) is not in the way: the keys go to the next one that is shown.
+      const shown = items.filter((item) => !item.hidden);
+      const here = shown.indexOf(event.target);
+      let next: HTMLButtonElement | undefined;
+      if (event.key === "ArrowDown") next = shown[(here + 1) % shown.length];
+      else if (event.key === "ArrowUp") next = shown[(here - 1 + shown.length) % shown.length];
+      else if (event.key === "Home") next = shown[0];
+      else if (event.key === "End") next = shown.at(-1);
+      if (next === undefined) return;
       event.preventDefault();
-      items[next]?.focus();
+      next.focus();
     },
     { signal },
   );

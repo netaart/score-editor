@@ -1,7 +1,7 @@
 // ABOUTME: Seam 5 for selecting several notes: Shift-click and Shift-tap, the box, a touch and hold, select all, invert and Escape.
 // ABOUTME: Each case runs with a mouse on the desktop project and with a finger on the phone project, and reads what the session holds.
 import type { Locator, Page } from "@playwright/test";
-import { box, expect, type Harness, type Point, test, vocalOnly } from "./fixtures";
+import { box, expect, type Harness, type Point, pointerOf, test, vocalOnly } from "./fixtures";
 
 const slot = (page: Page, name: string) => page.locator(`[data-slot="${name}"]`);
 
@@ -47,45 +47,6 @@ async function centreOf(target: Locator): Promise<Point> {
 async function spot(page: Page, x: number, y: number): Promise<Point> {
   const area = await box(lane(page));
   return { x: area.x + x, y: area.y + y };
-}
-
-/** A way to press, move and lift one pointer: a mouse on the desktop project, a held finger on the phone project. */
-interface Pointer {
-  down(point: Point): Promise<void>;
-  move(point: Point): Promise<void>;
-  up(): Promise<void>;
-  close(): Promise<void>;
-}
-
-/** The pointer the project has. A finger waits 550 ms after it goes down, as a person does to start a box. */
-async function pointerOf(
-  page: Page,
-  harness: Harness,
-  isMobile: boolean,
-  options: { shift?: boolean } = {},
-): Promise<Pointer> {
-  if (!isMobile) {
-    return {
-      async down(point) {
-        if (options.shift) await page.keyboard.down("Shift");
-        await page.mouse.move(point.x, point.y);
-        await page.mouse.down();
-      },
-      move: (point) => page.mouse.move(point.x, point.y, { steps: 8 }),
-      async up() {
-        await page.mouse.up();
-        if (options.shift) await page.keyboard.up("Shift");
-      },
-      close: async () => {},
-    };
-  }
-  const finger = await harness.finger(options.shift ? { shift: true } : {});
-  return {
-    down: (point) => finger.down(point, 550),
-    move: (point) => finger.move(point),
-    up: () => finger.up(),
-    close: () => finger.close(),
-  };
 }
 
 /** A box from `from` to `to`, drawn with the project's pointer and released. */
@@ -954,8 +915,7 @@ test.describe("a subset from the keyboard", () => {
 
     await page.keyboard.press("Alt+Shift+Space");
     await page.keyboard.press("Alt+Control+ArrowRight");
-    // Shift with the arrows is kept for what the spec plans for it, and Control with Shift for the selection keys.
-    await page.keyboard.press("Shift+ArrowRight");
+    // Control with Shift is kept for the selection keys; Shift with the arrows resizes the notes (move-resize.spec.ts).
     await page.keyboard.press("Control+Shift+ArrowRight");
     await page.keyboard.press("Control+Shift+Space");
     await expect(pitch(page, "D4")).toBeFocused();

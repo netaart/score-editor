@@ -3,6 +3,8 @@
 import { MAX_LABEL_STEP } from "./arrangement";
 import { boxCss } from "./box-styles";
 import { draftCss } from "./draft-styles";
+import { dragCss } from "./drag-styles";
+import { filterCss } from "./filter-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
 import { songCss } from "./song-styles";
@@ -149,7 +151,7 @@ const css = `
   gap: 8px;
   min-height: 40px;
   padding: 4px 12px;
-  /* When the box is narrower than the controls the row scrolls; the title gives way before that. */
+  /* When the box is narrower than the controls the row scrolls; a toolbar that wraps moves a control to a later row. */
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -161,6 +163,10 @@ const css = `
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* A toolbar that holds the Filter button keeps at least 2em of the title, so the extra control cannot take its last pixel. */
+.sce-root .sce-toolbar:has(.sce-filter-button) .sce-title {
+  min-width: 2em;
 }
 /*
  * With the preview control or the view switch the row wraps instead of scrolling: DESIGN.md, "Toolbar". The title counts at
@@ -174,6 +180,13 @@ const css = `
 .sce-root .sce-toolbar:is([data-synth], [data-views]) .sce-title {
   flex: 0 1 auto;
   max-width: 100%;
+}
+/*
+ * A toolbar that neither wraps nor holds a control to wrap it for scrolls sideways. The title keeps its whole text there
+ * instead of being squeezed to nothing, so the name of the view is always in sight; the row scrolls under it.
+ */
+.sce-root .sce-toolbar:not([data-synth]):not([data-views]) .sce-title {
+  flex: none;
 }
 /*
  * In a toolbar with the view switch, the preview control keeps its place while the score does not read. It comes after the
@@ -273,7 +286,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -286,6 +299,26 @@ const css = `
 .sce-root .sce-select-button {
   gap: 4px;
   padding: 0 8px;
+}
+/* The Grid button is a drawing, a fraction and a chevron; the dot after the fraction is the dot of a dotted note. */
+.sce-root .sce-grid-button {
+  gap: 6px;
+  padding: 0 8px;
+}
+.sce-root .sce-grid-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+/* Forced colors repaint every fill but a system color, which would take the dot out. */
+@media (forced-colors: active) {
+  .sce-root .sce-grid-dot {
+    background: CanvasText;
+  }
 }
 /* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
 .sce-root .sce-step {
@@ -1020,6 +1053,8 @@ ${labelThinning()}
 }
 .sce-root .sce-staff-drawing {
   display: block;
+  /* The cursor is positioned in the drawing's box; the hard reset above otherwise reverts this to static. */
+  position: relative;
 }
 .sce-root .sce-staff-message {
   margin: 0 0 8px;
@@ -1082,7 +1117,9 @@ ${labelThinning()}
 }
 ${boxCss}${lyricCss}
 ${draftCss}
-${songCss}`;
+${songCss}
+${filterCss}
+${dragCss}`;
 
 interface Injection {
   remove(): void;

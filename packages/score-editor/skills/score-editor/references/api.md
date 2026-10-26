@@ -53,6 +53,8 @@ change. The tests in the repository check that the list stays complete.
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
+| `filterNotes` | core | The ids of the notes that satisfy a `NoteFilter` (pitch, time, length, in or out of key, one in every N, invert) in a `Score`. Pure. |
+| `mountFilterPanel` | core | Mounts the Filter button and its panel on `(el, session)`: selects notes by condition through `session.select`; shown in read-only mode too. |
 | `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
 | `lyricBoundaryPlan` | core | The phrases that change and the `setLyricLinePhrase` commands, the line that gives up bars first, when an edge of a phrase is dragged to a tick. |
 | `lyricDropPlan` | core | The one-bar phrase, and its command, for a line let go of over a tick; says whether the bar is free. |
@@ -84,18 +86,18 @@ change. The tests in the repository check that the list stays complete.
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
-| `SessionOptions` | `{ project, dialects, language?, editable?, activeView? }` for `createEditingSession`. |
-| `EditingSession` | The headless editing session: project, reading, selection, insertion point, view, shown view, rejected text, dispatch, tools, history, subscribe. |
+| `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
+| `EditingSession` | The headless editing session: project, reading, selection, insertion point, grid, view, shown view, rejected text, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus its notices when `ok`, or the untouched project and a refusal. |
-| `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, and the `ProjectCommand` a dispatch made, if any), its causes, and the listener type. |
+| `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, the `ProjectCommand` a dispatch made if any, and the `gridDropped` a project or registry change put back to 1/4), its causes, and the listener type. |
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
 | `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
-| `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. |
+| `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. The session holds the one in force (`session.grid`, `setGrid`, `allowsGrid`); see [editing-session.md](editing-session.md). |
 | `CommandListResult` | `{ ok, project, diagnostics }` from `applyCommandList`: the applied project, or the untouched one with the refusal. |
 | `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`); each command is listed in the package README. |
 
@@ -194,6 +196,12 @@ change. The tests in the repository check that the list stays complete.
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
 | `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
 | `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
+
+## Filter types
+
+| Export | What it is |
+| --- | --- |
+| `NoteFilter` | The conditions of `filterNotes`, each optional: `pitch`, `time`, `duration`, `key`, `count` and `invert`. |
 
 ## Lyric track types
 
