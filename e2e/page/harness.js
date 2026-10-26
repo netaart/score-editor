@@ -241,7 +241,7 @@ const SAFE_TOOL = {
   group: "more",
   name: { en: "Rest the last note", zh: "最后一个音变休止" },
   description: { en: "Turn the last selected notes into rests.", zh: "把选区最后的几个音变成休止符。" },
-  parameters: [{ name: "count", label: { en: "How many", zh: "几个" }, type: "number", min: 1, default: 1 }],
+  parameters: [{ name: "count", label: { en: "How many", zh: "几个" }, type: "number", min: 1, max: 3, default: 1 }],
   commands(_project, selection, values) {
     const count = Number(values.count);
     return selection.slice(-count).map((noteId) => ({ type: "toRest", noteId }));
@@ -261,7 +261,31 @@ const BREAKING_TOOL = {
   },
 };
 
-const TOOL_SETS = { safe: [SAFE_TOOL], breaking: [BREAKING_TOOL], both: [SAFE_TOOL, BREAKING_TOOL], none: [] };
+/** A tool with more controls than a phone sheet can show at once, so opening it must scroll its body. */
+const LONG_TOOL = {
+  id: "many-values",
+  group: "more",
+  name: { en: "Many values", zh: "许多参数" },
+  description: { en: "Has more fields than fit in a short sheet.", zh: "参数多到放不进矮面板。" },
+  parameters: Array.from({ length: 6 }, (_, index) => ({
+    name: `value${index + 1}`,
+    label: { en: `Value ${index + 1}`, zh: `参数 ${index + 1}` },
+    type: "number",
+    min: 1,
+    max: 9,
+    default: index + 1,
+  })),
+  commands() {
+    return [];
+  },
+};
+
+const TOOL_SETS = {
+  safe: [SAFE_TOOL],
+  breaking: [BREAKING_TOOL],
+  both: [SAFE_TOOL, BREAKING_TOOL, LONG_TOOL],
+  none: [],
+};
 
 /**
  * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for

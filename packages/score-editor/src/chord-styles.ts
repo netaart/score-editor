@@ -134,11 +134,6 @@ export const chordCss = `
   padding: 0 8px;
 }
 .sce-root .sce-chip[aria-checked="true"],
-.sce-root .sce-picker-primary {
-  border-color: var(--sce-_text);
-  background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
-  font-weight: 600;
-}
 .sce-root .sce-picker-bass {
   justify-content: space-between;
   width: 100%;

@@ -62,7 +62,7 @@ export const filterCss = `
   min-height: 28px;
   min-width: 0;
   padding: 0 6px;
-  border: 1px solid var(--sce-_line-strong);
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 47%, var(--sce-_bg));
   border-radius: var(--sce-_radius);
   background: var(--sce-_bg);
   color: var(--sce-_text);
@@ -145,7 +145,7 @@ export const filterCss = `
   .sce-root .sce-filter-panel:popover-open {
     inset: auto 0 0 0;
     width: auto;
-    max-height: 75dvh;
+    max-height: calc(100dvh - var(--sce-_chrome-h, 0px) - var(--sce-_sheet-floor, 190px));
     border-width: 1px 0 0;
     border-end-start-radius: 0;
     border-end-end-radius: 0;

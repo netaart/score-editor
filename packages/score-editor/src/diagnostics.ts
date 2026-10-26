@@ -1008,19 +1008,19 @@ function chineseCutOtherVoiceShort(params: DiagnosticParams): string {
 
 /** A tool's own result broke a rule the command layer keeps: the score and the history were left as they were. */
 function englishToolResult(params: DiagnosticParams): string {
-  const tool = quoted(value(params, "toolId"));
+  const tool = quoted(value(params, "toolName") || value(params, "toolId"));
   if (value(params, "reason") === "overlap") {
-    return `The tool${tool} would put two notes at once in one voice, so the score was left as it was.`;
+    return `The tool${tool} would put two notes at once on one track. Nothing changed. Try another value or grid.`;
   }
-  return `The tool${tool} would put a note off the grid, so the score was left as it was.`;
+  return `The tool${tool} would put a note off the grid. Nothing changed. Try another value or grid.`;
 }
 
 function chineseToolResult(params: DiagnosticParams): string {
-  const tool = quoted(value(params, "toolId"));
+  const tool = quoted(value(params, "toolNameZh") || value(params, "toolId"));
   if (value(params, "reason") === "overlap") {
-    return `工具${tool}的结果会在同一个声部里让两个音同时响，乐谱保持原样。`;
+    return `工具${tool}的结果会在同一音轨上让两个音同时响。乐谱没有改动，请换个参数或网格再试。`;
   }
-  return `工具${tool}的结果会有音符落在网格外，乐谱保持原样。`;
+  return `工具${tool}的结果会有音符落在网格外。乐谱没有改动，请换个参数或网格再试。`;
 }
 
 const en: Catalog = {

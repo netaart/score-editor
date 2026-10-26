@@ -308,6 +308,12 @@ const css = `
 .sce-root .sce-button[aria-expanded="true"] {
   background: color-mix(in srgb, var(--sce-_text) 10%, var(--sce-_bg));
 }
+/* The one primary action of a layer, shared by the chord picker's Add and the Tools panel's Apply. */
+.sce-root .sce-picker-primary {
+  border-color: var(--sce-_text);
+  background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
+  font-weight: 600;
+}
 .sce-root .sce-button[aria-disabled="true"] {
   background: var(--sce-_bg);
   color: var(--sce-_muted);
@@ -961,7 +967,7 @@ ${labelThinning()}
 .sce-root .sce-meter-input {
   min-height: 28px;
   padding: 0 6px;
-  border: 1px solid var(--sce-_line-strong);
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 47%, var(--sce-_bg));
   border-radius: var(--sce-_radius);
   background: var(--sce-_bg);
   color: var(--sce-_text);

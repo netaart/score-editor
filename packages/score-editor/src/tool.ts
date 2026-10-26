@@ -26,6 +26,10 @@ export interface ToolContext {
   readonly grid: Grid;
   /** The tick of the session's insertion point, or null when none is placed. */
   readonly insertionPoint: number | null;
+  /** The 1-based first bar of the selected notes, or null when notes in no bar are selected. */
+  readonly selectionFirstBar?: number | null;
+  /** The 1-based last bar of the selected notes, or null when notes in no bar are selected. */
+  readonly selectionLastBar?: number | null;
 }
 
 const DEFAULT_TOOL_CONTEXT: ToolContext = { grid: { value: 4 }, insertionPoint: null };
@@ -36,16 +40,19 @@ export type ToolParameterValue = string | number | boolean;
 /** All parameter values a tool is run with, by parameter name. A missing key takes the declaration's default. */
 export type ToolParameterValues = Readonly<Record<string, ToolParameterValue | undefined>>;
 
+/** A default computed from the UI state the tool may read, such as the bars of the selection. */
+export type ToolDefault = (context: ToolContext) => ToolParameterValue;
+
 interface ParameterBase {
   readonly name: string;
   /** A label for the panel; when absent the panel shows the name. */
   readonly label?: ToolText;
-  readonly default: ToolParameterValue;
+  readonly default: ToolParameterValue | ToolDefault;
 }
 
 export interface NumberToolParameter extends ParameterBase {
   readonly type: "number";
-  readonly default: number;
+  readonly default: number | ToolDefault;
   readonly min?: number;
   readonly max?: number;
   readonly step?: number;
@@ -53,20 +60,20 @@ export interface NumberToolParameter extends ParameterBase {
 
 export interface BooleanToolParameter extends ParameterBase {
   readonly type: "boolean";
-  readonly default: boolean;
+  readonly default: boolean | ToolDefault;
 }
 
 /** A choice from a fixed list, the list being the allowed values. */
 export interface ChoiceToolParameter extends ParameterBase {
   readonly type: "choice";
-  readonly default: string;
+  readonly default: string | ToolDefault;
   readonly values: ReadonlyArray<string>;
 }
 
 /** Free text, with no range of its own. */
 export interface TextToolParameter extends ParameterBase {
   readonly type: "text";
-  readonly default: string;
+  readonly default: string | ToolDefault;
 }
 
 /** One parameter a tool declares: its name, type, range or allowed values, and default. */
@@ -100,6 +107,11 @@ export interface ToolRegistry {
   list(): ReadonlyArray<ScoreTool>;
   /** The tool with this id, or `undefined`. */
   find(id: string): ScoreTool | undefined;
+}
+
+/** The declared default, computed when it is a function of the context. */
+export function toolParameterDefault(parameter: ToolParameter, context: ToolContext): ToolParameterValue {
+  return typeof parameter.default === "function" ? parameter.default(context) : parameter.default;
 }
 
 function declarationError(tool: ScoreTool): string | undefined {
@@ -220,13 +232,17 @@ function commandsDiagnostic(tool: ScoreTool): Diagnostic {
 }
 
 /** Checks and fills a tool's parameters. Defaults fill missing names; wrong types and out-of-range values are refused. */
-export function validateToolParameters(tool: ScoreTool, values: ToolParameterValues = {}): ToolParameterCheck {
+export function validateToolParameters(
+  tool: ScoreTool,
+  values: ToolParameterValues = {},
+  context: ToolContext = DEFAULT_TOOL_CONTEXT,
+): ToolParameterCheck {
   const filled: Record<string, ToolParameterValue> = {};
   const diagnostics: Diagnostic[] = [];
 
   for (const parameter of tool.parameters ?? []) {
     const given = values[parameter.name];
-    const value = given === undefined ? parameter.default : given;
+    const value = given === undefined ? toolParameterDefault(parameter, context) : given;
     const problem = valueProblem(parameter, value);
     if (problem === undefined) filled[parameter.name] = value as ToolParameterValue;
     else diagnostics.push(parameterDiagnostic(tool, parameter, problem, value));
@@ -373,7 +389,13 @@ function toolResultDiagnostic(
       voice = span.voice;
       reached = -1;
     }
-    if (span.start < reached) return { code: "tool-result", params: { toolId: tool.id, reason: "overlap" }, at: {} };
+    if (span.start < reached) {
+      return {
+        code: "tool-result",
+        params: { toolId: tool.id, toolName: tool.name.en, toolNameZh: tool.name.zh, reason: "overlap" },
+        at: {},
+      };
+    }
     reached = Math.max(reached, span.end);
   }
 
@@ -384,7 +406,11 @@ function toolResultDiagnostic(
   for (const span of spans) {
     if (known.has(spanKey(span))) continue;
     if (span.start % step !== 0 || (span.end - span.start) % step !== 0) {
-      return { code: "tool-result", params: { toolId: tool.id, reason: "grid" }, at: {} };
+      return {
+        code: "tool-result",
+        params: { toolId: tool.id, toolName: tool.name.en, toolNameZh: tool.name.zh, reason: "grid" },
+        at: {},
+      };
     }
   }
   return undefined;
@@ -397,7 +423,7 @@ export function applyToolRequest(
   source: DialectRegistry | ScoreDialect,
   context: ToolContext = DEFAULT_TOOL_CONTEXT,
 ): ToolResult {
-  const checked = validateToolParameters(tool, request.values);
+  const checked = validateToolParameters(tool, request.values, context);
   if (!checked.ok) return failure(request.project, checked.diagnostics, []);
   if (typeof tool.commands !== "function") return failure(request.project, [commandsDiagnostic(tool)], []);
 

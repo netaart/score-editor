@@ -317,7 +317,6 @@ describe("the built-in note tools on the real score", () => {
   for (const example of valuesOf) {
     it(`${example.id} reads and checks, keeps one note a time, stays on the grid and leaves untouched bars alone`, () => {
       const session = openReal();
-      const before = parse(REAL);
       const result = session.runTool(tool(example.id), example.values ?? {});
 
       expect(result.ok).toBe(true);

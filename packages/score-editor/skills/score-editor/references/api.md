@@ -196,7 +196,7 @@ change. The tests in the repository check that the list stays complete.
 | `TextToolParameter` | Free text. |
 | `ToolParameterValue`, `ToolParameterValues` | One value, and values by parameter name. |
 | `ToolCommandBuilder` | `(project, selection, values, context) => ScoreCommand[]`; pure. Every tool is called with a `ToolContext` fourth; a function written with three parameters ignores it. |
-| `ToolContext` | `{ grid, insertionPoint }`: the grid in force and the insertion point's tick, or null. |
+| `ToolContext` | `{ grid, insertionPoint, selectionFirstBar, selectionLastBar }`: the grid in force, the insertion point's tick or null, and the selection's 1-based bars or null. |
 | `ToolGroup` | `"note" \| "quantize" \| "transform" \| "generate" \| "more"`; a tool without a group is listed under "more". |
 | `ToolParameterCheck` | The validated values, or the `tool-parameter` diagnostics. |
 | `ToolResult` | `{ ok, project, diagnostics, commands }` from a preview or a run. |

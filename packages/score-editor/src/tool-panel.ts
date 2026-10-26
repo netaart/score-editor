@@ -1,6 +1,7 @@
 // ABOUTME: The Tools panel view part: a toolbar button that opens every registered tool, its declared controls, a preview and Apply.
 // ABOUTME: The registry is the only list it reads, so a creator's tool gets the same controls and the same one-step run as a built-in one.
 
+import { watchChromeFloor } from "./chrome-floor";
 import { formatDiagnostic } from "./diagnostics";
 import { create, requireDom, uniqueId } from "./dom";
 import { NOTE_TOOLS } from "./note-tools";
@@ -8,7 +9,14 @@ import { anchorOf, clearPlacement, keepInside, placeUnder } from "./popover-menu
 import type { Score, SongProject } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
-import { createToolRegistry, type ScoreTool, TOOL_GROUPS, type ToolParameter, type ToolParameterValues } from "./tool";
+import {
+  createToolRegistry,
+  type ScoreTool,
+  TOOL_GROUPS,
+  type ToolParameter,
+  type ToolParameterValues,
+  toolParameterDefault,
+} from "./tool";
 import { type ToolMessages, toolMessagesFor } from "./tool-messages";
 import { toolPreviewChannel } from "./tool-preview";
 import { TOOLS_SHEET_QUERY } from "./tool-styles";
@@ -114,8 +122,14 @@ export function mountToolPanel(
   const footer = create(doc, "div", "sce-tool-footer", panel);
   const status = create(doc, "div", "sce-tool-status", footer);
   status.setAttribute("role", "status");
+  // The visible line follows every keystroke; the live region says only what a committed change came to.
+  status.setAttribute("aria-live", "off");
+  const live = create(doc, "div", "sce-tool-live", panel);
+  live.setAttribute("aria-live", "polite");
+  live.setAttribute("aria-atomic", "true");
+  watchChromeFloor(button, panel, signal);
   const actions = create(doc, "div", "sce-tool-actions", footer);
-  const apply = create(doc, "button", "sce-button sce-tool-apply", actions);
+  const apply = create(doc, "button", "sce-button sce-picker-primary sce-tool-apply", actions);
   apply.type = "button";
   const close = create(doc, "button", "sce-button", actions);
   close.type = "button";
@@ -128,15 +142,18 @@ export function mountToolPanel(
   let chosen: ScoreTool | null = null;
   let language: Language | null = null;
   let t: ToolMessages = toolMessagesFor(session.view.language);
+  const CHROME_VAR = "--sce-_chrome-h";
 
   function text(tag: "span" | "div", parent: HTMLElement, className: string): HTMLElement {
     return create(doc, tag, className, parent);
   }
 
-  /** One control per declared parameter, inside a label so the name and the field travel together. */
+  /** One control per declared parameter, with its name as the field's label or, for a number, its `aria-labelledby`. */
   function control(entry: Entry, parameter: ToolParameter): void {
-    const fieldLabel = create(doc, "label", "sce-tool-field", entry.controls);
+    // A number's field holds two buttons beside the input; a label around all three would take their names into it.
+    const fieldLabel = create(doc, parameter.type === "number" ? "div" : "label", "sce-tool-field", entry.controls);
     const name = text("span", fieldLabel, "sce-tool-field-name");
+    name.id = uniqueId("sce-tool-field-name");
     labels.push((_messages, lang) => {
       name.textContent = parameter.label?.[lang] ?? parameter.name;
     });
@@ -149,29 +166,57 @@ export function mountToolPanel(
         option.textContent = value;
         select.appendChild(option);
       }
-      select.value = parameter.default;
+      select.value = String(toolParameterDefault(parameter, session.toolContext));
       field = select;
+    } else if (parameter.type === "number") {
+      // A coarse pointer gets a step on each side, so a bar number does not need the keyboard; typing stays possible.
+      const stepper = create(doc, "div", "sce-tool-stepper", fieldLabel);
+      const minus = create(doc, "button", "sce-tool-step", stepper);
+      minus.type = "button";
+      minus.textContent = "\u2212";
+      const input = create(doc, "input", "sce-tool-number", stepper);
+      input.setAttribute("aria-labelledby", name.id);
+      input.type = "number";
+      input.inputMode = "numeric";
+      const step = parameter.step ?? 1;
+      input.step = String(step);
+      if (parameter.min !== undefined) input.min = String(parameter.min);
+      if (parameter.max !== undefined) input.max = String(parameter.max);
+      input.value = String(toolParameterDefault(parameter, session.toolContext));
+      const plus = create(doc, "button", "sce-tool-step", stepper);
+      plus.type = "button";
+      plus.textContent = "+";
+      const bump = (direction: number): void => {
+        const current = input.value === "" ? (parameter.min ?? 0) : Number(input.value);
+        const raw = current + direction * step;
+        const low = parameter.min ?? Number.NEGATIVE_INFINITY;
+        const high = parameter.max ?? Number.POSITIVE_INFINITY;
+        input.value = String(Math.min(high, Math.max(low, Math.round(raw * 1e6) / 1e6)));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      minus.addEventListener("click", () => bump(-1), { signal });
+      plus.addEventListener("click", () => bump(1), { signal });
+      field = input;
+      labels.push((_messages, lang) => {
+        const name = parameter.label?.[lang] ?? parameter.name;
+        minus.setAttribute("aria-label", _messages.decrease(name));
+        plus.setAttribute("aria-label", _messages.increase(name));
+      });
     } else {
-      const input = create(doc, "input", parameter.type === "number" ? "sce-tool-number" : "sce-tool-text", fieldLabel);
-      if (parameter.type === "number") {
-        input.type = "number";
-        input.inputMode = "numeric";
-        input.step = String(parameter.step ?? 1);
-        if (parameter.min !== undefined) input.min = String(parameter.min);
-        if (parameter.max !== undefined) input.max = String(parameter.max);
-        input.value = String(parameter.default);
-      } else if (parameter.type === "boolean") {
+      const input = create(doc, "input", parameter.type === "boolean" ? "sce-tool-check" : "sce-tool-text", fieldLabel);
+      if (parameter.type === "boolean") {
         input.type = "checkbox";
-        input.checked = parameter.default;
+        input.checked = toolParameterDefault(parameter, session.toolContext) === true;
         fieldLabel.classList.add("sce-tool-check");
       } else {
         input.type = "text";
-        input.value = parameter.default;
+        input.value = String(toolParameterDefault(parameter, session.toolContext));
       }
       field = input;
     }
     field.addEventListener("input", () => previewNow(), { signal });
-    field.addEventListener("change", () => previewNow(), { signal });
+    field.addEventListener("change", () => previewNow(true), { signal });
     entry.fields.set(parameter.name, field);
   }
 
@@ -200,7 +245,7 @@ export function mountToolPanel(
     for (const parameter of tool.parameters ?? []) {
       const field = entry?.fields.get(parameter.name);
       if (field === undefined) {
-        values[parameter.name] = parameter.default;
+        values[parameter.name] = toolParameterDefault(parameter, session.toolContext);
       } else if (parameter.type === "number") {
         values[parameter.name] = field.value === "" ? Number.NaN : Number(field.value);
       } else if (parameter.type === "boolean") {
@@ -213,43 +258,91 @@ export function mountToolPanel(
     return values;
   }
 
-  function setStatus(message: string, state: string): void {
+  function setStatus(message: string, state: string, announce = false): void {
     status.textContent = message;
     status.dataset.state = state;
+    if (announce) live.textContent = message;
   }
 
   function clearPreview(): void {
     preview.show(null);
   }
 
+  /** True when a box lies wholly inside the part of the arrangement the panel leaves uncovered. */
+  function inBand(rect: DOMRect, band: { left: number; top: number; right: number; bottom: number }): boolean {
+    return rect.left >= band.left && rect.right <= band.right && rect.top >= band.top && rect.bottom <= band.bottom;
+  }
+
+  /**
+   * Brings the first changed note into the band between the chrome and the panel, only when none is already there.
+   * It scrolls the arrangement's own scroller, never the page: the preview must be checkable before Apply.
+   */
+  function revealPreview(): void {
+    if (!panel.matches(":popover-open")) return;
+    const ghost = doc.querySelector<HTMLElement>(".sce-ghost");
+    const scroller = ghost?.closest<HTMLElement>(".sce-scroller");
+    if (!scroller) return;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const chromeBottom = Number.parseFloat(getComputedStyle(panel).getPropertyValue(CHROME_VAR)) || 0;
+    const sheet = isSheet();
+    const band = {
+      left: scrollerRect.left,
+      top: Math.max(scrollerRect.top, chromeBottom),
+      right: sheet ? scrollerRect.right : Math.min(scrollerRect.right, panelRect.left - 16),
+      bottom: sheet ? Math.min(scrollerRect.bottom, panelRect.top) : scrollerRect.bottom,
+    };
+    const outlines = [...doc.querySelectorAll<HTMLElement>(".sce-ghost")];
+    if (outlines.some((outline) => inBand(outline.getBoundingClientRect(), band))) return;
+    const first = outlines[0];
+    if (!first) return;
+    const margin = 16;
+    const before = first.getBoundingClientRect();
+    let dx = 0;
+    if (before.left < band.left + margin) dx = before.left - (band.left + margin);
+    else if (before.right > band.right - margin) dx = before.right - (band.right - margin);
+    if (dx !== 0) scroller.scrollLeft += dx;
+    const moved = first.getBoundingClientRect();
+    let dy = 0;
+    if (moved.top < band.top + margin) dy = moved.top - (band.top + margin);
+    else if (moved.bottom > band.bottom - margin) dy = moved.bottom - (band.bottom - margin);
+    if (dy !== 0) scroller.scrollTop += dy;
+  }
+
   /** What the chosen tool would do now: its status line, and the outlines the tracks draw. */
-  function previewNow(): void {
+  function previewNow(announce = false): void {
     clearPreview();
     if (!panel.matches(":popover-open")) return;
     if (chosen === null) {
-      setStatus(t.statusIdle, "idle");
+      setStatus(t.statusIdle, "idle", announce);
       return;
     }
     if (!session.view.editable) {
-      setStatus(t.statusReadOnly, "readonly");
+      setStatus(t.statusReadOnly, "readonly", announce);
       return;
     }
     build(entries.get(chosen.id) as Entry);
+    if (session.selection.length === 0) {
+      setStatus(t.statusNoSelection, "idle", announce);
+      return;
+    }
     const result = session.previewTool(chosen, valuesOf(chosen));
     const diagnostic = result.diagnostics[0];
     if (!result.ok) {
       setStatus(
         diagnostic === undefined ? t.statusUnchanged : formatDiagnostic(diagnostic, language ?? "en"),
         "refused",
+        announce,
       );
       return;
     }
     if (result.project.score === session.project.score) {
-      setStatus(t.statusUnchanged, "unchanged");
+      setStatus(t.statusUnchanged, "unchanged", announce);
       return;
     }
-    setStatus(t.statusPreview(changedNotes(session, session.project, result.project)), "preview");
+    setStatus(t.statusPreview(changedNotes(session, session.project, result.project)), "preview", announce);
     preview.show({ project: result.project });
+    revealPreview();
   }
 
   /** Opens one tool and closes the others; choosing the open one again closes it. */
@@ -260,7 +353,7 @@ export function mountToolPanel(
       entry.controls.hidden = !open;
       entry.row.setAttribute("aria-expanded", String(open));
     }
-    previewNow();
+    previewNow(true);
   }
 
   function buildEntry(tool: ScoreTool, parent: HTMLElement): void {
@@ -275,6 +368,10 @@ export function mountToolPanel(
     controls.hidden = true;
     const name = text("span", row, "sce-tool-name");
     const description = tool.description === undefined ? null : text("span", row, "sce-tool-description");
+    if (description !== null) {
+      description.id = uniqueId("sce-tool-description");
+      row.setAttribute("aria-describedby", description.id);
+    }
     labels.push((_messages, lang) => {
       name.textContent = tool.name[lang];
       row.setAttribute("aria-label", tool.name[lang]);
@@ -293,12 +390,13 @@ export function mountToolPanel(
     entries.set(tool.id, entry);
     row.addEventListener(
       "click",
-      () => {
+      (event) => {
         choose(chosen === tool ? null : tool);
-        if (chosen !== null) {
-          const first = entries.get(chosen.id)?.fields.values().next().value;
-          first?.focus();
-        }
+        if (chosen === null) return;
+        const entry = entries.get(chosen.id);
+        entry?.controls.scrollIntoView({ block: "nearest", inline: "nearest" });
+        // A keyboard click has detail 0 and keeps the move into the controls; a tap leaves the keyboard closed.
+        if (event.detail === 0) entry?.fields.values().next().value?.focus();
       },
       { signal },
     );
@@ -361,7 +459,14 @@ export function mountToolPanel(
   apply.addEventListener(
     "click",
     () => {
-      if (chosen === null || !session.view.editable) return;
+      if (!session.view.editable) {
+        setStatus(t.statusReadOnly, "readonly", true);
+        return;
+      }
+      if (chosen === null) {
+        setStatus(t.statusChooseFirst, "idle", true);
+        return;
+      }
       build(entries.get(chosen.id) as Entry);
       const before = session.project.score;
       const result = session.runTool(chosen, valuesOf(chosen));
@@ -370,6 +475,7 @@ export function mountToolPanel(
         setStatus(
           diagnostic === undefined ? t.statusUnchanged : formatDiagnostic(diagnostic, language ?? "en"),
           "refused",
+          true,
         );
         clearPreview();
         if (result.diagnostics.length > 0) options.onRefused?.(result.diagnostics);
@@ -379,6 +485,7 @@ export function mountToolPanel(
       setStatus(
         result.project.score === before ? t.statusUnchanged : t.statusApplied,
         result.project.score === before ? "unchanged" : "applied",
+        true,
       );
     },
     { signal },
@@ -406,7 +513,7 @@ export function mountToolPanel(
         return;
       }
       if (!isSheet()) keepInside(panel, anchorOf(button));
-      previewNow();
+      previewNow(true);
       const focusOn = chosen === null ? entries.values().next().value?.row : entries.get(chosen.id)?.row;
       focusOn?.focus();
     },

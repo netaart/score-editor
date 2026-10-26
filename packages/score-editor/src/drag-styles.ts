@@ -91,12 +91,16 @@ export const dragCss = `
   top: calc(var(--r) * var(--sce-_row));
   height: var(--sce-_row);
   border: 2px dashed var(--sce-_text);
+  /* A ground-coloured halo keeps the dashes apart from the notes they cross, so a dense preview reads. */
+  box-shadow: 0 0 0 1px var(--sce-_bg);
   border-radius: min(var(--sce-_radius), 3px);
   pointer-events: none;
 }
 @media (forced-colors: active) {
   .sce-root .sce-ghost {
     border-color: CanvasText;
+    box-shadow: 0 0 0 1px Canvas;
+    forced-color-adjust: none;
   }
   .sce-root[data-editable="true"] .sce-note[data-selected] {
     --sce-_grip: CanvasText;

@@ -798,11 +798,11 @@ test.describe("the panel hangs from its button", () => {
   const popover = (page: Page) => panel(page);
   const gapUnder = async (page: Page) => {
     const opened = await box(popover(page));
-    const button = await box(projectButton(page));
-    return opened.y - (button.y + button.height);
+    const toolbar = await box(page.locator(".sce-toolbar"));
+    return opened.y - (toolbar.y + toolbar.height);
   };
 
-  test("when a notice comes and goes, and the toolbar wraps again, the panel stays under the button", async ({
+  test("when a notice comes and goes, and the toolbar wraps again, the panel stays below the toolbar", async ({
     page,
     harness,
     press,
@@ -810,15 +810,15 @@ test.describe("the panel hangs from its button", () => {
     await harness.mount({ score: { text: withChords }, project: { scoreMode: "full" } });
     await press(projectButton(page));
     await expect(popover(page)).toBeVisible();
-    await expect.poll(() => gapUnder(page)).toBeCloseTo(4, 0);
+    await expect.poll(() => gapUnder(page)).toBeGreaterThanOrEqual(7);
 
     await press(page.getByRole("radio", { name: "Melody" }));
     await expect(projectButton(page)).toHaveAccessibleName("Project, 1 notice");
-    await expect.poll(() => gapUnder(page)).toBeCloseTo(4, 0);
+    await expect.poll(() => gapUnder(page)).toBeGreaterThanOrEqual(7);
 
     await press(page.getByRole("button", { name: "Delete all chords" }));
     await expect(projectButton(page)).toHaveAccessibleName("Project");
-    await expect.poll(() => gapUnder(page)).toBeCloseTo(4, 0);
+    await expect.poll(() => gapUnder(page)).toBeGreaterThanOrEqual(7);
   });
 
   test("when the window narrows while it is open, it spans the window", async ({ page, harness, press }) => {

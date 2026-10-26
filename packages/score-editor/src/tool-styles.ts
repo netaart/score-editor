@@ -31,7 +31,7 @@ export const toolCss = `
 .sce-root .sce-tool-panel:popover-open {
   display: flex;
   flex-direction: column;
-  width: min(28em, calc(100vw - 16px));
+  width: min(30em, calc(100vw - 16px));
   padding: 0;
   overflow: hidden;
 }
@@ -55,7 +55,11 @@ export const toolCss = `
   gap: 2px;
 }
 .sce-root .sce-tool-group-name {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
   padding: 4px 2px;
+  background: var(--sce-_surface);
   color: var(--sce-_muted);
   font-size: 0.92em;
   font-weight: 600;
@@ -65,13 +69,14 @@ export const toolCss = `
   flex-direction: column;
 }
 .sce-root .sce-tool-row {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: start;
   gap: 2px;
   min-height: 40px;
   margin: 0;
-  padding: 6px 8px;
+  padding: 6px 24px 6px 8px;
   border: 1px solid transparent;
   border-radius: var(--sce-_radius);
   background: transparent;
@@ -87,6 +92,20 @@ export const toolCss = `
 .sce-root .sce-tool-row[aria-expanded="true"] {
   border-color: var(--sce-_line-strong);
   background: color-mix(in srgb, var(--sce-_text) 12%, transparent);
+}
+.sce-root .sce-tool-row::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 10px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-50%) rotate(-45deg);
+}
+.sce-root .sce-tool-row[aria-expanded="true"]::after {
+  transform: translateY(-50%) rotate(45deg);
 }
 .sce-root .sce-tool-name {
   font-weight: 600;
@@ -126,7 +145,7 @@ export const toolCss = `
   min-height: 28px;
   min-width: 0;
   padding: 0 6px;
-  border: 1px solid var(--sce-_line-strong);
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 47%, var(--sce-_bg));
   border-radius: var(--sce-_radius);
   background: var(--sce-_bg);
   color: var(--sce-_text);
@@ -137,6 +156,25 @@ export const toolCss = `
 .sce-root .sce-tool-number {
   width: 7em;
 }
+.sce-root .sce-tool-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sce-root .sce-tool-step {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--sce-_text) 47%, var(--sce-_bg));
+  border-radius: var(--sce-_radius);
+  background: var(--sce-_bg);
+  color: var(--sce-_text);
+  font: inherit;
+  cursor: pointer;
+}
 .sce-root .sce-tool-footer {
   position: sticky;
   bottom: 0;
@@ -146,6 +184,16 @@ export const toolCss = `
   padding: 8px 12px 12px;
   border-top: 1px solid var(--sce-_line);
   background: var(--sce-_surface);
+}
+.sce-root .sce-tool-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .sce-root .sce-tool-status {
   min-height: calc(2.6em + 4px);
@@ -168,7 +216,7 @@ export const toolCss = `
   gap: 8px;
 }
 .sce-root :is(.sce-tool-button, .sce-tool-row, .sce-tool-apply, .sce-tool-actions .sce-button):focus-visible,
-.sce-root :is(.sce-tool-number, .sce-tool-text, .sce-tool-select, .sce-tool-check input):focus-visible {
+.sce-root :is(.sce-tool-number, .sce-tool-text, .sce-tool-select, .sce-tool-check input, .sce-tool-step):focus-visible {
   outline: 2px solid var(--sce-_accent);
   outline-offset: 2px;
 }
@@ -192,18 +240,32 @@ export const toolCss = `
   .sce-root .sce-tool-actions .sce-button {
     min-height: 40px;
   }
+  .sce-root .sce-tool-step {
+    display: inline-flex;
+  }
 }
 @media ${TOOLS_SHEET_QUERY} {
+  /* The sheet stops above the floor of music under the chrome; the variables are the panel's own, kept by chrome-floor.ts. */
   .sce-root .sce-tool-panel:popover-open {
     inset: auto 0 0 0;
     width: auto;
-    max-height: 75dvh;
+    max-height: calc(100dvh - var(--sce-_chrome-h, 0px) - var(--sce-_sheet-floor, 190px));
     border-width: 1px 0 0;
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
   .sce-root .sce-tool-footer {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  .sce-root .sce-tool-status {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .sce-root .sce-tool-actions {
+    flex: none;
   }
 }
 `;

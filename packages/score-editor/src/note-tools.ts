@@ -20,8 +20,8 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     group: "note",
     name: { en: "Split at the insertion point", zh: "在插入点切分" },
     description: {
-      en: "Cut each selected note where the insertion point stands.",
-      zh: "在插入点的位置切开每个选中的音。",
+      en: "Cut selected notes at the insertion point; click a beat.",
+      zh: "在插入点切开选中的音，先点击一拍。",
     },
     commands(_project, selection, _values, context) {
       return [{ type: "splitNotes", noteIds: selection, at: context.insertionPoint, grid: context.grid }];
@@ -32,7 +32,7 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     group: "note",
     name: { en: "Chop on the grid", zh: "按网格切碎" },
     description: {
-      en: "Cut each selected note at every grid line it crosses.",
+      en: "Cut each selected note on every grid line.",
       zh: "在每个穿过的网格线上切开选中的音。",
     },
     commands(_project, selection, _values, context) {
@@ -44,8 +44,8 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     group: "note",
     name: { en: "Join same pitch", zh: "合并同音高" },
     description: {
-      en: "Merge selected notes that are next to each other on the same pitch.",
-      zh: "把选中、相邻而且同音高的音并成一个。",
+      en: "Merge selected notes on the same pitch.",
+      zh: "把相邻的同音高选中音并成一个。",
     },
     commands(_project, selection, _values, context) {
       return [{ type: "joinNotes", noteIds: selection, grid: context.grid }];
@@ -56,8 +56,8 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     group: "note",
     name: { en: "Legato", zh: "连奏" },
     description: {
-      en: "Extend each selected note to where the next note of its voice starts.",
-      zh: "把每个选中的音延长到同声部下一个音开始的地方。",
+      en: "Extend each selected note to the next one.",
+      zh: "把选中的音延长到同一音轨的下一个音。",
     },
     commands(_project, selection, _values, context) {
       return [{ type: "legatoNotes", noteIds: selection, grid: context.grid }];
@@ -77,8 +77,8 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     group: "note",
     name: { en: "Flip up and down", zh: "上下翻转" },
     description: {
-      en: "Mirror the selected notes' pitches around the middle of the selection.",
-      zh: "以选中音域的中线为轴，上下翻转音高。",
+      en: "Mirror pitches: the highest becomes the lowest.",
+      zh: "以选区中线翻转音高，高音变低音。",
     },
     commands(_project, selection, _values, context) {
       return [{ type: "flipNotes", noteIds: selection, grid: context.grid }];
@@ -89,8 +89,8 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     group: "note",
     name: { en: "Snap to key", zh: "吸附到当前调" },
     description: {
-      en: "Move each selected note to the nearest pitch of the key in force.",
-      zh: "把每个选中的音移到当前调里最近的音高。",
+      en: "Move each note to the nearest note in the song's key.",
+      zh: "把选中的音移到当前调里最近的音高。",
     },
     commands(_project, selection, _values, context) {
       return [{ type: "snapNotesToKey", noteIds: selection, grid: context.grid }];
@@ -99,8 +99,8 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
   {
     id: "length-double",
     group: "note",
-    name: { en: "Length ×2", zh: "长度乘 2" },
-    description: { en: "Make each selected note twice as long.", zh: "把每个选中的音的长度乘 2。" },
+    name: { en: "Length ×2", zh: "长度乘2" },
+    description: { en: "Make each selected note twice as long.", zh: "把每个选中的音的长度乘2。" },
     commands(_project, selection, _values, context) {
       return [{ type: "scaleNoteLengths", noteIds: selection, factor: 2, grid: context.grid }];
     },
@@ -108,8 +108,8 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
   {
     id: "length-halve",
     group: "note",
-    name: { en: "Length ÷2", zh: "长度除以 2" },
-    description: { en: "Make each selected note half as long.", zh: "把每个选中的音的长度除以 2。" },
+    name: { en: "Length ÷2", zh: "长度除以2" },
+    description: { en: "Make each selected note half as long.", zh: "把每个选中的音的长度除以2。" },
     commands(_project, selection, _values, context) {
       return [{ type: "scaleNoteLengths", noteIds: selection, factor: 0.5, grid: context.grid }];
     },
@@ -138,12 +138,24 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     group: "note",
     name: { en: "Fit into bars", zh: "压缩或拉伸到小节" },
     description: {
-      en: "Stretch or squeeze the selected notes into a run of bars.",
-      zh: "把选中的音压缩或拉伸到一段小节里。",
+      en: "Fit the selected notes into the bars you choose.",
+      zh: "把选中的音放进所选的小节。",
     },
     parameters: [
-      { name: "from", label: { en: "First bar", zh: "第一小节" }, type: "number", min: 1, default: 1 },
-      { name: "to", label: { en: "Last bar", zh: "最后一小节" }, type: "number", min: 1, default: 1 },
+      {
+        name: "from",
+        label: { en: "From bar", zh: "起始小节" },
+        type: "number",
+        min: 1,
+        default: (context) => context.selectionFirstBar ?? 1,
+      },
+      {
+        name: "to",
+        label: { en: "To bar", zh: "结束小节" },
+        type: "number",
+        min: 1,
+        default: (context) => context.selectionLastBar ?? 1,
+      },
     ],
     commands(_project, selection, values, context) {
       const from = Number(values.from ?? 1) - 1;
