@@ -5,6 +5,13 @@ import { box, expect, type Harness, tapFirstVisibleNote, test, vocalOnly } from 
 
 /** Four quarter notes in C, then a whole note: the score most cases use. */
 const QUARTERS = vocalOnly("C4D4E4F4|G16|");
+/** The same score with a duration the format refuses, so the text view starts with a problem to fix. */
+const BROKEN = QUARTERS.replace("C4D4E4F4|", "C5D4E4F4|");
+
+const VIEWS = {
+  en: { group: "View", staff: "Staff", text: "Score text" },
+  zh: { group: "视图", staff: "五线谱", text: "乐谱文本" },
+} as const;
 
 /** Vocal plus a second voice cut after bar 1; the cut sentence and the project notice then stand with the conflict. */
 const CUT = [
@@ -289,4 +296,30 @@ test.describe("C11: the existing guards", () => {
     await tapFirstVisibleNote(page);
     await expect(page.getByRole("listitem", { name: /，已选中$/ })).toHaveCount(1);
   });
+
+  for (const width of [412, 500, 1280] as const) {
+    for (const language of ["en", "zh"] as const) {
+      test(`keeps the view switch where it is at ${width} (${language})`, async ({
+        page,
+        harness,
+        press,
+        isMobile,
+      }) => {
+        test.skip(isMobile, "the width is set once, on the desktop project");
+        await page.setViewportSize({ width, height: 700 });
+        await harness.mount({ score: { text: BROKEN }, language });
+        const names = VIEWS[language];
+        const tabs = page.getByRole("group", { name: names.group });
+        const staff = tabs.getByRole("button", { name: names.staff, exact: true });
+        await press(tabs.getByRole("button", { name: names.text, exact: true }));
+        const before = await box(staff);
+
+        await page.getByRole("textbox").fill(QUARTERS);
+        await page.getByRole("textbox").blur();
+        await expect(page.locator(".sce-history")).toBeVisible();
+
+        expect(await box(staff)).toEqual(before);
+      });
+    }
+  }
 });
