@@ -250,9 +250,7 @@ V: Vocal
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("melody-with-chords");
     const dialect = session.dialect;
     if (dialect === undefined) throw new Error("the registry has song2");
-    expect(checkProject(dialect, session.project).map((diagnostic) => diagnostic.code)).toContain(
-      "melody-with-chords",
-    );
+    expect(checkProject(dialect, session.project).map((diagnostic) => diagnostic.code)).toContain("melody-with-chords");
   });
 });
 
