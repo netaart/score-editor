@@ -205,7 +205,8 @@ if (score) {
 ```
 
 - Every field is optional and an absent field is no condition; the present ones combine with "and". `{}` takes every
-  pitched note.
+  pitched note: that is the pure function's meaning. The panel's own rule for no condition on is separate: it selects
+  nothing and says so (`DESIGN.md`, "Filter panel").
 - A note here is a tie chain: pitched notes joined by ties are one note that starts where the first starts, lasts as long as
   all of them and has the pitch of the first. A rest is not a note. The ids returned are those of every part of each
   chain that matched, so a tied note is selected whole.
@@ -216,8 +217,8 @@ if (score) {
   natural minor), not against how the note is spelt. A key that cannot be read makes the note neither in nor out.
 - `count` is "every Nth note" with an offset, as in a sequencer's filter: among the notes the other conditions let through,
   counted along each voice in time order, it takes the ones at the places `skip`, `skip + every`, and so on (places count
-  from 0). `every` must be a whole number of 1 or more and `skip` a whole number of 0 or more; anything else takes nothing.
-  Nothing throws.
+  from 0). `every` must be a whole number of 1 or more and `skip` a whole number of 0 or more; `skip` defaults to 0.
+  Anything else takes nothing. Nothing throws.
 - `invert` takes the pitched notes of the whole score that the other conditions, `count` included, did not take. With no
   other condition it takes nothing; with conditions that take nothing it takes every note.
 - There is no cap on how many notes a filter takes.

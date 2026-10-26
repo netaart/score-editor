@@ -293,14 +293,14 @@ mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws what the panel s
 
 - The panel is a native popover (top layer) with a row for each condition: Pitch (lowest and highest note), Time (first and
   last bar), Length (shortest and longest note value, a part of a whole note), Key (in or out of the key) and Count (one in
-  every N notes, after skipping the first M), then Invert, a status line and the buttons Re-apply and Done. Each row has a
-  checkbox that says whether the condition counts. The conditions combine with "and".
-- Changing a field turns its condition on and selects at once, through `session.select`; unchecking the last condition
-  selects nothing. Opening the panel selects nothing. Re-apply selects again from the conditions the panel holds, against
-  the score as it is now. A selection made through the panel is not a history step.
-- The panel holds the conditions of its last selection, so it shows them again when it is opened. Its status line, a polite
-  live region, says how many notes were selected, that none matched, or that the score or the selection has changed since
-  (Re-apply selects again).
+  every N of each voice, after skipping the first M), then Invert, a status line and the buttons Re-apply and Done. Each row
+  has a checkbox that says whether the condition counts. The conditions combine with "and".
+- Changing a field turns its condition on and selects at once, through `session.select`. Re-apply selects again from the
+  conditions the panel holds, against the score as it is now. A selection made through the panel is not a history step. The
+  panel's own rules (an empty filter, Invert, its status line) are in `DESIGN.md`, "Filter panel"; what the pure filter
+  means is in [headless-layer.md](headless-layer.md#picking-notes-by-conditions).
+- The panel holds the conditions of its last selection, so it shows them again when it is opened. Its status line is a
+  polite live region that says the result, or that the score or the selection has changed since (Re-apply selects again).
 - It selects through `session.select`, so it works while `session.view.editable` is false; the arrangement draws no
   selection frame then, and the status line is what shows the result.
 - It is there while the score reads and the arrangement is the view shown; otherwise the button is hidden and an open panel
