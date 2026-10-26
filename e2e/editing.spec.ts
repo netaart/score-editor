@@ -265,8 +265,13 @@ test.describe("the toolbar part", () => {
 
     if (isMobile) {
       const at = { x: shown.x + shown.width / 2, y: shown.y + shown.height / 2 };
-      await harness.swipe({ x: at.x + 80, y: at.y }, { x: at.x - 80, y: at.y });
-      await expect.poll(async () => (await box(deleteButton(page))).x).toBeLessThan(shown.x + shown.width);
+      // The row is wider than one swipe once the Grid control is in it, so swipe until Delete comes into sight.
+      await expect
+        .poll(async () => {
+          await harness.swipe({ x: at.x + 80, y: at.y }, { x: at.x - 80, y: at.y });
+          return (await box(deleteButton(page))).x;
+        })
+        .toBeLessThan(shown.x + shown.width);
     } else {
       await deleteButton(page).focus();
     }
