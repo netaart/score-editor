@@ -555,3 +555,50 @@ test.describe("the lane word stays where the head is pinned", () => {
     await check("end");
   });
 });
+
+test.describe("forced colours keep the marks", () => {
+  test("the pressed pencil and pressed view segment keep that mark when keyboard focus is on them", async ({
+    page,
+    harness,
+  }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await harness.mount({ score: { text: LEAD } });
+    const pencil = page.getByRole("button", { name: "Draw notes", exact: true });
+    await pencil.focus();
+    await page.keyboard.press("Enter");
+    await expect(pencil).toHaveAttribute("aria-pressed", "true");
+    await expect(pencil).toHaveCSS("outline-width", "2px");
+    const pencilMark = await pencil.evaluate((el) => {
+      const style = getComputedStyle(el, "::after");
+      return { content: style.content, border: style.borderTopWidth, colour: style.borderTopColor };
+    });
+    expect(pencilMark.content).not.toBe("none");
+    expect(pencilMark.border).toBe("2px");
+    expect(pencilMark.colour).toBe(
+      await page.locator(".sce-grid-dot").evaluate((el) => getComputedStyle(el).backgroundColor),
+    );
+
+    const staff = page.getByRole("button", { name: "Staff", exact: true });
+    await staff.focus();
+    await page.keyboard.press("Enter");
+    await expect(staff).toHaveAttribute("aria-pressed", "true");
+    await expect(staff).toHaveCSS("outline-width", "2px");
+    const viewMark = await staff.evaluate((el) => {
+      const style = getComputedStyle(el, "::after");
+      return { content: style.content, border: style.borderTopWidth };
+    });
+    expect(viewMark.content).not.toBe("none");
+    expect(viewMark.border).toBe("2px");
+  });
+
+  test("both zoom steps draw their bars in the system colour", async ({ page, harness }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    await harness.mount({ score: { text: LEAD } });
+    const system = await page.locator(".sce-grid-dot").evaluate((el) => getComputedStyle(el).backgroundColor);
+    const minus = page.getByRole("button", { name: "Zoom out", exact: true });
+    const plus = page.getByRole("button", { name: "Zoom in", exact: true });
+    expect(await minus.evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe(system);
+    expect(await plus.evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe(system);
+    expect(await plus.evaluate((el) => getComputedStyle(el, "::after").backgroundColor)).toBe(system);
+  });
+});
