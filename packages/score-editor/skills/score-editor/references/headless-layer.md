@@ -87,7 +87,9 @@ The note edits are `MoveNotesCommand` and `ResizeNotesCommand`, both members of 
 They take several note ids and act on each note's whole tie chain. Their `grid` is a `Grid`: its `value` is a
 `GridValue`, one of 4, 8, 16 or 32, and `dotted` makes a step half as long again. A grid step is allowed only when the
 score's `unitTicks` and the dialect's `constraints.durations` can write it, and a step the score cannot write is
-refused with `grid-not-allowed`. Every refusal code is listed with the command in the package README.
+refused with `grid-not-allowed`. Every refusal code is listed with the command in the package README. The parts send them through
+the `move-notes` and `resize-notes` inputs of `handleEditingInput`, on `session.grid`, so a view of your own can do the same
+([view-parts.md](view-parts.md)).
 
 ```ts
 import { applyProjectCommand, isNoticeDiagnostic } from "@neta-art/score-editor";
@@ -166,6 +168,21 @@ tempo range, section marker, lyric rule, durations, meter rule and chord vocabul
 `Language` is `"zh" | "en"`. `Notice` is a one-time message for the host's own toast system, `NoticeCode` its
 machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-refused"`, sent when the score would not take an edit the user asked for).
 
+## Chord places and the names a vocabulary allows
+
+The chord picker of the chord track is built from four pure functions, which a host with its own chord input can use. `chordSlots(score, constraints)` lists the places a chord can go as `ChordSlot`s: the start of every note or rest in a voice whose constraints allow chords, sorted by start (a start two voices share belongs to the voice listed first). A slot is `{ noteId, voice, start, duration, chord, before }`: `chord` is the chord on that start or null and `before` the chord in force before it or null. `nearestChordSlot(slots, tick)` is the slot nearest a tick, the earlier on a tie, and null for no slots. `chordChoices(vocabulary)` is what a picker may offer, a `ChordChoices`, `{ letters, qualities, slashBass }`, where each `ChordLetter` is `{ letter, roots }` and holds the spellings the vocabulary has on that letter, and `qualities` holds only the types the grammar can write with every offered root. `splitChordName(name, vocabulary)` is the grammar `setChord` checks: it returns `ChordNameParts`, `{ root, quality, bass }`, or null when the vocabulary does not allow the name.
+
+```ts
+const { constraints, reading } = session;
+if (constraints && reading.kind === "score") {
+  const slots = chordSlots(reading.score, constraints);
+  const slot = nearestChordSlot(slots, 600); // the start nearest tick 600
+  if (slot && splitChordName("Am7/G", constraints.chords)) {
+    session.dispatch({ type: "setChord", noteId: slot.noteId, name: "Am7/G" });
+  }
+}
+```
+
 ## The preview schedule
 
 `schedulePreview(score, fromTick = 0)` turns a `Score` into what a synthetic preview plays: a `PreviewSchedule`, which is
@@ -203,3 +220,49 @@ if (score) {
 - `tickAtSeconds(score, seconds)` is the reverse for a host player's clock: the tick at that time from the start, a
   tempo change included, the last tick past the end and the first at or before zero. `secondsPerTick` is the opening
   tempo's, so use `tickAtSeconds` rather than dividing when a score has changes.
+
+## Picking notes by conditions
+
+Use this when a note set is defined by what the notes are (the high ones, the short ones, the ones out of key, every
+second one) and not by where a person pointed. `filterNotes(score, filter)` takes a parsed `Score` and a `NoteFilter`
+and returns the ids of the notes that satisfy it, in the order of `score.notes`, ready for `session.select`. It is pure,
+touches no DOM and runs in Node and in a worker. The panel that drives it is in
+[view-parts.md](view-parts.md#selecting-by-filter).
+
+```ts
+import { filterNotes } from "@neta-art/score-editor";
+import type { NoteFilter } from "@neta-art/score-editor";
+
+const { score } = song2Dialect.parse(project.score);
+if (score) {
+  const filter: NoteFilter = {
+    pitch: { min: 64, max: 69 }, // E4 to A4, both ends included
+    time: { from: 0, to: 1024 }, // notes that start in the first bar of a 4/4 score: from included, to excluded
+    duration: { min: 256 }, // at least a quarter note, a tie chain counted whole
+    key: "in", // in the key in force where the note starts
+    count: { every: 2, skip: 0 }, // of those, the 1st, 3rd, 5th... of each voice
+    invert: false,
+  };
+  const ids: string[] = filterNotes(score, filter);
+  session.select(ids); // selecting is not an edit: no history step
+}
+```
+
+- Every field is optional and an absent field is no condition; the present ones combine with "and". `{}` takes every
+  pitched note: that is the pure function's meaning. The panel's own rule for no condition on is separate: it selects
+  nothing and says so ([DESIGN.md](../../../../DESIGN.md#filter-panel)).
+- A note here is a tie chain: pitched notes joined by ties are one note that starts where the first starts, lasts as long as
+  all of them and has the pitch of the first. A rest is not a note. The ids returned are those of every part of each
+  chain that matched, so a tied note is selected whole.
+- `pitch` is in MIDI numbers, `duration` in ticks (`TICKS_PER_QUARTER` to the quarter note), both with their ends included;
+  `time` is in ticks too, and a note passes when it starts in `[from, to)`. An end that is left out is open; a range whose
+  ends are crossed takes nothing. No number is clamped.
+- `key` judges the pitch class against the major scale of the key in force at the note's start (a minor key counts as its
+  natural minor), not against how the note is spelt. A key that cannot be read makes the note neither in nor out.
+- `count` is "every Nth note" with an offset, as in a sequencer's filter: among the notes the other conditions let through,
+  counted along each voice in time order, it takes the ones at the places `skip`, `skip + every`, and so on (places count
+  from 0). `every` must be a whole number of 1 or more and `skip` a whole number of 0 or more; `skip` defaults to 0.
+  Anything else takes nothing. Nothing throws.
+- `invert` takes the pitched notes of the whole score that the other conditions, `count` included, did not take. With no
+  other condition it takes nothing; with conditions that take nothing it takes every note.
+- There is no cap on how many notes a filter takes.

@@ -5,7 +5,7 @@ import { create } from "./dom";
 import { messagesFor } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
 import { meterAllowed, meterChoices } from "./meter";
-import { nudgeIntoWindow, placeUnder } from "./popover-menu";
+import { keepInside, placeUnder } from "./popover-menu";
 import type { Meter, Score } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -210,7 +210,10 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      placeUnder(button, menu);
+      const view = doc.defaultView;
+      const room =
+        view === null ? undefined : Math.max(0, view.innerHeight - button.getBoundingClientRect().bottom - 12);
+      placeUnder(menu, button, room === undefined ? {} : { maxHeight: room });
       const { reading } = session;
       const target = reading.kind === "score" ? targetOf(reading.score, session) : null;
       if (target !== null) renderMenu(target);
@@ -226,7 +229,7 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
         if (menu.contains(doc.activeElement)) button.focus();
         return;
       }
-      nudgeIntoWindow(menu);
+      keepInside(menu);
       (choices.find((choice) => choice.getAttribute("aria-checked") === "true") ?? choices[0])?.focus();
     },
     { signal },

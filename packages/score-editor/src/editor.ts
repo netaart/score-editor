@@ -47,6 +47,8 @@ export class Editor implements MountedEditor {
   private readonly abort = new AbortController();
   private readonly session: EditingSession;
   private readonly drafts: DraftBinding;
+  /** The chrome above the body: toolbar, conflict strip, cut sentence and stale notice, bounded by the music's floor. */
+  private readonly chrome: HTMLElement;
   private readonly scroller: HTMLElement;
   private readonly content: HTMLElement;
   private readonly top: HTMLElement;
@@ -71,6 +73,8 @@ export class Editor implements MountedEditor {
   private reading: ScoreReading;
   private language: Language;
   private openingViewDue = false;
+  /** The lane window's centre as it was when the scroller last had this height, so chrome can grow without moving it. */
+  private pinWindow: { clientHeight: number; pinned: number; scrollTop: number } | null = null;
   private readonly unsubscribe: Array<() => void> = [];
   private destroyed = false;
 
@@ -103,14 +107,17 @@ export class Editor implements MountedEditor {
 
     this.root = create(doc, "div", "sce-root sce-editor");
     host.appendChild(this.root);
+    this.chrome = create(doc, "div", "sce-chrome", this.root);
 
     const hintId = `sce-hint-${n}`;
     const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
     this.parts.push(
-      mountToolbar(this.root, this.session, {
+      mountToolbar(this.chrome, this.session, {
         hintId,
         onRefused,
         viewSwitch: true,
+        tempoKey: true,
+        projectPanel: true,
         draftKeeper: this.drafts,
         onChooseBars: (bar) => {
           this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`)?.focus();
@@ -118,10 +125,10 @@ export class Editor implements MountedEditor {
       }),
     );
     this.draftAnchor = doc.createComment("draft conflict");
-    this.root.appendChild(this.draftAnchor);
+    this.chrome.appendChild(this.draftAnchor);
     this.syncDraftParts();
-    this.parts.push(mountCutNotice(this.root, this.session, { onRefused }));
-    this.stalePane = pane(this.root);
+    this.parts.push(mountCutNotice(this.chrome, this.session, { onRefused }));
+    this.stalePane = pane(this.chrome);
     this.parts.push(mountStaleNotice(this.stalePane, this.session));
     const body = create(doc, "div", "sce-body", this.root);
     this.scroller = create(doc, "div", "sce-scroller", body);
@@ -154,7 +161,20 @@ export class Editor implements MountedEditor {
     this.showView();
     // The frame hears a change after the parts have drawn it, so it can scroll to what they drew.
     this.unsubscribe.push(this.session.subscribe(() => this.afterParts()));
+    // The header is pinned only if the lane under it keeps six rows; the opening scroll must know which before it runs.
+    this.syncPin();
     this.centreFirstTrack();
+    const Observer = this.doc.defaultView?.ResizeObserver;
+    if (Observer) {
+      const observer = new Observer(() => {
+        const before = this.pinWindow;
+        this.syncPin();
+        this.keepPinWindow(before);
+        this.rememberPinWindow();
+      });
+      observer.observe(this.scroller);
+      this.abort.signal.addEventListener("abort", () => observer.disconnect(), { once: true });
+    }
   }
 
   update(patch: Partial<MountOptions>): void {
@@ -208,9 +228,9 @@ export class Editor implements MountedEditor {
   private syncDraftParts(): void {
     if (this.draftStore() !== null) {
       if (this.conflict === null) {
-        const part = mountDraftConflict(this.root, this.session, this.drafts);
-        const node = this.root.lastElementChild;
-        if (node !== null) this.root.insertBefore(node, this.draftAnchor);
+        const part = mountDraftConflict(this.chrome, this.session, this.drafts);
+        const node = this.chrome.lastElementChild;
+        if (node !== null) this.chrome.insertBefore(node, this.draftAnchor);
         this.conflict = part;
         this.parts.push(part);
       }
@@ -309,6 +329,7 @@ export class Editor implements MountedEditor {
     this.problemPane.hidden = view === "text";
     this.staffPane.hidden = view !== "staff";
     this.textPane.hidden = view !== "text";
+    if (!arrangement) this.pinWindow = null;
     if (view === "staff" && !this.staffMounted) {
       this.staffMounted = true;
       this.parts.push(mountStaffView(this.staffPane, this.session));
@@ -348,13 +369,81 @@ export class Editor implements MountedEditor {
     this.centreFirstTrack();
   }
 
+  /** Whether the arrangement with the lane window is shown. */
+  private pinShown(): boolean {
+    return this.shownView === "arrangement" && !this.scroller.hidden && this.reading.kind === "score";
+  }
+
+  /** What covers the scroller's top: the header while it is sticky, and the track head. */
+  private pinnedHeight(): number {
+    const head = this.scroller.querySelector<HTMLElement>(".sce-track-head");
+    if (!head) return 0;
+    const header = this.doc.defaultView?.getComputedStyle(this.top).position === "sticky" ? this.top.offsetHeight : 0;
+    return header + head.offsetHeight;
+  }
+
+  /** Remembers the lane window's centre, for the next change in the scroller's height. */
+  private rememberPinWindow(): void {
+    this.pinWindow = this.pinShown()
+      ? { clientHeight: this.scroller.clientHeight, pinned: this.pinnedHeight(), scrollTop: this.scroller.scrollTop }
+      : null;
+  }
+
+  /**
+   * Keeps the content at the centre of the lane window where it was before the scroller's height changed, so chrome that
+   * appears above the music does not move the notes out from under the person. The pinned height is read after the pin
+   * rule, so a header that becomes static takes its 94px out of the window in the same step.
+   */
+  private keepPinWindow(before: { clientHeight: number; pinned: number; scrollTop: number } | null): void {
+    if (!before || !this.pinShown()) return;
+    const clientHeight = this.scroller.clientHeight;
+    if (clientHeight === before.clientHeight) return;
+    const centre = before.scrollTop + before.pinned + (before.clientHeight - before.pinned) / 2;
+    const pinned = this.pinnedHeight();
+    this.scroller.scrollTop = Math.max(0, centre - pinned - (clientHeight - pinned) / 2);
+  }
+
+  /**
+   * Pins the header block only while the lane under it keeps six rows. Below that the 116px of pinned rows cost more than
+   * they give, so `data-pin="none"` makes the header static and leaves only the track head pinned.
+   */
+  private syncPin(): void {
+    if (!this.pinShown()) {
+      this.pinWindow = null;
+      return;
+    }
+    const top = this.top;
+    const head = this.scroller.querySelector<HTMLElement>(".sce-track-head");
+    const lane = this.scroller.querySelector<HTMLElement>(".sce-lane");
+    if (!head || !lane) {
+      this.pinWindow = null;
+      return;
+    }
+    const rows = Number(lane.style.getPropertyValue("--sce-rows"));
+    const laneHeight = lane.getBoundingClientRect().height;
+    if (!(rows > 0) || laneHeight <= 0) {
+      this.pinWindow = null;
+      return;
+    }
+    const rowPixels = laneHeight / rows;
+    const unpinned = this.scroller.clientHeight < top.offsetHeight + head.offsetHeight + 6 * rowPixels;
+    if (unpinned) this.root.dataset.pin = "none";
+    else delete this.root.dataset.pin;
+  }
+
   private centreFirstTrack(): void {
     const { reading, scroller } = this;
-    if (reading.kind !== "score" || scroller.scrollHeight <= scroller.clientHeight) return;
+    if (reading.kind !== "score" || scroller.scrollHeight <= scroller.clientHeight) {
+      this.rememberPinWindow();
+      return;
+    }
     const voice = reading.score.voices[0];
     const lane = scroller.querySelector<HTMLElement>(".sce-lane");
     const head = scroller.querySelector<HTMLElement>(".sce-track-head");
-    if (voice === undefined || !lane || !head) return;
+    if (voice === undefined || !lane || !head) {
+      this.rememberPinWindow();
+      return;
+    }
     const notes = notesByVoice(reading.score).get(voice) ?? [];
     const range = pitchRangeOf(notes);
     let lowest = 127;
@@ -369,7 +458,9 @@ export class Editor implements MountedEditor {
     const frame = scroller.getBoundingClientRect();
     const rowPixels = laneBox.height / (range.hi - range.lo);
     const target = laneBox.top - frame.top + scroller.scrollTop + (range.hi - 1 - middle + 0.5) * rowPixels;
-    const pinned = this.top.offsetHeight + head.offsetHeight;
+    const topPinned = this.doc.defaultView?.getComputedStyle(this.top).position === "sticky";
+    const pinned = (topPinned ? this.top.offsetHeight : 0) + head.offsetHeight;
     scroller.scrollTop = Math.max(0, target - pinned - (scroller.clientHeight - pinned) / 2);
+    this.rememberPinWindow();
   }
 }

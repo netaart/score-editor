@@ -83,7 +83,9 @@ export function lengthInBeats(duration: number, beatTicks: number): number {
 
 /**
  * The notes that continue into the next note of their voice: pitched, flagged as tied, and followed without a gap by a
- * note of the same pitch. A tie that leads nowhere (a cut, or a dangling tie) is not a join.
+ * note of the same pitch. A tie that leads nowhere (a cut, or a dangling tie) is not a join. This check is deliberately
+ * stricter than the shared tie chains, which only ask whether a tie continues into the next note: the drawing also needs
+ * the next note to have the same pitch and to follow without a gap, so it does not join a block it would draw apart.
  */
 export function tieJoins(notes: ReadonlyArray<Note>): Set<string> {
   const joined = new Set<string>();
@@ -100,51 +102,6 @@ export function tieJoins(notes: ReadonlyArray<Note>): Set<string> {
 export function gridTicks(score: Score): number {
   const last = score.bars[score.bars.length - 1];
   return last ? last.start + last.length : 0;
-}
-
-/**
- * The beat lines of the bar grid in order, each bar's own meter deciding its beat, then the end of the grid last. The
- * end is the one line that belongs to no bar.
- */
-function beatLines(bars: ReadonlyArray<Bar>): number[] {
-  const lines: number[] = [];
-  for (const bar of bars) {
-    const beatTicks = WHOLE_NOTE_TICKS / bar.meter.denominator;
-    for (let beat = 0; beat < bar.meter.numerator; beat++) lines.push(bar.start + beat * beatTicks);
-  }
-  const last = bars[bars.length - 1];
-  if (last) lines.push(last.start + last.length);
-  return lines;
-}
-
-/** The beat line closest to `tick`; a tick halfway between two lines belongs to the earlier one. */
-export function nearestBeatLine(bars: ReadonlyArray<Bar>, tick: number): number {
-  let nearest = 0;
-  let distance = Number.POSITIVE_INFINITY;
-  for (const line of beatLines(bars)) {
-    const away = Math.abs(line - tick);
-    if (away < distance) {
-      nearest = line;
-      distance = away;
-    }
-  }
-  return nearest;
-}
-
-/** The last beat line before `tick`, or the start of the grid when there is none. */
-export function beatLineBefore(bars: ReadonlyArray<Bar>, tick: number): number {
-  let before = 0;
-  for (const line of beatLines(bars)) {
-    if (line >= tick) break;
-    before = line;
-  }
-  return before;
-}
-
-/** The first beat line after `tick`, or the end of the grid when there is none. */
-export function beatLineAfter(bars: ReadonlyArray<Bar>, tick: number): number {
-  const lines = beatLines(bars);
-  return lines.find((line) => line > tick) ?? lines[lines.length - 1] ?? 0;
 }
 
 /** Where a cut score stops, in the voice that was cut. */

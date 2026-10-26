@@ -12,18 +12,19 @@ added; calling it twice is harmless.
 
 | Function | Draws | Options |
 | --- | --- | --- |
-| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons, the Select menu, the Bars menu and the meter control; the read-only badge while it is not. | `ToolbarOptions` |
+| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons, the Select and Grid menus, the Bars menu and the meter control; the read-only badge while it is not. | `ToolbarOptions` |
 | `mountZoomControl(el, session)` | The zoom-out, readout/menu and zoom-in buttons. Hidden while the session has no readable score. | — |
 | `mountCutNotice(el, session, options?)` | The one sentence saying the score text stops before the song does, and, on an incomplete bar, Fill with rests and Delete the incomplete bar; nothing on a complete score. | `onRefused?` |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
 | `mountTimeRuler(el, session, options?)` | Bar numbers that choose their bar, the chosen run, section bands, and key/meter/cut marks. | `AxisPartOptions` |
-| `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line. | `AxisPartOptions` |
+| `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line; while the session is editable, a press places, changes or removes a chord (see editing below). | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
 | `mountTextView(el, session)` | The score text in a box with line numbers, a status sentence, and the problems of text that cannot be read. | — |
 | `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only; returns a `StaffViewPart` whose `setPlayPosition` draws the host player's cursor. | — |
 | `mountStaleNotice(el, session)` | One sentence while the text view holds text the project did not take, or nothing. | — |
 | `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
+| `mountFilterPanel(el, session)` | The Filter button and its panel for selecting notes by condition (see [Selecting by filter](#selecting-by-filter)). Shown in read-only mode too. | — |
 | `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). | `AxisPartOptions` |
 | `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
@@ -111,23 +112,25 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 | The user | Where | What happens |
 | --- | --- | --- |
 | Clicks or taps a note | A voice track | Selects it; a tied chain is selected as a whole. |
-| Clicks or taps empty lane space | A voice track | Puts the insertion point on the nearest beat line, and clears the selection. |
+| Clicks or taps empty lane space | A voice track | Puts the insertion point on the nearest line of the grid (`session.grid`), and clears the selection. |
 | Clicks or taps a bar number | The time ruler | Chooses that bar, or with Shift extends the chosen run to it. |
-| Presses on a bar number and drags across the ruler | The time ruler | Chooses the run from the first bar to the bar under the pointer; a finger does the same on the number. |
+| Presses on a bar number and drags across the ruler | The time ruler | Chooses the run from the first bar to the bar under the pointer. |
+| Taps one bar number and then another | The time ruler | Chooses the run from the first bar to the second. |
 | Presses Left, Right, Home, End, Enter, Space or Escape with the focus on a chosen bar | The time ruler | Moves the chosen run one bar, extends it with Shift, goes to the first or last bar, chooses the focused bar, or clears the run. |
 | Holds Shift while clicking or tapping a note | A voice track | Adds the note to the selection, or takes it and its tied chain out; on empty space nothing happens. |
 | Presses on empty lane space with a mouse and drags | A voice track | Draws a box. The notes it touches are framed while it is open and selected when it is let go; Shift at the press adds; Escape gives it up. |
 | Rests a finger on empty lane space for about 0.4 s, then slides | A voice track | Draws the same box (a swipe that starts at once still scrolls). Resting a finger on a note toggles it, as Shift does. |
-| Presses Ctrl or Cmd plus A, plus Shift, or Escape; or chooses an item of the Select menu | A part that hears the key; the toolbar | Selects every pitched note; inverts the selection; clears it (Escape clears whatever ids are selected, and is left to the host when none is). |
-| Presses Tab, then Left and Right, Home and End, Enter or Space | The notes of a voice track | The notes are one tab stop. With a note in focus, Left and Right step to the neighbour and select it, Home and End go to the first and last, Enter or Space selects the one in focus. With Ctrl or Cmd the four navigation keys move the focus without selecting, and Shift plus Space or Enter adds the note in focus or takes it out with its tie chain. |
-| Presses Left, Right, Home or End with the focus elsewhere in a part | Any time-axis part | Moves the insertion point; Left and Right keep scrolling while there is none. |
-| Presses Delete or Backspace, or the Delete button | A part that hears the key; the toolbar | Turns every selected pitched note into a rest as one history step. The button is muted until a pitched note is selected. |
-| Presses Ctrl or Cmd plus Z, plus Shift for redo, Ctrl plus Y, or the undo and redo buttons | A part that hears the key; the toolbar | Moves one history step. |
+| Presses a key | A part that hears the key | [The key map](../../../../../DESIGN.md#moving-and-resizing) gives each key with a note selected and with none. A part that handles one keeps it from the browser. |
+| Presses on a selected note and drags, by its body or by an edge | A voice track | [Moving and resizing](../../../../../DESIGN.md#moving-and-resizing) gives the edges, the ghost and the landing. One drag sends one `move-notes` or `resize-notes` input, one history step; Escape gives it up. |
+| Chooses an item of the Select or Grid menu | The toolbar | The selection actions, and the grid step with which notes move, resize and land. Both are also on the keys of the map above. The grid is UI state, not an undo step. |
+| Clicks or taps the chord track, or the name of a chord | The chord track | Opens the chord picker at the nearest start of a note or rest in a voice that allows chords (for `song2`, `Vocal`), or at the chord pressed. It offers only the names `session.dialect.constraints.chords` and the grammar allow; Place, Change or Remove is one `setChord` and one history step. The frame and the picker's look are in [DESIGN.md](../../../../../DESIGN.md#chord-editing). |
+| Presses Tab, then the chord track's keys | The chord track | The track has one tab stop, its cursor, first in the Tab order before the notes. It steps from start to start and from chord to chord, opens the picker, removes the chord under it and returns the focus to the cursor; the key list is in [DESIGN.md](../../../../../DESIGN.md#chord-editing). |
 
 Keys are heard by a part while the focus is inside it; a part that handles one keeps it from the browser. Each part
-also keeps one polite live region (`role="status"`, visually hidden) and says in the session's language what happened:
-a voice track says which of its own notes were selected, deleted, or brought back by an undo; the track of the score's
-first voice says where the insertion point moved; the time ruler says which run of bars was chosen; the toolbar's Bars menu and the cut notice say what they changed, or why and where an edit was refused. No part reads
+also keeps one polite announcement region (`role="status"`, visually hidden) and says in the session's language what happened:
+a voice track says which of its own notes were selected, deleted, or brought back by an undo; the chord track says the chord it placed, changed or removed, and what an undo or a redo did to a chord; the track of the score's
+first voice says where the insertion point moved; the time ruler says which run of bars was chosen; the toolbar's Bars menu and the cut notice say what they changed, or why and where an edit was refused. The chord picker's
+visible readout is a second live region inside the picker, as [DESIGN.md](../../../../../DESIGN.md#chord-editing) says. No part reads
 another part, so a part mounted alone speaks for what it draws and nothing else.
 
 The score may refuse an edit, for example a tied note whose rest would turn a cut score into a complete one. Nothing
@@ -232,6 +235,8 @@ type EditingInput =
   | { type: "click-note"; noteId: string }
   | { type: "click-empty"; tick: number } // a position on the time axis, not necessarily whole
   | { type: "delete" } // what a Delete control sends; it does what the Delete key does
+  | { type: "move-notes"; timeTicks: number; semitones: number } // a drag of the selection: ticks are snapped to session.grid
+  | { type: "resize-notes"; edge: "start" | "end"; timeTicks: number } // a drag of one edge of the selection, snapped to session.grid
   | { type: "toggle-note"; noteId: string } // a click on a note with Shift held
   | { type: "select-notes"; noteIds: ReadonlyArray<string>; add?: boolean } // a box: select these, or add them
   | { type: "select-all" } // Ctrl or Cmd plus A
@@ -306,3 +311,59 @@ noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once
   nothing plays. `PreviewStart` is the string union `start()` resolves.
 - `previewPlayer(session)` touches no audio until `start()`. Destroying the last control that holds the player stops it.
 - The headless half, `schedulePreview`, is in [headless-layer.md](headless-layer.md#the-preview-schedule).
+
+## Tempo, key and the song project panel
+
+`mountToolbar` takes `tempoKey` for the four song controls (tempo, key, transpose down and transpose up), there while
+the session is editable and its score reads, and `projectPanel` for the Project button that opens the panel; `mount`
+turns both on. The behaviour, the rules and the controls are in
+[the package README](../../../README.md#tempo-key-and-the-song-project-panel),
+[DESIGN's tempo and transpose section](../../../../../DESIGN.md#tempo-key-and-transpose) and
+[its panel section](../../../../../DESIGN.md#song-project-panel).
+
+A host that wants the panel somewhere of its own mounts it and leaves `projectPanel` off; it gets a `ProjectPanel`,
+whose `commit()` takes a field that has not been let go and whose `destroy()` changes no document:
+
+```ts
+import { mountProjectPanel, mountToolbar } from "@neta-art/score-editor";
+
+mountToolbar(toolbarEl, session, { tempoKey: true, onRefused });
+const panel = mountProjectPanel(panelEl, session, { onRefused }); // a ProjectPanel
+```
+
+## Selecting by filter
+
+Use this when a person should pick notes by condition instead of by pointing: a Filter button that opens a panel named
+"Select by filter" ("筛选选中"). The logic is `filterNotes`, which is in
+[headless-layer.md](headless-layer.md#picking-notes-by-conditions); this part is its form.
+
+| Export | What it is |
+| --- | --- |
+| `mountFilterPanel(el, session)` | A view part: a button labelled "Filter" ("筛选") and its panel. Returns a `ViewPart`. |
+
+`mountToolbar` mounts it by default, last in its row. Mount it yourself on an element of your own when the toolbar is
+not used; there is no option to leave it out.
+
+```ts
+import { mountFilterPanel, mountVoiceTrack } from "@neta-art/score-editor";
+
+mountFilterPanel(filterEl, session); // the button, and the panel it opens
+mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws what the panel selected
+```
+
+- The panel is a native popover (top layer) with a row for each condition: Pitch (lowest and highest note), Time (first and
+  last bar), Length (shortest and longest note value, a part of a whole note), Key (in or out of the key) and Count (one in
+  every N of each voice, after skipping the first M), then Invert, a status line and the buttons Re-apply and Done. Each row
+  has a checkbox that says whether the condition counts. The conditions combine with "and".
+- Changing a field turns its condition on and selects at once, through `session.select`. Re-apply selects again from the
+  conditions the panel holds, against the score as it is now. A selection made through the panel is not a history step. The
+  panel's own rules (an empty filter, Invert, its status line) are in [DESIGN.md](../../../../DESIGN.md#filter-panel); what the pure filter
+  means is in [headless-layer.md](headless-layer.md#picking-notes-by-conditions).
+- The panel holds the conditions of its last selection, so it shows them again when it is opened. Its status line is a
+  polite live region that says the result, or that the score or the selection has changed since (Re-apply selects again).
+- It selects through `session.select`, so it works while `session.view.editable` is false; the arrangement draws no
+  selection frame then, and the status line is what shows the result.
+- It is there while the score reads and the arrangement is the view shown; otherwise the button is hidden and an open panel
+  closes. On a phone (a coarse pointer and a window at most 640 px wide) the panel is a sheet from the bottom edge;
+  elsewhere it hangs from its button, over it when there is no room below.
+- Its texts follow `session.view.language` and are part of this part, not of the host's message catalogue.

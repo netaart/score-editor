@@ -411,8 +411,15 @@ test.describe("scrolling in time and in pitch", () => {
 
     const frame = await box(roll);
     await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
-    await page.mouse.wheel(0, 3000);
-    await expect.poll(() => visibleNote(page, "C2, bar 1 beat 1, length 1 beat")).toBe(true);
+    // Wheel the way a person does, until the note shows: one long wheel runs to the bottom of the octave under the
+    // lowest note, which puts that note behind the pinned header whenever the roll is short.
+    await expect
+      .poll(async () => {
+        if (await visibleNote(page, "C2, bar 1 beat 1, length 1 beat")) return true;
+        await page.mouse.wheel(0, 100);
+        return false;
+      })
+      .toBe(true);
 
     await page.mouse.wheel(600, 0);
     await expect.poll(() => roll.evaluate((el) => el.scrollLeft)).toBeGreaterThan(300);
@@ -1299,6 +1306,9 @@ test.describe("editing in the default editor", () => {
   }) => {
     await harness.mount({ score: { text: vocalOnly("C16-|B") } });
     await press(noteNamed(page, /^C4,/));
+    // The chord track's keyboard cursor is the stop between the scroller and the notes.
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.getByRole("button", { name: /^Chord place, / })).toBeFocused();
     await page.keyboard.press("Shift+Tab");
     await expect(page.getByRole("region", { name: "Arrangement" })).toBeFocused();
 
@@ -1363,6 +1373,9 @@ test.describe("keyboard focus in a short editor", () => {
     await page.setViewportSize({ width: 600, height: 360 });
     await harness.mount({ score: { text: vocalOnly("c'4b4C,4z4|") } });
     await page.getByRole("region", { name: "Arrangement" }).focus();
+    // The chord track comes first in the Tab order, and has the one stop of its keyboard cursor.
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: /^Chord place, / })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("listitem", { name: /^C6, bar 1 beat 1/ })).toBeFocused();
 

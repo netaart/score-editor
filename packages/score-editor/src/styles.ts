@@ -2,9 +2,13 @@
 // ABOUTME: Every class is prefixed "sce-", every theme variable is "--sce-*", and nothing is imported as a CSS file.
 import { MAX_LABEL_STEP } from "./arrangement";
 import { boxCss } from "./box-styles";
+import { chordCss } from "./chord-styles";
 import { draftCss } from "./draft-styles";
+import { dragCss } from "./drag-styles";
+import { filterCss } from "./filter-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
+import { songCss } from "./song-styles";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
 const BLACK_KEY_ROWS = [1, 3, 5, 8, 10];
@@ -84,6 +88,8 @@ const css = `
   overflow: hidden;
   /* Where the track heads pin: right under the header block that the editor pins above the tracks. */
   --sce-_head-top: var(--sce-_top);
+  /* The music keeps the header, a track head and three rows; the chrome scrolls inside itself when it needs more. */
+  --sce-_floor: calc(var(--sce-_head-top) + var(--sce-_band) + 3 * var(--sce-_row));
 }
 .sce-part.sce-part {
   display: block;
@@ -126,6 +132,19 @@ const css = `
   display: none;
 }
 
+/*
+ * Everything above the music: the toolbar, the conflict strip, the cut sentence and the stale notice. Its height is
+ * bounded so the body keeps the floor; what does not fit scrolls inside it, and nothing is cut or hidden.
+ */
+.sce-root .sce-chrome {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  max-height: calc(100% - var(--sce-_floor));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .sce-root .sce-toolbar {
   display: flex;
   flex: none;
@@ -133,7 +152,7 @@ const css = `
   gap: 8px;
   min-height: 40px;
   padding: 4px 12px;
-  /* When the box is narrower than the controls the row scrolls; the title gives way before that. */
+  /* When the box is narrower than the controls the row scrolls; a toolbar that wraps moves a control to a later row. */
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -145,6 +164,10 @@ const css = `
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* A toolbar that holds the Filter button keeps at least 2em of the title, so the extra control cannot take its last pixel. */
+.sce-root .sce-toolbar:has(.sce-filter-button) .sce-title {
+  min-width: 2em;
 }
 /*
  * With the preview control or the view switch the row wraps instead of scrolling: DESIGN.md, "Toolbar". The title counts at
@@ -158,6 +181,13 @@ const css = `
 .sce-root .sce-toolbar:is([data-synth], [data-views]) .sce-title {
   flex: 0 1 auto;
   max-width: 100%;
+}
+/*
+ * A toolbar that neither wraps nor holds a control to wrap it for scrolls sideways. The title keeps its whole text there
+ * instead of being squeezed to nothing, so the name of the view is always in sight; the row scrolls under it.
+ */
+.sce-root .sce-toolbar:not([data-synth]):not([data-views]) .sce-title {
+  flex: none;
 }
 /*
  * In a toolbar with the view switch, the preview control keeps its place while the score does not read. It comes after the
@@ -296,7 +326,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -309,6 +339,26 @@ const css = `
 .sce-root .sce-select-button {
   gap: 4px;
   padding: 0 8px;
+}
+/* The Grid button is a drawing, a fraction and a chevron; the dot after the fraction is the dot of a dotted note. */
+.sce-root .sce-grid-button {
+  gap: 6px;
+  padding: 0 8px;
+}
+.sce-root .sce-grid-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  margin-left: 2px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: middle;
+}
+/* Forced colors repaint every fill but a system color, which would take the dot out. */
+@media (forced-colors: active) {
+  .sce-root .sce-grid-dot {
+    background: CanvasText;
+  }
 }
 /* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
 .sce-root .sce-step {
@@ -381,7 +431,7 @@ const css = `
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  min-height: 0;
+  min-height: var(--sce-_floor);
 }
 
 /*
@@ -441,6 +491,13 @@ const css = `
   position: sticky;
   top: 0;
   z-index: 5;
+}
+/* Below six rows in the lane the header costs more than it gives: it scrolls away and the track head stays pinned. */
+.sce-editor[data-pin="none"] {
+  --sce-_head-top: 0px;
+}
+.sce-editor[data-pin="none"] .sce-top {
+  position: static;
 }
 .sce-root .sce-ruler {
   height: var(--sce-_ruler);
@@ -1202,7 +1259,11 @@ ${labelThinning()}
   pointer-events: none;
 }
 ${boxCss}${lyricCss}
-${draftCss}`;
+${draftCss}
+${chordCss}
+${songCss}
+${filterCss}
+${dragCss}`;
 
 interface Injection {
   remove(): void;

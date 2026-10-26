@@ -3,9 +3,11 @@
 
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
 import type { ScoreCommand } from "./commands";
+import { type Grid, isGridAllowed, movedIds } from "./commands-notes";
 import { isProjectCommand, type ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
+import { DEFAULT_GRID, normalizeGrid, sameGrid } from "./grid";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
@@ -66,6 +68,8 @@ export interface SessionOptions {
   editable?: boolean;
   /** The view shown first. Defaults to "arrangement". */
   activeView?: ViewName;
+  /** The grid the editing starts on. Defaults to 1/4. A value the editor does not offer is a RangeError. */
+  grid?: Grid;
 }
 
 /**
@@ -88,11 +92,12 @@ export type SessionChangeCause =
   | "view"
   | "replace"
   | "active-view"
-  | "rejected-text";
+  | "rejected-text"
+  | "grid";
 
 /**
- * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view or of
- * the rejected text touches none of the four booleans and is told by its cause alone.
+ * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view, of
+ * the rejected text or of the grid touches none of the four booleans and is told by its cause alone.
  */
 export interface SessionChange {
   readonly cause: SessionChangeCause;
@@ -108,6 +113,12 @@ export interface SessionChange {
    * changed project alone.
    */
   readonly command?: ProjectCommand;
+  /**
+   * The grid that was dropped for the default because the project or the dialects no longer allow it. It is present on
+   * the one change that dropped it, with `gridDropped` absent from every later change since the grid is then the
+   * default already. A host can use it to say once what changed.
+   */
+  readonly gridDropped?: Grid;
 }
 
 export type SessionListener = (change: SessionChange) => void;
@@ -124,6 +135,12 @@ export interface EditingSession {
    * same object until the score text, the model or the dialects change.
    */
   readonly reading: ScoreReading;
+  /**
+   * The dialect that reads the project's model, or undefined when the registry has none. It is how a control learns what
+   * the dialect allows (`dialect.constraints`) and how a panel asks what the project carries (`checkProject`). It follows
+   * `replaceDialects` and a project of another model.
+   */
+  readonly dialect: ScoreDialect | undefined;
   /**
    * The ids of the selected notes. The selection is UI state: it is not in the history. An id that names no note of
    * the current score is dropped, so the selection always names notes that exist.
@@ -151,6 +168,11 @@ export interface EditingSession {
    * stale. A change of the project drops it, since the text view then shows the project's score again.
    */
   readonly rejectedText: RejectedText | null;
+  /**
+   * The time grid that notes move, resize and land on, and that the insertion point steps by. UI state of the session
+   * like the selection: not in the project and not in the history. It starts at 1/4.
+   */
+  readonly grid: Grid;
   /**
    * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
    * diagnostics; a command that leaves the project as it was adds no step and announces nothing. A command that comes
@@ -192,6 +214,16 @@ export interface EditingSession {
   setActiveView(name: ViewName): void;
   /** Says which text the text view holds that was not taken, or that it holds none (null). Does nothing when the text is the same. */
   setRejectedText(next: RejectedText | null): void;
+  /**
+   * Sets the grid. A value the editor does not offer is a RangeError. It does not ask the score: a grid the score cannot
+   * write is refused by the note commands with `grid-not-allowed`, and `allowsGrid` says beforehand.
+   */
+  setGrid(grid: Grid): void;
+  /**
+   * Whether the score the session reads can be edited on this grid: the check the note commands make, run once for a
+   * control to ask. False while the score cannot be read.
+   */
+  allowsGrid(grid: Grid): boolean;
   /** Changes the view state by the keys given. Zoom is kept within its range, scroll at zero or more. */
   setView(patch: Partial<ViewState>): void;
   /**
@@ -232,6 +264,13 @@ function reportListenerError(error: unknown): void {
   });
 }
 
+function startingGrid(grid: Grid | undefined): Grid {
+  if (grid === undefined) return DEFAULT_GRID;
+  const normal = normalizeGrid(grid);
+  if (normal === null) throw new RangeError("The grid is not one the editor offers.");
+  return normal;
+}
+
 export function createEditingSession(options: SessionOptions): EditingSession {
   let project = options.project;
   /** The history keeps whole song projects, oldest first; the current project is in neither list. */
@@ -243,6 +282,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   let barSelection: BarSelection | null = null;
   let activeView: ViewName = options.activeView ?? "arrangement";
   let rejectedText: RejectedText | null = null;
+  let grid: Grid = startingGrid(options.grid);
   let view: ViewState = {
     zoom: 1,
     scrollLeft: 0,
@@ -321,20 +361,78 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     return last < from ? null : { from, count: last - from + 1 };
   }
 
-  function projectChanged(cause: SessionChangeCause, command?: ProjectCommand): void {
-    const kept = idsStillInScore(selection);
+  /**
+   * Leaves the grid in force when the score can write it, and otherwise puts the default grid in force and returns the
+   * one it dropped. A score that cannot be read says nothing about what it can write, so the grid stays. The default
+   * itself is never dropped again: it is the grid the session goes back to, whether or not this score can write it.
+   */
+  function droppedGrid(): Grid | undefined {
+    const found = read();
+    if (found.kind !== "score" || sameGrid(grid, DEFAULT_GRID)) return undefined;
+    const allowed = withDialect(
+      (dialect) => isGridAllowed(found.score, grid, dialect.constraints),
+      () => true,
+    );
+    if (allowed) return undefined;
+    const dropped = grid;
+    grid = DEFAULT_GRID;
+    return dropped;
+  }
+
+  /**
+   * `following` is the selection to keep, when the change moved the notes it names to ids of their own; it replaces the
+   * current selection before ids that name no note are dropped.
+   */
+  function projectChanged(
+    cause: SessionChangeCause,
+    command?: ProjectCommand,
+    following?: ReadonlyArray<string>,
+  ): void {
+    const kept = idsStillInScore(following ?? selection);
     const selectionChanged = !sameIds(kept, selection);
     selection = kept;
     barSelection = null;
     rejectedText = null;
-    announce(cause, { project: true, selection: selectionChanged, ...(command === undefined ? {} : { command }) });
+    const gridDropped = droppedGrid();
+    announce(cause, {
+      project: true,
+      selection: selectionChanged,
+      ...(command === undefined ? {} : { command }),
+      ...(gridDropped === undefined ? {} : { gridDropped }),
+    });
   }
 
-  function commit(next: SongProject, cause: SessionChangeCause, command?: ProjectCommand): void {
+  /**
+   * The selection a move or a resize leaves: the notes it named are found again by their new ids, which are their new
+   * starts. Undefined for every other command, which keeps the selection as ids that still name a note.
+   */
+  function followedSelection(commands: ReadonlyArray<ScoreCommand | ProjectCommand>): string[] | undefined {
+    const only = commands[0];
+    const reading = read();
+    if (commands.length !== 1 || only === undefined || reading.kind !== "score") return undefined;
+    if (only.type !== "moveNotes" && only.type !== "resizeNotes") return undefined;
+    const moved = movedIds(reading.score, only);
+    return [...new Set(selection.map((id) => moved.get(id) ?? id))];
+  }
+
+  /** The selections around a step that moved notes, so an undo and a redo put the selection back with the notes. */
+  const selectionBefore = new WeakMap<SongProject, ReadonlyArray<string>>();
+  const selectionAfter = new WeakMap<SongProject, ReadonlyArray<string>>();
+
+  function commit(
+    next: SongProject,
+    cause: SessionChangeCause,
+    command?: ProjectCommand,
+    following?: ReadonlyArray<string>,
+  ): void {
+    if (following !== undefined) {
+      selectionBefore.set(project, selection);
+      selectionAfter.set(next, following);
+    }
     past.push(project);
     future.length = 0;
     project = next;
-    projectChanged(cause, command);
+    projectChanged(cause, command, following);
   }
 
   /** The one path a list of commands takes into the history: all apply, or none does. */
@@ -344,9 +442,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   ): DispatchResult {
     return withDialect<DispatchResult>(
       (dialect) => {
+        const following = followedSelection(commands);
         const applied = applyCommandList(dialect, project, commands);
         if (!applied.ok) return { ok: false, project, diagnostics: applied.diagnostics };
-        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch", named);
+        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch", named, following);
         return { ok: true, project, diagnostics: applied.diagnostics };
       },
       (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),
@@ -366,6 +465,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     get reading() {
       return read();
     },
+    get dialect() {
+      return dialects.find(project.modelId);
+    },
     get selection() {
       return selection;
     },
@@ -380,7 +482,13 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       insertionPoint = null;
       barSelection = null;
       rejectedText = null;
-      announce("replace", { project: true, selection: hadSelection, insertionPoint: hadInsertionPoint });
+      const gridDropped = droppedGrid();
+      announce("replace", {
+        project: true,
+        selection: hadSelection,
+        insertionPoint: hadInsertionPoint,
+        ...(gridDropped === undefined ? {} : { gridDropped }),
+      });
     },
     replaceDialects(next) {
       if (next === dialects) return;
@@ -441,6 +549,24 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       rejectedText = next;
       announce("rejected-text", {});
     },
+    get grid() {
+      return grid;
+    },
+    setGrid(next) {
+      const normal = normalizeGrid(next);
+      if (normal === null) throw new RangeError("The grid is not one the editor offers.");
+      if (sameGrid(normal, grid)) return;
+      grid = normal;
+      announce("grid", {});
+    },
+    allowsGrid(candidate) {
+      const found = read();
+      if (found.kind !== "score") return false;
+      return withDialect(
+        (dialect) => isGridAllowed(found.score, candidate, dialect.constraints),
+        () => false,
+      );
+    },
     checkScoreText(text) {
       return withDialect<ReadonlyArray<Diagnostic>>(
         (dialect) => applyCommandList(dialect, project, [{ type: "replaceScoreText", text }]).diagnostics,
@@ -486,7 +612,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       if (previous === undefined) return false;
       future.push(project);
       project = previous;
-      projectChanged("undo");
+      projectChanged("undo", undefined, selectionBefore.get(previous));
       return true;
     },
     redo() {
@@ -494,7 +620,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       if (next === undefined) return false;
       past.push(project);
       project = next;
-      projectChanged("redo");
+      projectChanged("redo", undefined, selectionAfter.get(next));
       return true;
     },
     subscribe(call) {

@@ -2,10 +2,12 @@
 // ABOUTME: Expected score texts are worked out by hand from RULES.md; the session is never compared with the layer it calls.
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  checkProject,
   createDialectRegistry,
   createEditingSession,
   type EditingSession,
   handleEditingInput,
+  isNoticeDiagnostic,
   type SessionChange,
   type SongProject,
 } from "@neta-art/score-editor";
@@ -140,6 +142,19 @@ C5|`;
     expect(result.diagnostics[0]?.params).toEqual({ modelId: "other-model" });
     expect(session.project.score).toBe(SCORE);
   });
+
+  it("refuses a tempo that is not a number as it refuses one outside the range", () => {
+    const session = open();
+    const changes = listen(session);
+
+    const result = session.dispatch({ type: "setTempo", bpm: Number.NaN });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["tempo-out-of-range"]);
+    expect(session.project).toEqual(project);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
 });
 
 describe("a command that comes back with a notice", () => {
@@ -224,6 +239,18 @@ K:C
 V: Vocal
 "C"C4z4E4F4|G16|`);
     expect(session.canUndo).toBe(true);
+  });
+
+  it("returns the notice a melody project with chords already carries, so it is not news", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+
+    const result = session.dispatch({ type: "transpose", semitones: 1 });
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain("melody-with-chords");
+    const dialect = session.dialect;
+    if (dialect === undefined) throw new Error("the registry has song2");
+    expect(checkProject(dialect, session.project).map((diagnostic) => diagnostic.code)).toContain("melody-with-chords");
   });
 });
 
@@ -1148,6 +1175,56 @@ C16|`;
       { text: "three", phrase: { firstBar: 2, barCount: 1 } },
     ]);
     expect(session.project.lyrics).toBe("one");
+  });
+});
+
+describe("the dialect of a session", () => {
+  const WITH_CHORDS = `${HEADER}
+K:C
+V: Vocal
+"C"C4D4E4F4|G16|`;
+
+  it("is the one the registry holds for the project's model, with the limits a control needs", () => {
+    const session = open();
+
+    expect(session.dialect).toBe(song2Dialect);
+    expect(session.dialect?.constraints.tempo).toEqual({ unit: "1/4", min: 20, max: 400 });
+    expect(session.dialect?.constraints.keys.major).toContain("Eb");
+    expect(session.dialect?.constraints.keys.minor).toContain("F#m");
+  });
+
+  it("is undefined when the registry has no dialect for the model, and follows a registry that is replaced", () => {
+    const session = open({ modelId: "other-model" });
+    expect(session.dialect).toBeUndefined();
+
+    const other = open();
+    other.replaceDialects(createDialectRegistry([]));
+    expect(other.dialect).toBeUndefined();
+    other.replaceDialects(dialects);
+    expect(other.dialect).toBe(song2Dialect);
+  });
+
+  it("lets a panel ask what the project carries as it stands, and see a fix take the notice away in one step each", () => {
+    const session = open({ scoreMode: "melody", score: WITH_CHORDS });
+    const carried = () => {
+      const dialect = session.dialect;
+      if (dialect === undefined) throw new Error("the registry has song2");
+      return checkProject(dialect, session.project).map((diagnostic) => diagnostic.code);
+    };
+    expect(carried()).toEqual(["melody-with-chords"]);
+    expect(isNoticeDiagnostic({ code: "melody-with-chords", params: {}, at: {} })).toBe(true);
+
+    expect(session.dispatch({ type: "removeChords" }).ok).toBe(true);
+    expect(carried()).toEqual([]);
+    expect(session.undo()).toBe(true);
+    expect(carried()).toEqual(["melody-with-chords"]);
+    expect(session.canUndo).toBe(false);
+
+    expect(session.dispatch({ type: "setScoreMode", scoreMode: "full" }).ok).toBe(true);
+    expect(carried()).toEqual([]);
+    expect(session.undo()).toBe(true);
+    expect(session.project.scoreMode).toBe("melody");
+    expect(session.canUndo).toBe(false);
   });
 });
 

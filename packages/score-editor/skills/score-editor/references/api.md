@@ -14,7 +14,7 @@ change. The tests in the repository check that the list stays complete.
 | `mountCutNotice` | core | Mounts the cut-notice view part, with Fill with rests and Delete the incomplete bar on a cut bar. |
 | `mountProblemView` | core | Mounts the problem view part. |
 | `mountTimeRuler` | core | Mounts the time-ruler view part, whose bar numbers choose a run; takes `AxisPartOptions`. |
-| `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. |
+| `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. While the session is editable, a press places, changes or removes a chord through a picker. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
 | `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. Returns a `StaffViewPart`. |
@@ -46,6 +46,7 @@ change. The tests in the repository check that the list stays complete.
 | `validateToolParameters` | core | Fills defaults and checks a tool's values; returns `ToolParameterCheck`. |
 | `previewTool` | core | Computes a `ToolResult` without a session. |
 | `handleEditingInput` | core | Does what a part does with one `EditingInput` (a key, a click on a note, a click on empty space, a delete, a toggle, a box, select all, invert, clear) to a session; returns `EditingInputResult`. |
+| `mountProjectPanel` | core | Mounts the song project panel: the style text, the score mode, the seed, the joined lyrics with their count and the notices the project carries; takes `EditingPartOptions` and returns a `ProjectPanel`. |
 | `mountSynthPreview` | core | Mounts the synth preview control: a Preview / Stop button and its caption; shown in read-only mode too. |
 | `previewPlayer` | core | The session's one `PreviewPlayer`: start, stop, and the tick under the playhead. |
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
@@ -55,6 +56,12 @@ change. The tests in the repository check that the list stays complete.
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
+| `chordSlots` | core | The places a chord can go in a `Score`: the starts of notes and rests in voices the constraints allow chords on, as `ChordSlot`s. Pure. |
+| `nearestChordSlot` | core | The `ChordSlot` nearest a tick, the earlier one on a tie; null when there is none. Pure. |
+| `chordChoices` | core | What a chord picker may offer from a `ChordVocabulary`: letters with their spellings, the types the grammar can write, and whether a bass note is allowed, as `ChordChoices`. Pure. |
+| `splitChordName` | core | Splits a chord name into `ChordNameParts` by a vocabulary; null when the vocabulary does not allow the name. The grammar `setChord` checks. Pure. |
+| `filterNotes` | core | The ids of the notes that satisfy a `NoteFilter` (pitch, time, length, in or out of key, one in every N, invert) in a `Score`. Pure. |
+| `mountFilterPanel` | core | Mounts the Filter button and its panel on `(el, session)`: selects notes by condition through `session.select`; shown in read-only mode too. |
 | `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
 | `lyricBoundaryPlan` | core | The phrases that change and the `setLyricLinePhrase` commands, the line that gives up bars first, when an edge of a phrase is dragged to a tick. |
 | `lyricDropPlan` | core | The one-bar phrase, and its command, for a line let go of over a tick; says whether the bar is free. |
@@ -86,19 +93,19 @@ change. The tests in the repository check that the list stays complete.
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
-| `SessionOptions` | `{ project, dialects, language?, editable?, activeView? }` for `createEditingSession`. |
-| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, dispatch, tools, history, subscribe. |
+| `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
+| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
 | `BarSelection` | A chosen run of bars: `{ from, count }`, `from` base 0. UI state, outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus its notices when `ok`, or the untouched project and a refusal. |
-| `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, and the `ProjectCommand` a dispatch made, if any), its causes, and the listener type. |
+| `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, the `ProjectCommand` a dispatch made if any, and the `gridDropped` a project or registry change put back to 1/4), its causes, and the listener type. |
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
 | `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
-| `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. |
+| `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. The session holds the one in force (`session.grid`, `setGrid`, `allowsGrid`); see [editing-session.md](editing-session.md). |
 | `CommandListResult` | `{ ok, project, diagnostics }` from `applyCommandList`: the applied project, or the untouched one with the refusal. |
 | `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`); each command is listed in the package README. |
 
@@ -146,10 +153,11 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
+| `ProjectPanel` | A `ViewPart` with `element` and `commit()`: the song project panel's root, and the pending field a host takes when it closes its own container. |
 | `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper?, tempoKey?, projectPanel? }` for the toolbar. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
@@ -196,6 +204,21 @@ change. The tests in the repository check that the list stays complete.
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
 | `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
 | `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
+
+## Chord editing types
+
+| Export | What it is |
+| --- | --- |
+| `ChordSlot` | `{ noteId, voice, start, duration, chord, before }`: a start a chord can go on, the chord there (or null) and the chord in force before it (or null). |
+| `ChordChoices` | `{ letters, qualities, slashBass }`: what a picker offers. |
+| `ChordLetter` | `{ letter, roots }`: one letter A-G and the root spellings the vocabulary has on it. |
+| `ChordNameParts` | `{ root, quality, bass }`: a chord name split by a vocabulary; `bass` is null without a slash bass. |
+
+## Filter types
+
+| Export | What it is |
+| --- | --- |
+| `NoteFilter` | The conditions of `filterNotes`, each optional: `pitch`, `time`, `duration`, `key`, `count` and `invert`. |
 
 ## Lyric track types
 
