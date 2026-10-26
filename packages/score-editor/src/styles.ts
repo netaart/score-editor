@@ -1002,6 +1002,8 @@ ${labelThinning()}
 }
 .sce-root .sce-staff-drawing {
   display: block;
+  /* The cursor is positioned in the drawing's box; the hard reset above otherwise reverts this to static. */
+  position: relative;
 }
 .sce-root .sce-staff-message {
   margin: 0 0 8px;
