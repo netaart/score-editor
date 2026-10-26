@@ -30,8 +30,86 @@ import {
 } from "/packages/score-editor/dist/index.js";
 
 const stage = document.getElementById("stage");
-const dialects = createDialectRegistry([song2Dialect]);
 const TESTS = "/packages/score-dialect-song2/tests/";
+
+/**
+ * The dialects a test can ask for. `narrow` has a smaller chord vocabulary than song2. `refusing` reads and writes as
+ * song2 does, but its check finds a fault in any score that has chords, so the editor refuses every chord edit.
+ * `slash-quality` lists a quality the chord grammar cannot write; `both-chord-voices` lets `Ins` carry chords too.
+ */
+const VARIANTS = {
+  song2: song2Dialect,
+  narrow: {
+    ...song2Dialect,
+    constraints: {
+      ...song2Dialect.constraints,
+      chords: { roots: ["C", "D", "E", "F", "G", "A", "B", "Bb", "F#"], qualities: ["", "m", "7"], slashBass: false },
+    },
+  },
+  refusing: {
+    ...song2Dialect,
+    check(score) {
+      if (score.chords.length === 0) return song2Dialect.check(score);
+      return [{ code: "write-mismatch", params: { what: "chords" }, at: {} }];
+    },
+  },
+  "slash-quality": {
+    ...song2Dialect,
+    constraints: {
+      ...song2Dialect.constraints,
+      chords: { roots: ["C", "D", "E", "F", "G", "A", "B"], qualities: ["", "6/9"], slashBass: false },
+    },
+  },
+  "both-chord-voices": (() => {
+    const marker = "% ins-chord ";
+    const noteIdAt = (score, start) =>
+      score.notes.find((note) => note.voice === "Ins" && note.start === start)?.id ?? null;
+    return {
+      ...song2Dialect,
+      constraints: {
+        ...song2Dialect.constraints,
+        voices: song2Dialect.constraints.voices.map((voice) => ({ ...voice, allowsChords: true })),
+      },
+      // A test dialect that may hold a chord on Ins: the marker line keeps the voice it belongs to through the text.
+      parse(text) {
+        const extra = [];
+        const kept = [];
+        for (const line of text.split("\n")) {
+          const found = /^% ins-chord (\d+) (\S+)$/.exec(line);
+          if (found) extra.push({ start: Number(found[1]), name: found[2] });
+          else kept.push(line);
+        }
+        const read = song2Dialect.parse(kept.join("\n"));
+        if (read.score === null) return read;
+        const chords = [
+          ...read.score.chords,
+          ...extra.map((chord) => ({ ...chord, noteId: noteIdAt(read.score, chord.start) })),
+        ].sort((a, b) => a.start - b.start || (a.noteId ?? "").localeCompare(b.noteId ?? ""));
+        return {
+          score: { ...read.score, chords, hasChords: read.score.hasChords || extra.length > 0 },
+          diagnostics: read.diagnostics,
+        };
+      },
+      serialize(score) {
+        const ins = score.chords.filter((chord) => chord.noteId?.startsWith("Ins:"));
+        const vocal = score.chords.filter((chord) => !chord.noteId?.startsWith("Ins:"));
+        const text = song2Dialect.serialize({ ...score, chords: vocal, hasChords: vocal.length > 0 });
+        return [text.trimEnd(), ...ins.map((chord) => `${marker}${chord.start} ${chord.name}`), ""].join("\n");
+      },
+      check() {
+        return [];
+      },
+    };
+  })(),
+};
+
+function registry(dialect = "song2") {
+  const found = VARIANTS[dialect];
+  if (!found) throw new Error(`no dialect variant ${dialect}`);
+  return createDialectRegistry([found]);
+}
+
+const dialects = registry();
 let editor = null;
 let project = null;
 let vectors = null;
@@ -276,13 +354,33 @@ const layout = {
     shadow,
     scene,
     editable,
+    dialect,
+    hostLayer,
+    width,
+    top,
+    spill,
     tempoChanges,
   } = {}) {
     if (layout.session) throw new Error("a layout is already open");
     const base = await projectFrom(blank, score, fields);
     const host = document.createElement("div");
     host.id = "layout-host";
+    if (hostLayer) {
+      host.style.cssText = "position:fixed;inset:0;z-index:2147483000;transform:translateZ(0);background:#e8e8ee;";
+    } else if (spill) {
+      host.style.cssText = `width:calc(100% + ${spill}px);margin:${top ?? 12}px 12px 12px;`;
+    } else {
+      if (width) host.style.width = `min(${width}px, calc(100% - 24px))`;
+      if (top !== undefined) host.style.marginTop = `${top}px`;
+    }
     document.body.append(host);
+    if (hostLayer) {
+      const cover = document.createElement("div");
+      cover.id = "chord-cover";
+      cover.style.cssText =
+        "position:fixed;inset:0;z-index:2147483646;pointer-events:none;background:rgba(200,0,0,0.12);";
+      document.body.append(cover);
+    }
     layout.shadowRoot = null;
     let container = host;
     if (shadow) {
@@ -301,7 +399,9 @@ const layout = {
     if (scene) SCENES[scene](container, layout.slots);
     layout.session = createEditingSession({
       project: base,
-      dialects: tempoChanges ? createDialectRegistry([withTempoChanges(song2Dialect, tempoChanges)]) : dialects,
+      dialects: tempoChanges
+        ? createDialectRegistry([withTempoChanges(song2Dialect, tempoChanges)])
+        : registry(dialect),
       language,
       ...(editable === undefined ? {} : { editable }),
     });
@@ -389,6 +489,7 @@ const layout = {
   close() {
     for (const part of Object.values(layout.parts)) part.destroy();
     layout.host?.remove();
+    document.getElementById("chord-cover")?.remove();
     Object.assign(layout, { session: null, parts: {}, slots: {}, host: null, retained: null });
   },
 };
@@ -423,6 +524,12 @@ const hostPage = {
       '<div id="probe"><button id="probe-button">Host button</button><span>Host text</span></div>',
     );
   },
+  /** The host's covering layer starts taking the pointer, as a toast or a dialog of the host does once it is shown. */
+  cover() {
+    const cover = document.getElementById("chord-cover");
+    if (!cover) throw new Error("the page was opened without a host layer");
+    cover.style.pointerEvents = "auto";
+  },
 };
 
 window.harness = {
@@ -441,10 +548,27 @@ window.harness = {
    * Mounts on the stage. `score` says which score text (default: a small two-voice sample), `project` overrides
    * other project fields, and `shadow` mounts inside an open shadow root of a host element instead.
    */
-  async mount({ score = { sample: "compact-three-sections" }, project: fields, shadow, ...options } = {}) {
+  async mount({
+    score = { sample: "compact-three-sections" },
+    project: fields,
+    shadow,
+    dialect,
+    hostLayer,
+    ...options
+  } = {}) {
     project = await projectFrom(blank, score, fields);
     let target = stage;
-    if (shadow) {
+    if (hostLayer) {
+      const host = document.createElement("div");
+      host.id = "chord-host";
+      host.style.cssText = "position:fixed;inset:0;z-index:2147483000;transform:translateZ(0);background:#e8e8ee;";
+      const cover = document.createElement("div");
+      cover.id = "chord-cover";
+      cover.style.cssText =
+        "position:fixed;inset:0;z-index:2147483646;pointer-events:none;background:rgba(200,0,0,0.12);";
+      document.body.append(host, cover);
+      target = host;
+    } else if (shadow) {
       const host = document.createElement("div");
       host.id = "shadow-host";
       stage.append(host);
@@ -458,7 +582,7 @@ window.harness = {
     editor = mount(target, {
       language: "en",
       project,
-      dialects,
+      dialects: registry(dialect),
       notify: (notice) => notices.push(notice),
       ...hostOptions(options),
     });
@@ -472,6 +596,8 @@ window.harness = {
   },
   destroy() {
     editor?.destroy();
+    document.getElementById("chord-host")?.remove();
+    document.getElementById("chord-cover")?.remove();
   },
 };
 

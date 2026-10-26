@@ -70,6 +70,8 @@ components:
     height: "1.85em"
   band:
     height: "1.7em"
+  band-coarse:
+    height: "25px"
   chord-row:
     height: "2em"
   note:
@@ -198,6 +200,7 @@ Sizes are keyword-relative so the user's browser font size applies and a host's 
 
 - **Base** (400, `small`, line-height 1.3): toolbar buttons, menu items, the cut sentence, the problem view.
 - **Title** (600, `small`): toolbar title, the zoom value, chord names.
+- **Chord readout** (600, `1.35em`): the name the chord picker will write.
 - **Label** (`0.92em`): bar numbers, section names (600), marks, track names (600, 0.02em tracking), badge.
 - **Numeral label** (`0.85em`): octave labels in the pitch column and the Chords label.
 
@@ -205,7 +208,7 @@ Sizes are keyword-relative so the user's browser font size applies and a host's 
 
 **The Tabular Numbers Rule.** Every number that can change (bar numbers, octave labels, the zoom value, marks) uses lining, tabular numerals (`font-variant-numeric: lining-nums tabular-nums`) so numbers do not shift as the zoom changes.
 
-**The Keyword Size Rule.** No `px` or `rem` font sizes. The root is a keyword; descendants are `em`. One exception: on a coarse pointer a field that opens a phone's keyboard is 16px, since a phone zooms the page when a smaller field is focused. It is the text view's box and its numbers, the toolbar's tempo, key and panel fields, and the text fields of the lyric track.
+**The Keyword Size Rule.** No `px` or `rem` font sizes. The root is a keyword; descendants are `em`. One exception: on a coarse pointer a field that opens a phone's keyboard is at least 16px, since a phone zooms the page when a smaller field is focused. That is the text view's box and its numbers, the toolbar's tempo, key and panel fields, the text fields of the lyric track, and the section form's fields at `max(16px, 1em)`.
 
 ## Layout
 
@@ -228,6 +231,7 @@ Density follows pointer type, not viewport width. A fine pointer gets the compac
 | Row height and note height | 14px | 24px |
 | Toolbar button minimum height, and the width and height of an icon button | 28px | 36px |
 | Menu item minimum height | 30px | 40px |
+| Section band row | 1.7em (22px at the default text size) | max(1.7em, 25px) |
 | Lyric phrase block and the line it is read on (`--sce-_phrase`) | 2.3em | 3em |
 | Lyric phrase handle, the hit area of an edge | 16px wide | 44px by 44px |
 | Item of the unaligned list, its grip, and the fields of the editor | 28px high, grip 28px wide | 36px high, grip 44px wide; fields 16px type |
@@ -297,7 +301,7 @@ Why a menu of a dozen words and not a slider or a pictogram row: the values are 
 
 - **Buttons:** ground fill, 1px strong line, 4px radius, 28px high (36px coarse). The step buttons are square (28px or 36px). Hover darkens by 6% of text; expanded state 10%. A step that has nowhere to go is `aria-disabled` and muted.
 - **Value button:** shows the zoom as a percentage in 600 weight and opens the menu; its accessible name is "Zoom 100%" and it carries the popover's expanded state.
-- **Popover:** a native popover (`popover="auto"`), so it lives in the top layer and stacks above a host's full-screen layer. Surface fill, 1px strong line, 8px/24px shadow, positioned under the button and nudged left if it would overflow the viewport (8px margin).
+- **Popover:** a native popover (`popover="auto"`), so it lives in the top layer and stacks above a host's full-screen layer. Surface fill, 1px strong line, 8px/24px shadow, positioned under the button with an 8px margin from the window's edges: it is nudged left when it would run off the right, and when it would run off the bottom it is put above its anchor if it fits there, else it keeps its top 8px from the window's top, with a max-height to the bottom margin and its own scroll.
 - **Menu items:** radio items for the presets, a rule, then "Fit whole song" as a plain item. A 6px dot at the start marks the checked preset in the accent colour; hover is 8% of text. Arrow keys, Home and End walk the items; Enter or Space picks; Escape closes and returns focus to the button.
 - **Keys and wheel:** `+`, `=` step in; `-`, `_` step out (on the focused view); control plus the wheel zooms smoothly around the pointer, and stops the page from zooming itself.
 
@@ -307,7 +311,7 @@ A 1.85em row (24px at the default size). Each bar number sits at the left edge o
 
 ### Section bands
 
-A 1.7em row. One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing.
+A 1.7em row (25px on a coarse pointer). One band per section that has bars, from its first bar to the next band, with a strong line at its left and its name in 600 weight pinned to the left edge of the visible part. Every second band is tinted. Music before the first marker is named "Unnamed" ("未命名"); a marker with no bars after it draws nothing. While the session is editable a band opens the section menu (see Section menu).
 
 ### Marks row
 
@@ -315,7 +319,7 @@ A 1.7em row of flags. The first flag shows what is in force at the start (meter 
 
 ### Chord track
 
-A 2em row labelled "Chords" in its corner. Each chord's name in 600 weight at the position where the score writes it, running to the next chord, with a strong line at its left. A chord name that does not fit its width is left out whole. A score with no chords shows one muted sentence, "No chords in this score", pinned at the left, instead of an empty row.
+A 2em row labelled "Chords" in its corner. Each chord's name in 600 weight at the position where the score writes it, running to the next chord, with a strong line at its left. A chord name that does not fit its width is left out whole. A score with no chords shows one muted sentence, "No chords in this score", pinned at the left, instead of an empty row; while a press on the row places a chord, the sentence goes on with how ("No chords in this score. Click or tap a beat to add one."), so a person who cannot hover finds the gesture, and a read-only editor says only that the row is empty. While the session is editable a press on the row places, changes or removes a chord; that is [Chord editing](#chord-editing), below. Where a dialect lets more than one voice carry chords, the track keeps one place per tick: the cursor and placing use the voice listed first, a chord on another voice is reached by pressing its name, and a chord at the same start as a later chord has no width of its own.
 
 ### Track, lane and grid
 
@@ -485,7 +489,7 @@ Pill, 1px strong line, muted text, label size, at the end of the toolbar. It app
 
 ### Focus treatment
 
-Interactive parts (buttons, menu items) get a 2px accent outline with 2px offset on keyboard focus, and so does a note reached by keyboard, outside the selection frame, so the ring (where the keys act) and the frame (what Delete takes) read as two things. A click or tap does not draw the ring. The scroller is focusable; because its own outline would be hidden behind the sticky header and pitch column, a 2px accent ring is drawn over the whole body instead.
+Interactive parts (buttons, menu items) get a 2px accent outline with 2px offset on keyboard focus, and so does a note reached by keyboard, outside the selection frame, so the ring (where the keys act) and the frame (what Delete takes) read as two things. A click or tap does not draw the ring. The text box and the items of the problem list draw the ring inside their edge (see Text view), and the chord cursor draws it 4px inside its frame (see Chord editing), because those containers clip an outside ring. The scroller is focusable; because its own outline would be hidden behind the sticky header and pitch column, a 2px accent ring is drawn over the whole body instead.
 
 ### Announcements
 
@@ -534,6 +538,34 @@ The synth preview is the one thing in the package that makes sound, so it has th
 **Not verified.** iOS Safari, macOS Safari and Firefox, on any device; Android audio focus; the system's silent switch on a phone; headed Chromium with real speakers (the headless browser is muted, so what was checked is that the audio clock runs and the nodes are made, not that the sound is right, which is not tested automatically); a host with its own audio player that holds an audio session of its own. A person with an iPhone should press Preview once on a page with its own audio playing and say what they hear.
 
 **What the preview does about other sound.** It ignores it when it starts: it does not pause, duck or take over a host's audio, because that audio is the host's and an ambient, mixable sound is what the specification gives a context by default; and the evidence above is that the two go on side by side, neither paused (that they are heard together was not observed). It yields when another element starts: when an `<audio>` or `<video>` element in the page's document starts to play while the preview plays, the preview stops, because a media element is the stronger kind of audio in the specification ("playback" over "ambient"), a person who starts a track or a video did not mean the preview to go on over it, and a rough synthetic rendering is the one to give way. Escape also stops it, from wherever the focus is, so a person who hears it and has the focus in a lane does not have to find the toolbar again. The handler listens on the document, in the bubbling phase, and neither prevents the default nor stops the event, so a host's own Escape handler (a dialog it closes) still gets the key; a handler of the host's that stops the event below the document keeps it from the preview, which is then stopped by its button. A host whose audio is in a shadow root, an iframe or a detached `new Audio()` is not heard by the preview, and can call `previewPlayer(session).stop()` itself.
+
+### Chord editing
+
+**Where a chord can go.** A chord is written at the start of a note or a rest in a voice whose constraints allow chords (for `song2`, `Vocal`; `Ins` has no way in, and a start that only `Ins` has is never offered). A press on the chord row takes the start nearest to it, the earlier of two on a tie, so the person aims at a place on the time axis and does not have to hit a small target; the whole row answers, also in an empty track. A press on the name of a chord takes that chord instead, because a name is drawn a little to the right of its start and, where notes are short, another start can be nearer to its last letters; pressing a chord is asking to change it. Where a start already has a chord the picker offers Change and Remove, where it has none Place.
+
+**How the user sees which start was taken.** Three states of one frame, the same box on the same stretch of the row: the stretch of the note or rest that starts there, from its start to the end of its length (at least 8px, so a very short note still shows).
+- A mouse over the row shows the start a press would take, as a 1px dashed frame in the text colour. Dashed is the editor's word for "not chosen yet". Nothing is shown for a finger, which has no hover; it learns the start from the next state.
+- While the picker is open the frame is solid and 2px in the text colour, and the picker's first line says the start in words ("Bar 1, beat 2"; the dialog is named "Chord at bar 1 beat 2"), so the start is never told by the frame alone. It is the selection frame's vocabulary: shape and weight, not hue.
+- The keyboard cursor (below) carries the same frame, with the accent ring of keyboard focus inside it. The frame has no border at rest (so nothing is drawn where the system forces its colours either), and is gone when the picker closes by a pointer; it stays while the cursor has keyboard focus. The cursor takes no pointer: the row is the target of a press, and it is as high as the other header rows (2em), so a finger needs to aim along the time axis only, where the nearest start is taken.
+
+**The picker.** A popover of the package's own, as the zoom menu is: native `popover="auto"`, so it stands in the top layer above a host's full-screen layer, closes on Escape and on a press outside, and returns the focus to what had it. It has the popover's surface fill, 1px strong line, radius and the one floating shadow, a dialog role and the name above. It is `min(21em, 100vw − 16px)` wide on a fine pointer and `100vw − 16px` wide on a coarse one, where it stands at the left margin whichever start was taken, so the choices are as wide as they are tall and a finger does not find the picker under the hand that opened it. It has 10px padding and is built from rows, top to bottom:
+- A head line: the start in words in 600 weight, and what is there now ("Now Am", or "No chord yet") in muted text at the end of the line.
+- The readout: the name that Place will write, in 1.35em and 600 weight, tabular numerals. It is a polite live region, a second one inside the picker, because the name is the one thing that changes under the focus (choosing a root renames every type chip) and the focused chip does not say it.
+- **Root**: the letters C to G, A and B in seven equal columns; under them the spellings the vocabulary has on the chosen letter (`bb`, `b`, natural, `#`, `##`) in five equal columns, so a choice keeps its place when the letter changes. A letter chooses its plain root when the vocabulary has it.
+- **Type**: the vocabulary's qualities as chips that show the whole chord name (`Am`, `Amaj7`, `A7sus4`), not the bare suffix, which a person who reads chord names rather than suffixes can scan; they wrap, since their widths differ.
+- **Bass note**, only when the vocabulary allows a slash bass: one button that shows the bass chosen ("None" or its name) with the zoom value's chevron, which opens the letters (with None first) and spellings of the bass. It starts closed unless the chord has a bass.
+- The actions: Remove at the start (only for a start that has a chord), then Cancel and the primary action, Place or Change, at the end.
+Everything it offers comes from `session.dialect.constraints.chords` and is filtered to the names `splitChordName` can write, so a chord the dialect rejects cannot be built; the same grammar (`splitChordName`) is what `setChord` checks. A choice is a chip with the buttons' 28px (36px coarse) height and border; the chosen chip, and the primary action, are drawn as the view switch draws its shown view: a 12% text fill, a text-colour border and 600 weight. Where the system forces its colours the fill is lost, so a chosen chip's border thickens to 2px, as a selected note's does, and the padding gives the pixel back; no system colour is named, so the Borrowed Colour Rule keeps its one exception. The picker opens on the chord on the start, else on the chord in force before it (so repeating a chord is one press), else on the first root and first type of the vocabulary. It is placed under the chord row at the left edge of the taken start, kept inside the window, and above the row when there is more room there; when a choice makes it taller (the bass note opening) it grows downward from where it was, so the control that was pressed stays under the finger, and moves up only as far as the edge of the window makes it; its height is fitted to the window and it scrolls inside it when the window is short. Its left and right edges are kept inside the width the page lays out in, which a scroll bar, or a page that spills sideways on a phone, makes smaller than the window's. Place and Change write one `setChord`; Remove writes the same with an empty name; each is one history step. The picker closes before the command runs, so a refused command leaves no picker behind; the refusal is said in the part's live region and told to `onRefused`.
+
+**Keyboard.** The row holds one tab stop, the cursor: a button, always present while editing is on, whose name says where it stands ("Chord place, bar 1 beat 2, Am" or "..., no chord") and whose description says how to use it. It is in the chord row's layer and not among the list items of the chords, so the list keeps only chords. In the default editor it is the first tab stop after the scroller and before the notes, which is the order the eye reads. Left and Right step it from start to start and keep it in view, with Ctrl or Cmd from chord to chord, Home and End to the first and last start; Enter and Space open the picker; Delete and Backspace remove the chord under it. The cursor keeps the arrows from moving the insertion point, since a person in the chord row is not placing a note. In the picker, Tab goes row by row (one stop for each row, as in a radio group), the arrows choose within a row and Home and End go to its ends, Enter on a chip places the chord, and Escape closes. The focus moves into the picker, to the first choice, not to the cursor; the cursor is focused first only so that it is where the focus returns when the picker closes. A redraw that replaces the cursor (an undo, an edit from elsewhere) gives the focus to the new one. The cursor's ring is drawn inside the frame, with a 4px inset, and not at the 2px offset the other controls have, because the row clips what is drawn outside it.
+
+**Announcements.** The chord track's live region says what the person did and what the history did to a chord: "Chord Am placed at bar 1 beat 2", "Chord changed to Dm at bar 1 beat 2", "Chord removed at bar 1 beat 2", and after an undo or redo "Chord Am at bar 1 beat 2" or "No chord at bar 1 beat 2". Stepping the cursor is said too ("Chord place, bar 1 beat 2, no chord"), unlike stepping through notes, because the cursor is one button whose name changes under it and a screen reader does not reliably read a changed name on a button that keeps the focus.
+
+**A press opens on `click`.** The picker opens when the press is released as a click, not when it goes down: the browser closes an open popover on the press, and the click that follows then opens the next one, so a person can move the picker from one start to another in one press. A pointer that moved more than 6px between press and release is a scroll or a drag, and opens nothing.
+
+**Read-only.** The layer with the cursor and the frames is hidden, the row has no tab stop and no pointer cursor, and a press opens nothing. An open picker closes when the session stops being editable.
+
+**Not verified.** Chromium only, at a desktop size and in a phone's emulation with real touch input; a screen reader's speech (the names, descriptions and sentences are asserted, what is read aloud is not heard); Safari and Firefox; the popover's light dismiss and its focus return on a real touch device.
 
 ### Tempo, key and transpose
 
@@ -612,6 +644,23 @@ The names of the conditions ("Pitch", "Time", "Length", "Key", "Count"; "音高"
 
 **Verified and not.** Seam 1 (`tests/filter-notes.test.ts`) covers the filter on hand-written scores; seam 5 (`e2e/filter-select.spec.ts`) covers each condition, combining, Invert, Re-apply, closing and opening, read-only, the views, the language, keys, the panel's place and size and the status line, on the desktop and phone projects. Screenshots of every state were taken in Chromium at 1280x720 and in the Pixel 7 emulation. Not checked: a real phone's zoom on focus (the 16px rule follows the browser's documented behaviour and was measured only as computed size), a screen reader's reading of the panel, a browser other than Chromium, and the panel inside a host's own modal.
 
+### Section menu
+
+While the session is editable each section band is a button laid over the whole band, so a press anywhere on it opens the menu and the pinned name keeps its place. A chevron follows the name (the 5px mark of the zoom value and the Select button); hover tints the band by 6% of text, only where a pointer hovers, the open state by 10%, and keyboard focus draws the 2px accent outline inside the band, because a ring outside it would be hidden by the rows around it. A read-only session draws the band as before: no button, no chevron, no menu, no key.
+
+**Menu.** The popover menu of the zoom control and the Select menu (`popover-menu.ts`), hung under the start of the band's pinned name, since the band's own start may be scrolled away. It is as wide as its text, so a menu near the right edge is not squeezed, and is then nudged into the window. Choices in three groups: Rename (the unnamed opening says "Name this section") and "Start a section at a bar"; Move earlier, Move later and Duplicate; Delete section. The three that ask for text end in an ellipsis. Delete comes last, because the first choice takes the focus and Enter on a destructive first choice is the wrong default, and it says "section", because the toolbar's Delete only turns notes into rests. The choices are made when the menu first opens, so a band holds two nodes until it is pressed.
+
+**A choice that cannot be done.** A choice the commands would refuse is `aria-disabled` and muted. Their words are its `aria-description`, and for the eye they stand once, under the last of a run of muted choices that are refused in the same words, aligned with the labels: a note under each choice said one sentence three times in the unnamed section's menu. The words are not written here. The menu dry-runs each command (`sectionActions`), so a rule that changes in the commands changes the menu, and the menu adds no refusal of its own. Pressing a muted choice does nothing and leaves the menu open, so the words can be read on a touch screen, where there is no tooltip, and it says them in the live region.
+
+**Form.** Rename, Name this section and Start a section at a bar ask for text in a popover (`role="dialog"`) under the band, not a modal: the task needs neither interruption nor protected focus. A line of context comes first (which bars the section covers), then the Bar field (Start only) and the Name field, then Cancel and a confirm in 600 weight that names the act ("Rename", "Name", "Start section"). Enter submits; Escape, Cancel and a press outside close it and give the focus back to the band. The bar offered is inside the section and does not start it: the insertion point's bar when it is such a bar, else the section's second bar. The field takes any number, and says under itself, before the form is sent, when the bar starts a section and so renames it. A refusal after a submit shows under the field it is about (`role="alert"`); that field takes `aria-invalid` and a 2px text-colour border, so it is a shape and not a colour, and takes the focus; the refusal also goes to `onRefused`. The form sends what was typed, and the commands alone decide what a bar or a name may be.
+
+**Keys.** Bands are not tab stops: the Tab order of the arrangement is pinned, with one tab stop among the notes. Shift and F10, or the Menu key, on the ruler or the arrangement opens the menu of the section at the insertion point (the first section when there is none); Left, Right, Home and End walk the bands; Enter or Space opens the one in focus; a right click opens it too. After a choice the focus goes to the band of the section acted on (the copy, the moved section, the new section, or the one that took a deleted section's place) and the view scrolls to it, and a polite live region says what was done.
+
+**Touch.** Menu items are 40px and the form's fields 36px with type of at least 16px (below that a phone zooms the page when a field takes the focus, as the text view's box notes). The row of bands is 25px and the control reaches 12px up into the row of bar numbers, which takes no press, so the target is at least 37px, as the rule for controls asks, without taking height from a phone's frame. A 36px row did take it: in the multi-select spec the finger-drawn selection box no longer found empty lane to start on. Nothing reaches down into the marks row.
+
+**Considered and not built.** Bar numbers as buttons (about 235 of them on a real song, thinned out at low zoom, and no path for a keyboard); the insertion point alone as the way to name a bar (it is hidden state, and a tick and not a bar); a modal dialog.
+
+
 ### Lyric track
 
 A view part of its own (`mountLyricTrack`) on the same time axis, zoom and scroll as the other tracks; in the default editor it is the bottom track, under `Ins`, mounted with the voice tracks and replaced with them. It draws the project's lyric lines from `session.project` (the lines the project stores, or the layout computed from its `lyrics` text), classified against the score: a line whose phrase no longer fits the score is read as not on bars.
@@ -681,7 +730,7 @@ The change log is a real list: no flex on the list itself, items spaced by a mar
 - **Do** take every colour from the theme variable contract or a `color-mix` of bg and text; add a new public variable only when a host cannot be served by derivation.
 - **Do** keep the neutral defaults described as defaults, and keep hosts' mapping optional: mapping only bg and text must stay readable.
 - **Do** size type with `small` at the root and `em` below, size header rows and pinned heads in `em`, and use tabular lining numerals for any number.
-- **Do** give every new interactive element a 2px accent outline with 2px offset on `:focus-visible`, and a coarse-pointer size (36px or larger for controls).
+- **Do** give every new interactive element a 2px accent outline with 2px offset on `:focus-visible` (inside the edge where its container would clip it), and a coarse-pointer size of 36px or larger for a control a finger presses; a keyboard-only stop is as high as its row, as the chord cursor is 2em. The section band's control draws the 2px accent outline inside the band, because an outside ring is hidden by the rows around it; its target is the 25px row plus the 12px it reaches above, at least 37px (see the Section menu Touch paragraph).
 - **Do** say a state with a shape or words as well as colour, as the cut (hatch, dashed edge, a sentence) and the tie (one joined bar) do.
 - **Do** leave out text that does not fit its cell, whole, instead of cutting it; thin numbers out rather than crowd them.
 - **Do** place anything on the time axis in percent of its axis element, and change the zoom only by setting those elements' widths.
@@ -697,7 +746,7 @@ The change log is a real list: no flex on the list itself, items spaced by a mar
 ### Don't:
 
 - **Don't** state a brand: no fixed brand colour, no bundled font, no logo.
-- **Don't** hard-code `px` or `rem` font sizes (but for the one exception in The Keyword Size Rule), or a font family other than through `--sce-font-family`.
+- **Don't** hard-code `px` or `rem` font sizes (but for the one exception in The Keyword Size Rule), or a font family other than through `--sce-font-family`. The one exception is a form field's `max(16px, 1em)` on a coarse pointer, because below 16px a phone zooms the page when the field takes the focus.
 - **Don't** add shadows at rest. A shadow marks a floating thing.
 - **Don't** add decoration or motion, and don't tint a selection or the insertion point with the accent: they are the text colour, so shape and weight carry them.
 - **Don't** hold the zoom, or anything else that changes while the user zooms or scrolls, in an inherited custom property on the root.

@@ -187,6 +187,7 @@ interface PageHarness {
     addRules(kind: "important" | "hostile" | "hostile-svg", inShadowRoot?: boolean): void;
     addProbe(): void;
     setColorScheme(scheme: string): void;
+    cover(): void;
   };
   shadowRoot: ShadowRoot | null;
   previewNote(midi: number, options?: { duration?: number }): Promise<boolean>;
@@ -450,6 +451,11 @@ export class Harness {
   /** Switches the page's `color-scheme`, as a host with a dark mode does. */
   setColorScheme(scheme: "dark" | "light") {
     return this.page.evaluate((value) => window.harness.host.setColorScheme(value), scheme);
+  }
+
+  /** Lets the host's covering layer take the pointer, as a toast or a dialog of the host does once it is shown. */
+  coverHost() {
+    return this.page.evaluate(() => window.harness.host.cover());
   }
 
   /** The notices the mounted editor has sent to its host so far, in order. */

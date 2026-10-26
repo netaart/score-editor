@@ -17,7 +17,7 @@ added; calling it twice is harmless.
 | `mountCutNotice(el, session)` | The one sentence saying the score text stops before the song does, or nothing. | — |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
 | `mountTimeRuler(el, session, options?)` | Bar numbers, section bands, and key/meter/cut marks. | `AxisPartOptions` |
-| `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line. | `AxisPartOptions` |
+| `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line; while the session is editable, a press places, changes or removes a chord (see editing below). | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
 | `mountTextView(el, session)` | The score text in a box with line numbers, a status sentence, and the problems of text that cannot be read. | — |
 | `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only; returns a `StaffViewPart` whose `setPlayPosition` draws the host player's cursor. | — |
@@ -119,11 +119,14 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 | Presses a key | A part that hears the key | [The key map](../../../../../DESIGN.md#moving-and-resizing) gives each key with a note selected and with none. A part that handles one keeps it from the browser. |
 | Presses on a selected note and drags, by its body or by an edge | A voice track | [Moving and resizing](../../../../../DESIGN.md#moving-and-resizing) gives the edges, the ghost and the landing. One drag sends one `move-notes` or `resize-notes` input, one history step; Escape gives it up. |
 | Chooses an item of the Select or Grid menu | The toolbar | The selection actions, and the grid step with which notes move, resize and land. Both are also on the keys of the map above. The grid is UI state, not an undo step. |
+| Clicks or taps the chord track, or the name of a chord | The chord track | Opens the chord picker at the nearest start of a note or rest in a voice that allows chords (for `song2`, `Vocal`), or at the chord pressed. It offers only the names `session.dialect.constraints.chords` and the grammar allow; Place, Change or Remove is one `setChord` and one history step. The frame and the picker's look are in [DESIGN.md](../../../../../DESIGN.md#chord-editing). |
+| Presses Tab, then the chord track's keys | The chord track | The track has one tab stop, its cursor, first in the Tab order before the notes. It steps from start to start and from chord to chord, opens the picker, removes the chord under it and returns the focus to the cursor; the key list is in [DESIGN.md](../../../../../DESIGN.md#chord-editing). |
 
 Keys are heard by a part while the focus is inside it; a part that handles one keeps it from the browser. Each part
-also keeps one polite live region (`role="status"`, visually hidden) and says in the session's language what happened:
-a voice track says which of its own notes were selected, deleted, or brought back by an undo; the track of the score's
-first voice says where the insertion point moved; a part that heard a refused edit says why and where. No part reads
+also keeps one polite announcement region (`role="status"`, visually hidden) and says in the session's language what happened:
+a voice track says which of its own notes were selected, deleted, or brought back by an undo; the chord track says the chord it placed, changed or removed, and what an undo or a redo did to a chord; the track of the score's
+first voice says where the insertion point moved; a part that heard a refused edit says why and where. The chord picker's
+visible readout is a second live region inside the picker, as [DESIGN.md](../../../../../DESIGN.md#chord-editing) says. No part reads
 another part, so a part mounted alone speaks for what it draws and nothing else.
 
 The score may refuse an edit, for example a tied note whose rest would turn a cut score into a complete one. Nothing
@@ -360,3 +363,34 @@ mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws what the panel s
   closes. On a phone (a coarse pointer and a window at most 640 px wide) the panel is a sheet from the bottom edge;
   elsewhere it hangs from its button, over it when there is no room below.
 - Its texts follow `session.view.language` and are part of this part, not of the host's message catalogue.
+
+## The section menu
+
+While the session is editable, each section band of the time ruler opens a menu: Rename (the unnamed music before the
+first marker says "Name this section"), Start a section at a bar, Move earlier, Move later, Duplicate and Delete section. Each
+choice is one command, so it is one undo step, and a screen reader hears what was done. A choice the commands would
+refuse stays in the menu, muted, with the refusal's words under it; choices side by side that are refused in the same
+words share one note. The two choices that need a name open a small form under the band; a name the commands refuse
+stays in the form with the refusal under it, and the refusal also goes to `onRefused`. A read-only session draws the
+bands and no menu.
+
+Bands are not Tab stops: the Tab key walks from the Arrangement region straight to the notes. The section-menu keys
+are in [DESIGN.md](../../../../../DESIGN.md#section-menu).
+
+`sectionActions(session, section)` is the same answer for a control of your own: the six actions of one section, as
+`SectionAction`s named by `SectionActionName` in the menu's order, each with the command that does it and `unavailable`, the
+`Diagnostic` the command layer would refuse it with, or `null` while it can be done. `rename` and
+`start` carry no command, because they need a name (and `start` a bar) first; send `renameSection` or `nameSection`
+with it. It asks the commands without applying them, so the project, the history and the listeners are untouched.
+
+```ts
+import { formatDiagnostic, sectionActions } from "@neta-art/score-editor";
+
+for (const action of sectionActions(session, 1) ?? []) {
+  if (action.unavailable === null) {
+    if (action.command !== null) button(action.name).onclick = () => session.dispatch(action.command);
+  } else {
+    mute(action.name, formatDiagnostic(action.unavailable, session.view.language));
+  }
+}
+```

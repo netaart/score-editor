@@ -71,6 +71,19 @@ After the synth preview (the toolbar's control, and a playhead line in each voic
 
 The preview adds 8 nodes (its button, icon, two words and caption) and nothing measurable. The rows above this note (1848 nodes, parse 1 ms) are older than the commands for bars, meter, key, tempo and chords, and the parse now reads 4.7 ms at 1x and 33 ms at 4x without the preview, so that part of the difference from the first table is not the preview's.
 
+**The section menu.** Each section band holds a button and an empty popover until the band is pressed; the six choices are made the first time its menu opens. Direct, the script's defaults (128 bars, 1,500 notes, 8 sections), headless Chromium, two runs per row on a shared machine, against the same build with the menu switched off at its one call site:
+
+| Build | CPU | Cold first frame | Warm first frame (median) | DOM nodes | Wheel zoom, longest long task |
+| --- | --- | --- | --- | --- | --- |
+| Menu off | 1x | 145 ms and 135 ms | 39.6 ms and 36.9 ms | 1921 | none |
+| Choices made at draw time | 1x | 136 ms and 145 ms | 39.7 ms and 41.9 ms | 2063 | none |
+| Choices made on first open | 1x | 156 ms and 146 ms | 46.4 ms and 40.8 ms | 1952 | none |
+| Menu off | 4x slowdown | 854 ms and 797 ms | 206 ms and 213 ms | 1921 | 125 ms and 131 ms |
+| Choices made at draw time | 4x slowdown | 771 ms and 886 ms | 208 ms and 239 ms | 2063 | 156 ms and 165 ms |
+| Choices made on first open | 4x slowdown | 2334 ms and 828 ms | 1160 ms and 233 ms | 1952 | 260 ms and 171 ms |
+
+Opening a menu also dry-runs its four command-bearing choices once each (`sectionActions`), so one open is four `previewTool` runs; these timings do not isolate them. The menu adds 31 nodes (8 bands, two each, and the name form), and 142 when its choices are made at draw time, which is why they are not. The timings do not separate the builds from each other: the machine was shared with other work, the first 4x run of the last row is a stall (parse alone, which the menu does not touch, read 147 ms against 47 to 50 ms), and the longest wheel-zoom long task is higher with the menu in both of its rows. A cost of up to about 30 ms in that one figure at 4x cannot be ruled out, and was not chased further.
+
 Zooming and scrolling at that size, 1x: no long task and a worst frame of 16.8 ms (one 33 ms frame in one run's wheel scroll) in eight button zoom steps (three runs), 60 control-plus-wheel zoom events, wheel scrolling in time (90 events) and in pitch (60 events), and a script moving `scrollLeft` every frame. At 4x: scrolling the same way has no long task; a button zoom step takes 50 to 66 ms (long tasks of 50 to 69 ms in none to seven of eight steps, by run); 60 control-plus-wheel zoom events each cost about 55 ms, so 25 to 40 of them are long tasks of up to 115 ms. A zoom step before the change to axis widths (see Now, above) was 70 to 85 ms at 1x. Not measured: 256 bars and 6000 notes, the 6x slowdown, a real phone.
 
 **What the measurement says.** The approach meets the targets at the size of a real song (128 bars, 1500 notes): first render well under a second even at 6x slowdown, no long task above 50 ms in drag or scroll. It does not at 6000 notes on a slow CPU: first render near two seconds and long tasks of 70 ms or more. Cost grows linearly with node count (first frame 83 ms at 1677 nodes, 253 ms at 6305 nodes, both at 1x).

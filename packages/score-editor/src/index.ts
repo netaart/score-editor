@@ -6,7 +6,11 @@ export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
 export type { ChangeLogOptions, HandoffInstructionOptions } from "./change-log";
 export { changeLog, handoffInstruction } from "./change-log";
+export type { ChordSlot } from "./chord-edit";
+export { chordSlots, nearestChordSlot } from "./chord-edit";
 export { mountChordTrack } from "./chord-track";
+export type { ChordChoices, ChordLetter, ChordNameParts } from "./chord-vocabulary";
+export { chordChoices, splitChordName } from "./chord-vocabulary";
 export type { ScoreCommand } from "./commands";
 export type { Grid, GridValue, MoveNotesCommand, MoveResizeCommand, ResizeNotesCommand } from "./commands-notes";
 export type { ProjectCommand } from "./commands-project";
@@ -97,6 +101,8 @@ export type {
   Truncation,
 } from "./score";
 export { noteId, TICKS_PER_QUARTER } from "./score";
+export type { SectionAction, SectionActionName } from "./section-actions";
+export { sectionActions } from "./section-actions";
 export type {
   DispatchResult,
   EditingSession,

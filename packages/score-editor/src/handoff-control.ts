@@ -5,7 +5,7 @@ import type { DialectRegistry } from "./dialect";
 import { create } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { messagesFor } from "./i18n";
-import { keepInside, placeUnder } from "./popover-menu";
+import { anchorOf, placePopover } from "./popover-menu";
 import type { SongProject } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -78,6 +78,14 @@ export function mountHandoffControl(
   let busy = false;
   let destroyed = false;
 
+  /** The one placement rule: under the trigger, with the room below it, and never past the window. */
+  function place(): void {
+    const anchor = anchorOf(button);
+    const view = popover.ownerDocument.defaultView;
+    const room = view === null ? undefined : Math.max(1, view.innerHeight - anchor.bottom - 12);
+    placePopover(popover, anchor, room === undefined ? {} : { maxHeight: room });
+  }
+
   function setBusy(next: boolean): void {
     busy = next;
     button.disabled = next;
@@ -138,10 +146,7 @@ export function mountHandoffControl(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      const view = popover.ownerDocument.defaultView;
-      const room =
-        view === null ? undefined : Math.max(0, view.innerHeight - button.getBoundingClientRect().bottom - 12);
-      placeUnder(popover, button, room === undefined ? {} : { maxHeight: room });
+      place();
     },
     { signal },
   );
@@ -152,7 +157,7 @@ export function mountHandoffControl(
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
       renderLog();
-      keepInside(popover);
+      place();
       cancel.focus();
     },
     { signal },

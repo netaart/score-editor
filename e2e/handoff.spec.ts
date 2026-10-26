@@ -561,24 +561,65 @@ test.describe("the trigger and the toolbar", () => {
     }
   });
 
-  test("cannot keep the toolbar height at the remaining 320 and 412 sizes with the word trigger", async ({
+  test("cannot keep the desktop toolbar height at 320 and 412 in English with the word trigger", async ({
     page,
     harness,
     isMobile,
   }) => {
+    test.skip(isMobile, "the phone case is its own test");
     test.fail(
       true,
-      "F2 remains with the word trigger: 320px English and, on a fine pointer, 412px English; on a coarse pointer, 320px English and 412px Chinese. Reported for the leader's decision.",
+      "F2 remains with the word trigger on a fine pointer: 320px and 412px in English. Reported for the leader's decision.",
     );
-    const cases = isMobile
-      ? ([
-          [320, "en"],
-          [412, "zh"],
-        ] as const)
-      : ([
-          [320, "en"],
-          [412, "en"],
-        ] as const);
+    // Waits for the phone toolbar change (14b change 3): when it lands this flips and is removed.
+    const cases = [
+      [320, "en"],
+      [412, "en"],
+    ] as const;
+    for (const [width, language] of cases) {
+      await page.setViewportSize({ width, height: 900 });
+      await harness.destroy();
+      await harness.mount({
+        language,
+        score: { text: SCORE },
+        project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+        drafts: true,
+      });
+      await expect(page.locator(".sce-part-restore")).toBeVisible();
+      await harness.frames(1);
+      const without = (await box(page.locator(".sce-toolbar"))).height;
+
+      await harness.destroy();
+      await harness.mount({
+        language,
+        score: { text: SCORE },
+        project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
+        drafts: true,
+        handoff: true,
+      });
+      await expect(handoffButton(page, language)).toBeVisible();
+      await harness.frames(1);
+      const withTrigger = (await box(page.locator(".sce-toolbar"))).height;
+
+      expect.soft(withTrigger, `${language} ${width}px: ${without} -> ${withTrigger}`).toBeLessThanOrEqual(without);
+    }
+  });
+
+  test("cannot keep the phone toolbar height at 320 in English and 412 in Chinese with the word trigger", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "the desktop case is its own test");
+    test.fail(
+      true,
+      "F2 remains with the word trigger on a coarse pointer: 320px English and 412px Chinese. Reported for the leader's decision.",
+    );
+    // Waits for the phone toolbar change (14b change 3): when it lands this flips and is removed.
+    const cases = [
+      [320, "en"],
+      [412, "zh"],
+    ] as const;
     for (const [width, language] of cases) {
       await page.setViewportSize({ width, height: 900 });
       await harness.destroy();
