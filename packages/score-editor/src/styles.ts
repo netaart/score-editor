@@ -145,6 +145,10 @@ const css = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A toolbar that holds the Filter button keeps at least 2em of the title, so the extra control cannot take its last pixel. */
+.sce-root .sce-toolbar:has(.sce-filter-button) .sce-title {
+  min-width: 2em;
+}
 /*
  * With the preview control or the view switch the row wraps instead of scrolling: DESIGN.md, "Toolbar". The title counts at
  * the width of its own text when the row is broken into lines, so a control moves to a later row before the title gets

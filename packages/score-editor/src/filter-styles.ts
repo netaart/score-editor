@@ -5,11 +5,7 @@
 export const FILTER_SHEET_QUERY = "(pointer: coarse) and (max-width: 640px)";
 
 export const filterCss = `
-/*
- * The Filter panel: a native popover like the menus (top layer, above a host's full-screen layer, its box and scrolling
- * from the shared popover rule), but a form, so it is a column of condition rows and a footer with the status line and
- * two buttons. It hangs under its button; on a phone it is a sheet.
- */
+/* The Filter panel's box and the room its rows and fields need: DESIGN.md, "Filter panel"; docs/spike.md, popovers. */
 .sce-root .sce-filter-panel:popover-open {
   display: flex;
   flex-direction: column;
@@ -17,14 +13,6 @@ export const filterCss = `
   width: min(26em, calc(100vw - 16px));
   padding: 12px 12px 0;
   font-variant-numeric: lining-nums tabular-nums;
-}
-/*
- * A toolbar with neither the preview control nor the view switch does not wrap: its row scrolls, and the title gives way
- * first. With one more control in the row the title would give way entirely at a phone's width, so it keeps a sliver of
- * its own text and the row scrolls instead.
- */
-.sce-root .sce-toolbar:not([data-synth], [data-views]) .sce-title {
-  min-width: 2em;
 }
 .sce-root .sce-filter-title {
   font-weight: 600;
@@ -147,7 +135,7 @@ export const filterCss = `
   .sce-root .sce-filter-select,
   .sce-root .sce-filter-number {
     min-height: 40px;
-    font-size: 1.25em;
+    font-size: max(16px, 1.25em);
   }
   .sce-root .sce-filter-actions .sce-button {
     min-height: 40px;
