@@ -29,7 +29,7 @@ const EVERY_NOTE = [ID.C4, ID.D4, ID.E4, ID.F4, ID.G4, ID.A4, ID.C5, ID.D5, ID.D
 
 const toolbar = (page: Page) => slot(page, "toolbar");
 const filterButton = (page: Page, name = "Filter") => toolbar(page).getByRole("button", { name, exact: true });
-// The panel is a native popover in the top layer, so it is found from the page and not from the toolbar's slot.
+// The panel is drawn in the top layer, so the locator starts at the page rather than at the toolbar's slot.
 const panel = (page: Page, name = "Select by filter") => page.getByRole("dialog", { name, exact: true });
 const status = (page: Page) => panel(page).getByRole("status");
 const check = (page: Page, name: string) => panel(page).getByRole("checkbox", { name });
@@ -68,7 +68,7 @@ test.describe("the Filter button and its panel", () => {
 
 test.describe("where the panel sits", () => {
   for (const height of [720, 360]) {
-    test(`stays inside a window ${height} px high, over its button when there is no room below, every control reachable`, async ({
+    test(`stays inside a window ${height} px high, under its button when there is room below, over it when it fits above, otherwise as high as the window allows, every control reachable`, async ({
       page,
       harness,
       press,
@@ -80,8 +80,12 @@ test.describe("where the panel sits", () => {
       await openPanel(page, press);
 
       const frame = await box(panel(page));
+      const button = await box(filterButton(page));
       expect(frame.y).toBeGreaterThanOrEqual(0);
       expect(frame.y + frame.height).toBeLessThanOrEqual(height);
+      if (height === 720) expect(frame.y).toBeGreaterThanOrEqual(button.y + button.height);
+      else if (button.y - frame.height >= 8) expect(frame.y + frame.height).toBeLessThanOrEqual(button.y);
+      else expect(frame.y + frame.height).toBeGreaterThanOrEqual(height - 9);
       // Its last control can be pressed, the panel scrolling if the window is too short to show it whole.
       await press(panel(page).getByRole("button", { name: "Done", exact: true }));
       await expect(panel(page)).toBeHidden();
@@ -251,10 +255,72 @@ test.describe("the count condition", () => {
     await type(countSkip(page), 2);
     expect(await harness.layout.selection()).toEqual([ID.E4, ID.A4, ID.E5]);
   });
+
+  test("reads a cleared Skip as zero, the default of the filter", async ({ page, harness, press }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+    await press(check(page, "Count"));
+    expect(await harness.layout.selection()).toEqual([ID.C4, ID.E4, ID.G4, ID.C5, ID.E5]);
+
+    await countSkip(page).fill("");
+    await countSkip(page).press("Enter");
+
+    expect(await harness.layout.selection()).toEqual([ID.C4, ID.E4, ID.G4, ID.C5, ID.E5]);
+    await expect(status(page)).toHaveText("5 of 9 notes selected");
+    await expect(countSkip(page)).toHaveValue("0");
+  });
+
+  test("has no min or max on its fields, and reads a bar past the last and a count of zero by their rules", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness);
+    await openPanel(page, press);
+
+    for (const field of [barFirst(page), barLast(page), countEvery(page), countSkip(page)]) {
+      expect(await field.getAttribute("min")).toBeNull();
+      expect(await field.getAttribute("max")).toBeNull();
+    }
+
+    // A last bar past the score leaves the range open at that end, so every note is selected.
+    await type(barLast(page), 99);
+    expect(await harness.layout.selection()).toEqual(EVERY_NOTE);
+    await expect(status(page)).toHaveText("9 of 9 notes selected");
+
+    // A first bar past the score is the end of the score, so no note starts there.
+    await type(barFirst(page), 99);
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(status(page)).toHaveText("No note matches these conditions. Nothing is selected.");
+
+    await type(barFirst(page), 1);
+    await type(barLast(page), 4);
+    await type(countEvery(page), 0);
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(status(page)).toHaveText(REASON);
+  });
 });
 
 const reapply = (page: Page) => panel(page).getByRole("button", { name: "Re-apply", exact: true });
 const STALE = "The score or the selection has changed since. Re-apply to select again.";
+const REASON =
+  "No note matches: a range has its ends the wrong way round, or a number is not valid. Nothing is selected.";
+
+test.describe("a score with no pitched note", () => {
+  test("says that no note matches when a condition is checked, since there is no note to select", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openTrack(harness, vocalOnly("z4z4|"));
+    await openPanel(page, press);
+
+    await press(check(page, "Pitch"));
+
+    expect(await harness.layout.selection()).toEqual([]);
+    await expect(status(page)).toHaveText("No note matches these conditions. Nothing is selected.");
+  });
+});
 
 test.describe("invert", () => {
   test("selects the notes that do not match, a rest being no note, and unchecking it goes back", async ({
@@ -555,6 +621,29 @@ test.describe("the panel's place and size", () => {
   });
 });
 
+test.describe("the text of the fields on a phone", () => {
+  test("stays at least 16px when the root text is smaller", async ({ page, harness, press, isMobile }) => {
+    test.skip(!isMobile, "The 16px floor is for a phone, which zooms the page below it.");
+    await openTrack(harness);
+    await openPanel(page, press);
+    await page.addStyleTag({ content: ".sce-root.sce-root { font-size: 12px !important; }" });
+
+    const size = await pitchLowest(page).evaluate((field) => Number.parseFloat(getComputedStyle(field).fontSize));
+    expect(size).toBeGreaterThanOrEqual(16);
+  });
+});
+
+test.describe("the toolbar title", () => {
+  test("keeps its 2em floor in the default editor, which mounts the Filter part", async ({ page, harness }) => {
+    await harness.mount({ score: { sample: "vocal-only-melody" } });
+    const title = await page.locator(".sce-title").evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { floor: Number.parseFloat(style.minWidth), size: Number.parseFloat(style.fontSize) };
+    });
+    expect(title.floor).toBeGreaterThanOrEqual(title.size * 2 - 0.5);
+  });
+});
+
 test.describe("what the status line says when no note matches", () => {
   test("says nothing is selected, and why when a range or a number cannot match", async ({ page, harness, press }) => {
     await openTrack(harness);
@@ -570,8 +659,6 @@ test.describe("what the status line says when no note matches", () => {
     await expect(status(page)).toHaveText("No note matches these conditions. Nothing is selected.");
 
     // A range with its ends the wrong way round, and a count that is not a count, are named as the reason.
-    const REASON =
-      "No note matches: a range has its ends the wrong way round, or a number is not valid. Nothing is selected.";
     await press(check(page, "Key"));
     await pitchLowest(page).selectOption({ label: "A4" });
     await pitchHighest(page).selectOption({ label: "C4" });
@@ -601,13 +688,16 @@ test.describe("a condition that is not counted", () => {
     await openTrack(harness);
     await openPanel(page, press);
     const colour = (field: Locator) => field.evaluate((element) => getComputedStyle(element).color);
+    const muted = await colour(panel(page).locator(".sce-filter-hint").first());
+    const text = await panel(page)
+      .evaluate((element) => getComputedStyle(element).color);
     const resting = await colour(pitchLowest(page));
 
+    expect(resting).toBe(muted);
     await press(check(page, "Pitch"));
-    const counted = await colour(pitchLowest(page));
+    expect(await colour(pitchLowest(page))).toBe(text);
 
-    expect(resting).not.toBe(counted);
     await press(check(page, "Pitch"));
-    expect(await colour(pitchLowest(page))).toBe(resting);
+    expect(await colour(pitchLowest(page))).toBe(muted);
   });
 });
