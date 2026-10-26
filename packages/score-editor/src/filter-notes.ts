@@ -1,11 +1,12 @@
 // ABOUTME: filterNotes: the notes of a score that satisfy a set of conditions, as ids, and the counts the Filter panel shows. Pure: it reads the score and nothing else.
 // ABOUTME: A tie chain counts as one note and a rest as none; conditions combine with "and", and invert takes the others.
 import { effectiveKeyAt } from "./commands-shared";
+import { keyPitchClasses } from "./key-scale";
 import type { Note, Score } from "./score";
-import { keyPitchClasses } from "./spelling";
+import { tieChains } from "./tie-chains";
 
 /** An inclusive range of whole or fractional numbers; a bound that is not given is open. */
-interface Range {
+interface NumberRange {
   readonly min?: number;
   readonly max?: number;
 }
@@ -17,11 +18,11 @@ interface Range {
  */
 export interface NoteFilter {
   /** MIDI pitch, both bounds inclusive. */
-  readonly pitch?: Range;
+  readonly pitch?: NumberRange;
   /** Ticks. A note passes when it starts at `from` or later and before `to`, so ranges that meet share no note. */
   readonly time?: { readonly from?: number; readonly to?: number };
   /** Ticks, both bounds inclusive: the length of the whole note, a tie chain counted as one. */
-  readonly duration?: Range;
+  readonly duration?: NumberRange;
   /**
    * Whether the pitch class of the note is in the scale of the key in force where the note starts ("in"), or is not ("out").
    * A minor key counts as its natural minor. A note whose key cannot be read is neither in nor out.
@@ -54,30 +55,18 @@ function chainsOf(score: Score): Chain[] {
   const chains: Chain[] = [];
   for (const voice of score.voices) {
     const notes = score.notes.filter((note) => note.voice === voice).sort((a, b) => a.start - b.start);
-    let members: Note[] = [];
-    const close = (): void => {
+    for (const members of tieChains(notes)) {
       const [first] = members;
       const last = members[members.length - 1];
-      if (first !== undefined && last !== undefined && first.midi !== null) {
-        chains.push({
-          voice,
-          members,
-          start: first.start,
-          duration: last.start + last.duration - first.start,
-          midi: first.midi,
-        });
-      }
-      members = [];
-    };
-    for (const note of notes) {
-      if (note.midi === null) {
-        close();
-        continue;
-      }
-      members.push(note);
-      if (!note.tie) close();
+      if (first === undefined || last === undefined || first.midi === null) continue;
+      chains.push({
+        voice,
+        members,
+        start: first.start,
+        duration: last.start + last.duration - first.start,
+        midi: first.midi,
+      });
     }
-    close();
   }
   return chains;
 }
@@ -90,7 +79,7 @@ function inKey(score: Score, chain: Chain, scales: Map<string, ReadonlySet<numbe
   return scale === undefined || scale === null ? null : scale.has(chain.midi % 12);
 }
 
-function within(value: number, range: Range): boolean {
+function within(value: number, range: NumberRange): boolean {
   return (range.min === undefined || value >= range.min) && (range.max === undefined || value <= range.max);
 }
 
@@ -98,10 +87,16 @@ function startsIn(start: number, time: { readonly from?: number; readonly to?: n
   return (time.from === undefined || start >= time.from) && (time.to === undefined || start < time.to);
 }
 
+/** Whether a count names places at all: Every a whole number of 1 or more, and a given Skip a whole number of 0 or more. */
+export function countIsValid(count: { readonly every: number; readonly skip?: number }): boolean {
+  const skip = count.skip ?? 0;
+  return Number.isInteger(count.every) && count.every >= 1 && Number.isInteger(skip) && skip >= 0;
+}
+
 /** The chains at the places `skip`, `skip + every`, `skip + 2 * every` and so on of their own voice, in the order given. */
 function oneInEvery(chains: ReadonlyArray<Chain>, count: { readonly every: number; readonly skip?: number }): Chain[] {
   const skip = count.skip ?? 0;
-  if (!Number.isInteger(count.every) || count.every < 1 || !Number.isInteger(skip) || skip < 0) return [];
+  if (!countIsValid(count)) return [];
   const seen = new Map<string, number>();
   return chains.filter((chain) => {
     const place = seen.get(chain.voice) ?? 0;

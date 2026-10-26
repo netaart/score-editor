@@ -83,7 +83,9 @@ export function lengthInBeats(duration: number, beatTicks: number): number {
 
 /**
  * The notes that continue into the next note of their voice: pitched, flagged as tied, and followed without a gap by a
- * note of the same pitch. A tie that leads nowhere (a cut, or a dangling tie) is not a join.
+ * note of the same pitch. A tie that leads nowhere (a cut, or a dangling tie) is not a join. This check is deliberately
+ * stricter than the shared tie chains, which only ask whether a tie continues into the next note: the drawing also needs
+ * the next note to have the same pitch and to follow without a gap, so it does not join a block it would draw apart.
  */
 export function tieJoins(notes: ReadonlyArray<Note>): Set<string> {
   const joined = new Set<string>();

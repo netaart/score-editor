@@ -2,7 +2,7 @@
 // ABOUTME: transposeChord respells chord roots and basses; the song2 writer respells notes from their MIDI.
 import type { DialectConstraints } from "./types";
 
-interface KeyParts {
+export interface KeyParts {
   readonly letter: string;
   readonly accidental: number;
   readonly minor: boolean;
@@ -51,7 +51,7 @@ function accidentalOf(mark: string): number {
   return ACCIDENTAL_SEMITONES[mark] ?? 0;
 }
 
-function parseKey(key: string): KeyParts | null {
+export function parseKey(key: string): KeyParts | null {
   const match = /^([A-G])(bb|b|##|#)?(m)?$/.exec(key);
   if (match === null) return null;
   const letter = match[1] as string;
@@ -101,19 +101,6 @@ export function shortestShift(from: string, to: string): number {
   let shift = (((newParts.pitchClass - oldParts.pitchClass) % 12) + 12) % 12;
   if (shift > 6) shift -= 12;
   return shift;
-}
-
-const MAJOR_SCALE: ReadonlyArray<number> = [0, 2, 4, 5, 7, 9, 11];
-const NATURAL_MINOR_SCALE: ReadonlyArray<number> = [0, 2, 3, 5, 7, 8, 10];
-
-/**
- * The seven pitch classes (0 for C through 11 for B) of a key's scale: the major scale, or for a minor key the natural
- * minor, which is the same seven as its relative major. Null for a key this file cannot read.
- */
-export function keyPitchClasses(key: string): ReadonlySet<number> | null {
-  const parts = parseKey(key);
-  if (parts === null) return null;
-  return new Set((parts.minor ? NATURAL_MINOR_SCALE : MAJOR_SCALE).map((step) => (parts.pitchClass + step) % 12));
 }
 
 function spellingOfPitchClass(
