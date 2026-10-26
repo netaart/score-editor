@@ -33,13 +33,18 @@ When the dialect is omitted, only project fields and the raw text can be compare
 `handoffInstruction(options: HandoffInstructionOptions)` writes the prefilled text the host puts in its chat input; the
 options are `{ original, current, title?, language, dialect? }`. It states:
 
-- the work's title (`title`, or the original's `sourceKey` when absent or blank);
+- the work's title (`title`, or the original's `sourceKey` when absent or blank); with a score-file source it is the
+  file's name;
 - the request to regenerate with song2 and pass the score in the attached `score.abc` through `--text`;
 - the final style description and joined lyrics, already synced by the editor and not to be changed by the agent;
 - the score mode, and the seed when there is one;
 - the change log.
 
 The joined lyrics come from the current score and lyric lines, not from the stored `lyrics` field alone.
+
+`requiredInputs` is the host's list of `ProjectField` values the model requires. While one is missing, the handoff
+trigger reads **Complete required inputs…** and opens the Project panel on the first missing field instead of the
+review; it comes back when the field is filled. The editor reads no model declaration.
 
 ## The handoff in `mount`
 
@@ -76,5 +81,9 @@ the handoff: the keeper answers `"unchanged"`, so there is no draft to save. Whi
 did not take, the review says the last readable score is what is handed off; the control is not disabled. The review
 is bounded by the window and scrolls a long change list, so the action stays reachable. The change log is visible only
 in that review.
+
+With a score-file source the same trigger saves the file first when it is dirty, uses the last saved project as the
+change log's original, and does not call the host on a conflict or a failed save. The instruction's title is the file
+name. See [score-files.md](score-files.md).
 
 See [the package README](../../../README.md#change-log-and-handoff) for the same contract next to the draft rules.

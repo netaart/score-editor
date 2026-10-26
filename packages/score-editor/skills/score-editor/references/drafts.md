@@ -42,6 +42,8 @@ const editor = mount(el, { language, project, dialects, drafts: store, notify: (
 - **`update`.** Another `sourceKey`, `lyrics` or score text is a new original and the keeper starts over (the old one writes
   what it holds first); the same project passed again keeps the user's edits; `drafts` and `editable` are applied as given.
 - **A store that never answers** leaves the editor opening; there is no timeout, so the store should fail rather than hang.
+- **A score-file source** (`MountOptions.source`) ignores `drafts` completely: no read, write, list or remove, no
+  Restore-original-as-draft and no draft conflict. Its save state is [score-files.md](score-files.md).
 - **Parts.** For your own layout, bind `mountToolbar(el, session, { draftKeeper: keeper })` for the opening badge and
   Restore original, and `mountDraftConflict(el, session, keeper)` for the strip.
 

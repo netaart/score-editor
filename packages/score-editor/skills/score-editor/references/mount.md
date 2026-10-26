@@ -21,6 +21,10 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 | Option | Meaning |
 | --- | --- |
 | `project: SongProject` | The song project. This version reads its `score` text and `modelId`. |
+| `source?: ScoreSource` | Absent or `{ kind: "generated" }` means a generated score; `{ kind: "scoreFile", name, version, save, read }` means a file with explicit Save, no drafts, Restore to the last saved version and a conflict. See [score-files.md](score-files.md). |
+| `onSaveAs?: (text: string) => void` | Adds **Save as…** to a generated score; receives the current score text. |
+| `onUnsavedChange?: (unsaved: boolean) => void` | The score file's unsaved state when it changes; `MountedEditor.hasUnsavedChanges()` asks it directly. |
+| `requiredInputs?: ReadonlyArray<RequiredInput>` | `ProjectField` values the model requires; until they are filled the handoff trigger opens the Project panel on the first missing one. |
 | `dialects: DialectRegistry` | The dialects the editor can read, from `createDialectRegistry`. |
 | `language: Language` | Interface language, `"zh"` or `"en"`. |
 | `editable?: boolean` | Defaults to true. While true the toolbar offers undo, redo, Delete and a Select menu, a click or tap selects a note or sets the insertion point, and the editing keys act; see [view-parts.md](view-parts.md#editing-in-the-parts). While false the score is only shown and the toolbar shows a read-only badge. |
@@ -33,10 +37,15 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 
 | Member | Meaning |
 | --- | --- |
-| `update(options: Partial<MountOptions>)` | Applies only the given keys. A language change rewrites the interface without rebuilding the view, and `editable` switches editing on or off without remounting. A `project` with another `sourceKey`, `lyrics` or score text is a new original, so the draft keeper starts over on it; the same project again changes nothing. `drafts` set, replaced or `undefined` starts, replaces or ends the keeper. Does nothing after `destroy`. |
+| `update(options: Partial<MountOptions>)` | Applies only the given keys. A language change rewrites the interface without rebuilding the view, and `editable` switches editing on or off without remounting. A `project` with another `sourceKey`, `lyrics` or score text is a new original, so the draft keeper starts over on it; the same project again changes nothing. `drafts` set, replaced or `undefined` starts, replaces or ends the keeper. A `source` of another kind or file version rebuilds the save state; the same source keeps it. Does nothing after `destroy`. |
+| `hasUnsavedChanges()` | Whether a score file has changes that are not saved. Always false for a generated score. |
 | `destroy()` | Removes every listener, node and style sheet it added; a draft keeper writes what it still holds. Safe to call twice. |
 
-An element holds at most one editor: destroy the first before mounting again.
+An element holds at most one editor: destroy the first before mounting again. `ScoreSource` is either a
+`GeneratedScoreSource` with `kind: "generated"`, or a `ScoreFileSource` with `kind: "scoreFile"`, `name`, `version`,
+`save` and `read`. Its `save` answers a `ScoreFileSaveResult`, and its `read` answers a `ScoreFileEntry` or null. For
+the source option, the save button, the unsaved state, the conflict and save-as, see
+[score-files.md](score-files.md).
 
 ## Usage
 

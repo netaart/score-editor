@@ -8,6 +8,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | Package | What it does |
 | --- | --- | --- |
 | `mount` | core | Mounts the default editor on an element; returns `MountedEditor`. |
+| `createScoreFileKeeper` | core | Binds a session to a `ScoreFileSource`: saves explicitly, answers a conflict with overwrite or load, restores the last saved version and saves before a handoff. |
 | `createEditingSession` | core | Builds an `EditingSession` from a project and a `DialectRegistry`. |
 | `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete and the Select menu; takes `ToolbarOptions`. |
 | `mountZoomControl` | core | Mounts the zoom control view part on `(el, session)`. |
@@ -78,7 +79,7 @@ change. The tests in the repository check that the list stays complete.
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
 | `LYRICS_MAX_CHARACTERS` | core | 4000; the limit song2 generation accepts for the joined `lyrics` text. |
-| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`. |
+| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`, `"score-save-failed"`, `"score-load-failed"`. |
 | `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `song2Id` | song2 | `"song2"`. |
@@ -89,8 +90,10 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, drafts, title, onHandoff. |
-| `MountedEditor` | `{ update(options), destroy() }`. |
+| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, source, onSaveAs, onUnsavedChange, requiredInputs, drafts, title, onHandoff. |
+| `MountedEditor` | `{ update(options), hasUnsavedChanges(), destroy() }`. |
+| `ScoreSource`, `GeneratedScoreSource`, `ScoreFileSource`, `ScoreFileEntry`, `ScoreFileSaveResult` | Where the score came from, the host's versioned file save/read, and the shapes a version uses; see [score-files.md](score-files.md). |
+| `ProjectField`, `RequiredInput` | A project field the host may mark required for a handoff: `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
 | `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
@@ -160,11 +163,12 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
-| `ProjectPanel` | A `ViewPart` with `element` and `commit()`: the song project panel's root, and the pending field a host takes when it closes its own container. |
+| `ProjectPanel` | A `ViewPart` with `element`, `commit()` and `focus(field)`: the song project panel's root, the pending field a host takes when it closes its own container, and the field the handoff opens. |
 | `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
 | `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper?, tempoKey?, projectPanel? }` for the toolbar. |
+| `ToolbarPart` | A `ViewPart` with `openProject(field?)`: opens the toolbar's Project panel, on a field when given. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 
@@ -211,6 +215,16 @@ change. The tests in the repository check that the list stays complete.
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
 | `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
 | `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
+
+## Score-file types
+
+| Export | What it is |
+| --- | --- |
+| `ScoreFileKeeper` | `status`, `unsaved`, `failed`, `savedProject`, `version`, `save`, `overwrite`, `loadTheirs`, `restoreOriginal`, `handoff`, `subscribe`, `destroy`. |
+| `ScoreFileKeeperOptions` | `{ session, original, source, notify?, onUnsavedChange? }`. |
+| `ScoreFileKeeperChange` | `{ status, unsaved, failed }`, announced after a change. |
+| `ScoreFileKeeperStatus` | `"clean" \| "dirty" \| "saving" \| "conflict" \| "destroyed"`. |
+| `ScoreFileHandoffResult` | `"saved" \| "unchanged" \| "conflict" \| "failed"`. |
 
 ## Chord editing types
 

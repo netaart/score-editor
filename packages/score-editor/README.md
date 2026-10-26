@@ -15,12 +15,17 @@ const editor = mount(element, {
   project, // a SongProject: the score text and the model ID are read
   dialects: createDialectRegistry([song2Dialect]), // the formats this editor can read
   drafts: store, // optional: a DraftStore; edits are kept as a draft of this project (see Drafts)
+  source: { kind: "generated" }, // optional; a scoreFile source saves explicitly (see Score files)
+  onSaveAs: (text) => saveNewFile(text), // optional: adds Save as to a generated score
+  onUnsavedChange: (unsaved) => guardClose(unsaved), // optional: a score file's unsaved state
+  requiredInputs: ["style"], // optional: blocks the handoff until these project fields are filled
   title: "My Song", // optional: the work's title in the handoff instruction
   onHandoff: (handoff) => openChatInput(handoff), // optional: adds the handoff button (see Change log and handoff)
   notify: (notice) => showToast(notice.message), // already in the current language; `notice.code` is one of `NOTICE_CODES`
 });
 
 editor.update({ project: nextProject }); // only the given keys change; language-only changes keep the view
+editor.hasUnsavedChanges(); // false for a generated score
 editor.destroy(); // removes every listener, node and stylesheet it added
 ```
 
@@ -35,6 +40,7 @@ editor.destroy(); // removes every listener, node and stylesheet it added
 - A host whose own CSS uses ID selectors or `!important` on plain elements should mount the editor inside a shadow root. See [docs/spike.md](../../docs/spike.md).
 - The package assumes a browser with native popovers, `:has()` and `light-dark()`. Only Chromium has been run so far.
 - `drafts` (optional) is the host's `DraftStore`. With it, and while the editor is editable, `mount` makes one draft keeper for the project and keeps the user's edits under `project.sourceKey`; the toolbar gets a Restore original button and a draft that another window changed first gets a conflict strip. Without it, or while the editor is read only, nothing is kept and the store is never called. What the editor shows and does is under [Drafts](#drafts).
+- `source` (optional) says where the score came from. Absent or `{ kind: "generated" }` is a generated score, with drafts as before. `{ kind: "scoreFile", name, version, save, read }` is a document: Save is explicit, `drafts` is ignored entirely, Restore original goes back to the last saved version, a conflict offers overwrite or load theirs, and the change log compares with the last saved version. `onSaveAs` adds Save as to a generated score; `onUnsavedChange` and `editor.hasUnsavedChanges()` expose a file's unsaved state; `requiredInputs` names the model inputs that must be filled before a handoff. See [Score files, save and save-as](#score-files-save-and-save-as).
 
 ## Commands
 
@@ -154,7 +160,7 @@ stop();
 - Notes by keyboard: a voice track has one tab stop among its notes (the selected note, else the first). The keys and what they do, with a note selected and with none, are the map in [DESIGN.md](../../DESIGN.md#moving-and-resizing). A click or tap puts the focus on the note it selects, so the keys go on from there.
 - Announcements: each part keeps one polite announcement region (`role="status"`) in the host's language; the chord picker's visible readout is a second live region inside the picker, as [DESIGN.md](../../DESIGN.md#chord-editing) says. A voice track says which of its own notes were selected, that a delete took some, and what an undo brought back or a redo took away, and the track of the score's first voice says where the insertion point moved; any part says why, and where, a refused edit its keys caused was refused (the toolbar for its Delete button), and the toolbar says when a grid the score cannot write is put back to 1/4. A part mounted alone speaks for what it draws, and nothing reads another part.
 - Not tied to the DOM: `handleEditingInput(session, input)` takes one `EditingInput` as plain data and does what the parts do, so a host that builds its own layout or its own input handling can reuse it. The input is `{ type: "key", key, ctrlKey?, metaKey?, shiftKey?, altKey? }`, `{ type: "click-note", noteId }`, `{ type: "click-empty", tick }`, `{ type: "delete" }` (what a Delete control sends), `{ type: "toggle-note", noteId }` (a click on a note with Shift held), `{ type: "select-notes", noteIds, add? }` (a box: exactly the pitched notes among `noteIds` are selected, or with `add` join the selection; no note clears it unless `add`), `{ type: "select-all" }`, `{ type: "invert-selection" }`, `{ type: "clear-selection" }`, `{ type: "move-notes", timeTicks, semitones }` or `{ type: "resize-notes", edge, timeTicks }` (a drag, with the distance the pointer covered); the key input takes every key in [the map](../../DESIGN.md#moving-and-resizing). It returns an `EditingInputResult`, `{ handled, refused }`: `handled` says the input meant something here, so the caller should keep the browser from also acting on it, and `refused` holds the diagnostics of an edit the score would not take. While the session is not editable nothing is handled. Deleting several selected notes is one history step, and one refusal refuses the whole run.
-- `mount` builds one session and assembles these parts in a toolbar, a scroller and a problem view; its options are unchanged, and `editable` and `notify` do what the first list says.
+- `mount` builds one session and assembles these parts in a toolbar, a scroller and a problem view; its options are those in [Mount](#mount), and `editable` and `notify` do what the first list says.
 - Chords: while `session.view.editable` is true and the arrangement is shown, a click or tap on the chord track places, changes or removes the chord at the nearest allowed start (or at the chord pressed) through the package's own picker; each edit is one `setChord` and one history step, and a refusal changes nothing and is said in the part's live region and through `onRefused`. The picker reads the chord vocabulary from `session.dialect.constraints`; with no dialect for the project's model (`session.dialect` undefined) the chord track is not editable. The picker's appearance and keys are in [DESIGN.md](../../DESIGN.md#chord-editing).
 - Chords by keyboard: the chord track's cursor is its one tab stop; the keys are in [DESIGN.md](../../DESIGN.md#chord-editing). `chordSlots`, `nearestChordSlot`, `chordChoices` and `splitChordName` are the headless half: which starts a score offers, which one is nearest a tick, which names a vocabulary offers, and how a name splits into root, type and bass. A type is offered only when the grammar can write it with every offered root.
 - Selecting by condition: `filterNotes(score, filter)` returns the ids of the notes of a `Score` that satisfy a `NoteFilter` (pitch, time, length, in or out of key, one in every N, invert), and `mountFilterPanel(el, session)` is the part that asks for the conditions and selects the notes through `session.select`. The toolbar mounts the panel last in its row, while the arrangement is the view shown. Selecting is not an edit, so the panel adds nothing to the history and works while `session.view.editable` is false. What the conditions mean is in [the skill's headless reference](skills/score-editor/references/headless-layer.md#picking-notes-by-conditions), the panel in [its view-parts reference](skills/score-editor/references/view-parts.md#selecting-by-filter), and the decisions in [DESIGN.md](../../DESIGN.md).
@@ -242,6 +248,53 @@ const { events, length } = schedulePreview(score, 512); // notes and chords in s
 - `previewNote(midi, { duration })` is the single-note preview, for a view that sounds a note as the user draws or selects it: a whole MIDI number from 0 to 127 (a `RangeError` otherwise), for 0.35 seconds unless `duration` says otherwise, kept between 0.02 and 10 seconds. It resolves `true` once the note sounded.
 - `schedulePreview(score, fromTick = 0)` is the headless half: a pure function from a `Score` to `{ events, fromTick, secondsPerTick, length }`, where an event is a note (`voice`, `midi`) or a chord (`name`, `midis`, bass first) with `at` and `length` in seconds. `secondsPerTick` is the opening tempo's; `tickAtSeconds(score, seconds)` turns a host player's time back into a tick, tempo changes included, and stays at the end past the score's last second. Both run in Node and in a worker.
 
+## Score files, save and save-as
+
+`MountOptions.source` tells the editor where the score came from. A **score file** is a host document, so its edits are
+saved only when the user asks:
+
+```ts
+const editor = mount(el, {
+  language: "en",
+  project, // project.score is the file's text; style, seed and lyric lines start empty
+  dialects,
+  source: {
+    kind: "scoreFile",
+    name: "tune.abc", // the handoff instruction's title
+    version: file.version, // opaque, as a draft store's version is
+    save: (text, expected) => writeFile(path, text, expected), // { ok: true, version } | { ok: false, reason }
+    read: () => readFile(path), // { text, version } | null, for "load the other version"
+  },
+  onUnsavedChange: (unsaved) => guardWindowClose(unsaved),
+  requiredInputs: ["style"],
+  onHandoff,
+});
+editor.hasUnsavedChanges(); // the same answer, asked just before closing
+```
+
+The toolbar has **Save** in its right-hand group, before the view switch, with an **Unsaved** pill beside it at desktop
+and phone widths above 360px; at 320px the button becomes a 36px icon with a dot for the unsaved state, so the row does
+not grow. Ctrl/Cmd+S saves while the focus is inside the editor. While there is nothing to save, or a save is in flight or a conflict stands,
+Save is `aria-disabled`. A slow save reads **Saving…**; a failed one says **Save failed**, leaves the changes in place,
+and sends `notify` the `score-save-failed` notice. A version conflict shows the draft conflict's strip with
+**Overwrite with my version** (read their version, then write ours over it) and **Load the other version** (their text
+opens as a new document); the editor never overwrites by itself. Restore original asks about the last saved version and
+replaces the project without reading or writing the file. The change log and the handoff use the last saved project as
+their original. No draft call is made, even when `drafts` is also given.
+
+A **generated score** (the absent source) keeps drafts as before and adds **Save as…** while `onSaveAs` is given; the
+callback receives the current score text. `onSaveAs` is not shown in read-only mode.
+
+`requiredInputs` is the host's list of `ProjectField` values (`"style"`, `"scoreMode"`, `"seed"`, `"lyrics"`). While
+one is missing, the handoff trigger reads **Complete required inputs…** and opens the Project panel on the first missing
+field instead of the review. The editor reads no model declaration. A score-file handoff saves first when the file is
+dirty and stays closed on a conflict or a failed save; its instruction title is the file's name.
+
+For a host with its own Save control, `createScoreFileKeeper({ session, original, source, notify?, onUnsavedChange? })`
+returns a `ScoreFileKeeper` with `status`, `unsaved`, `failed`, `savedProject`, `version`, `save`, `overwrite`,
+`loadTheirs`, `restoreOriginal`, `handoff`, `subscribe` and `destroy`. Versions are the host's opaque strings, and
+`ScoreFileSaveResult` is the same shape as `DraftWriteResult`. The design is in [DESIGN.md](../../DESIGN.md#score-source-save-and-save-as).
+
 ## Drafts
 
 The headless draft keeper saves a session's project through a host store, restores it on open, and inherits lyric lines into a regenerated song. It works in Node with no DOM, like the session. `mount` wires it for the default editor ([In the default editor](#in-the-default-editor)); a host that builds its own layout uses the keeper directly.
@@ -285,7 +338,7 @@ The host's `DraftStore` takes keys and text; where a key maps (a file, a path, a
 
 Give `mount` a `drafts` store and the editor does the keeper's half that a person sees. The keeper's rules above are unchanged; what `mount` adds is below.
 
-- **Wiring.** While the editor is editable and has a store, `mount` creates one keeper on the project and `destroy()` destroys it, which starts one pending write. A read-only editor, or one without `drafts`, has no keeper: no read, no write, no list, no Restore original.
+- **Wiring.** While the editor is editable and has a store, and the source is a generated score, `mount` creates one keeper on the project and `destroy()` destroys it, which starts one pending write. A read-only editor, one without `drafts`, or one with a score-file source has no keeper: no read, no write, no list, no Restore original.
 - **Opening.** Until the keeper is ready the editor shows the original, the toolbar badge says "Opening draft…" where a read-only editor says "Read only", and no edit can start: the editing controls are not there and the keys do nothing. When the draft is read (or none is found) the editing controls appear. A store whose reads never settle keeps the editor in this state; there is no timeout, because how long a read may take is the store's to decide.
 - **Restore original.** A word button in the toolbar, shown while the keeper is ready or in conflict and the editor is editable. It opens a question in a native popover of the editor's own, so it stacks above a host's full-screen layer: "Go back to the original score?" and "Every change you made is discarded and the saved draft is deleted. You can't undo this." The focus starts on Cancel; the other answer is "Restore original", which calls `restoreOriginal()` and, once the store has answered, has the toolbar's live region say that the original is back. When the draft could not be cleared it says that too, and the host has had `draft-save-failed`. The question is asked once, and Escape or Cancel leaves everything as it was. The button is there from the first edit, and before it, so a person can always get back to the original; there is no muted state.
 - **Conflict.** When another window wrote the draft first the editor keeps editing, the keeper writes nothing, and a strip between the toolbar and the views says that the draft was changed somewhere else and that nothing is saved until the user chooses. It has two buttons, each of two lines: "Overwrite with my version" ("The other version is replaced by yours.") and "Load the other version" ("It opens here, and your changes in this window are dropped."). They call `overwrite()` and `loadTheirs()`; there is no second question, since the cost is in the button. The strip never takes the focus; its sentence is an alert. Restore original stays available during a conflict.
