@@ -19,12 +19,18 @@ const THEIR_SCORE = QUARTERS.replace("C4D4E4F4|G16|", "C4D4E4G4|A16|");
 
 const D4 = "D4, bar 1 beat 2, length 1 beat";
 const E4 = "E4, bar 1 beat 3, length 1 beat";
+const F4 = "F4, bar 1 beat 4, length 1 beat";
 
 const noteNamed = (page: Page, name: string) => page.getByRole("listitem", { name, exact: true });
+const noteLabel = (language: "en" | "zh", pitch: string, bar: number, beat: number, length: number) =>
+  language === "zh"
+    ? `${pitch}，第 ${bar} 小节第 ${beat} 拍，长 ${length} 拍`
+    : `${pitch}, bar ${bar} beat ${beat}, length ${length} ${length === 1 ? "beat" : "beats"}`;
 const saveButton = (page: Page) => page.getByRole("button", { name: "Save", exact: true });
 const saveAsButton = (page: Page) => page.getByRole("button", { name: "Save as score file", exact: true });
 const unsavedPill = (page: Page) => page.getByText("Unsaved", { exact: true });
-const conflictStrip = (page: Page) => page.getByRole("group", { name: "Score file conflict", exact: true });
+const conflictStrip = (page: Page, language: "en" | "zh" = "en") =>
+  page.getByRole("group", { name: language === "zh" ? "乐谱文件冲突" : "Score file conflict", exact: true });
 const overwriteButton = (page: Page) => page.getByRole("button", { name: "Overwrite with my version", exact: true });
 const loadTheirsButton = (page: Page) => page.getByRole("button", { name: "Load the other version", exact: true });
 const restore = (page: Page) => page.getByRole("button", { name: "Restore original", exact: true });
@@ -39,10 +45,15 @@ async function openFile(harness: Harness, options: Record<string, unknown> = {})
   });
 }
 
-async function deleteD(page: Page, press: (target: ReturnType<Page["locator"]>) => Promise<void>): Promise<void> {
-  await press(noteNamed(page, D4));
+async function deleteD(
+  page: Page,
+  press: (target: ReturnType<Page["locator"]>) => Promise<void>,
+  language: "en" | "zh" = "en",
+): Promise<void> {
+  const name = noteLabel(language, "D4", 1, 2, 1);
+  await press(noteNamed(page, name));
   await page.keyboard.press("Delete");
-  await expect(noteNamed(page, D4)).toHaveCount(0);
+  await expect(noteNamed(page, name)).toHaveCount(0);
 }
 
 test.describe("saving a score file", () => {
@@ -59,7 +70,7 @@ test.describe("saving a score file", () => {
     expect(await harness.hasUnsavedChanges()).toBe(false);
 
     await deleteD(page, press);
-    if (isMobile) await expect(page.locator(".sce-save-dot")).toBeVisible();
+    if (isMobile) await expect(page.locator(".sce-save-mark")).toBeVisible();
     else await expect(unsavedPill(page)).toBeVisible();
     expect(await harness.hasUnsavedChanges()).toBe(true);
     expect(await harness.unsavedChanges()).toEqual([true]);
@@ -119,8 +130,9 @@ test.describe("saving a score file", () => {
 
     await press(saveButton(page));
     const failed = page.locator(".sce-save-button");
-    await expect(failed).toHaveAttribute("aria-label", "Save failed");
-    await expect(failed).toHaveText("Save failed");
+    await expect(failed).toHaveAttribute("aria-label", "Save again");
+    await expect(failed).toContainText("Save again");
+    await expect(page.locator(".sce-save-state")).toHaveText("Save failed");
     expect(await harness.hasUnsavedChanges()).toBe(true);
     expect(await harness.notices()).toEqual([
       {
@@ -134,6 +146,166 @@ test.describe("saving a score file", () => {
     await expect.poll(async () => (await harness.scoreCalls()).length).toBe(2);
     await expect(unsavedPill(page)).toBeHidden();
     expect((await harness.scoreCalls()).map((call) => call.expected)).toEqual(["file-1", "file-1"]);
+  });
+});
+
+test.describe("the save state at every width", () => {
+  const words = {
+    en: { unsaved: "Unsaved", saving: "Saving…", failed: "Save failed", again: "Save again", save: "Save" },
+    zh: { unsaved: "未保存", saving: "保存中…", failed: "保存失败", again: "重新保存", save: "保存" },
+  } as const;
+
+  test("shows a word or a distinct mark, and adds no toolbar row", async ({ page, harness, press, isMobile }) => {
+    test.setTimeout(120_000);
+    const widths = isMobile ? [412, 360, 320] : [1280];
+    for (const width of widths) {
+      for (const language of ["en", "zh"] as const) {
+        const t = words[language];
+        const height = async () => (await box(page.locator(".sce-toolbar"))).height;
+        const visible = async () => page.locator(".sce-part-save").innerText();
+        await page.setViewportSize({ width, height: isMobile ? 839 : 720 });
+        await openFile(harness, { language });
+        const clean = await height();
+
+        await deleteD(page, press, language);
+        const dirtyWords = await visible();
+        expect(
+          dirtyWords.includes(t.unsaved) || dirtyWords.includes("•"),
+          `${width} ${language} dirty: ${dirtyWords}`,
+        ).toBe(true);
+        expect(await height(), `${width} ${language} dirty`).toBe(clean);
+
+        await harness.holdScoreSave();
+        await press(page.getByRole("button", { name: t.save, exact: true }));
+        await expect(page.getByRole("button", { name: t.saving, exact: true })).toBeVisible();
+        const savingWords = await visible();
+        expect(savingWords.includes(t.saving) || savingWords.includes("…")).toBe(true);
+        expect(page.locator(".sce-save-mark")).toBeHidden();
+        expect(await height(), `${width} ${language} saving`).toBe(clean);
+        await harness.releaseScoreSave();
+        await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
+        await expect(page.getByRole("button", { name: t.save, exact: true })).toBeVisible();
+        await press(noteNamed(page, noteLabel(language, "E4", 1, 3, 1)));
+        await page.keyboard.press("Delete");
+
+        await harness.failScoreNext("save");
+        await press(page.getByRole("button", { name: t.save, exact: true }));
+        const failedWords = await visible();
+        expect(
+          failedWords.includes(t.failed) || failedWords.includes(t.again) || failedWords.includes("!"),
+          `${width} ${language} failed: ${failedWords}`,
+        ).toBe(true);
+        expect(await height(), `${width} ${language} failed`).toBe(clean);
+
+        await press(page.getByRole("button", { name: t.again, exact: true }));
+        await expect.poll(async () => (await harness.scoreCalls()).length).toBe(3);
+        await expect(page.getByRole("button", { name: t.save, exact: true })).toBeVisible();
+        await harness.externalScore(THEIR_SCORE);
+        await press(noteNamed(page, noteLabel(language, "F4", 1, 4, 1)));
+        await page.keyboard.press("Delete");
+        await expect(noteNamed(page, noteLabel(language, "F4", 1, 4, 1))).toHaveCount(0);
+        await press(page.getByRole("button", { name: t.save, exact: true }));
+        await expect(conflictStrip(page, language)).toBeVisible();
+        const conflictWords = await visible();
+        expect(
+          conflictWords.includes(t.unsaved) || conflictWords.includes("?"),
+          `${width} ${language} conflict: ${conflictWords}`,
+        ).toBe(true);
+        expect(await height(), `${width} ${language} conflict`).toBe(clean);
+        await harness.destroy();
+      }
+    }
+  });
+});
+
+test("reveals the whole strip in the chrome without a swipe", async ({ page, harness, press, isMobile }) => {
+  const widths = isMobile ? [412, 320] : [1280];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: isMobile ? 839 : 720 });
+    await harness.stageHeight(420);
+    await openFile(harness);
+    await deleteD(page, press);
+    await harness.externalScore(THEIR_SCORE);
+    await press(saveButton(page));
+    await expect(conflictStrip(page)).toBeVisible();
+    await harness.frames(1);
+
+    const found = await page.evaluate(() => {
+      const chrome = document.querySelector<HTMLElement>(".sce-chrome");
+      const strip = document.querySelector<HTMLElement>(".sce-part-save-conflict .sce-draft-conflict");
+      if (!chrome || !strip) return null;
+      const outer = chrome.getBoundingClientRect();
+      const sentence = strip.querySelector<HTMLElement>(".sce-draft-conflict-text")?.getBoundingClientRect();
+      const choices = [...strip.querySelectorAll<HTMLElement>(".sce-draft-choice")].map((choice) => {
+        const area = choice.getBoundingClientRect();
+        const top = document.elementFromPoint(area.left + area.width / 2, area.top + area.height / 2);
+        return {
+          inside: area.top >= outer.top - 0.5 && area.bottom <= outer.top + chrome.clientHeight + 0.5,
+          hit: top === choice || choice.contains(top),
+        };
+      });
+      return {
+        sentenceInside:
+          sentence !== undefined &&
+          sentence.top >= outer.top - 0.5 &&
+          sentence.bottom <= outer.top + chrome.clientHeight + 0.5,
+        choices,
+      };
+    });
+    expect(found?.sentenceInside, `${width}: the sentence is in the chrome`).toBe(true);
+    expect(
+      found?.choices.map((choice) => choice.inside),
+      `${width}: both choices are in the chrome`,
+    ).toEqual([true, true]);
+    expect(
+      found?.choices.map((choice) => choice.hit),
+      `${width}: both choices are on top`,
+    ).toEqual([true, true]);
+    await harness.destroy();
+  }
+});
+
+test.describe("what the save state says", () => {
+  test("announces Saved and the recovery sentence, and speaks the state once", async ({ page, harness, press }) => {
+    await openFile(harness);
+    const state = page.locator(".sce-save-state");
+    const button = page.locator(".sce-save-button");
+    const live = page.locator(".sce-part-toolbar [role=status].sce-sr-only");
+
+    await deleteD(page, press);
+    await expect(state).toHaveAttribute("aria-hidden", "true");
+    await expect(button).toHaveAttribute("aria-description", "Unsaved");
+    await press(saveButton(page));
+    await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
+    await expect(live).toHaveText("Saved");
+
+    await press(noteNamed(page, E4));
+    await page.keyboard.press("Delete");
+    await harness.failScoreNext("save");
+    await press(saveButton(page));
+    await expect(button).toHaveAttribute("aria-label", "Save again");
+    await expect(button).toHaveAttribute(
+      "aria-description",
+      "The score file was not saved. Your changes are still here; try Save again.",
+    );
+    await expect(button).toHaveAttribute(
+      "title",
+      "Save again (Ctrl/Cmd+S). The score file was not saved. Your changes are still here; try Save again.",
+    );
+    await expect(state).toHaveText("Save failed");
+    await expect(state).toHaveAttribute("aria-hidden", "true");
+    await expect(live).toHaveText("The score file was not saved. Your changes are still here; try Save again.");
+
+    await press(button);
+    await expect.poll(async () => (await harness.scoreCalls()).length).toBe(3);
+    await harness.externalScore(THEIR_SCORE);
+    await press(noteNamed(page, F4));
+    await page.keyboard.press("Delete");
+    await press(saveButton(page));
+    await expect(conflictStrip(page)).toBeVisible();
+    await expect(state).toHaveAttribute("data-state", "dirty");
+    await expect(state).toHaveCSS("font-weight", "600");
+    await expect(button).toHaveAttribute("aria-description", "Unsaved");
   });
 });
 
@@ -198,14 +370,19 @@ test.describe("Restore original for a score file", () => {
     isMobile,
   }) => {
     await openFile(harness);
+    await expect(restore(page)).toHaveAttribute("aria-disabled", "true");
+    await restore(page).evaluate((el) => (el as HTMLButtonElement).click());
+    await expect(restoreQuestion(page)).toBeHidden();
+
     await deleteD(page, press);
+    await expect(restore(page)).toHaveAttribute("aria-disabled", "false");
     await press(saveButton(page));
     await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
 
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await expect(noteNamed(page, E4)).toHaveCount(0);
-    if (isMobile) await expect(page.locator(".sce-save-dot")).toBeVisible();
+    if (isMobile) await expect(page.locator(".sce-save-mark")).toBeVisible();
     else await expect(unsavedPill(page)).toBeVisible();
 
     await press(restore(page));
@@ -213,12 +390,13 @@ test.describe("Restore original for a score file", () => {
     await expect(restoreQuestion(page)).toContainText(
       "Every change since the last save is discarded. You can't undo this.",
     );
-    await press(restoreQuestion(page).getByRole("button", { name: "Restore original", exact: true }));
+    await press(restoreQuestion(page).getByRole("button", { name: "Go back to last save", exact: true }));
 
     await expect(restoreQuestion(page)).toBeHidden();
     await expect(noteNamed(page, E4)).toBeVisible();
     await expect(noteNamed(page, D4)).toHaveCount(0);
     await expect(unsavedPill(page)).toBeHidden();
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveAttribute("aria-disabled", "true");
     expect(await harness.scoreCalls()).toHaveLength(1);
   });
 });
@@ -279,7 +457,6 @@ test.describe("a real score as a score file", () => {
 
 test.describe("the handoff with a score file", () => {
   const handoffButton = (page: Page) => page.getByRole("button", { name: "Regenerate…", exact: true });
-  const missingButton = (page: Page) => page.getByRole("button", { name: "Complete required inputs…", exact: true });
   const review = (page: Page) => page.getByRole("dialog", { name: "Check before regenerating", exact: true });
 
   test("a missing required input opens the Project panel on it; the title is the file name", async ({
@@ -293,8 +470,9 @@ test.describe("the handoff with a score file", () => {
       project: { style: "" },
     });
 
-    await expect(missingButton(page)).toBeVisible();
-    await press(missingButton(page));
+    const required = page.getByRole("button", { name: "Add style first…", exact: true });
+    await expect(required).toBeVisible();
+    await press(required);
 
     const panel = page.getByRole("dialog", { name: "Project", exact: true });
     await expect(panel).toBeVisible();
@@ -318,22 +496,51 @@ test.describe("the handoff with a score file", () => {
     expect(await harness.scoreCalls()).toEqual([]);
   });
 
+  test("names the required field, counts several, and marks the empty field", async ({ page, harness, press }) => {
+    await openFile(harness, { handoff: true, requiredInputs: ["style"], project: { style: "" } });
+    await expect(page.getByRole("button", { name: "Add style first…", exact: true })).toBeVisible();
+    await press(page.getByRole("button", { name: "Add style first…", exact: true }));
+    const panel = page.getByRole("dialog", { name: "Project", exact: true });
+    await expect(panel).toBeVisible();
+    await expect(
+      page.getByText("Required to regenerate. Not set. Describe the style you want.", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Not set. Each generation picks its own.", { exact: true })).toBeVisible();
+
+    await harness.destroy();
+    await openFile(harness, {
+      handoff: true,
+      requiredInputs: ["style", "seed"],
+      project: { style: "", seed: null },
+    });
+    await expect(page.getByRole("button", { name: "Add 2 required inputs…", exact: true })).toBeVisible();
+
+    await harness.destroy();
+    await openFile(harness, { language: "zh", handoff: true, requiredInputs: ["style"], project: { style: "" } });
+    await expect(page.getByRole("button", { name: "先补风格描述…", exact: true })).toBeVisible();
+  });
+
   test("a missing lyrics input shows the arrangement and opens the new-line editor", async ({
     page,
     harness,
     press,
   }) => {
+    await harness.stageHeight(420);
     await openFile(harness, { handoff: true, requiredInputs: ["lyrics"] });
     await press(page.getByRole("group", { name: "View" }).getByRole("button", { name: "Staff", exact: true }));
     await expect(page.getByRole("region", { name: "Staff" })).toBeVisible();
 
-    await expect(missingButton(page)).toBeVisible();
-    await press(missingButton(page));
+    const required = page.getByRole("button", { name: "Add lyrics first…", exact: true });
+    await expect(required).toBeVisible();
+    await press(required);
 
     await expect(page.getByRole("region", { name: "Arrangement" })).toBeVisible();
     const entry = page.getByRole("textbox", { name: "New lyric line text", exact: true });
     await expect(entry).toBeVisible();
     await expect(entry).toBeFocused();
+    const head = await box(page.locator(".sce-part-lyric-track .sce-lyric-head"));
+    const firstRow = await box(page.getByText("No lyrics in this song", { exact: true }));
+    expect(firstRow.y).toBeGreaterThanOrEqual(head.y + head.height - 1);
   });
 
   test("a conflicted save keeps the handoff closed until the conflict is answered", async ({
@@ -349,10 +556,56 @@ test.describe("the handoff with a score file", () => {
 
     await expect(conflictStrip(page)).toBeVisible();
     expect(await harness.handoffs()).toEqual([]);
+    expect(await harness.notices()).toContainEqual({
+      code: "handoff-not-sent",
+      level: "warning",
+      message: "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
+    });
+    await expect(page.locator(".sce-part-toolbar [role=status].sce-sr-only")).toHaveText(
+      "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
+    );
 
     await press(loadTheirsButton(page));
     await expect(conflictStrip(page)).toBeHidden();
     expect(await harness.handoffs()).toEqual([]);
+  });
+
+  test("the review says a dirty file is saved first, and only then", async ({ page, harness, press }) => {
+    const line = page.locator(".sce-handoff-file");
+    await openFile(harness, { handoff: true });
+    await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
+    await expect(review(page)).toBeVisible();
+    await expect(line).toBeHidden();
+    await page.keyboard.press("Escape");
+
+    await deleteD(page, press);
+    await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
+    await expect(line).toBeVisible();
+    await expect(line).toHaveText("Saves tune.abc first, then sends the song.");
+    await page.keyboard.press("Escape");
+
+    await harness.destroy();
+    await harness.mount({ score: { text: QUARTERS }, handoff: true });
+    await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
+    await expect(line).toBeHidden();
+  });
+
+  test("a failed save in a handoff says it was not sent", async ({ page, harness, press }) => {
+    await openFile(harness, { handoff: true });
+    await deleteD(page, press);
+    await harness.failScoreNext("save");
+    await press(handoffButton(page));
+    await press(review(page).getByRole("button", { name: "Regenerate with this version", exact: true }));
+
+    expect(await harness.handoffs()).toEqual([]);
+    expect(await harness.notices()).toContainEqual({
+      code: "handoff-not-sent",
+      level: "warning",
+      message: "Not sent: the score file was not saved. Try again, then regenerate.",
+    });
+    await expect(page.locator(".sce-part-toolbar [role=status].sce-sr-only")).toHaveText(
+      "Not sent: the score file was not saved. Try again, then regenerate.",
+    );
   });
 
   test("a dirty handoff saves the file before the host is called", async ({ page, harness, press }) => {
@@ -399,7 +652,7 @@ test.describe("the save control adds no toolbar row on a phone", () => {
       await openFile(harness);
       await page.getByRole("listitem", { name: D4, exact: true }).tap();
       await page.keyboard.press("Delete");
-      await expect(page.locator(".sce-save-dot")).toBeVisible();
+      await expect(page.locator(".sce-save-mark")).toBeVisible();
       if (width >= 480) await expect(unsavedPill(page)).toBeVisible();
       const after = await box(page.locator(".sce-toolbar"));
       expect(after.height).toBe(before.height);
