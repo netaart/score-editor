@@ -1,5 +1,5 @@
-// ABOUTME: The menu that opens under a toolbar button: a native popover of menu items with arrow-key movement between them.
-// ABOUTME: The zoom control and the selection menu share it, so a menu opens, places itself, takes focus and closes one way.
+// ABOUTME: The menu that opens under a toolbar button or a section band: a native popover of menu items with arrow-key movement between them.
+// ABOUTME: The zoom control, the selection menu and the section menu share it, so a menu opens, places itself, takes focus and closes one way.
 import { create } from "./dom";
 
 export interface PopoverMenu {
@@ -21,8 +21,22 @@ export interface PopoverMenuOptions {
 }
 
 /**
+ * Places a popover under `anchor`, moved left when its right edge would run off the window. The menu and the section
+ * form hang from the same point, so they place themselves the same way.
+ */
+export function placePopover(element: HTMLElement, anchor: { readonly left: number; readonly bottom: number }): void {
+  element.style.left = `${anchor.left}px`;
+  element.style.top = `${anchor.bottom + 4}px`;
+  const view = element.ownerDocument.defaultView;
+  if (!view) return;
+  const box = element.getBoundingClientRect();
+  const across = box.right - (view.innerWidth - 8);
+  if (across > 0) element.style.left = `${Math.max(8, box.left - across)}px`;
+}
+
+/**
  * Makes the menu that `button` opens, as the last child of `root`. The menu is a native popover, so it stacks above a
- * host's full-screen layer, and it sits under the button, moved left or up when it would run off the window. The first item,
+ * host's full-screen layer, and it sits under the button, moved left when it would run off the window. The first item,
  * or the one `initialFocus` names, takes the focus when it opens, and Up, Down, Home and End move between the items.
  * Everything it adds is removed with `root`.
  */
@@ -43,29 +57,12 @@ export function mountPopoverMenu(
   button.popoverTargetAction = "toggle";
 
   menu.addEventListener(
-    "beforetoggle",
-    (event) => {
-      if ((event as ToggleEvent).newState !== "open") return;
-      const rect = options.anchor?.() ?? button.getBoundingClientRect();
-      menu.style.left = `${rect.left}px`;
-      menu.style.top = `${rect.bottom + 4}px`;
-    },
-    { signal },
-  );
-  menu.addEventListener(
     "toggle",
     (event) => {
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      const view = doc.defaultView;
-      if (view) {
-        const rect = menu.getBoundingClientRect();
-        const overflow = rect.right - (view.innerWidth - 8);
-        if (overflow > 0) menu.style.left = `${Math.max(8, rect.left - overflow)}px`;
-        const below = rect.bottom - (view.innerHeight - 8);
-        if (below > 0) menu.style.top = `${Math.max(8, rect.top - below)}px`;
-      }
+      placePopover(menu, options.anchor?.() ?? button.getBoundingClientRect());
       (options.initialFocus?.(items) ?? items[0])?.focus();
     },
     { signal },
