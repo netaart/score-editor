@@ -193,6 +193,7 @@ interface PageHarness {
     holdSave(): void;
     releaseSave(): void;
   };
+  save(): Promise<"saved" | "unchanged" | "conflict" | "failed">;
   saveAs: string[];
   unsavedChanges: boolean[];
   probes?: Partial<PageProbes>;
@@ -531,6 +532,11 @@ export class Harness {
   /** Every unsaved state the host was told about. */
   unsavedChanges() {
     return this.page.evaluate(() => [...window.harness.unsavedChanges]);
+  }
+
+  /** Asks the mounted editor to save now, as its host would. */
+  save(): Promise<"saved" | "unchanged" | "conflict" | "failed"> {
+    return this.page.evaluate(() => window.harness.save());
   }
 
   /** What the mounted editor answers for `hasUnsavedChanges()`. */

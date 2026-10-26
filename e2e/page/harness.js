@@ -687,6 +687,9 @@ window.harness = {
   hasUnsavedChanges() {
     return editor?.hasUnsavedChanges() ?? false;
   },
+  save() {
+    return editor?.save() ?? Promise.resolve("unchanged");
+  },
   destroy() {
     editor?.destroy();
     document.getElementById("chord-host")?.remove();

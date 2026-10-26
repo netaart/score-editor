@@ -3,10 +3,20 @@
 import { create, requireDom } from "./dom";
 import { messagesFor } from "./i18n";
 import { lineIcon } from "./icons";
-import type { ScoreFileKeeper } from "./score-source";
+import type { ScoreFileHandoffResult, ScoreFileKeeper } from "./score-source";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
+
+/** The control as a part, with the host's save action on the same path as its button. */
+export interface ScoreSourceControl extends ViewPart {
+  /**
+   * Saves a score file now. Resolves `saved` when the host write succeeds, `unchanged` when there is nothing to write
+   * (no keeper, a generated score, read-only, a save already in flight, a conflict, or after destroy), else `conflict`
+   * or `failed` from the keeper.
+   */
+  save(): Promise<ScoreFileHandoffResult>;
+}
 
 /** What the control needs: a file keeper, a save-as callback, or neither (it then draws nothing). */
 export interface ScoreSourceControlOptions {
@@ -30,7 +40,7 @@ export function mountScoreSourceControl(
   el: HTMLElement,
   session: EditingSession,
   options: ScoreSourceControlOptions,
-): ViewPart {
+): ScoreSourceControl {
   requireDom("mountScoreSourceControl");
   const doc = el.ownerDocument;
   const abort = new AbortController();
@@ -56,6 +66,7 @@ export function mountScoreSourceControl(
   const keeper = options.keeper ?? null;
   const saveAs = options.saveAs;
   let awaitingSave = false;
+  let destroyed = false;
 
   // The room the form is chosen from is the bar's: Save sits there with the view switch and the preview control, and a
   // wider state must not wrap that bar.
@@ -65,12 +76,20 @@ export function mountScoreSourceControl(
     options.scope;
   const heightNow = (): number => toolbar().offsetHeight;
 
+  /** The one score-file save path: the Save button, Ctrl/Cmd+S and `save()` all come through here. */
+  async function saveFile(): Promise<ScoreFileHandoffResult> {
+    if (destroyed || keeper === null || !session.view.editable) return "unchanged";
+    if (keeper.status !== "clean" && keeper.status !== "dirty") return "unchanged";
+    if (!keeper.unsaved) return "unchanged";
+    awaitingSave = true;
+    const result = await keeper.save();
+    return result.ok ? "saved" : result.reason;
+  }
+
   /** Saves the file, or hands the current text to the host's save-as callback. */
   function act(): void {
     if (keeper !== null) {
-      if (keeper.status !== "clean" && keeper.status !== "dirty") return;
-      awaitingSave = true;
-      void keeper.save();
+      void saveFile();
       return;
     }
     const callback = saveAs?.();
@@ -292,8 +311,8 @@ export function mountScoreSourceControl(
       draw();
     });
   }
-  let destroyed = false;
   return {
+    save: saveFile,
     destroy() {
       if (destroyed) return;
       destroyed = true;

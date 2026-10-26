@@ -3,6 +3,7 @@
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry } from "./dialect";
 import type { SongProject } from "./score";
+import type { ScoreFileHandoffResult } from "./score-source";
 import type { ScoreTool } from "./tool";
 
 /** Interface languages the package ships text for. The host picks one. */
@@ -167,6 +168,12 @@ export interface MountedEditor {
   update(options: Partial<MountOptions>): void;
   /** Whether a score file has changes that are not saved. Always false for a generated score. */
   hasUnsavedChanges(): boolean;
+  /**
+   * Saves the score file now, as the Save button and Ctrl/Cmd+S do, and settles when that save has. Answers the keeper's
+   * `saved` / `unchanged` / `conflict` / `failed`: `unchanged` when there was nothing to write, including a generated
+   * score, a read-only editor, a save already in flight, a standing conflict, or a destroyed editor.
+   */
+  save(): Promise<ScoreFileHandoffResult>;
   /** Removes every listener and node the editor added. Safe to call twice. */
   destroy(): void;
 }
