@@ -113,7 +113,7 @@ export function mountChordEditing(
   });
 
   const editable = (): boolean =>
-    drawn !== null && session.view.editable && arrangementShown(session) && session.constraints !== null;
+    drawn !== null && session.view.editable && arrangementShown(session) && session.dialect !== undefined;
   // Set when the part is mounted, as the voice tracks do, so that the root's attributes are in the same order however it
   // came to be drawn.
   root.setAttribute("data-editable", "false");
@@ -200,8 +200,8 @@ export function mountChordEditing(
   }
 
   function openPicker(d: Drawn, slot: ChordSlot): void {
-    const constraints = session.constraints;
-    if (constraints === null) return;
+    const constraints = session.dialect?.constraints;
+    if (constraints === undefined) return;
     moveCursor(d, slot, false);
     // The focus goes to the cursor first, so that is where it returns when the picker closes.
     d.cursor.focus({ preventScroll: true });
@@ -341,8 +341,8 @@ export function mountChordEditing(
       picker.close();
       drawn = null;
       editableShown = null;
-      const constraints = session.constraints;
-      if (row === null || constraints === null) return null;
+      const constraints = session.dialect?.constraints;
+      if (row === null || constraints === undefined) return null;
       const slots = chordSlots(row.score, constraints);
       if (slots.length === 0) return null;
       const layer = create(doc, "div", "sce-chord-layer", row.row);

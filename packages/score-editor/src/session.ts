@@ -11,7 +11,7 @@ import { DEFAULT_GRID, normalizeGrid, sameGrid } from "./grid";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
-import type { DialectConstraints, Language } from "./types";
+import type { Language } from "./types";
 
 /** What reading the project's score came to: a score, or the reason there is none. */
 export type ScoreReading =
@@ -128,12 +128,6 @@ export interface EditingSession {
    * same object until the score text, the model or the dialects change.
    */
   readonly reading: ScoreReading;
-  /**
-   * What the dialect that reads the project's model declares about itself, or null when the host imported none for it.
-   * A part that offers choices narrows them by this, such as the chord picker by the chord vocabulary, so the user cannot
-   * build what the dialect would refuse.
-   */
-  readonly constraints: DialectConstraints | null;
   /**
    * The dialect that reads the project's model, or undefined when the registry has none. It is how a control learns what
    * the dialect allows (`dialect.constraints`) and how a panel asks what the project carries (`checkProject`). It follows
@@ -437,12 +431,6 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get reading() {
       return read();
-    },
-    get constraints() {
-      return withDialect(
-        (dialect) => dialect.constraints,
-        () => null,
-      );
     },
     get dialect() {
       return dialects.find(project.modelId);

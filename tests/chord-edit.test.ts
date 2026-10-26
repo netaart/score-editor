@@ -46,9 +46,9 @@ function open(overrides: Partial<SongProject> = {}): EditingSession {
   return createEditingSession({ project: { ...project, score: TWO_VOICES, ...overrides }, dialects });
 }
 
-describe("the session's constraints", () => {
+describe("the session's dialect constraints", () => {
   it("are those of the dialect that reads the project's model", () => {
-    const constraints = open().constraints;
+    const constraints = open().dialect?.constraints;
     expect(constraints?.voices).toEqual([
       { name: "Vocal", required: true, allowsChords: true },
       { name: "Ins", required: false, allowsChords: false },
@@ -56,8 +56,8 @@ describe("the session's constraints", () => {
     expect(constraints?.chords.slashBass).toBe(true);
   });
 
-  it("are null when the host imported no dialect for the model", () => {
-    expect(open({ modelId: "other-model" }).constraints).toBeNull();
+  it("are absent when the host imported no dialect for the model", () => {
+    expect(open({ modelId: "other-model" }).dialect).toBeUndefined();
   });
 });
 
@@ -72,8 +72,9 @@ C2D2E2F2G2A2B2c2|C16|`;
 describe("the places a chord can go", () => {
   it("are the starts of the notes and rests of the voice that allows chords, with the chord there and the chord before", () => {
     const session = open({ score: CHORDED });
-    const { reading, constraints } = session;
-    if (reading.kind !== "score" || constraints === null) throw new Error("the fixture did not read");
+    const { reading } = session;
+    const constraints = session.dialect?.constraints;
+    if (reading.kind !== "score" || constraints === undefined) throw new Error("the fixture did not read");
 
     const slots = chordSlots(reading.score, constraints);
 
@@ -92,8 +93,9 @@ describe("the places a chord can go", () => {
 describe("the places a chord can go in a dialect where two voices allow chords", () => {
   it("are the starts of both, and the voice listed first owns a start that both have", () => {
     const session = open();
-    const { reading, constraints } = session;
-    if (reading.kind !== "score" || constraints === null) throw new Error("the fixture did not read");
+    const { reading } = session;
+    const constraints = session.dialect?.constraints;
+    if (reading.kind !== "score" || constraints === undefined) throw new Error("the fixture did not read");
     const both = {
       ...constraints,
       voices: constraints.voices.map((voice) => ({ ...voice, allowsChords: true })),
@@ -116,8 +118,9 @@ describe("the places a chord can go in a dialect where two voices allow chords",
 
   it("are none when no voice allows chords", () => {
     const session = open();
-    const { reading, constraints } = session;
-    if (reading.kind !== "score" || constraints === null) throw new Error("the fixture did not read");
+    const { reading } = session;
+    const constraints = session.dialect?.constraints;
+    if (reading.kind !== "score" || constraints === undefined) throw new Error("the fixture did not read");
     const none = { ...constraints, voices: constraints.voices.map((voice) => ({ ...voice, allowsChords: false })) };
 
     expect(chordSlots(reading.score, none)).toEqual([]);
@@ -126,8 +129,10 @@ describe("the places a chord can go in a dialect where two voices allow chords",
 
 describe("the nearest place for a chord", () => {
   function slotsOf(text: string): ReadonlyArray<ChordSlot> {
-    const { reading, constraints } = open({ score: text });
-    if (reading.kind !== "score" || constraints === null) throw new Error("the fixture did not read");
+    const session = open({ score: text });
+    const { reading } = session;
+    const constraints = session.dialect?.constraints;
+    if (reading.kind !== "score" || constraints === undefined) throw new Error("the fixture did not read");
     return chordSlots(reading.score, constraints);
   }
   // Starts at 0, 256, 512, 768, 1024 and 1536.
