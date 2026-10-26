@@ -92,9 +92,11 @@ export type {
   ViewState,
 } from "./session";
 export { createEditingSession, VIEW_NAMES } from "./session";
+export type { StaffViewPart } from "./staff-view";
 export { mountStaffView } from "./staff-view";
 export { mountStaleNotice } from "./stale-notice";
 export { mountSynthPreview } from "./synth-preview";
+export { tickAtSeconds } from "./tempo";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
 export type {
