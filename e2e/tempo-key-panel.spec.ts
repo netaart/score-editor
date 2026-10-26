@@ -1,5 +1,6 @@
 // ABOUTME: Seam 5 for the toolbar's tempo, key and transpose controls and the song project panel, in desktop and phone projects.
 // ABOUTME: A user acts through the toolbar and the panel; the tests read the score text and the project fields the session holds.
+import { LYRICS_MAX_CHARACTERS } from "@neta-art/score-editor";
 import type { Locator, Page } from "@playwright/test";
 import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
@@ -461,7 +462,7 @@ test.describe("the song project panel's fields", () => {
     await expect(seedField(page)).toHaveValue("");
     await expect(panel(page).getByText("Not set. Each generation picks its own.")).toBeVisible();
     await expect(panel(page).getByText("No lyrics yet.")).toBeVisible();
-    await expect(panel(page).getByText("0 of 2000 characters")).toBeVisible();
+    await expect(panel(page).getByText(`0 of ${LYRICS_MAX_CHARACTERS} characters`)).toBeVisible();
 
     await styleBox(page).fill("lofi");
     await styleBox(page).blur();
@@ -486,7 +487,7 @@ test.describe("the song project panel's lyrics and notices", () => {
 
     // "[a]" and two lines of eight characters, with a line break between each: 3 + 1 + 8 + 1 + 8.
     expect(await joined(page)).toBe("[a]\nla la la\ndo re mi");
-    await expect(panel(page).getByText("21 of 2000 characters")).toBeVisible();
+    await expect(panel(page).getByText(`21 of ${LYRICS_MAX_CHARACTERS} characters`)).toBeVisible();
     await expect(panel(page).getByRole("note")).toHaveCount(0);
     await expect(projectButton(page)).toHaveAccessibleName("Project");
   });
@@ -500,24 +501,27 @@ test.describe("the song project panel's lyrics and notices", () => {
     await openPanel(page, press);
 
     expect(await joined(page)).toBe("[a]\nla la la\ndo re mi");
-    await expect(panel(page).getByText("21 of 2000 characters")).toBeVisible();
+    await expect(panel(page).getByText(`21 of ${LYRICS_MAX_CHARACTERS} characters`)).toBeVisible();
     await expect(
       panel(page).getByRole("note").filter({ hasText: "1 lyric line is unaligned and left out of the joined lyrics." }),
     ).toHaveCount(1);
     await expect(projectButton(page)).toHaveAccessibleName("Project, 1 notice");
   });
 
-  test("over 2,000 characters the panel says so and still lets the person edit", async ({ page, harness, press }) => {
-    const long = `[a]\n${"a".repeat(1100)}\n${"b".repeat(1100)}`;
+  test("over the lyrics limit the panel says so and still lets the person edit", async ({ page, harness, press }) => {
+    const long = `[a]\n${"a".repeat(2100)}\n${"b".repeat(2100)}`;
+    const over = 3 + 1 + 2100 + 1 + 2100;
     await openSong(harness, SONG, { lyrics: long, style: "pop" });
     await openPanel(page, press);
 
-    // "[a]" 3, two lines of 1,100, two line breaks: 3 + 1 + 1100 + 1 + 1100 = 2,205.
-    await expect(panel(page).getByText("2205 of 2000 characters")).toBeVisible();
+    // "[a]" 3, two lines of 2,100, two line breaks: 3 + 1 + 2100 + 1 + 2100 = 4,205.
+    await expect(panel(page).getByText(`${over} of ${LYRICS_MAX_CHARACTERS} characters`)).toBeVisible();
     await expect(
       panel(page)
         .getByRole("note")
-        .filter({ hasText: "The joined lyrics are 2205 characters; song2 generation accepts 2000." }),
+        .filter({
+          hasText: `The joined lyrics are ${over} characters; song2 generation accepts ${LYRICS_MAX_CHARACTERS}.`,
+        }),
     ).toHaveCount(1);
     await expect(projectButton(page)).toHaveAccessibleName("Project, 1 notice");
 
@@ -621,11 +625,11 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await openPanel(page, press);
 
     await expect(panel(page).getByText("warm pop", { exact: true })).toBeVisible();
-    await expect(panel(page).getByText("warm pop", { exact: true })).toHaveAccessibleName("Style description");
+    await expect(panel(page).getByRole("group", { name: "Style description" })).toHaveText("warm pop");
     await expect(panel(page).getByText("Melody", { exact: true }).locator("visible=true")).toBeVisible();
     await expect(panel(page).getByText("5", { exact: true })).toBeVisible();
-    await expect(panel(page).getByText("5", { exact: true })).toHaveAccessibleName("Seed");
-    await expect(panel(page).getByText("12 of 2000 characters")).toBeVisible();
+    await expect(panel(page).getByRole("group", { name: "Seed" })).toHaveText("5");
+    await expect(panel(page).getByText(`12 of ${LYRICS_MAX_CHARACTERS} characters`)).toBeVisible();
     expect(await lyricsRegion(page).evaluate((element) => element.textContent)).toBe("[a]\nla la la");
     await expect(panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" })).toHaveCount(1);
     for (const control of ["textbox", "radio", "spinbutton", "button"] as const) {
@@ -655,7 +659,7 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await expect(zh.getByRole("spinbutton", { name: "种子" })).toBeVisible();
     await expect(zh.getByRole("region", { name: "歌词" })).toBeVisible();
     // The joined lyrics are the label of the score's one named section, "[a]": three characters.
-    await expect(zh.getByText("3 / 2000 字")).toBeVisible();
+    await expect(zh.getByText(`3 / ${LYRICS_MAX_CHARACTERS} 字`)).toBeVisible();
   });
 });
 
