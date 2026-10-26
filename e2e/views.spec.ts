@@ -790,27 +790,34 @@ test.describe("the staff view", () => {
     page,
     harness,
   }) => {
-    // QUARTERS is 4/4 at 100: a bar is 2.4 s. Its two bars have a bar line at the start, between them, and at the end.
+    // QUARTERS is 4/4 at 100: a bar is 2.4 s, and its two bars have a bar line at the end of each. abcjs may also
+    // draw the line the first bar starts at, so the first drawn line can be the opening one or the end of bar 1.
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], editable: false });
     await expect(drawnNotes(page)).toHaveCount(5);
     const bars = await staffBarXs(page);
-    expect(bars.length).toBeGreaterThanOrEqual(3);
-    const last = bars[bars.length - 1] as number;
+    expect(bars.length).toBeGreaterThanOrEqual(2);
+    const opening = bars.length > 2;
+    const barTwo = bars[opening ? 1 : 0] as number;
+    const end = bars[opening ? 2 : 1] as number;
 
     await setStaffPosition(page, 0);
     await expect(staffCursor(page)).toBeVisible();
-    expect(Math.abs((await staffCursorX(page)) - (bars[0] as number))).toBeLessThan(4);
+    const start = await staffCursorX(page);
+    if (opening) expect(Math.abs(start - (bars[0] as number))).toBeLessThan(4);
+    else {
+      expect(start).toBeGreaterThan(0);
+      expect(start).toBeLessThan(barTwo);
+    }
 
     await setStaffPosition(page, 2.4);
-    expect(Math.abs((await staffCursorX(page)) - (bars[1] as number))).toBeLessThan(4);
+    expect(Math.abs((await staffCursorX(page)) - barTwo)).toBeLessThan(4);
 
     // 3.6 s is half way through the second bar, which is where the cursor is drawn.
     await setStaffPosition(page, 3.6);
-    const middle = (bars[1] as number) + ((bars[2] as number) - (bars[1] as number)) / 2;
-    expect(Math.abs((await staffCursorX(page)) - middle)).toBeLessThan(4);
+    expect(Math.abs((await staffCursorX(page)) - (barTwo + (end - barTwo) / 2))).toBeLessThan(4);
 
     await setStaffPosition(page, 1000);
-    expect(Math.abs((await staffCursorX(page)) - last)).toBeLessThan(4);
+    expect(Math.abs((await staffCursorX(page)) - end)).toBeLessThan(4);
 
     await setStaffPosition(page, null);
     await expect(staffCursor(page)).toHaveCount(0);
@@ -828,10 +835,14 @@ test.describe("the staff view", () => {
     });
     await expect(drawnNotes(page)).toHaveCount(9);
     const bars = await staffBarXs(page);
+    expect(bars.length).toBeGreaterThanOrEqual(3);
+    const opening = bars.length > 3;
+    const barTwo = bars[opening ? 1 : 0] as number;
+    const barThree = bars[opening ? 2 : 1] as number;
 
     await setStaffPosition(page, 2.5);
 
-    const expected = (bars[1] as number) + ((bars[2] as number) - (bars[1] as number)) / 8;
+    const expected = barTwo + (barThree - barTwo) / 8;
     expect(Math.abs((await staffCursorX(page)) - expected)).toBeLessThan(4);
   });
 
@@ -842,15 +853,15 @@ test.describe("the staff view", () => {
   }) => {
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff", "synth"] });
     await expect(drawnNotes(page)).toHaveCount(5);
-    const bars = await staffBarXs(page);
     await setStaffPosition(page, 2.4);
     const hostX = await staffCursorX(page);
 
     await press(slot(page, "synth").getByRole("button"));
     await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().from)).toBe(0);
+    const startX = await staffCursorX(page);
     await expect
       .poll(() => staffCursorX(page), { message: "the cursor follows the preview" })
-      .toBeGreaterThan((bars[0] as number) + 10);
+      .toBeGreaterThan(startX + 10);
 
     await press(slot(page, "synth").getByRole("button"));
     await expect
