@@ -4,7 +4,7 @@
 import { create } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { messagesFor } from "./i18n";
-import { nudgeIntoWindow, placeUnder } from "./popover-menu";
+import { anchorOf, keepInside, placeUnder } from "./popover-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
@@ -47,7 +47,7 @@ export function mountRestoreControl(
   popover.addEventListener(
     "beforetoggle",
     (event) => {
-      if ((event as ToggleEvent).newState === "open") placeUnder(button.getBoundingClientRect(), popover);
+      if ((event as ToggleEvent).newState === "open") placeUnder(anchorOf(button), popover);
     },
     { signal },
   );
@@ -57,7 +57,7 @@ export function mountRestoreControl(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      nudgeIntoWindow(popover, button.getBoundingClientRect().top);
+      keepInside(popover, anchorOf(button));
       cancel.focus();
     },
     { signal },

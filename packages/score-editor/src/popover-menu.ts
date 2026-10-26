@@ -1,6 +1,60 @@
 // ABOUTME: The menu that opens under a toolbar button or a section band: a native popover of menu items with arrow-key movement between them.
-// ABOUTME: The zoom control, the selection menu and the section menu share it, so a menu opens, places itself, takes focus and closes one way.
+// ABOUTME: The zoom control, the selection and Project menus and the section menu share it, so a popover opens, places itself, takes focus and closes one way.
 import { create } from "./dom";
+
+/** How a floating layer sits under its anchor; a narrow layer spans the window instead of sitting on the anchor's left edge. */
+export interface UnderAnchorOptions {
+  narrow?: boolean;
+  /** The room the caller gives the layer, for a panel that scrolls inside it. */
+  maxHeight?: number;
+}
+
+/** Where a popover hangs: the left edge of its anchor, the line it sits 4px under, and the top the bottom rule needs. */
+export interface PopoverAnchor {
+  readonly left: number;
+  readonly bottom: number;
+  readonly top: number;
+}
+
+/** The anchor an element gives a popover: its box, including the top so a layer can go above it. */
+export function anchorOf(element: HTMLElement): PopoverAnchor {
+  const rect = element.getBoundingClientRect();
+  return { left: rect.left, bottom: rect.bottom, top: rect.top };
+}
+
+/** Puts a popover that is about to open under its anchor, on the anchor's left edge, with no old height limit. */
+export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement, options: UnderAnchorOptions = {}): void {
+  popover.style.maxHeight = options.maxHeight === undefined ? "" : `${options.maxHeight}px`;
+  popover.style.overflowY = "";
+  popover.style.left = options.narrow ? "" : `${anchor.left}px`;
+  popover.style.top = `${anchor.bottom + 4}px`;
+}
+
+/**
+ * Moves an open popover inside the window, 8px from its edges. It is nudged left when it runs off to the right, unless it
+ * is narrow and spans the window. When its bottom runs off, it goes above its anchor when it fits there; otherwise it
+ * starts 8px from the top and scrolls inside the room left. A caller's `maxHeight` stays the cap.
+ */
+export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options: UnderAnchorOptions = {}): void {
+  const view = popover.ownerDocument.defaultView;
+  if (!view) return;
+  const rect = popover.getBoundingClientRect();
+  if (!options.narrow) {
+    const overflow = rect.right - (view.innerWidth - 8);
+    if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
+  }
+  const below = rect.bottom - (view.innerHeight - 8);
+  if (below <= 0) return;
+  const above = anchor.top - 4 - rect.height;
+  if (above >= 8) {
+    popover.style.top = `${above}px`;
+    return;
+  }
+  popover.style.top = "8px";
+  const room = view.innerHeight - 16;
+  popover.style.maxHeight = `${Math.max(1, Math.min(options.maxHeight ?? room, room))}px`;
+  popover.style.overflowY = "auto";
+}
 
 export interface PopoverMenu {
   readonly element: HTMLElement;
@@ -10,48 +64,12 @@ export interface PopoverMenu {
   rule(): void;
 }
 
-/** Where a popover hangs: the left edge of what opens it, and the line it sits 4px under (a button's box, or a band's). */
-export interface PopoverAnchor {
-  readonly left: number;
-  readonly bottom: number;
-}
-
-/** Puts a popover that is about to open under its anchor, on the anchor's left edge, with no old height limit. */
-export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement): void {
-  popover.style.maxHeight = "";
-  popover.style.overflowY = "";
-  popover.style.left = `${anchor.left}px`;
-  popover.style.top = `${anchor.bottom + 4}px`;
-}
-
-/**
- * Moves an open popover inside the window, 8px from its edges. It is nudged left when it runs off to the right. When its
- * bottom runs off, it goes above `anchorTop` when it fits there; otherwise it starts 8px from the top and scrolls.
- */
-export function nudgeIntoWindow(popover: HTMLElement, anchorTop?: number): void {
-  const view = popover.ownerDocument.defaultView;
-  if (!view) return;
-  const rect = popover.getBoundingClientRect();
-  const overflow = rect.right - (view.innerWidth - 8);
-  if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
-  const below = rect.bottom - (view.innerHeight - 8);
-  if (below <= 0) return;
-  const above = anchorTop === undefined ? undefined : anchorTop - 4 - rect.height;
-  if (above !== undefined && above >= 8) {
-    popover.style.top = `${above}px`;
-    return;
-  }
-  popover.style.top = "8px";
-  popover.style.maxHeight = `${view.innerHeight - 16}px`;
-  popover.style.overflowY = "auto";
-}
-
 export interface PopoverMenuOptions {
-  /** The item that takes the focus when the menu opens; the first item when this gives none. */
+  /** The item that takes the focus when the menu opens; the first shown item when this gives none. */
   initialFocus?(items: ReadonlyArray<HTMLButtonElement>): HTMLElement | undefined;
   /**
-   * Where the menu hangs, when that is not the button's own box: its left edge, and the line it sits 4px under. A button
-   * that is wider than the part of it in view, such as a band, says where its visible start is.
+   * Where the menu hangs, when that is not the button's own box: its left edge, the line it sits 4px under, and its top.
+   * A button that is wider than the part of it in view, such as a band, says where its visible start is.
    */
   anchor?(): PopoverAnchor;
 }
@@ -60,16 +78,16 @@ export interface PopoverMenuOptions {
  * Places an open popover under `anchor` and inside the window. The menu and the section form hang from the same point,
  * so they place themselves the same way.
  */
-export function placePopover(element: HTMLElement, anchor: PopoverAnchor, anchorTop?: number): void {
-  placeUnder(anchor, element);
-  nudgeIntoWindow(element, anchorTop);
+export function placePopover(popover: HTMLElement, anchor: PopoverAnchor, options: UnderAnchorOptions = {}): void {
+  placeUnder(anchor, popover, options);
+  keepInside(popover, anchor, options);
 }
 
 /**
  * Makes the menu that `button` opens, as the last child of `root`. The menu is a native popover, so it stacks above a
  * host's full-screen layer, and it sits under the button, moved left or above it when it would run off the window. The
- * first item, or the one `initialFocus` names, takes the focus when it opens, and Up, Down, Home and End move between
- * the items. Everything it adds is removed with `root`.
+ * first shown item, or the one `initialFocus` names, takes the focus when it opens, and Up, Down, Home and End move
+ * between the items. Everything it adds is removed with `root`.
  */
 export function mountPopoverMenu(
   root: HTMLElement,
@@ -86,12 +104,13 @@ export function mountPopoverMenu(
   button.setAttribute("aria-expanded", "false");
   button.popoverTargetElement = menu;
   button.popoverTargetAction = "toggle";
+  const anchor = (): PopoverAnchor => options.anchor?.() ?? anchorOf(button);
 
   menu.addEventListener(
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      placeUnder(options.anchor?.() ?? button.getBoundingClientRect(), menu);
+      placeUnder(anchor(), menu);
     },
     { signal },
   );
@@ -101,8 +120,8 @@ export function mountPopoverMenu(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      nudgeIntoWindow(menu, button.getBoundingClientRect().top);
-      (options.initialFocus?.(items) ?? items[0])?.focus();
+      keepInside(menu, anchor());
+      (options.initialFocus?.(items) ?? items.find((item) => !item.hidden))?.focus();
     },
     { signal },
   );
@@ -110,16 +129,18 @@ export function mountPopoverMenu(
     "keydown",
     (event) => {
       if (!(event.target instanceof HTMLButtonElement)) return;
-      const at = items.indexOf(event.target);
-      if (at < 0) return;
-      let next = -1;
-      if (event.key === "ArrowDown") next = (at + 1) % items.length;
-      else if (event.key === "ArrowUp") next = (at - 1 + items.length) % items.length;
-      else if (event.key === "Home") next = 0;
-      else if (event.key === "End") next = items.length - 1;
-      if (next < 0) return;
+      if (!items.includes(event.target)) return;
+      // An item that is left out (hidden) is not in the way: the keys go to the next one that is shown.
+      const shown = items.filter((item) => !item.hidden);
+      const here = shown.indexOf(event.target);
+      let next: HTMLButtonElement | undefined;
+      if (event.key === "ArrowDown") next = shown[(here + 1) % shown.length];
+      else if (event.key === "ArrowUp") next = shown[(here - 1 + shown.length) % shown.length];
+      else if (event.key === "Home") next = shown[0];
+      else if (event.key === "End") next = shown.at(-1);
+      if (next === undefined) return;
       event.preventDefault();
-      items[next]?.focus();
+      next.focus();
     },
     { signal },
   );

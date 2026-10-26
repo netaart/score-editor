@@ -290,10 +290,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
         updateForm();
         element.showPopover();
         const band = draw.bands.get(section);
-        if (band) {
-          const place = anchorOf(band);
-          placePopover(element, place, place.top);
-        }
+        if (band) placePopover(element, anchorOf(band));
         const focus = how === "start" ? bar.input : name.input;
         focus.focus();
         focus.select();

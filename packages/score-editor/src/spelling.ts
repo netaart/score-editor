@@ -2,7 +2,7 @@
 // ABOUTME: transposeChord respells chord roots and basses; the song2 writer respells notes from their MIDI.
 import type { DialectConstraints } from "./types";
 
-interface KeyParts {
+export interface KeyParts {
   readonly letter: string;
   readonly accidental: number;
   readonly minor: boolean;
@@ -51,7 +51,7 @@ function accidentalOf(mark: string): number {
   return ACCIDENTAL_SEMITONES[mark] ?? 0;
 }
 
-function parseKey(key: string): KeyParts | null {
+export function parseKey(key: string): KeyParts | null {
   const match = /^([A-G])(bb|b|##|#)?(m)?$/.exec(key);
   if (match === null) return null;
   const letter = match[1] as string;
