@@ -96,7 +96,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     const keeper = options.draftKeeper;
     if (keeper !== undefined && keeper.status !== "destroyed") {
       if (restore === null) {
-        restore = mountRestoreControl(row, session, keeper, (words) => live.say(words), spacer);
+        // Keep the handoff control after Restore when the store is added after mount; both sit before the spacer.
+        const handoff = row.querySelector(".sce-part-handoff");
+        restore = mountRestoreControl(row, session, keeper, (words) => live.say(words), handoff ?? spacer);
       }
     } else if (restore !== null) {
       restore.destroy();
