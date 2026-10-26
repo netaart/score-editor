@@ -93,11 +93,11 @@ export interface Messages {
   sectionFormCovers(firstBar: number, lastBar: number): string;
   /** Said under the bar field while the bar typed is the first bar of a section, which the command renames and does not split. */
   sectionFormRenames(name: string | null, bar: number): string;
+  /** Said instead of the opened section's line while the typed bar lies inside another section, which the command splits there. */
+  sectionFormBarCovers(name: string | null, bar: number, firstBar: number, lastBar: number): string;
   sectionFormCancel: string;
   sectionConfirmName: string;
   sectionConfirmStart: string;
-  /** The prompt for a bar that was not typed: the one thing the form says itself, since every other refusal is a command's. */
-  sectionFormBarMissing: string;
   /** What a live region says once a section command was taken. */
   sectionDeleted(name: string | null): string;
   sectionDuplicated(name: string | null): string;
@@ -200,10 +200,13 @@ const en: Messages = {
     name === null
       ? `Bar ${bar} starts the unnamed section, so this names it.`
       : `Bar ${bar} starts “${name}”, so this renames it.`,
+  sectionFormBarCovers: (name, bar, first, last) =>
+    name === null
+      ? `Bar ${bar} is in the unnamed section, which covers bars ${first} to ${last}, so this splits it.`
+      : `Bar ${bar} is in “${name}”, which covers bars ${first} to ${last}, so this splits it.`,
   sectionFormCancel: "Cancel",
   sectionConfirmName: "Name",
   sectionConfirmStart: "Start section",
-  sectionFormBarMissing: "Enter the bar where the section starts.",
   sectionDeleted: (name) => (name === null ? "Deleted the unnamed section" : `Deleted section “${name}”`),
   sectionDuplicated: (name) => (name === null ? "Duplicated the unnamed section" : `Duplicated section “${name}”`),
   sectionMoved: (name, direction) =>
@@ -300,10 +303,13 @@ const zh: Messages = {
     name === null
       ? `第 ${bar} 小节是未命名段落的开头，所以这会给它命名。`
       : `第 ${bar} 小节是段落“${name}”的开头，所以这会重命名它。`,
+  sectionFormBarCovers: (name, bar, first, last) =>
+    name === null
+      ? `第 ${bar} 小节在未命名段落中（第 ${first} 到 ${last} 小节），所以这会把它分成两段。`
+      : `第 ${bar} 小节在段落“${name}”中（第 ${first} 到 ${last} 小节），所以这会把它分成两段。`,
   sectionFormCancel: "取消",
   sectionConfirmName: "命名",
   sectionConfirmStart: "另起一段",
-  sectionFormBarMissing: "请填写新段落从第几小节开始。",
   sectionDeleted: (name) => (name === null ? "已删除未命名的段落" : `已删除段落“${name}”`),
   sectionDuplicated: (name) => (name === null ? "已复制未命名的段落" : `已复制段落“${name}”`),
   sectionMoved: (name, direction) =>

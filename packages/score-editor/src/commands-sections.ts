@@ -354,6 +354,8 @@ function renameSection(score: Score, index: number, name: string): ScoreCommandR
 
 function nameSection(score: Score, bar: number, name: string): ScoreCommandResult {
   if (!isIndex(bar) || bar >= score.bars.length) {
+    // A bar that is not a finite number has no number to show: saying "NaN" would present it as a bar.
+    if (!Number.isFinite(bar)) return commandRefusal("bar-out-of-range", {});
     return commandRefusal("bar-out-of-range", { bar: bar + 1 }, { bar: bar + 1 });
   }
   const at: DiagnosticAt = { bar: bar + 1 };

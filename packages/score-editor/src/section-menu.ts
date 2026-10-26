@@ -7,8 +7,8 @@ import { type Diagnostic, formatDiagnostic } from "./diagnostics";
 import { create } from "./dom";
 import type { Messages } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
-import { mountPopoverMenu, type PopoverMenu } from "./popover-menu";
-import type { Score } from "./score";
+import { mountPopoverMenu, type PopoverMenu, placePopover } from "./popover-menu";
+import type { Score, Section } from "./score";
 import { type SectionAction, type SectionActionName, sectionActions } from "./section-actions";
 import type { EditingSession } from "./session";
 import type { AxisPartOptions } from "./types";
@@ -55,7 +55,7 @@ interface NameForm {
 type FormKind = "rename" | "name" | "start";
 
 /** A section's index among the bands, for the arrow keys: the indices of the sections that have a band, in order. */
-function sorted(bands: ReadonlyMap<number, unknown>): number[] {
+function bandIndices(bands: ReadonlyMap<number, unknown>): number[] {
   return [...bands.keys()].sort((a, b) => a - b);
 }
 
@@ -71,7 +71,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
   let live: LiveRegion | null = null;
   let say: ((diagnostics: ReadonlyArray<Diagnostic>) => void) | null = null;
   let pending: Pending | null = null;
-  let shown: boolean | null = null;
+  let lastEditable: boolean | null = null;
 
   let drawing: Drawing | null = null;
 
@@ -84,7 +84,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     const wanted = pending;
     pending = null;
     if (!wanted || !drawing) return;
-    const indices = sorted(drawing.buttons);
+    const indices = bandIndices(drawing.buttons);
     const target = wanted.find(drawing.score);
     const index = indices.find((found) => found >= target) ?? indices[indices.length - 1];
     if (index === undefined) return;
@@ -94,18 +94,48 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     if (wanted.reveal && first) revealTick(session, first.start);
   }
 
-  /** Runs `command`, then says `words` and moves the focus. A refusal changes nothing and is told the way a refused key is. */
-  function run(command: ScoreCommand, next: Pending, words: string): boolean {
+  /** Dispatches `command` with the focus it should leave, or hands its refusal to `onRefused` and keeps nothing pending. */
+  function dispatch(
+    command: ScoreCommand,
+    next: Pending,
+    onRefused: (diagnostics: ReadonlyArray<Diagnostic>) => void,
+  ): boolean {
     pending = next;
     const result = session.dispatch(command);
     if (!result.ok) {
       pending = null;
-      say?.(result.diagnostics);
+      onRefused(result.diagnostics);
       return false;
     }
+    return true;
+  }
+
+  /** Runs `command`, then says `words` and moves the focus. A refusal changes nothing and is told the way a refused key is. */
+  function run(command: ScoreCommand, next: Pending, words: string): boolean {
+    if (!dispatch(command, next, (diagnostics) => say?.(diagnostics))) return false;
     speak(words);
     settle();
     return true;
+  }
+
+  /** The bar typed in the form, counted from 0 as the commands count it; an empty field is no bar at all. */
+  function typedBar(input: HTMLInputElement): number {
+    const typed = input.value.trim();
+    return typed === "" ? Number.NaN : Number(typed) - 1;
+  }
+
+  /** The section that holds a bar, and whether that bar starts it. `null` when the bar is no bar of this score. */
+  function sectionAt(
+    score: Score,
+    bar: number,
+  ): { readonly section: Section; readonly index: number; readonly starts: boolean } | null {
+    if (!Number.isInteger(bar) || bar < 0 || bar >= score.bars.length) return null;
+    const index = score.sections.findIndex(
+      (each) => each.barCount > 0 && bar >= each.firstBar && bar < each.firstBar + each.barCount,
+    );
+    const section = score.sections[index];
+    if (index < 0 || section === undefined) return null;
+    return { section, index, starts: section.firstBar === bar };
   }
 
   function nameFormFor(draw: Omit<Drawing, "form">): NameForm {
@@ -157,44 +187,50 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
       error.textContent = "";
       for (const each of [bar.input, name.input]) each.removeAttribute("aria-invalid");
     }
-    /** The section that starts at the bar typed, for which a command renames and does not split; the line says so before the form is sent. */
-    function showRenames(): void {
-      const typed = bar.input.value.trim();
-      const wanted = typed === "" ? Number.NaN : Number(typed);
-      const hit = Number.isInteger(wanted)
-        ? score.sections.find((each) => each.barCount > 0 && each.firstBar === wanted - 1)
-        : undefined;
-      renames.hidden = current?.how !== "start" || hit === undefined;
-      renames.textContent = renames.hidden || hit === undefined ? "" : t.sectionFormRenames(hit.name, wanted);
-      // A description and not an id, since ids come from a counter that two editors on a page would share.
-      if (current?.how !== "start") bar.input.removeAttribute("aria-description");
-      else
-        bar.input.setAttribute("aria-description", [covers.textContent, renames.textContent].filter(Boolean).join(" "));
+
+    /** The context line, the hint under the bar and the confirm label for the form's current kind and typed bar. */
+    function updateForm(): void {
+      if (!current) return;
+      const { section: opened, how } = current;
+      const found = score.sections[opened];
+      if (!found) return;
+      let context = t.sectionFormCovers(found.firstBar + 1, found.firstBar + found.barCount);
+      let hint = "";
+      let confirmLabel =
+        how === "rename" ? t.sectionRename : how === "name" ? t.sectionConfirmName : t.sectionConfirmStart;
+      if (how === "start") {
+        const at = typedBar(bar.input);
+        const target = sectionAt(score, at);
+        if (target?.starts) {
+          hint = t.sectionFormRenames(target.section.name, at + 1);
+          confirmLabel = target.section.name === null ? t.sectionConfirmName : t.sectionRename;
+        } else if (target && target.index !== opened) {
+          context = t.sectionFormBarCovers(
+            target.section.name,
+            at + 1,
+            target.section.firstBar + 1,
+            target.section.firstBar + target.section.barCount,
+          );
+        }
+        // A description and not an id, since ids come from a counter that two editors on a page would share.
+        bar.input.setAttribute("aria-description", [context, hint].filter(Boolean).join(" "));
+      } else bar.input.removeAttribute("aria-description");
+      covers.textContent = context;
+      renames.textContent = hint;
+      renames.hidden = hint === "";
+      confirm.textContent = confirmLabel;
     }
     bar.input.addEventListener("input", clearError, { signal });
-    bar.input.addEventListener("input", showRenames, { signal });
+    bar.input.addEventListener("input", updateForm, { signal });
     name.input.addEventListener("input", clearError, { signal });
     cancel.addEventListener("click", () => element.hidePopover(), { signal });
-
-    element.addEventListener(
-      "beforetoggle",
-      (event) => {
-        if ((event as ToggleEvent).newState !== "open" || !current) return;
-        const band = draw.bands.get(current.section);
-        if (!band) return;
-        const place = anchorOf(band);
-        element.style.left = `${place.left}px`;
-        element.style.top = `${place.bottom + 4}px`;
-      },
-      { signal },
-    );
 
     form.addEventListener(
       "submit",
       (event) => {
         event.preventDefault();
         if (!current) return;
-        const { section, how } = current;
+        const { section: opened, how } = current;
         const typed = name.input.value;
         const language = session.view.language;
         const refused = (diagnostics: ReadonlyArray<Diagnostic>, input: HTMLInputElement): void => {
@@ -203,33 +239,23 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
           options.onRefused?.(diagnostics);
         };
         if (how === "start") {
-          const wanted = Number(bar.input.value.trim());
-          if (bar.input.value.trim() === "" || Number.isNaN(wanted)) {
-            showError(t.sectionFormBarMissing, bar.input);
-            return;
-          }
-          const command: ScoreCommand = { type: "nameSection", bar: wanted - 1, name: typed };
-          pending = { find: (found) => found.sections.findIndex((each) => each.firstBar === wanted - 1), reveal: true };
-          const result = session.dispatch(command);
-          if (!result.ok) {
-            pending = null;
-            const bad = result.diagnostics[0]?.code === "bar-out-of-range" ? bar.input : name.input;
-            refused(result.diagnostics, bad);
-            return;
-          }
+          const at = typedBar(bar.input);
+          const target = sectionAt(score, at);
+          const command: ScoreCommand = { type: "nameSection", bar: at, name: typed };
+          const onRefused = (diagnostics: ReadonlyArray<Diagnostic>): void =>
+            refused(diagnostics, diagnostics[0]?.code === "bar-out-of-range" ? bar.input : name.input);
+          const find = (found: Score) => found.sections.findIndex((each) => each.firstBar === at);
+          if (!dispatch(command, { find, reveal: true }, onRefused)) return;
           closeForm();
-          speak(t.sectionStarted(typed, wanted));
+          if (target?.starts) speak(t.sectionRenamed(target.section.name, typed));
+          else speak(t.sectionStarted(typed, at + 1));
           settle();
           return;
         }
-        const before = score.sections[section]?.name ?? null;
-        pending = { find: () => section, reveal: false };
-        const result = session.dispatch({ type: "renameSection", section, name: typed });
-        if (!result.ok) {
-          pending = null;
-          refused(result.diagnostics, name.input);
-          return;
-        }
+        const before = score.sections[opened]?.name ?? null;
+        const command: ScoreCommand = { type: "renameSection", section: opened, name: typed };
+        const onRefused = (diagnostics: ReadonlyArray<Diagnostic>): void => refused(diagnostics, name.input);
+        if (!dispatch(command, { find: () => opened, reveal: false }, onRefused)) return;
         closeForm();
         speak(t.sectionRenamed(before, typed));
         settle();
@@ -251,11 +277,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
         clearError();
         const title = how === "rename" ? t.sectionRename : how === "name" ? t.sectionNameIt : t.sectionStart;
         element.setAttribute("aria-label", title);
-        confirm.textContent =
-          how === "rename" ? t.sectionRename : how === "name" ? t.sectionConfirmName : t.sectionConfirmStart;
         bar.wrap.hidden = how !== "start";
-        covers.hidden = how !== "start";
-        covers.textContent = t.sectionFormCovers(found.firstBar + 1, found.firstBar + found.barCount);
         name.input.value = how === "rename" ? (found.name ?? "") : "";
         const point = session.insertionPoint;
         // A bar offered by default is inside this section and does not start it, since a bar that starts a section renames it:
@@ -265,16 +287,10 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
         const inside = at > found.firstBar && at < found.firstBar + found.barCount;
         const start = inside ? at + 1 : second;
         bar.input.value = start === null ? "" : String(start);
-        showRenames();
+        updateForm();
         element.showPopover();
-        const view = doc.defaultView;
-        if (view) {
-          const box = element.getBoundingClientRect();
-          const across = box.right - (view.innerWidth - 8);
-          if (across > 0) element.style.left = `${Math.max(8, box.left - across)}px`;
-          const down = box.bottom - (view.innerHeight - 8);
-          if (down > 0) element.style.top = `${Math.max(8, box.top - down)}px`;
-        }
+        const band = draw.bands.get(section);
+        if (band) placePopover(element, anchorOf(band));
         const focus = how === "start" ? bar.input : name.input;
         focus.focus();
         focus.select();
@@ -405,7 +421,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
       "keydown",
       (event) => {
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-        const order = sorted(draw.buttons);
+        const order = bandIndices(draw.buttons);
         const at = order.indexOf(index);
         let to: number | undefined;
         if (event.key === "ArrowLeft") to = order[at - 1];
@@ -427,7 +443,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     const point = session.insertionPoint;
     const at = point === null ? 0 : barIndexAt(score.bars, point.tick);
     const index = score.sections.findIndex((found) => at >= found.firstBar && at < found.firstBar + found.barCount);
-    const order = sorted(buttons);
+    const order = bandIndices(buttons);
     const chosen = buttons.has(index) ? index : order[0];
     if (chosen === undefined) return;
     const menu = menus.get(chosen);
@@ -482,7 +498,7 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     },
     begin(canvas, score, t) {
       drawing?.abort.abort();
-      shown = null;
+      lastEditable = null;
       const doc = canvas.ownerDocument;
       const container = create(doc, "div", "sce-section-menus", canvas);
       const base = {
@@ -501,8 +517,8 @@ export function createSectionMenus(session: EditingSession, options: AxisPartOpt
     refresh() {
       if (!drawing || !root) return;
       const editable = session.view.editable;
-      if (editable !== shown) {
-        shown = editable;
+      if (editable !== lastEditable) {
+        lastEditable = editable;
         root.setAttribute("data-editable", String(editable));
         for (const button of drawing.buttons.values()) button.hidden = !editable;
         if (!editable) closeEverything();
