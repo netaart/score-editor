@@ -159,14 +159,31 @@ function exercisePlaced(
     for (const note of input.notes) {
       if (note.voice !== span.voice) continue;
       if (note.start < span.end && note.start + note.duration > span.start) {
-        affected.add(note.id);
-        touchedBars.add(`${note.voice}:${note.bar}`);
+        // A removed or shortened note carries its whole tie chain with it, and every bar of that chain is touched.
+        for (const member of chainAround(input, note.id)) {
+          affected.add(member.id);
+          touchedBars.add(`${member.voice}:${member.bar}`);
+        }
       }
     }
   }
 
   const before = splitBars(text);
   const after = splitBars(result.text);
+  // One Z, Z2, Z3 or Z4 writes several bars; a rewrite of one bar rewrites the whole run, so a touched bar
+  // touches every bar that run carries.
+  const wholeRestRuns: string[][] = [];
+  for (const [key, piece] of before.pieces) {
+    const run = /^Z([234])$/.exec(piece.trim());
+    if (run === null) continue;
+    const [runVoice = "", barText = ""] = key.split(":");
+    const first = Number(barText);
+    wholeRestRuns.push(Array.from({ length: Number(run[1]) }, (_item, offset) => `${runVoice}:${first + offset}`));
+  }
+  for (const run of wholeRestRuns) {
+    if (!run.some((key) => touchedBars.has(key))) continue;
+    for (const key of run) touchedBars.add(key);
+  }
   for (const [key, piece] of before.pieces) {
     if (touchedBars.has(key)) continue;
     expect(after.pieces.get(key), `${label}: untouched bar ${key}`).toBe(piece);
@@ -211,48 +228,131 @@ function exercisePlaced(
   }
 }
 
-/** One placing command per sample, with a command that fits the sample's grid and end. */
+/** One spread target of one voice, with its whole tie-chain span. */
+function targetOf(score: Score, id: string): { note: ScoreNote; start: number; end: number; midi: number } | null {
+  const note = score.notes.find((candidate) => candidate.id === id);
+  if (note === undefined || note.midi === null) return null;
+  const chain = chainAround(score, note.id);
+  const first = chain[0] as ScoreNote;
+  const last = chain[chain.length - 1] as ScoreNote;
+  return { note, start: first.start, end: last.start + last.duration, midi: first.midi as number };
+}
+
+/** Several targets for every placing command on one sample, with a success in every voice and a near-end refusal. */
 function exerciseSample(file: string): void {
   const text = readFileSync(new URL(`samples/${file}`, directory), "utf8");
   const input = parse(text);
   const grid = gridFor(input);
   if (grid === null) return;
-  const first = pitched(input, input.voices[0] as string)[0];
-  if (first === undefined) return;
-  const span = chainAround(input, first.id);
-  const start = (span[0] as ScoreNote).start;
-  const end = (span[span.length - 1] as ScoreNote).start + (span[span.length - 1] as ScoreNote).duration;
-  const midi = first.midi as number;
   const step = grid.step;
+  const last = input.bars[input.bars.length - 1];
+  if (last === undefined) return;
+  const scoreEnd = last.start + last.length;
+  const voices = input.voices.filter((voice) => pitched(input, voice).length > 0);
+  if (voices.length === 0) return;
 
-  exercisePlaced(
-    `${file}: add`,
-    text,
-    add(first.voice, 0, midi, grid.value),
-    [{ voice: first.voice, start: 0, end: step, midi }],
-    step,
-  );
-  exercisePlaced(
-    `${file}: duplicate`,
-    text,
-    duplicate([first.id], grid.value),
+  const firstIds = voices.map((voice) => (pitched(input, voice)[0] as ScoreNote).id);
+  const allPitched = input.notes.filter((note) => note.midi !== null).sort((left, right) => left.start - right.start);
+  const middleId = allPitched[Math.floor(allPitched.length / 2)]?.id;
+  const lastId = allPitched[allPitched.length - 1]?.id;
+  const ids = [...new Set([...firstIds, middleId, lastId].filter((id): id is string => id !== undefined))];
+
+  const sourceOf = (voice: string) => {
+    const source = pitched(input, voice)[0] as ScoreNote;
+    const chain = chainAround(input, source.id);
+    const first = chain[0] as ScoreNote;
+    const lastOf = chain[chain.length - 1] as ScoreNote;
+    return {
+      note: source,
+      voice,
+      start: first.start,
+      duration: lastOf.start + lastOf.duration - first.start,
+      midi: first.midi as number,
+    };
+  };
+
+  for (const [name, commandOf] of [
     [
-      {
-        voice: first.voice,
-        start: snapped(start + Math.max(step, snapped(end, step) - snapped(start, step)), step),
-        end: snapped(start + Math.max(step, snapped(end, step) - snapped(start, step)), step) + (end - start),
-        midi,
+      "add",
+      (voice: string, target: { start: number; midi: number }) => {
+        const start = snapped(target.start, step);
+        return {
+          command: add(voice, target.start, target.midi, grid.value),
+          expected: [{ voice, start, end: start + step, midi: target.midi }],
+        };
       },
     ],
-    step,
-  );
-  exercisePlaced(
-    `${file}: paste`,
-    text,
-    paste([{ voice: first.voice, start, duration: end - start, midi }], 0, grid.value),
-    [{ voice: first.voice, start: 0, end: snapped(end - start, step) + 0, midi }],
-    step,
-  );
+    [
+      "paste",
+      (voice: string, target: { start: number; midi: number }) => {
+        const source = sourceOf(voice);
+        const start = snapped(target.start, step);
+        const end = Math.max(start + step, snapped(target.start + source.duration, step));
+        return {
+          command: paste([source], target.start, grid.value),
+          expected: [{ voice, start, end, midi: source.midi }],
+        };
+      },
+    ],
+    [
+      "duplicate",
+      (voice: string, target: { note: ScoreNote; start: number; end: number; midi: number }) => {
+        const offset = Math.max(step, snapped(target.end, step) - snapped(target.start, step));
+        const start = snapped(target.start + offset, step);
+        const end = Math.max(start + step, snapped(target.end + offset, step));
+        return {
+          command: duplicate([target.note.id], grid.value),
+          expected: [{ voice, start, end, midi: target.midi }],
+        };
+      },
+    ],
+    [
+      "copy",
+      (voice: string, target: { note: ScoreNote; start: number; end: number; midi: number }) => {
+        const start = snapped(target.start + step, step);
+        const end = start + (target.end - target.start);
+        return {
+          command: copy([target.note.id], step, 1, grid.value),
+          expected: [{ voice, start, end, midi: target.midi + 1 }],
+        };
+      },
+    ],
+  ] as const) {
+    const succeeded = new Set<string>();
+    let tried = 0;
+    for (const id of ids) {
+      const target = targetOf(input, id);
+      if (target === null) continue;
+      const voice = target.note.voice;
+      const { command, expected } = commandOf(voice, target);
+      tried += 1;
+      const span = expected[0] as { voice: string; start: number; end: number; midi: number };
+      if (span.end > scoreEnd) {
+        expectPlaceRefused(`${file}: ${name} near the end`, text, command, "note-past-end");
+        continue;
+      }
+      exercisePlaced(`${file}: ${name} ${span.start}`, text, command, expected, step);
+      succeeded.add(voice);
+    }
+    expect(tried, `${file}: ${name} tried several targets`).toBeGreaterThan(1);
+    expect([...succeeded].sort(), `${file}: ${name} succeeded in every voice`).toEqual([...voices].sort());
+
+    // A target at the very end is a refusal for add, paste and copy, leaving the bytes unchanged. Duplicate's
+    // near-end target is the last note in the loop above; it refuses when its copy would run past the end.
+    if (name !== "duplicate") {
+      const first = sourceOf(voices[0] as string);
+      expectPlaceRefused(
+        `${file}: ${name} at the end`,
+        text,
+        name === "add"
+          ? add(first.voice, scoreEnd, first.midi, grid.value)
+          : name === "paste"
+            ? paste([first], scoreEnd, grid.value)
+            : copy([first.note.id], scoreEnd, 0, grid.value),
+        "note-past-end",
+      );
+    }
+  }
 }
 
 describe("placing on every sample: untouched bars, one note a time, the target reached", () => {
