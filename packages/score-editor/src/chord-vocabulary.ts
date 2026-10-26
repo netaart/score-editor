@@ -12,7 +12,7 @@ export interface ChordLetter {
 export interface ChordChoices {
   /** The letters the vocabulary has roots on, in the order C D E F G A B. */
   readonly letters: ReadonlyArray<ChordLetter>;
-  /** The vocabulary's qualities, in its order. The empty string is a major triad. */
+  /** The qualities the grammar can write with every offered root, in the vocabulary's order. The empty string is a major triad. */
   readonly qualities: ReadonlyArray<string>;
   /** Whether a bass note may follow a slash. */
   readonly slashBass: boolean;
@@ -20,10 +20,29 @@ export interface ChordChoices {
 
 const LETTER_ORDER = ["C", "D", "E", "F", "G", "A", "B"];
 const SPELLING_ORDER = ["bb", "b", "", "#", "##"];
+const ROOT_SPELLINGS = new Set(
+  LETTER_ORDER.flatMap((letter) => SPELLING_ORDER.map((spelling) => `${letter}${spelling}`)),
+);
+
+/** The letter a root is written on: its first character. */
+export function rootLetter(root: string): string {
+  return root.slice(0, 1);
+}
+
+/** Whether `root` is a letter A-G with one of the spellings `ChordVocabulary` documents. */
+export function isRootSpelling(root: string): boolean {
+  return ROOT_SPELLINGS.has(root);
+}
+
+/** The chord name a root, a quality and an optional bass make. */
+export function joinChordName(root: string, quality: string, bass: string | null): string {
+  return `${root}${quality}${bass === null ? "" : `/${bass}`}`;
+}
 
 /**
  * What a picker may offer for `vocabulary`. A root that is not a letter A-G with one of the documented spellings
- * (`ChordVocabulary`) has no place in a picker built on letters, so it is left out.
+ * (`ChordVocabulary`) has no place in a picker built on letters, so it is left out. A quality is left out unless every
+ * offered root with it splits back to the same root and quality, so a quality with a slash cannot become a bass.
  */
 export function chordChoices(vocabulary: ChordVocabulary): ChordChoices {
   const letters: ChordLetter[] = [];
@@ -33,7 +52,14 @@ export function chordChoices(vocabulary: ChordVocabulary): ChordChoices {
     );
     if (roots.length > 0) letters.push({ letter, roots });
   }
-  return { letters, qualities: vocabulary.qualities, slashBass: vocabulary.slashBass };
+  const roots = letters.flatMap((found) => found.roots);
+  const qualities = vocabulary.qualities.filter((quality) =>
+    roots.every((root) => {
+      const parts = splitChordName(joinChordName(root, quality, null), vocabulary);
+      return parts !== null && parts.root === root && parts.quality === quality && parts.bass === null;
+    }),
+  );
+  return { letters, qualities, slashBass: vocabulary.slashBass };
 }
 
 /** A chord name taken apart: its root, its quality (the empty string for a major triad) and its bass, if it has one. */
@@ -43,9 +69,9 @@ export interface ChordNameParts {
   readonly bass: string | null;
 }
 
-/** The root and quality that make up all of `text`, preferring the longest root that fits. */
+/** The root and quality that make up all of `text`, preferring the longest root that fits and that the contract allows. */
 function rootAndQuality(text: string, vocabulary: ChordVocabulary): { root: string; quality: string } | null {
-  const roots = [...vocabulary.roots].sort((a, b) => b.length - a.length);
+  const roots = [...vocabulary.roots].filter(isRootSpelling).sort((a, b) => b.length - a.length);
   for (const root of roots) {
     if (!text.startsWith(root)) continue;
     const quality = text.slice(root.length);
@@ -67,5 +93,5 @@ export function splitChordName(name: string, vocabulary: ChordVocabulary): Chord
   if (!vocabulary.slashBass || name.indexOf("/", slash + 1) >= 0) return null;
   const bass = name.slice(slash + 1);
   const found = rootAndQuality(name.slice(0, slash), vocabulary);
-  return found && vocabulary.roots.includes(bass) ? { ...found, bass } : null;
+  return found && vocabulary.roots.includes(bass) && isRootSpelling(bass) ? { ...found, bass } : null;
 }

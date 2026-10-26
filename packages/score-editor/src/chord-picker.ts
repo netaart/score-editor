@@ -3,7 +3,7 @@
 import type { BarPosition } from "./arrangement";
 import type { ChordSlot } from "./chord-edit";
 import { type ChordMessages, chordMessagesFor } from "./chord-text";
-import { type ChordChoices, splitChordName } from "./chord-vocabulary";
+import { type ChordChoices, joinChordName, rootLetter, splitChordName } from "./chord-vocabulary";
 import { create } from "./dom";
 import type { ChordVocabulary, Language } from "./types";
 
@@ -114,8 +114,6 @@ function radioGroup(
   };
 }
 
-const letterOf = (root: string): string => root.slice(0, 1);
-
 /** The plain letter if the vocabulary has it, else the first spelling it has on that letter. */
 function rootOnLetter(choices: ChordChoices, letter: string): string {
   const roots = choices.letters.find((found) => found.letter === letter)?.roots ?? [];
@@ -141,7 +139,7 @@ function startDraft({ slot, choices, vocabulary }: ChordPickerRequest): Draft {
 }
 
 function compose(draft: Draft): string {
-  return `${draft.root}${draft.quality}${draft.bass === null ? "" : `/${draft.bass}`}`;
+  return joinChordName(draft.root, draft.quality, draft.bass);
 }
 
 /**
@@ -196,7 +194,7 @@ export function mountChordPicker(
     };
     const letterItems = choices.letters.map((found) => ({ value: found.letter, text: found.letter }));
     const spellings = (root: string): Item[] =>
-      (choices.letters.find((found) => found.letter === letterOf(root))?.roots ?? []).map((name) => ({
+      (choices.letters.find((found) => found.letter === rootLetter(root))?.roots ?? []).map((name) => ({
         value: name,
         text: name,
       }));
@@ -285,7 +283,7 @@ export function mountChordPicker(
       if (!letters || !accidentals || !types) return;
       // Opening the bass note or choosing a spelling changes the height, so the picker is fitted to the window again.
       const grows = panel.matches(":popover-open");
-      letters.set(letterItems, letterOf(draft.root));
+      letters.set(letterItems, rootLetter(draft.root));
       accidentals.set(spellings(draft.root), draft.root);
       types.set(
         choices.qualities.map((quality) => ({ value: quality, text: `${draft.root}${quality}` })),
@@ -297,7 +295,7 @@ export function mountChordPicker(
         bassBody.hidden = !draft.bassOpen;
         bassLetters.set(
           [{ value: "", text: t.bassNone }, ...letterItems],
-          draft.bass === null ? "" : letterOf(draft.bass),
+          draft.bass === null ? "" : rootLetter(draft.bass),
         );
         bassAccidentals.set(draft.bass === null ? [] : spellings(draft.bass), draft.bass);
         bassAccidentals.element.hidden = draft.bass === null;
