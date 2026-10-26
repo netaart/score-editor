@@ -743,6 +743,23 @@ describe("a project command through the session", () => {
     expect(session.project).toEqual(project);
     expect(session.canUndo).toBe(false);
   });
+
+  it("applies several commands as one step of the history", () => {
+    const session = open();
+    const changes = listen(session);
+
+    const result = session.dispatchAll([
+      { type: "setStyle", style: "jazz" },
+      { type: "setSeed", seed: 3 },
+    ]);
+
+    expect(result).toMatchObject({ ok: true, diagnostics: [] });
+    expect(session.project).toEqual({ ...project, style: "jazz", seed: 3 });
+    expect(changes).toHaveLength(1);
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual(project);
+    expect(session.canUndo).toBe(false);
+  });
 });
 
 describe("replacing the score text", () => {
@@ -1131,5 +1148,86 @@ C16|`;
       { text: "three", phrase: { firstBar: 2, barCount: 1 } },
     ]);
     expect(session.project.lyrics).toBe("one");
+  });
+});
+
+describe("a list of commands dispatched as one step", () => {
+  const THREE_BAR_SCORE = `${HEADER}
+K:C
+V: Vocal
+C16|D16|E16|`;
+  const lines = [
+    { text: "first", phrase: { firstBar: 0, barCount: 1 } },
+    { text: "second", phrase: { firstBar: 1, barCount: 2 } },
+  ];
+
+  function openLines(): EditingSession {
+    return createEditingSession({
+      project: { ...project, score: THREE_BAR_SCORE, lyrics: "first\nsecond", lyricLines: lines },
+      dialects,
+    });
+  }
+
+  it("moves a boundary two lines share as one history step, announced once", () => {
+    const session = openLines();
+    const before = session.project;
+    const changes = listen(session);
+
+    const result = session.dispatchAll([
+      { type: "setLyricLinePhrase", line: 1, phrase: { firstBar: 2, barCount: 1 } },
+      { type: "setLyricLinePhrase", line: 0, phrase: { firstBar: 0, barCount: 2 } },
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(session.project.lyricLines).toEqual([
+      { text: "first", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "second", phrase: { firstBar: 2, barCount: 1 } },
+    ]);
+    expect(changes.map((change) => [change.cause, change.project, change.command])).toEqual([
+      ["dispatch", true, undefined],
+    ]);
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual(before);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("refuses the whole list when a step overlaps, and leaves the project, the history and the listeners alone", () => {
+    const session = openLines();
+    const before = session.project;
+    const changes = listen(session);
+
+    const result = session.dispatchAll([
+      { type: "setLyricLinePhrase", line: 0, phrase: { firstBar: 0, barCount: 2 } },
+      { type: "setLyricLinePhrase", line: 1, phrase: { firstBar: 2, barCount: 1 } },
+    ]);
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["lyric-phrase-overlap"]);
+    expect(session.project).toBe(before);
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("takes an empty list, and a list that leaves the project as it was, without a step", () => {
+    const session = openLines();
+    const changes = listen(session);
+
+    expect(session.dispatchAll([]).ok).toBe(true);
+    expect(
+      session.dispatchAll([{ type: "setLyricLinePhrase", line: 0, phrase: { firstBar: 0, barCount: 1 } }]).ok,
+    ).toBe(true);
+
+    expect(session.canUndo).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("is refused for a project whose model has no dialect", () => {
+    const session = createEditingSession({ project: { ...project, modelId: "other" }, dialects });
+
+    const result = session.dispatchAll([{ type: "setSeed", seed: 3 }]);
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["no-dialect"]);
+    expect(session.canUndo).toBe(false);
   });
 });

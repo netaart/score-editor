@@ -77,7 +77,77 @@ export interface Messages {
   /** Draft keeper notices: the source changed under a draft, and a write or removal did not reach the host store. */
   draftSourceChanged: string;
   draftSaveFailed: string;
+  /** The lyric track: its name, what it says with no lyrics and with none on bars, and the name of the area of lines not on bars. */
+  lyrics: string;
+  noLyrics: string;
+  noLyricsOnBars: string;
+  lyricUnaligned: string;
+  /** The words in a phrase block: syllables over note starts. */
+  lyricCount(syllables: number, starts: number): string;
+  /** The name of a phrase: its place, the two counts in words, whether they are equal, whether it is selected, and its text. */
+  lyricPhraseLabel(info: LyricPhraseInfo): string;
+  lyricUnalignedLabel(line: number, text: string, selected: boolean): string;
+  /** The handles of a phrase's two edges (sliders on the bar lines), the value they read aloud, and the grip of a line not on bars. */
+  lyricStartHandle(line: number, bar: number): string;
+  lyricEndHandle(line: number, bar: number): string;
+  lyricBarValue(bar: number): string;
+  lyricGrip(line: number): string;
+  /** The editor of a line: the names of its box and of its buttons. */
+  lyricTextLabel: string;
+  lyricNewTextLabel: string;
+  lyricEditorLabel(line: number): string;
+  lyricNewLine: string;
+  lyricAdd: string;
+  lyricSplit: string;
+  lyricMerge: string;
+  lyricDelete: string;
+  /** The way to put a line that is not on bars on a bar without dragging: a bar number and the button that places it. */
+  lyricBarField: string;
+  lyricPlace: string;
+  /** What the track tells a person who selects a line, in a sentence its lists are described by. */
+  lyricHint: string;
+  lyricUnalignedHint: string;
+  lyricLegend: string;
+  /** What a live region says after an edit of a line. */
+  lyricMoved(line: number, first: number, last: number): string;
+  lyricPlaced(line: number, bar: number): string;
+  lyricTextSet(line: number): string;
+  lyricAdded(line: number): string;
+  lyricDeleted(line: number): string;
+  lyricSplitDone(line: number): string;
+  lyricMerged(line: number): string;
+  /** What the badge says in place of "Read only" while a draft keeper is still reading the host's store. */
+  draftOpening: string;
+  /** The conflict strip: its name, the sentence that says what happened, and each way out with what it does. */
+  draftConflict: string;
+  draftConflictText: string;
+  draftOverwrite: string;
+  draftOverwriteNote: string;
+  draftLoadTheirs: string;
+  draftLoadTheirsNote: string;
+  /** Restore original: the button, the question it asks and what that costs, the two answers, and what is said once it is done. */
+  restoreOriginal: string;
+  restoreQuestion: string;
+  restoreWarning: string;
+  restoreCancel: string;
+  restoreDone: string;
+  /** Said when the original is back but the stored draft could not be cleared. */
+  restoreNotCleared: string;
 }
+
+/** What a phrase's name says about it; `first` and `last` are 1-based bars. */
+export interface LyricPhraseInfo {
+  readonly line: number;
+  readonly text: string;
+  readonly first: number;
+  readonly last: number;
+  readonly syllables: number;
+  readonly starts: number;
+  readonly equal: boolean;
+  readonly selected: boolean;
+}
+
+const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
 const en: Messages = {
   title: "Arrangement",
@@ -157,6 +227,55 @@ const en: Messages = {
   previewBlocked: "Blocked by the browser. Press Preview again.",
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
+  lyrics: "Lyrics",
+  noLyrics: "No lyrics in this song",
+  noLyricsOnBars: "No lyric line sits on bars yet",
+  lyricUnaligned: "Not aligned",
+  lyricCount: (syllables, starts) => `${syllables} / ${starts}`,
+  lyricPhraseLabel: ({ line, text, first, last, syllables, starts, equal, selected }) =>
+    `Line ${line}, ${first === last ? `bar ${first}` : `bars ${first} to ${last}`}, ${plural(syllables, "syllable", "syllables")} and ${plural(starts, "note start", "note starts")}, ${equal ? "equal" : "they differ"}${selected ? ", selected" : ""}: ${text}`,
+  lyricUnalignedLabel: (line, text, selected) => `Line ${line}, not aligned${selected ? ", selected" : ""}: ${text}`,
+  lyricStartHandle: (line, bar) => `Start of line ${line}, bar ${bar}`,
+  lyricEndHandle: (line, bar) => `End of line ${line}, bar ${bar}`,
+  lyricBarValue: (bar) => `bar ${bar}`,
+  lyricGrip: (line) => `Drag line ${line} onto bars`,
+  lyricTextLabel: "Lyric line text",
+  lyricNewTextLabel: "New lyric line text",
+  lyricEditorLabel: (line) => `Line ${line}`,
+  lyricNewLine: "New line",
+  lyricAdd: "Add",
+  lyricSplit: "Split at cursor",
+  lyricMerge: "Merge with next",
+  lyricDelete: "Delete line",
+  lyricBarField: "Bar number",
+  lyricPlace: "Place on bar",
+  lyricHint:
+    "Select a line to edit its text. The start and end handles of a selected line move it one bar with the Left and Right keys, and as far as they can go with Home and End. Delete removes the line.",
+  lyricUnalignedHint: "Drag a line onto bars, or choose it and type a bar number.",
+  lyricLegend: "syllables / note starts",
+  lyricMoved: (line, first, last) =>
+    `Line ${line} now covers ${first === last ? `bar ${first}` : `bars ${first} to ${last}`}`,
+  lyricPlaced: (line, bar) => `Line ${line} placed on bar ${bar}`,
+  lyricTextSet: (line) => `Line ${line} text changed`,
+  lyricAdded: (line) => `Line ${line} added, not aligned`,
+  lyricDeleted: (line) => `Line ${line} deleted`,
+  lyricSplitDone: (line) => `Line ${line} split into lines ${line} and ${line + 1}`,
+  lyricMerged: (line) => `Lines ${line} and ${line + 1} merged`,
+  draftOpening: "Opening draft…",
+  draftConflict: "Draft conflict",
+  draftConflictText:
+    "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
+  draftOverwrite: "Overwrite with my version",
+  draftOverwriteNote: "The other version is replaced by yours.",
+  draftLoadTheirs: "Load the other version",
+  draftLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
+  restoreOriginal: "Restore original",
+  restoreQuestion: "Go back to the original score?",
+  restoreWarning: "Every change you made is discarded and the saved draft is deleted. You can't undo this.",
+  restoreCancel: "Cancel",
+  restoreDone: "The original score is back",
+  restoreNotCleared:
+    "The original score is back, but the saved draft could not be deleted. The next change tries again.",
 };
 
 const zh: Messages = {
@@ -230,6 +349,53 @@ const zh: Messages = {
   previewBlocked: "浏览器没有允许发声，请再按一次试听",
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
+  lyrics: "歌词",
+  noLyrics: "这首歌还没有歌词",
+  noLyricsOnBars: "还没有歌词行放在小节上",
+  lyricUnaligned: "未对齐",
+  lyricCount: (syllables, starts) => `${syllables} / ${starts}`,
+  lyricPhraseLabel: ({ line, text, first, last, syllables, starts, equal, selected }) =>
+    `第 ${line} 行，${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}，${syllables} 个音节、${starts} 个音符起点，${equal ? "相等" : "不相等"}${selected ? "，已选中" : ""}：${text}`,
+  lyricUnalignedLabel: (line, text, selected) => `第 ${line} 行，未对齐${selected ? "，已选中" : ""}：${text}`,
+  lyricStartHandle: (line, bar) => `第 ${line} 行的起点，第 ${bar} 小节`,
+  lyricEndHandle: (line, bar) => `第 ${line} 行的终点，第 ${bar} 小节`,
+  lyricBarValue: (bar) => `第 ${bar} 小节`,
+  lyricGrip: (line) => `把第 ${line} 行拖到小节上`,
+  lyricTextLabel: "歌词行文字",
+  lyricNewTextLabel: "新歌词行的文字",
+  lyricEditorLabel: (line) => `第 ${line} 行`,
+  lyricNewLine: "新增一行",
+  lyricAdd: "添加",
+  lyricSplit: "在光标处拆开",
+  lyricMerge: "与下一行合并",
+  lyricDelete: "删除这一行",
+  lyricBarField: "小节号",
+  lyricPlace: "放到这一小节",
+  lyricHint:
+    "选中一行即可改它的文字。选中行的起点和终点手柄可以用左、右键按小节移动，用 Home、End 移到能到的最远处。按 Delete 删除这一行。",
+  lyricUnalignedHint: "把一行拖到小节上，或选中它再输入小节号。",
+  lyricLegend: "音节 / 音符起点",
+  lyricMoved: (line, first, last) =>
+    `第 ${line} 行现在占 ${first === last ? `第 ${first} 小节` : `第 ${first} 至 ${last} 小节`}`,
+  lyricPlaced: (line, bar) => `第 ${line} 行已放到第 ${bar} 小节`,
+  lyricTextSet: (line) => `第 ${line} 行的文字已改`,
+  lyricAdded: (line) => `已添加第 ${line} 行，未对齐`,
+  lyricDeleted: (line) => `已删除第 ${line} 行`,
+  lyricSplitDone: (line) => `第 ${line} 行已拆成第 ${line} 行和第 ${line + 1} 行`,
+  lyricMerged: (line) => `第 ${line} 行和第 ${line + 1} 行已合并`,
+  draftOpening: "正在打开草稿…",
+  draftConflict: "草稿冲突",
+  draftConflictText: "这份草稿在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
+  draftOverwrite: "用我的版本覆盖",
+  draftOverwriteNote: "对方的版本会被你的版本替换。",
+  draftLoadTheirs: "载入对方的版本",
+  draftLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
+  restoreOriginal: "恢复原谱",
+  restoreQuestion: "恢复到原来的乐谱？",
+  restoreWarning: "你做过的所有修改都会丢弃，已保存的草稿也会删除，之后无法撤销。",
+  restoreCancel: "取消",
+  restoreDone: "已恢复原谱",
+  restoreNotCleared: "已恢复原谱，但保存的草稿没能删除。下一次改动会再试。",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };

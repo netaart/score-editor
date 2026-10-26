@@ -20,17 +20,21 @@ added; calling it twice is harmless.
 | `mountChordTrack(el, session, options?)` | Each chord at the position the score gives it, or one "no chords" line; while the session is editable, a press places, changes or removes a chord (see editing below). | `AxisPartOptions` |
 | `mountVoiceTrack(el, session, options)` | One voice's piano roll: head, pitch column, grids and notes. | `VoiceTrackOptions` |
 | `mountTextView(el, session)` | The score text in a box with line numbers, a status sentence, and the problems of text that cannot be read. | — |
-| `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only. | — |
+| `mountStaffView(el, session)` | The score drawn on a staff by abcjs, read-only; returns a `StaffViewPart` whose `setPlayPosition` draws the host player's cursor. | — |
 | `mountStaleNotice(el, session)` | One sentence while the text view holds text the project did not take, or nothing. | — |
 | `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
+| `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). | `AxisPartOptions` |
+| `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean }`:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
 switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
-(zoom and Delete) while another view is shown. The toolbar's row wraps when its element is narrower than its controls
+(zoom and Delete) while another view is shown; `draftKeeper` binds the toolbar to a draft keeper (see [drafts.md](drafts.md)), so that it
+offers Restore original while the keeper is ready or in conflict and the session is editable, and its badge says "Opening draft…"
+while the keeper is still opening. The toolbar's row wraps when its element is narrower than its controls
 if it holds the preview control or the switch (the read-only badge and the switch go together to a line of their own, and the
 preview control and its caption take the line after it), or scrolls sideways when it holds neither, so every
 control can still be reached.
@@ -57,18 +61,27 @@ drawing sits in a shadow root of its own inside the part, so the host's CSS for 
 reach it and it adds no rule to the page. It takes the colour of the part's text. The drawing is never narrower than
 240px; in a narrower box the part scrolls inside its own region and not the page. A score that cannot be read is not drawn.
 
+`mountStaffView` returns a `StaffViewPart`: the usual `destroy()` plus `setPlayPosition(seconds | null)`. A host
+player calls it with the time of its own playback, or with null to remove the cursor; the part turns seconds into a
+tick with `tickAtSeconds`, following a tempo change in the score and staying at the end past the last second. The
+cursor is drawn whether or not the session is editable. While the session's preview plays, the same cursor follows
+the player's tick; when it stops, the host's last position is shown again. A press on a drawn note starts the preview
+at that note. The cursor's look and the scroll that keeps it in view are in [DESIGN.md](../../../DESIGN.md#staff-view).
+
 ```ts
 const views = {
   arrangement: document.querySelector<HTMLElement>(".roll")!,
   staff: document.querySelector<HTMLElement>(".staff")!,
   text: document.querySelector<HTMLElement>(".text")!,
 };
+const staff = mountStaffView(views.staff, session); // asks for abcjs now
 const parts = [
   mountViewSwitch(document.querySelector(".views")!, session),
   mountStaleNotice(document.querySelector(".stale")!, session),
   mountTextView(views.text, session),
-  mountStaffView(views.staff, session), // asks for abcjs now
+  staff,
 ];
+staff.setPlayPosition(12.5); // the host player's seconds, or null to take the cursor away
 const show = () => {
   for (const name of VIEW_NAMES) views[name].hidden = name !== session.activeView;
 };
@@ -130,6 +143,27 @@ mountToolbar(document.querySelector(".toolbar")!, session, { hintId: "score-hint
 mountVoiceTrack(document.querySelector(".vocal")!, session, { voice: "Vocal", onRefused });
 
 session.setView({ editable: false }); // every part follows: no control, no selection, no keys
+```
+
+## The lyric track
+
+`mountLyricTrack` is the bottom track of the arrangement in the default editor, and a part like the others: it follows the
+session's zoom, scroll and language, and takes `{ scroller?, onRefused? }`. A phrase block says its counts in words for a
+screen reader ("equal" or "differ"), not only in colour. Lines that are not on bars, or whose phrase no longer fits the
+score, are listed under the lane and counted.
+
+While `session.view.editable` is true the lines can be edited, each action as one command (or one `session.dispatchAll`
+list) and one undo step, and a refusal is said in the part's live region and sent to `onRefused`; the actions, gestures
+and keys are in [DESIGN.md](https://github.com/netaart/score-editor/blob/main/DESIGN.md#lyric-track).
+
+A finger's slide on empty track space scrolls; only a handle or a grip starts a drag, and no long press is needed. A
+host that draws its own lyric view reuses the rules the track uses, with no DOM (see the headless layer: `lyricRows`,
+`lyricBoundaryPlan`, `lyricDropPlan`, `lyricSplitCommand`).
+
+```ts
+import { mountLyricTrack } from "@neta-art/score-editor";
+
+mountLyricTrack(document.querySelector(".lyrics")!, session, { onRefused }); // its own scroll surface, like a voice track
 ```
 
 ## Usage

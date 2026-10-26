@@ -45,9 +45,10 @@ export interface DraftKeeper {
   loadTheirs(): Promise<void>;
   /**
    * Puts the original back and removes whatever draft is stored, even one this keeper believes does not exist. It
-   * resets the history through `replaceProject`: the edits it discards are the whole story of this draft.
+   * resets the history through `replaceProject`: the edits it discards are the whole story of this draft. Resolves true
+   * when the draft is cleared, and false when a conflict or a failure leaves it there, which is reported as for a write.
    */
-  restoreOriginal(): Promise<void>;
+  restoreOriginal(): Promise<boolean>;
   /** Saves at once with the content hash of the current joined lyrics and score as the handoff hash. */
   handoff(): Promise<DraftHandoffResult>;
   /**
@@ -398,20 +399,24 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       setStatus("ready");
     },
     async restoreOriginal() {
-      if (isDestroyed()) return;
+      if (isDestroyed()) return false;
       cancelTimer();
       withoutKeep(() => session.replaceProject(original));
       handoffHash = null;
       // Story 71 clears the draft even when this keeper believes there is none: another window may have written one.
       const entry = await readEntry(key);
-      if (isDestroyed()) return;
+      if (isDestroyed()) return false;
       if (entry === null) {
         setCursor({ kind: "none" });
         setStatus("ready");
-        return;
+        return true;
       }
       setCursor({ kind: "unknown" });
-      if (await removeDraft(entry.version)) setStatus("ready");
+      if (await removeDraft(entry.version)) {
+        setStatus("ready");
+        return true;
+      }
+      return false;
     },
     async handoff() {
       if (isDestroyed()) return "failed";

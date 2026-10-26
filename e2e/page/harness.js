@@ -1,6 +1,7 @@
 // ABOUTME: Page-side half of the mount seam: mounts the built editor, or single view parts on one session, and exposes window.harness.
 // ABOUTME: The host is the bare test page; it builds the dialect registry and fetches the test scores itself.
 
+import { createFakeDraftStore } from "/e2e/page/draft-store.js";
 import { syntheticSong } from "/e2e/page/synthetic.js";
 import { song2Dialect } from "/packages/score-dialect-song2/dist/index.js";
 import {
@@ -9,6 +10,8 @@ import {
   mount,
   mountChordTrack,
   mountCutNotice,
+  mountDraftConflict,
+  mountLyricTrack,
   mountProblemView,
   mountStaffView,
   mountStaleNotice,
@@ -109,6 +112,13 @@ let project = null;
 let vectors = null;
 /** The notices the mounted editor sent to its host, in order. */
 const notices = [];
+/** The host's draft store: what `drafts: true` in the options of `mount` and `update` stands for. */
+const drafts = createFakeDraftStore();
+const withDrafts = (options) => {
+  if (options.drafts === true) return { ...options, drafts };
+  if (options.drafts === false) return { ...options, drafts: undefined };
+  return options;
+};
 
 /**
  * The score text a test asks for: `{ sample }` is a file of the dialect's samples, `{ vector }` the text of a
@@ -139,6 +149,20 @@ const blank = {
   sourceKey: "test-page",
 };
 
+/**
+ * The song2 dialect with tempo changes the model allows but the format cannot write. A host that reads a format with
+ * them hands the editor a `Score` that carries them; this is that host, so the staff cursor can be checked against one.
+ */
+function withTempoChanges(dialect, changes) {
+  return {
+    ...dialect,
+    parse(text) {
+      const result = dialect.parse(text);
+      return result.score ? { ...result, score: { ...result.score, tempoChanges: changes } } : result;
+    },
+  };
+}
+
 /** The view parts of the layout page, by name, each with the function that mounts it on its slot. */
 const LAYOUT_PARTS = {
   // The layout has a slot of its own for the preview control, so the toolbar leaves its own out.
@@ -154,6 +178,29 @@ const LAYOUT_PARTS = {
 };
 
 /**
+ * A draft keeper already in conflict, for the conflict strip's lifetime case: the part reads its status, subscribes, and
+ * takes the two ways out, so the stub answers those and nothing else.
+ */
+function conflictKeeper() {
+  const listeners = new Set();
+  return {
+    status: "conflict",
+    ready: Promise.resolve(),
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    overwrite: () => Promise.resolve(),
+    loadTheirs: () => Promise.resolve(),
+    restoreOriginal: () => Promise.resolve(true),
+    handoff: () => Promise.resolve("unchanged"),
+    destroy() {
+      listeners.clear();
+    },
+  };
+}
+
+/**
  * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for
  * them, and the lists of the parts the older specs walk through do not include them.
  */
@@ -163,9 +210,18 @@ const VIEW_PARTS = {
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+  "draft-conflict": (el, session) => mountDraftConflict(el, session, conflictKeeper()),
 };
 
-const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };
+/**
+ * Parts a test asks for by name that the lists above leave out on purpose: older specs walk those lists and name the
+ * region of every part in them. These have a slot only when a test opens a layout with them.
+ */
+const EXTRA_PARTS = {
+  lyrics: (el, session) => mountLyricTrack(el, session),
+};
+
+const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS, ...EXTRA_PARTS };
 
 /** The parts that draw on the time axis. */
 const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
@@ -176,7 +232,7 @@ const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
  */
 function viewCards(names) {
   return names
-    .filter((name) => name in VIEW_PARTS)
+    .filter((name) => name in VIEW_PARTS || name in EXTRA_PARTS)
     .map(
       (name) => `<div class="layout-card layout-card-wide"><div class="layout-slot" data-slot="${name}"></div></div>`,
     )
@@ -267,6 +323,7 @@ const layout = {
     width,
     top,
     spill,
+    tempoChanges,
   } = {}) {
     if (layout.session) throw new Error("a layout is already open");
     const base = await projectFrom(blank, score, fields);
@@ -306,7 +363,9 @@ const layout = {
     if (scene) SCENES[scene](container, layout.slots);
     layout.session = createEditingSession({
       project: base,
-      dialects: registry(dialect),
+      dialects: tempoChanges
+        ? createDialectRegistry([withTempoChanges(song2Dialect, tempoChanges)])
+        : registry(dialect),
       language,
       ...(editable === undefined ? {} : { editable }),
     });
@@ -328,6 +387,12 @@ const layout = {
     }
     layout.slots[name].closest(".layout-card").style.display = hidden ? "none" : "";
     layout.parts[name] = PART_FACTORIES[name](layout.slots[name], layout.session);
+  },
+  /** Drives the mounted staff part's play position in seconds, or clears it for null. */
+  setPlayPosition(seconds) {
+    const staff = layout.parts.staff;
+    if (!staff || typeof staff.setPlayPosition !== "function") throw new Error("no staff part is mounted");
+    staff.setPlayPosition(seconds);
   },
   /** Shows or hides the box a mounted part stands in, as a host with tabs does. */
   setSlotHidden(name, hidden) {
@@ -429,6 +494,7 @@ window.harness = {
   stage,
   layout,
   notices,
+  drafts,
   host: hostPage,
   shadowRoot: null,
   /** The single-note preview export, called as a host calls it. */
@@ -474,7 +540,7 @@ window.harness = {
       project,
       dialects: registry(dialect),
       notify: (notice) => notices.push(notice),
-      ...options,
+      ...withDrafts(options),
     });
   },
   async update({ score, project: fields, ...options } = {}) {
@@ -482,7 +548,7 @@ window.harness = {
       project = await projectFrom(project, score, fields);
       options.project = project;
     }
-    editor.update(options);
+    editor.update(withDrafts(options));
   },
   destroy() {
     editor.destroy();

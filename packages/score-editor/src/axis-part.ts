@@ -1,4 +1,4 @@
-// ABOUTME: The shared body of the three view parts that draw on the time axis: the ruler, the chord track and a voice track.
+// ABOUTME: The shared body of the view parts that draw on the time axis: the ruler, the chord, voice and lyric tracks.
 // ABOUTME: It owns the part's root, redraws when the reading or the language changes, and leaves zoom and scroll to the axis controller.
 
 import { barLabelStep, type GridRun, gridTicks, MIN_BAR_LINE_PIXELS, MIN_BEAT_LINE_PIXELS } from "./arrangement";
@@ -33,7 +33,7 @@ export interface BuiltAxis {
 
 export interface AxisSpec {
   /** The part's name: its root's class suffix. */
-  readonly kind: "time-ruler" | "chord-track" | "voice-track";
+  readonly kind: "time-ruler" | "chord-track" | "voice-track" | "lyric-track";
   /** The public function that mounts it, named in the error where there is no DOM. */
   readonly who: string;
   /** What the part is called where it is its own focusable scroll surface. */
@@ -50,6 +50,11 @@ export interface AxisSpec {
    * other change of the session, so it must be cheap when nothing it shows has changed.
    */
   refresh?(): void;
+  /**
+   * Ends what `build` set going outside the canvas it made, such as listeners on its elements. It runs before the part builds
+   * again, when the score can no longer be drawn, and when the part is destroyed.
+   */
+  release?(): void;
 }
 
 /** A row of the pinned header: the pinned corner and the timeline that carries the row's items. */
@@ -131,6 +136,7 @@ export function mountAxisPart(
     reading = session.reading;
     language = session.view.language;
     root.lang = language;
+    spec.release?.();
     canvas?.remove();
     delete root.dataset.labelStep;
     canvas = null;
@@ -182,6 +188,7 @@ export function mountAxisPart(
       if (destroyed) return;
       destroyed = true;
       abort.abort();
+      spec.release?.();
       unsubscribe();
       axis.leave();
       root.remove();

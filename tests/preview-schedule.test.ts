@@ -309,6 +309,27 @@ describe("the schedule of a synth preview", () => {
     expect(schedule.length).toBe(0);
   });
 
+  it("counts a tempo change in the middle of the score: after 60 BPM a bar lasts four seconds, not two", () => {
+    // The first bar at 120 takes 2 s. From tick 1024 the tempo is 60, so its four quarter notes last one second each.
+    const score: Score = {
+      ...read(song({ vocal: ["C4D4E4F4|G4A4B4c4|"] })),
+      tempoChanges: [{ at: 1024, tempo: { unit: "1/4", bpm: 60 } }],
+    };
+    const schedule = schedulePreview(score);
+
+    expect(notesOf(schedule.events, "Vocal").map(({ midi, at, length }) => [midi, at, length])).toEqual([
+      [60, 0, 0.5],
+      [62, 0.5, 0.5],
+      [64, 1, 0.5],
+      [65, 1.5, 0.5],
+      [67, 2, 1],
+      [69, 3, 1],
+      [71, 4, 1],
+      [72, 5, 1],
+    ]);
+    expect(schedule.length).toBe(6);
+  });
+
   describe("starting from a tick", () => {
     // Bar 1: C D E F as quarter notes with C over the first two beats and G over the last two; bar 2: a whole-note G under
     // Am. Ticks: a quarter note is 256, so beat 3 of bar 1 is tick 512. At 120 a tick is 1/512 of a second.
