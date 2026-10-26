@@ -1125,6 +1125,7 @@ test.describe("the staff view", () => {
               ? ["Z3|G16|", "A16|B16|c16|d16|"]
               : ["Z4|", "G16|A16|B16|c16|"];
         const rests = ["z16|z16|z16|z16|", "z16|z16|z16|z16|"];
+        const plain = run.map((line) => line.replace(`Z${count}|`, "z16|".repeat(count)));
         await harness.layout.open({
           score: { text: twoVoice(target === 0 ? run : rests, target === 1 ? run : rests) },
           parts: ["staff"],
@@ -1132,7 +1133,14 @@ test.describe("the staff view", () => {
         });
         await expect(drawnNotes(page).first()).toBeVisible();
         const marks = await staffMarks(page);
-        expect(marks.filter((mark) => mark.kind === "rest" && mark.voice === target)).toHaveLength(count);
+        const runRests = marks
+          .filter((mark) => mark.kind === "rest" && mark.voice === target)
+          .sort((a, b) => a.x - b.x);
+        expect(runRests).toHaveLength(count);
+        await expect(
+          staffSlot(page).locator("svg text.abcjs-rest"),
+          "a full-bar rest has no count written over it",
+        ).toHaveCount(0);
 
         const spans = barSpans(marks, 0);
         const insSpans = barSpans(marks, 1);
@@ -1171,6 +1179,32 @@ test.describe("the staff view", () => {
         });
         await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().from)).toBe(middle * 1024);
         await page.evaluate(() => window.harness.previewPlayer().stop());
+
+        // The same line written with ordinary whole-bar rests draws the same rests and bar positions.
+        await harness.layout.close();
+        await harness.layout.open({
+          score: { text: twoVoice(target === 0 ? plain : rests, target === 1 ? plain : rests) },
+          parts: ["staff"],
+          editable: false,
+        });
+        await expect(drawnNotes(page).first()).toBeVisible();
+        const plainMarks = await staffMarks(page);
+        const plainRests = plainMarks
+          .filter((mark) => mark.kind === "rest" && mark.voice === target)
+          .sort((a, b) => a.x - b.x);
+        expect(plainRests).toHaveLength(count);
+        for (let index = 0; index < runRests.length; index += 1) {
+          expect(Math.abs((runRests[index] as StaffMark).x - (plainRests[index] as StaffMark).x)).toBeLessThan(2);
+          expect(Math.abs((runRests[index] as StaffMark).width - (plainRests[index] as StaffMark).width)).toBeLessThan(
+            1,
+          );
+        }
+        const plainSpans = barSpans(plainMarks, 0);
+        expect(plainSpans).toHaveLength(8);
+        for (let index = 0; index < spans.length; index += 1) {
+          expect(Math.abs((spans[index] as BarSpan).x0 - (plainSpans[index] as BarSpan).x0)).toBeLessThan(2);
+          expect(Math.abs((spans[index] as BarSpan).x1 - (plainSpans[index] as BarSpan).x1)).toBeLessThan(2);
+        }
       });
     }
   }
