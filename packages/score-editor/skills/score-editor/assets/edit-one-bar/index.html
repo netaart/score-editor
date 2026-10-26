@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Score editor skill: edit one bar</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font: 16px/1.5 system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 2rem;
+      }
+      main {
+        margin: 0 auto;
+        max-width: 72rem;
+      }
+      .status {
+        padding: 0.75rem 1rem;
+        border: 1px solid currentColor;
+        border-radius: 0.5rem;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.25rem 1rem;
+      }
+      dt {
+        font-weight: 700;
+      }
+      dd {
+        margin: 0;
+      }
+      pre {
+        overflow: auto;
+        padding: 1rem;
+        border: 1px solid #8888;
+        border-radius: 0.5rem;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="app">
+      <h1>Edit one bar</h1>
+      <p>
+        This page reads a real-sized song2 score, finds the first pitched Vocal note in bar 5, sends one
+        <code>setChord</code> command through the headless layer, reads the diagnostics, and writes back the project
+        the command returned. The project is in <code>melody</code> mode, so the accepted edit also carries the
+        <code>melody-with-chords</code> notice: a notice is not a refusal.
+      </p>
+      <p class="status" role="status" aria-live="polite" aria-label="Edit status">Reading the score...</p>
+      <dl>
+        <dt>Note id</dt>
+        <dd data-field="note-id">—</dd>
+        <dt>Notices</dt>
+        <dd data-field="notices">—</dd>
+        <dt>Refusals</dt>
+        <dd data-field="refusals">—</dd>
+        <dt>Lines changed</dt>
+        <dd data-field="lines">—</dd>
+      </dl>
+      <h2>Before</h2>
+      <pre aria-label="Input score" data-field="before"></pre>
+      <h2>After</h2>
+      <pre role="log" aria-label="Written score" data-field="after"></pre>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

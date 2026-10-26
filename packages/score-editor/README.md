@@ -259,6 +259,6 @@ The host's `DraftStore` takes keys and text; where a key maps (a file, a path, a
 
 ## Editor skill
 
-`skills/score-editor/` is the editor skill, an Agent Skills bundle that ships in this package: `SKILL.md` routes an agent to one reference per layer and extension point, and `assets/` holds two runnable examples (a static page that imports from esm.sh, and a pnpm project bundled with esbuild). Start at [skills/score-editor/SKILL.md](skills/score-editor/SKILL.md). `pnpm check:skill` fails when a public export is missing from the skill, and the browser tests run both examples against the local build.
+`skills/score-editor/` is the editor skill, an Agent Skills bundle that ships in this package: `SKILL.md` routes an agent to one reference per layer and extension point, and `references/edit-a-score.md` is the task page for making one requested change and handing the project back. `assets/` holds three runnable examples: a static page that imports from esm.sh, a pnpm project bundled with esbuild, and an edit-one-bar page that uses only the headless layer. Start at [skills/score-editor/SKILL.md](skills/score-editor/SKILL.md). `pnpm check:skill` fails when a public export is missing from the skill, and the browser tests run all three examples against the local build.
 
 MIT licensed.
