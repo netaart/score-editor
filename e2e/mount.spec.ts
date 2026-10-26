@@ -411,8 +411,15 @@ test.describe("scrolling in time and in pitch", () => {
 
     const frame = await box(roll);
     await page.mouse.move(frame.x + frame.width / 2, frame.y + frame.height / 2);
-    await page.mouse.wheel(0, 3000);
-    await expect.poll(() => visibleNote(page, "C2, bar 1 beat 1, length 1 beat")).toBe(true);
+    // Wheel the way a person does, until the note shows: one long wheel runs to the bottom of the octave under the
+    // lowest note, which puts that note behind the pinned header whenever the roll is short.
+    await expect
+      .poll(async () => {
+        if (await visibleNote(page, "C2, bar 1 beat 1, length 1 beat")) return true;
+        await page.mouse.wheel(0, 100);
+        return false;
+      })
+      .toBe(true);
 
     await page.mouse.wheel(600, 0);
     await expect.poll(() => roll.evaluate((el) => el.scrollLeft)).toBeGreaterThan(300);

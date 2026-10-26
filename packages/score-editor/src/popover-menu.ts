@@ -2,28 +2,35 @@
 // ABOUTME: The zoom control and the selection menu share it, so a menu opens, places itself, takes focus and closes one way.
 import { create } from "./dom";
 
+/** How a floating layer sits under its button; a narrow window spans its width instead of its left edge. */
+export interface UnderButtonOptions {
+  narrow?: boolean;
+  /** The room there is below the button, for a layer that scrolls inside. */
+  maxHeight?: number;
+}
+
+/** Places `popover` under `button`: the 4px gap and the left edge the zoom menu and the Project popover share. */
+export function placeUnder(popover: HTMLElement, button: HTMLElement, options: UnderButtonOptions = {}): void {
+  const rect = button.getBoundingClientRect();
+  popover.style.top = `${rect.bottom + 4}px`;
+  popover.style.left = options.narrow ? "" : `${rect.left}px`;
+  if (options.maxHeight !== undefined) popover.style.maxHeight = `${options.maxHeight}px`;
+}
+
+/** Moves a shown layer left where it would run off the window; a layer that spans the window is left alone. */
+export function keepInside(popover: HTMLElement, narrow = false): void {
+  const view = popover.ownerDocument.defaultView;
+  if (!view || narrow) return;
+  const overflow = popover.getBoundingClientRect().right - (view.innerWidth - 8);
+  if (overflow > 0) popover.style.left = `${Math.max(8, popover.getBoundingClientRect().left - overflow)}px`;
+}
+
 export interface PopoverMenu {
   readonly element: HTMLElement;
   /** Adds an item. Choosing it closes the menu first and then runs `choose`. */
   item(role: "menuitem" | "menuitemradio", choose: () => void): HTMLButtonElement;
   /** Adds a rule between two groups of items. */
   rule(): void;
-}
-
-/** Puts a popover that is about to open under its button, on the button's left edge. */
-export function placeUnder(button: HTMLElement, popover: HTMLElement): void {
-  const rect = button.getBoundingClientRect();
-  popover.style.left = `${rect.left}px`;
-  popover.style.top = `${rect.bottom + 4}px`;
-}
-
-/** Moves an open popover left until it is inside the window, 8px from its edge, when it ran off to the right. */
-export function nudgeIntoWindow(popover: HTMLElement): void {
-  const view = popover.ownerDocument.defaultView;
-  if (!view) return;
-  const rect = popover.getBoundingClientRect();
-  const overflow = rect.right - (view.innerWidth - 8);
-  if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
 }
 
 export interface PopoverMenuOptions {
@@ -57,7 +64,7 @@ export function mountPopoverMenu(
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      placeUnder(button, menu);
+      placeUnder(menu, button);
     },
     { signal },
   );
@@ -67,8 +74,8 @@ export function mountPopoverMenu(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      nudgeIntoWindow(menu);
-      (options.initialFocus?.(items) ?? items[0])?.focus();
+      keepInside(menu);
+      (options.initialFocus?.(items) ?? items.find((item) => !item.hidden))?.focus();
     },
     { signal },
   );
@@ -76,16 +83,18 @@ export function mountPopoverMenu(
     "keydown",
     (event) => {
       if (!(event.target instanceof HTMLButtonElement)) return;
-      const at = items.indexOf(event.target);
-      if (at < 0) return;
-      let next = -1;
-      if (event.key === "ArrowDown") next = (at + 1) % items.length;
-      else if (event.key === "ArrowUp") next = (at - 1 + items.length) % items.length;
-      else if (event.key === "Home") next = 0;
-      else if (event.key === "End") next = items.length - 1;
-      if (next < 0) return;
+      if (!items.includes(event.target)) return;
+      // An item that is left out (hidden) is not in the way: the keys go to the next one that is shown.
+      const shown = items.filter((item) => !item.hidden);
+      const here = shown.indexOf(event.target);
+      let next: HTMLButtonElement | undefined;
+      if (event.key === "ArrowDown") next = shown[(here + 1) % shown.length];
+      else if (event.key === "ArrowUp") next = shown[(here - 1 + shown.length) % shown.length];
+      else if (event.key === "Home") next = shown[0];
+      else if (event.key === "End") next = shown.at(-1);
+      if (next === undefined) return;
       event.preventDefault();
-      items[next]?.focus();
+      next.focus();
     },
     { signal },
   );
