@@ -3,7 +3,7 @@
 import { create } from "./dom";
 import { messagesFor } from "./i18n";
 import type { LiveRegion } from "./live-region";
-import { keepInside, placeUnder } from "./popover-menu";
+import { anchorOf, keepInside, placeUnder } from "./popover-menu";
 import { carriedNotices } from "./project-notices";
 import { drawProjectPanel } from "./project-panel";
 import type { EditingSession } from "./session";
@@ -42,19 +42,19 @@ export function mountProjectControl(
   /** Puts the popover under the button: on a narrow window it spans the window, and its height is the room below the button. */
   function place(): void {
     const view = doc.defaultView;
-    const rect = button.getBoundingClientRect();
+    const anchor = anchorOf(button);
     const narrow = view?.matchMedia("(max-width: 40em)").matches ?? false;
     popover.toggleAttribute("data-narrow", narrow);
-    placeUnder(popover, button, {
+    placeUnder(anchor, popover, {
       narrow,
-      maxHeight: Math.max((view?.innerHeight ?? 0) - rect.bottom - 12, 0),
+      maxHeight: Math.max((view?.innerHeight ?? 0) - anchor.bottom - 12, 0),
     });
   }
   /** The toolbar wraps again when its controls come and go or the window changes, which moves the button the popover hangs from. */
   function follow(): void {
     if (!popover.matches(":popover-open")) return;
     place();
-    keepInside(popover, popover.hasAttribute("data-narrow"));
+    keepInside(popover, anchorOf(button), { narrow: popover.hasAttribute("data-narrow") });
   }
 
   popover.addEventListener(
@@ -71,7 +71,7 @@ export function mountProjectControl(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      keepInside(popover, popover.hasAttribute("data-narrow"));
+      keepInside(popover, anchorOf(button), { narrow: popover.hasAttribute("data-narrow") });
       panel.element.focus({ preventScroll: true });
     },
     { signal },
