@@ -60,6 +60,7 @@ export type {
   LyricSplit,
 } from "./lyric-edit";
 export { barLineTick, lyricBoundaryPlan, lyricDropPlan, lyricRows, lyricSplitCommand } from "./lyric-edit";
+export type { LyricTrackPart } from "./lyric-track";
 export { mountLyricTrack } from "./lyric-track";
 export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
 export {

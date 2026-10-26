@@ -35,9 +35,15 @@ export const scoreSourceCss = `
   border-radius: 50%;
   background: var(--sce-_text);
 }
-/* At 320px the word and the pill would push a control to another row; the icon and the dot stay. */
-.sce-root.sce-part-save[data-compact="true"] .sce-save-label,
-.sce-root.sce-part-save[data-compact="true"] .sce-save-state {
+/* Below 480px the pill would push a control to another row; the dot carries the unsaved state. */
+.sce-root.sce-part-save[data-pill="false"] .sce-save-state {
+  display: none;
+}
+.sce-root.sce-part-save[data-pill="true"] .sce-save-dot {
+  display: none;
+}
+/* At 320px the word would do the same; the icon and the dot stay. */
+.sce-root.sce-part-save[data-compact="true"] .sce-save-label {
   display: none;
 }
 .sce-root.sce-part-save[data-compact="true"] .sce-save-button {

@@ -17,8 +17,8 @@ import { type HandoffControl, type HandoffKeeper, type HandoffSource, mountHando
 import { hostChanges } from "./host-changes";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, type LiveRegion, sayRefusals } from "./live-region";
-import { mountLyricTrack } from "./lyric-track";
-import { joinLyrics, lyricLinesOf } from "./lyrics";
+import { type LyricTrackPart, mountLyricTrack } from "./lyric-track";
+import { lyricLinesOf } from "./lyrics";
 import { mountProblemView } from "./problem-view";
 import { mountSaveConflict } from "./save-conflict";
 import { mountScoreSourceControl } from "./save-control";
@@ -126,7 +126,7 @@ export class Editor implements MountedEditor {
   private tracks: ViewPart[] = [];
   private voices: string[] = [];
   /** The lyric track, the bottom track of the arrangement: it is mounted after the voice tracks and replaced with them. */
-  private lyricTrack: ViewPart | null = null;
+  private lyricTrack: LyricTrackPart | null = null;
   private reading: ScoreReading;
   private language: Language;
   private openingViewDue = false;
@@ -342,14 +342,33 @@ export class Editor implements MountedEditor {
     if (required.length === 0) return [];
     const project = this.session.project;
     const reading = this.session.reading;
-    const lyrics =
-      reading.kind === "score" ? joinLyrics(reading.score, lyricLinesOf(project, reading.score)) : project.lyrics;
+    const lines = reading.kind === "score" ? lyricLinesOf(project, reading.score) : (project.lyricLines ?? []);
+    const hasLyrics =
+      lines.some((line) => line.text.trim() !== "") || (reading.kind !== "score" && project.lyrics.trim() !== "");
     return [...new Set(required)].filter((field) => {
       if (field === "style") return project.style.trim() === "";
       if (field === "seed") return project.seed === null;
       if (field === "scoreMode") return project.scoreMode !== "full" && project.scoreMode !== "melody";
-      return lyrics.trim() === "";
+      return !hasLyrics;
     });
+  }
+
+  /** Takes the person to where a missing required input is entered: the Project panel, or a new lyric line. */
+  private openRequired(field: ProjectField): void {
+    if (field !== "lyrics") {
+      this.toolbar.openProject(field);
+      return;
+    }
+    this.session.setActiveView("arrangement");
+    const focus = () => {
+      if (this.destroyed) return;
+      if (this.lyricTrack !== null) this.lyricTrack.focusEntry();
+      else this.toolbar.openProject("lyrics");
+    };
+    // The arrangement may have been hidden; its lyric track draws on the next frame.
+    const view = this.doc.defaultView;
+    if (view === null) focus();
+    else view.requestAnimationFrame(focus);
   }
 
   /** What the handoff control reads: nothing while the editor cannot edit or the host gave no callback. */
@@ -369,7 +388,7 @@ export class Editor implements MountedEditor {
         return file.handoff().then((result) => (result === "saved" ? "written" : result));
       },
       missingRequired: () => this.missingRequired(),
-      openProject: (field) => this.toolbar.openProject(field),
+      openProject: (field) => this.openRequired(field),
       ...(title === undefined ? {} : { title }),
       ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
     };

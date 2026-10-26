@@ -196,6 +196,7 @@ const ownerGroups = {
     "PreviewStart",
     "PreviewNoteOptions",
     "mountLyricTrack",
+    "LyricTrackPart",
     "mountDraftConflict",
   ],
   "references/mount.md": [

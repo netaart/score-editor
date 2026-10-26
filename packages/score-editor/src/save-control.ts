@@ -55,7 +55,9 @@ export function mountScoreSourceControl(
 
   /** The toolbar is 320px wide on a small phone: the word and the pill give way to the icon and its dot. */
   function syncCompact(): void {
-    root.dataset.compact = String(options.scope.clientWidth < 360);
+    const width = options.scope.clientWidth;
+    root.dataset.compact = String(width < 360);
+    root.dataset.pill = String(width >= 480);
   }
   syncCompact();
   const Observer = doc.defaultView?.ResizeObserver;
@@ -128,17 +130,18 @@ export function mountScoreSourceControl(
       return;
     }
     root.dataset.kind = "save";
-    label.textContent = status === "saving" ? t.saving : t.save;
+    const failure = failed && status !== "saving";
+    label.textContent = status === "saving" ? t.saving : failure ? t.saveFailed : t.save;
     button.title = `${t.save} (Ctrl/Cmd+S)`;
-    button.setAttribute("aria-label", status === "saving" ? t.saving : t.save);
-    if (unsaved) button.setAttribute("aria-description", t.unsaved);
+    button.setAttribute("aria-label", status === "saving" ? t.saving : failure ? t.saveFailed : t.save);
+    if (unsaved) button.setAttribute("aria-description", failure ? t.saveFailed : t.unsaved);
     else button.removeAttribute("aria-description");
     dot.hidden = !unsaved;
     button.setAttribute("aria-keyshortcuts", "Control+S Meta+S");
     button.setAttribute("aria-busy", String(status === "saving"));
     button.setAttribute("aria-disabled", String(status === "saving" || status === "conflict" || !unsaved));
     state.hidden = status === "clean" || status === "destroyed";
-    state.textContent = failed && status !== "saving" ? t.saveFailed : status === "saving" ? t.saving : t.unsaved;
+    state.textContent = failure ? t.saveFailed : status === "saving" ? t.saving : t.unsaved;
     state.dataset.state = failed ? "failed" : status;
     root.dataset.unsaved = String(unsaved);
   }
