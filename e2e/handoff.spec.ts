@@ -553,7 +553,7 @@ test.describe("the trigger and the toolbar", () => {
     }
   });
 
-  test("places the trigger after Select and Grid, before Restore original", async ({ page, harness }) => {
+  test("places the trigger after Select, Grid and Restore original", async ({ page, harness }) => {
     await harness.mount({
       score: { text: SCORE },
       project: { style: "pop", lyrics: LYRICS, scoreMode: "full", seed: 7 },
@@ -561,13 +561,13 @@ test.describe("the trigger and the toolbar", () => {
       handoff: true,
     });
     await expect(handoffButton(page)).toBeVisible();
-    const order = await page.locator(".sce-toolbar").evaluate((el) =>
-      [...el.children]
+    const order = await page.locator(".sce-tools").evaluate((el) =>
+      [...el.querySelectorAll(".sce-part-select, .sce-part-grid, .sce-part-handoff, .sce-part-restore")]
         .map((child) => [...child.classList].find((name) => /^sce-part-(select|grid|handoff|restore)$/.test(name)))
         .filter((name) => name !== undefined)
         .map((name) => `.${name}`),
     );
-    expect(order).toEqual([".sce-part-select", ".sce-part-grid", ".sce-part-handoff", ".sce-part-restore"]);
+    expect(order).toEqual([".sce-part-select", ".sce-part-grid", ".sce-part-restore", ".sce-part-handoff"]);
   });
 
   test("hands off a host without a draft store without writing one", async ({ page, harness }) => {

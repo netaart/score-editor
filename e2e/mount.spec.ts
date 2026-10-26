@@ -1155,6 +1155,10 @@ test.describe("a narrow host", () => {
   test("the read-only badge is not clipped when the toolbar has only 320 pixels", async ({ page, harness }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     await harness.mount({ editable: false });
+    // The badge is in the strip, in the history group's place; the strip scrolls it wholly into the box.
+    await page.locator(".sce-tools").evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+    });
     const badge = await box(page.getByText("Read only", { exact: true }));
     const view = await box(page.getByRole("region", { name: "Arrangement" }));
     expect(badge.x).toBeGreaterThanOrEqual(view.x);

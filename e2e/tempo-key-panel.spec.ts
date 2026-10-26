@@ -706,22 +706,32 @@ test.describe("the controls in the default editor at the window's width", () => 
     await expect(page.getByRole("dialog", { name: "Project" }).getByRole("region", { name: "Project" })).toHaveCount(0);
   });
 
-  test("in a 320 pixel box the two transpose buttons stay on one line and nothing is wider than the box", async ({
+  test("in a 320 pixel box the transpose pair stays together and every song control can be scrolled into the box", async ({
     page,
     harness,
+    isMobile,
   }) => {
     await page.setViewportSize({ width: 320, height: 700 });
     await harness.mount({ score: { text: SONG }, project });
-    const down = await box(page.getByRole("button", { name: "Transpose down a semitone" }));
-    const up = await box(page.getByRole("button", { name: "Transpose up a semitone" }));
+    const downButton = page.getByRole("button", { name: "Transpose down a semitone" });
+    const upButton = page.getByRole("button", { name: "Transpose up a semitone" });
+    await downButton.focus();
+    const down = await box(downButton);
+    const up = await box(upButton);
     expect(Math.abs(down.y - up.y)).toBeLessThan(1);
     expect(down.x + down.width).toBeLessThanOrEqual(up.x + 1);
+    const target = isMobile ? 36 : 28;
+    expect(down.width).toBeGreaterThanOrEqual(target);
+    expect(up.width).toBeGreaterThanOrEqual(target);
+    // The strip scrolls sideways: focusing a control brings it into the box, as Tab does.
     for (const control of [
       page.getByRole("spinbutton", { name: "Tempo (BPM)" }),
       page.getByRole("combobox", { name: "Key" }),
-      page.getByRole("button", { name: "Transpose up a semitone" }),
+      downButton,
+      upButton,
       projectButton(page),
     ]) {
+      await control.focus();
       const found = await box(control);
       expect(found.x).toBeGreaterThanOrEqual(0);
       expect(found.x + found.width).toBeLessThanOrEqual(320);

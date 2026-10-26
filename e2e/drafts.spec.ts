@@ -353,6 +353,7 @@ test.describe("a draft that another window changed first", () => {
   const THEIRS = QUARTERS.replace("C4D4E4F4|", "C4D4z4F4|");
   /** The score here after the D and the F are turned into rests. */
   const OURS = QUARTERS.replace("C4D4E4F4|", "C4z4E4z4|");
+  const choose = (page: Page) => page.getByRole("button", { name: "Choose", exact: true });
   const overwrite = (page: Page) => page.getByRole("button", { name: "Overwrite with my version" });
   const loadTheirs = (page: Page) => page.getByRole("button", { name: "Load the other version" });
 
@@ -385,31 +386,23 @@ test.describe("a draft that another window changed first", () => {
         if (!chrome || !strip) return null;
         const outer = chrome.getBoundingClientRect();
         const sentence = strip.querySelector<HTMLElement>(".sce-draft-conflict-text")?.getBoundingClientRect();
-        const choices = [...strip.querySelectorAll<HTMLElement>(".sce-draft-choice")].map((choice) => {
-          const area = choice.getBoundingClientRect();
-          const top = document.elementFromPoint(area.left + area.width / 2, area.top + area.height / 2);
-          return {
-            inside: area.top >= outer.top - 0.5 && area.bottom <= outer.top + chrome.clientHeight + 0.5,
-            hit: top === choice || choice.contains(top),
-          };
-        });
+        const choose = strip.querySelector<HTMLElement>(".sce-draft-choose");
+        const area = choose?.getBoundingClientRect();
+        const top =
+          area === undefined ? null : document.elementFromPoint(area.left + area.width / 2, area.top + area.height / 2);
         return {
           sentenceInside:
             sentence !== undefined &&
             sentence.top >= outer.top - 0.5 &&
             sentence.bottom <= outer.top + chrome.clientHeight + 0.5,
-          choices,
+          chooseInside:
+            area !== undefined && area.top >= outer.top - 0.5 && area.bottom <= outer.top + chrome.clientHeight + 0.5,
+          chooseHit: area !== undefined && (top === choose || choose?.contains(top) === true),
         };
       });
       expect(found?.sentenceInside, `${width}: the sentence is in the chrome`).toBe(true);
-      expect(
-        found?.choices.map((choice) => choice.inside),
-        `${width}: both choices are in the chrome`,
-      ).toEqual([true, true]);
-      expect(
-        found?.choices.map((choice) => choice.hit),
-        `${width}: both choices are on top`,
-      ).toEqual([true, true]);
+      expect(found?.chooseInside, `${width}: Choose is in the chrome`).toBe(true);
+      expect(found?.chooseHit, `${width}: Choose is on top`).toBe(true);
       await harness.destroy();
     }
   });
@@ -443,6 +436,10 @@ test.describe("a draft that another window changed first", () => {
     await expect(page.getByRole("alert")).toHaveText(
       "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
     );
+    await expect(choose(page)).toBeVisible();
+    await expect(overwrite(page)).toBeHidden();
+    await expect(loadTheirs(page)).toBeHidden();
+    await press(choose(page));
     await expect(overwrite(page)).toBeVisible();
     await expect(overwrite(page)).toHaveAccessibleDescription(
       "The other version is replaced and can't be brought back.",
@@ -451,6 +448,7 @@ test.describe("a draft that another window changed first", () => {
     await expect(loadTheirs(page)).toHaveAccessibleDescription(
       "It opens here, and your changes in this window are dropped.",
     );
+    await page.keyboard.press("Escape");
     expect((await store.callsOf("write")).map((call) => call.result)).toEqual([
       expect.stringMatching(/^v\d+$/),
       "conflict",
@@ -465,7 +463,7 @@ test.describe("a draft that another window changed first", () => {
   }) => {
     await openEditor(page, harness);
     const { store } = await conflict(page, press);
-    await expect(overwrite(page)).toBeVisible();
+    await expect(choose(page)).toBeVisible();
 
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
@@ -473,7 +471,7 @@ test.describe("a draft that another window changed first", () => {
     await page.clock.runFor(5 * DEBOUNCE_MS);
 
     expect(await store.callsOf("write")).toHaveLength(2);
-    await expect(overwrite(page)).toBeVisible();
+    await expect(choose(page)).toBeVisible();
   });
 
   test("overwriting writes the user's project over the other version, which the editor reads first", async ({
@@ -484,6 +482,7 @@ test.describe("a draft that another window changed first", () => {
     await openEditor(page, harness);
     const { store, theirs } = await conflict(page, press);
 
+    await press(choose(page));
     await press(overwrite(page));
 
     await expect(overwrite(page)).toBeHidden();
@@ -514,6 +513,7 @@ test.describe("a draft that another window changed first", () => {
     const readsBefore = (await store.callsOf("read")).length;
     await store.hold();
 
+    await press(choose(page));
     await press(overwrite(page));
     await expect(overwrite(page)).toHaveAttribute("aria-disabled", "true");
     await expect(loadTheirs(page)).toHaveAttribute("aria-disabled", "true");
@@ -533,6 +533,7 @@ test.describe("a draft that another window changed first", () => {
     const { store, theirs } = await conflict(page, press);
     await expect(noteNamed(page, D4)).toHaveCount(0);
 
+    await press(choose(page));
     await press(loadTheirs(page));
 
     await expect(loadTheirs(page)).toBeHidden();
@@ -569,7 +570,8 @@ test.describe("a draft that another window changed first", () => {
 
     await expect(page.getByRole("alert")).toBeVisible();
     await expect(remove).toBeFocused();
-    await expect(overwrite(page)).toBeVisible();
+    await expect(choose(page)).toBeVisible();
+    await expect(overwrite(page)).toBeHidden();
     await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
     expect((await store.callsOf("write"))[1]?.result).toBe("conflict");
   });

@@ -69,7 +69,11 @@ async function expectDrawnLikeFresh(harness: Harness, { withHistory = false } = 
     delete drawn.toolbar;
     delete fresh.toolbar;
   }
-  expect(drawn).toEqual(fresh);
+  // A scroll cue is live state, not drawing: the fresh host is off screen and has nothing to scroll, while the shown
+  // one may show the fade. Compare the drawings without it.
+  const withoutCue = (roots: Record<string, string>) =>
+    Object.fromEntries(Object.entries(roots).map(([name, html]) => [name, html.replace(/ data-cue="[^"]*"/g, "")]));
+  expect(withoutCue(drawn)).toEqual(withoutCue(fresh));
   return drawn;
 }
 
@@ -702,8 +706,12 @@ test.describe("destroying the view parts", () => {
     await expect(part.getByRole("alert")).toHaveText(
       "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
     );
+    await expect(part.getByRole("button", { name: "Choose", exact: true })).toBeVisible();
+    await expect(part.getByRole("button", { name: "Overwrite with my version" })).toBeHidden();
+    await part.getByRole("button", { name: "Choose", exact: true }).click();
     await expect(part.getByRole("button", { name: "Overwrite with my version" })).toBeVisible();
     await expect(part.getByRole("button", { name: "Load the other version" })).toBeVisible();
+    await page.keyboard.press("Escape");
 
     await harness.layout.retain("draft-conflict");
     await harness.layout.destroyPart("draft-conflict", 2);

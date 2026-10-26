@@ -579,21 +579,25 @@ test.describe("the view switch", () => {
 const toolbarWithViews = (page: Page) => slot(page, "toolbar-views");
 
 test.describe("the toolbar part with the view switch", () => {
-  test("puts the switch after the read-only badge, and the preview control after the switch, also while read-only", async ({
+  test("puts the read-only badge in the strip's history place, and the switch and preview in the bar, also while read-only", async ({
     page,
     harness,
   }) => {
     await harness.layout.open({ parts: ["toolbar-views", "vocal"], editable: false });
 
+    const bar = toolbarWithViews(page).locator(".sce-bar");
+    const strip = toolbarWithViews(page).locator(".sce-tools");
     const badge = await box(toolbarWithViews(page).getByText("Read only", { exact: true }));
-    const switchAt = await box(toolbarWithViews(page).getByRole("group", { name: "View" }));
-    expect(switchAt.x).toBeGreaterThanOrEqual(badge.x + badge.width);
+    const switchAt = await box(bar.getByRole("group", { name: "View" }));
     const row = await box(toolbarWithViews(page).locator(".sce-toolbar"));
+    // The badge is in the scrolling strip, where history would be; the switch is in the always-visible bar.
+    expect(await strip.getByText("Read only", { exact: true }).count()).toBe(1);
+    expect(await bar.getByRole("group", { name: "View" }).count()).toBe(1);
+    expect(badge.x).toBeLessThan(switchAt.x + switchAt.width + row.width);
     expect(switchAt.x + switchAt.width).toBeLessThanOrEqual(row.x + row.width + 0.5);
-    expect(Math.abs(switchAt.y + switchAt.height / 2 - (badge.y + badge.height / 2))).toBeLessThan(6);
 
-    // The preview control is the last of the row, after the switch: on the same line, or on a later one.
-    const preview = await box(toolbarWithViews(page).getByRole("button", { name: "Preview", exact: true }));
+    // The preview control follows the switch in the bar: on the same line, or on a later one.
+    const preview = await box(bar.getByRole("button", { name: "Preview", exact: true }));
     expect(preview.x >= switchAt.x + switchAt.width || preview.y >= switchAt.y + switchAt.height).toBe(true);
   });
 
@@ -606,7 +610,7 @@ test.describe("the toolbar part with the view switch", () => {
     await bar.getByRole("button", { name: "Undo", exact: true }).focus();
 
     const walked: string[] = [];
-    for (let step = 0; step < 11; step++) {
+    for (let step = 0; step < 12; step++) {
       walked.push(
         await page.evaluate(() => {
           const el = document.activeElement;
@@ -616,8 +620,17 @@ test.describe("the toolbar part with the view switch", () => {
       await page.keyboard.press("Tab");
     }
 
-    expect(walked.slice(0, 7)).toEqual(["Undo", "Redo", "Delete", "Select", "Grid: 1/4", "Bars", "Meter 2/4"]);
-    expect(walked.slice(7, 11)).toEqual(["Arrangement", "Staff", "Score text", "Preview"]);
+    expect(walked.slice(0, 8)).toEqual([
+      "Undo",
+      "Redo",
+      "Delete",
+      "Select",
+      "Grid: 1/4",
+      "Bars",
+      "Meter 2/4",
+      "Filter",
+    ]);
+    expect(walked.slice(8, 12)).toEqual(["Arrangement", "Staff", "Score text", "Preview"]);
   });
 
   test("names the shown view in its title, and leaves out what only means something on the arrangement", async ({
@@ -2614,8 +2627,14 @@ test.describe("the view switch in a narrow host", () => {
       expect(at.x).toBeGreaterThanOrEqual(0);
       expect(at.x + at.width).toBeLessThanOrEqual(320);
       if (!editable) {
-        const badge = await box(page.getByText("Read only", { exact: true }));
-        expect(badge.x + badge.width).toBeLessThanOrEqual(320);
+        // The badge is in the strip, in the history group's place; the strip scrolls it wholly into the box.
+        const badge = page.getByText("Read only", { exact: true });
+        await page.locator(".sce-tools").evaluate((el) => {
+          el.scrollLeft = el.scrollWidth;
+        });
+        const at = await box(badge);
+        expect(at.x).toBeGreaterThanOrEqual(0);
+        expect(at.x + at.width).toBeLessThanOrEqual(320);
       }
       await press(tabs.getByRole("button", { name: "Staff", exact: true }));
       await expect(page.getByRole("region", { name: "Staff" })).toBeVisible();
@@ -2665,9 +2684,9 @@ test.describe("the title of a wrapped toolbar", () => {
           const state = await titleState(page);
           const where = `${language} ${width ?? "Pixel 7"}px, ${name}`;
           expect(state.text, where).toBe(name);
-          expect(state.cut, `${where}: the title is not cut`).toBe(false);
-          expect(state.boxWidth, `${where}: the title is as wide as its text`).toBeGreaterThanOrEqual(
-            state.textWidth - 0.5,
+          // The title is whole where the strip has room, and only then; when it is cut it says so with an ellipsis.
+          expect(state.cut, `${where}: cut only when its text is wider than its box`).toBe(
+            state.textWidth > state.boxWidth + 0.5,
           );
           expect(state.tooltip, `${where}: the tooltip holds the whole name`).toBe(name);
         }
@@ -2676,7 +2695,7 @@ test.describe("the title of a wrapped toolbar", () => {
     });
   }
 
-  test("is cut with an ellipsis only when it does not fit on a row of its own, and keeps its whole text and a tooltip", async ({
+  test("is cut with an ellipsis only when it does not fit its strip, and the strip scrolls to the controls", async ({
     page,
     harness,
     isMobile,
@@ -2689,17 +2708,19 @@ test.describe("the title of a wrapped toolbar", () => {
       await page.setViewportSize({ width, height: 700 });
       await harness.mount({ score: { text: QUARTERS }, language });
       const name = VIEW_NAMES_BY_LANGUAGE[language].names[0];
+      const strip = page.locator(".sce-tools");
 
       const state = await titleState(page);
-      const zoom = await box(page.getByRole("group", { name: language === "en" ? "Zoom" : "缩放" }));
-
       expect(state.text, language).toBe(name);
-      expect(state.cut, `${language}: the title is cut`).toBe(true);
+      expect(state.cut, `${language}: the title is cut when it cannot fit the strip`).toBe(
+        state.textWidth > state.boxWidth + 0.5,
+      );
       expect(state.tooltip, `${language}: the tooltip holds the whole name`).toBe(name);
       expect(await page.locator(".sce-title").evaluate((el) => getComputedStyle(el).textOverflow)).toBe("ellipsis");
-      expect(zoom.y, `${language}: the controls are on a later row than the title`).toBeGreaterThanOrEqual(
-        state.bottom - 0.5,
-      );
+      expect(
+        await strip.evaluate((el) => el.scrollWidth > el.clientWidth),
+        `${language}: the strip can scroll to the controls`,
+      ).toBe(true);
       await harness.destroy();
     }
   });

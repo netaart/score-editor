@@ -31,6 +31,7 @@ const saveAsButton = (page: Page) => page.getByRole("button", { name: "Save as s
 const unsavedPill = (page: Page) => page.getByText("Unsaved", { exact: true });
 const conflictStrip = (page: Page, language: "en" | "zh" = "en") =>
   page.getByRole("group", { name: language === "zh" ? "乐谱文件冲突" : "Score file conflict", exact: true });
+const chooseButton = (page: Page) => page.getByRole("button", { name: "Choose", exact: true });
 const overwriteButton = (page: Page) => page.getByRole("button", { name: "Overwrite with my version", exact: true });
 const loadTheirsButton = (page: Page) => page.getByRole("button", { name: "Load the other version", exact: true });
 const restore = (page: Page) => page.getByRole("button", { name: "Restore original", exact: true });
@@ -234,34 +235,6 @@ type SaveState = "clean" | "dirty" | "saving" | "failed" | "conflict";
 const SAVE_STATES: ReadonlyArray<SaveState> = ["clean", "dirty", "saving", "failed", "conflict"];
 
 /**
- * The height the control takes in its narrowest form, measured by hiding its word and pill. It is the least room any
- * form needs; a box with no room for it makes one row unavoidable, whatever the state's form.
- */
-async function iconFormHeight(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const toolbar = document.querySelector<HTMLElement>(".sce-toolbar");
-    const part = document.querySelector<HTMLElement>(".sce-part-save");
-    if (!toolbar || !part) throw new Error("the save control is not drawn");
-    const state = part.querySelector<HTMLElement>(".sce-save-state");
-    const mark = part.querySelector<HTMLElement>(".sce-save-mark");
-    const compact = part.dataset.compact;
-    const word = part.dataset.word;
-    const stateHidden = state?.hidden ?? true;
-    const markHidden = mark?.hidden ?? true;
-    part.dataset.compact = "true";
-    part.dataset.word = "false";
-    if (state) state.hidden = true;
-    if (mark) mark.hidden = true;
-    const height = toolbar.getBoundingClientRect().height;
-    part.dataset.compact = compact;
-    part.dataset.word = word;
-    if (state) state.hidden = stateHidden;
-    if (mark) mark.hidden = markHidden;
-    return height;
-  });
-}
-
-/**
  * The height the widest state's words take, measured with those words in the control. The five states' longest pair
  * is the failed state's pill and action, so the test uses them as the room the one form must have.
  */
@@ -347,20 +320,19 @@ async function saveStates(
 function checkSaveStates(
   states: Record<SaveState, SaveLooks>,
   base: number,
-  icon: number,
   width: number,
   language: "en" | "zh",
+  noRow = true,
 ): void {
   const t = words[language];
   const where = `${width} ${language}`;
   for (const state of SAVE_STATES) {
     const look = states[state];
     expect(look.height, `${where} ${state}: the height does not follow the state`).toBe(states.clean.height);
-    // Where even the narrowest form needs the box's next row, that row is the box's, not a state's.
-    expect([base, icon], `${where} ${state}: only the box's own rows`).toContain(look.height);
-    if (look.height !== base) {
-      expect(states.clean.form, `${where}: only the narrowest form may take the box's row`).toBe("true");
-    }
+    // On a phone Save lives in the always-visible bar and adds no row to it: the toolbar is as tall as it is without the
+    // control, whatever form the state's words need. A narrow fine-pointer host may still spend a row; only the phone
+    // has the two-row promise.
+    if (noRow) expect(look.height, `${where} ${state}: Save adds no row`).toBe(base);
     expect(look.form, `${where} ${state}: one form for the width`).toBe(states.clean.form);
     expect(look.buttonInSight, `${where} ${state}: the button is in sight`).toBe(true);
   }
@@ -402,7 +374,7 @@ test.describe("the save state at every width", () => {
 
         await openFile(harness, { language });
         const states = await saveStates(page, harness, press, language);
-        checkSaveStates(states, base, await iconFormHeight(page), width, language);
+        checkSaveStates(states, base, width, language);
         await harness.destroy();
       }
     }
@@ -427,7 +399,7 @@ test.describe("the save state at every width", () => {
       for (const state of SAVE_STATES) {
         expect(states[state].form, `${width} ${state}: the box chooses one form`).toBe(form);
       }
-      checkSaveStates(states, base, await iconFormHeight(page), width, "en");
+      checkSaveStates(states, base, width, "en", width !== 320);
       await harness.destroy();
     }
   });
@@ -451,31 +423,23 @@ test("reveals the whole strip in the chrome without a swipe", async ({ page, har
       if (!chrome || !strip) return null;
       const outer = chrome.getBoundingClientRect();
       const sentence = strip.querySelector<HTMLElement>(".sce-draft-conflict-text")?.getBoundingClientRect();
-      const choices = [...strip.querySelectorAll<HTMLElement>(".sce-draft-choice")].map((choice) => {
-        const area = choice.getBoundingClientRect();
-        const top = document.elementFromPoint(area.left + area.width / 2, area.top + area.height / 2);
-        return {
-          inside: area.top >= outer.top - 0.5 && area.bottom <= outer.top + chrome.clientHeight + 0.5,
-          hit: top === choice || choice.contains(top),
-        };
-      });
+      const choose = strip.querySelector<HTMLElement>(".sce-draft-choose");
+      const area = choose?.getBoundingClientRect();
+      const top =
+        area === undefined ? null : document.elementFromPoint(area.left + area.width / 2, area.top + area.height / 2);
       return {
         sentenceInside:
           sentence !== undefined &&
           sentence.top >= outer.top - 0.5 &&
           sentence.bottom <= outer.top + chrome.clientHeight + 0.5,
-        choices,
+        chooseInside:
+          area !== undefined && area.top >= outer.top - 0.5 && area.bottom <= outer.top + chrome.clientHeight + 0.5,
+        chooseHit: area !== undefined && (top === choose || choose?.contains(top) === true),
       };
     });
     expect(found?.sentenceInside, `${width}: the sentence is in the chrome`).toBe(true);
-    expect(
-      found?.choices.map((choice) => choice.inside),
-      `${width}: both choices are in the chrome`,
-    ).toEqual([true, true]);
-    expect(
-      found?.choices.map((choice) => choice.hit),
-      `${width}: both choices are on top`,
-    ).toEqual([true, true]);
+    expect(found?.chooseInside, `${width}: Choose is in the chrome`).toBe(true);
+    expect(found?.chooseHit, `${width}: Choose is on top`).toBe(true);
     await harness.destroy();
   }
 });
@@ -537,8 +501,9 @@ test.describe("a score file another writer changed", () => {
         { exact: true },
       ),
     ).toBeVisible();
-    await expect(overwriteButton(page)).toBeVisible();
-    await expect(loadTheirsButton(page)).toBeVisible();
+    await expect(chooseButton(page)).toBeVisible();
+    await expect(overwriteButton(page)).toBeHidden();
+    await expect(loadTheirsButton(page)).toBeHidden();
   }
 
   test("offers both choices, and Overwrite reads their version and writes ours over it", async ({
@@ -548,6 +513,7 @@ test.describe("a score file another writer changed", () => {
   }) => {
     await conflict(page, harness, press);
 
+    await press(chooseButton(page));
     await press(overwriteButton(page));
     await expect(conflictStrip(page)).toBeHidden();
     await expect.poll(async () => (await harness.scoreCalls()).length).toBe(3);
@@ -567,6 +533,7 @@ test.describe("a score file another writer changed", () => {
     await conflict(page, harness, press);
     const before = await harness.scoreCalls();
 
+    await press(chooseButton(page));
     await press(loadTheirsButton(page));
 
     await expect(page.getByRole("listitem", { name: /^A4,/ })).toBeVisible();
@@ -779,6 +746,7 @@ test.describe("the handoff with a score file", () => {
       "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
     );
 
+    await press(chooseButton(page));
     await press(loadTheirsButton(page));
     await expect(conflictStrip(page)).toBeHidden();
     expect(await harness.handoffs()).toEqual([]);
@@ -873,16 +841,11 @@ test.describe("the save control re-chooses with the box, the language and the fo
       await openFile(harness);
       await deleteD(page, press);
       const english = await saveLooks(page);
-      const englishIcon = await iconFormHeight(page);
-      expect([base.en, englishIcon], `${width} en: only the box's own rows`).toContain(english.height);
-      if (english.height !== base.en) {
-        expect(english.form, `${width} en: only the icon form may take the box's row`).toBe("true");
-      }
+      expect(english.height, `${width} en: Save adds no row`).toBe(base.en);
 
       await harness.update({ language: "zh" });
       const chinese = await saveLooks(page);
-      const icon = await iconFormHeight(page);
-      expect([base.zh, icon], `${width} zh: the toolbar keeps its height`).toContain(chinese.height);
+      expect(chinese.height, `${width} zh: Save adds no row`).toBe(base.zh);
       expect(chinese.pill || chinese.mark, `${width} zh: a word or a mark`).not.toBe("");
 
       await harness.holdScoreSave();
@@ -890,7 +853,7 @@ test.describe("the save control re-chooses with the box, the language and the fo
       await expect(page.getByRole("button", { name: words.zh.saving, exact: true })).toBeVisible();
       const saving = await saveLooks(page);
       expect(saving.form, `${width} zh: one form across the language and the state`).toBe(chinese.form);
-      expect([base.zh, icon], `${width} zh saving: the toolbar keeps its height`).toContain(saving.height);
+      expect(saving.height, `${width} zh saving: Save adds no row`).toBe(base.zh);
       await harness.releaseScoreSave();
       await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
       await harness.destroy();
@@ -912,14 +875,13 @@ test.describe("the save control re-chooses with the box, the language and the fo
     await harness.frames(2);
     const narrow = await saveLooks(page);
     const widest = await widestWordsHeight(page, "en");
-    const icon = await iconFormHeight(page);
 
     await harness.destroy();
     await harness.mount({ score: { text: QUARTERS }, drafts: true });
     await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
     const base = (await box(page.locator(".sce-toolbar"))).height;
     expect(narrow.form, "the new box chooses its own form").toBe(widest > base ? "true" : "false");
-    expect([base, icon], "only the box's own rows, and the state is dirty").toContain(narrow.height);
+    expect(narrow.buttonInSight, "the control stays in sight at the narrow width").toBe(true);
   });
 
   test("a settled font re-chooses the form, and the state does not", async ({ page, harness, press, isMobile }) => {
@@ -944,7 +906,6 @@ test.describe("the save control re-chooses with the box, the language and the fo
     const dirty = await saveLooks(page);
     expect(dirty.height, "the height does not wait for the state to change").toBe(clean.height);
     expect(dirty.form, "the state keeps the settled form").toBe(clean.form);
-    const icon = await iconFormHeight(page);
     const widest = await widestWordsHeight(page, "en");
 
     await harness.destroy();
@@ -952,6 +913,6 @@ test.describe("the save control re-chooses with the box, the language and the fo
     await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
     const base = (await box(page.locator(".sce-toolbar"))).height;
     expect(clean.form, "the settled font's own form").toBe(widest > base ? "true" : "false");
-    expect([base, icon], "only the narrowest form may take the box's row").toContain(clean.height);
+    expect(clean.height, "Save does not grow a narrow fine-pointer toolbar").toBeLessThanOrEqual(base);
   });
 });
