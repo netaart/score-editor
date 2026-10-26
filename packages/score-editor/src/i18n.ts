@@ -133,6 +133,42 @@ export interface Messages {
   restoreDone: string;
   /** Said when the original is back but the stored draft could not be cleared. */
   restoreNotCleared: string;
+  /** The change log, its section operations, and the other kinds of change it names. */
+  changeLog: string;
+  changeLogNone: string;
+  changeLogSectionDeleted(name: string): string;
+  changeLogSectionCopied(name: string): string;
+  changeLogSectionMoved(name: string): string;
+  changeLogSectionRenamed(from: string, to: string): string;
+  changeLogSectionAdded(name: string): string;
+  changeLogTempo(from: number, to: number): string;
+  changeLogTempoChanges: string;
+  changeLogKey(from: string, to: string): string;
+  changeLogKeyChanges: string;
+  changeLogMeter(from: string, to: string, count: number): string;
+  changeLogChords: string;
+  changeLogLyrics: string;
+  changeLogStyle: string;
+  changeLogScoreMode(from: string, to: string): string;
+  changeLogSeed(from: string, to: string): string;
+  changeLogSeedNone: string;
+  changeLogNotes(count: number): string;
+  changeLogText: string;
+  /** The handoff control: the trigger, the dialog and its action, and the note about rejected text. */
+  handoffReview: string;
+  handoffTitle: string;
+  handoffCancel: string;
+  handoffAction: string;
+  handoffRejected: string;
+  /** The prefilled instruction: its labels and its fixed sentences. */
+  handoffInstructionTitle: string;
+  handoffInstructionIntro: string;
+  handoffInstructionFinal: string;
+  handoffInstructionStyle: string;
+  handoffInstructionLyrics: string;
+  handoffInstructionMode: string;
+  handoffInstructionSeed: string;
+  handoffInstructionChanges: string;
 }
 
 /** What a phrase's name says about it; `first` and `last` are 1-based bars. */
@@ -276,6 +312,41 @@ const en: Messages = {
   restoreDone: "The original score is back",
   restoreNotCleared:
     "The original score is back, but the saved draft could not be deleted. The next change tries again.",
+  changeLog: "Changes",
+  changeLogNone: "No changes from the original.",
+  changeLogSectionDeleted: (name) => `Removed section “${name}”.`,
+  changeLogSectionCopied: (name) => `Copied section “${name}”.`,
+  changeLogSectionMoved: (name) => `Moved section “${name}”.`,
+  changeLogSectionRenamed: (from, to) => `Renamed section “${from}” to “${to}”.`,
+  changeLogSectionAdded: (name) => `Added section “${name}”.`,
+  changeLogTempo: (from, to) => `Tempo changed from ${from} to ${to} BPM.`,
+  changeLogTempoChanges: "Tempo changes were added or removed.",
+  changeLogKey: (from, to) => `Key changed from ${from} to ${to}.`,
+  changeLogKeyChanges: "Key changes were added or removed.",
+  changeLogMeter: (from, to, count) =>
+    count === 1 ? `Meter changed from ${from} to ${to}.` : `Meter changed in ${plural(count, "bar", "bars")}.`,
+  changeLogChords: "Chords changed.",
+  changeLogLyrics: "Lyrics changed.",
+  changeLogStyle: "Style description changed.",
+  changeLogScoreMode: (from, to) => `Score mode changed from ${from} to ${to}.`,
+  changeLogSeed: (from, to) => `Seed changed from ${from} to ${to}.`,
+  changeLogSeedNone: "none",
+  changeLogNotes: (count) => `The notes of ${plural(count, "bar", "bars")} changed.`,
+  changeLogText: "Edited the score text directly.",
+  handoffReview: "Hand off…",
+  handoffTitle: "Hand off this version",
+  handoffCancel: "Cancel",
+  handoffAction: "Regenerate with this version",
+  handoffRejected: "The text view has text the score did not take. The handoff uses the last score the editor read.",
+  handoffInstructionTitle: "Title",
+  handoffInstructionIntro: "Regenerate with song2. Use the score in the attached score.abc, passed with --text.",
+  handoffInstructionFinal:
+    "The style description and joined lyrics below are final and already synced by the editor; do not change them.",
+  handoffInstructionStyle: "Style description",
+  handoffInstructionLyrics: "Joined lyrics",
+  handoffInstructionMode: "Score mode",
+  handoffInstructionSeed: "Seed",
+  handoffInstructionChanges: "Changes",
 };
 
 const zh: Messages = {
@@ -396,6 +467,39 @@ const zh: Messages = {
   restoreCancel: "取消",
   restoreDone: "已恢复原谱",
   restoreNotCleared: "已恢复原谱，但保存的草稿没能删除。下一次改动会再试。",
+  changeLog: "改动记录",
+  changeLogNone: "和原版相比没有改动。",
+  changeLogSectionDeleted: (name) => `删除了段落「${name}」。`,
+  changeLogSectionCopied: (name) => `复制了段落「${name}」。`,
+  changeLogSectionMoved: (name) => `移动了段落「${name}」。`,
+  changeLogSectionRenamed: (from, to) => `段落「${from}」改名为「${to}」。`,
+  changeLogSectionAdded: (name) => `新增了段落「${name}」。`,
+  changeLogTempo: (from, to) => `速度从 ${from} 改为 ${to} BPM。`,
+  changeLogTempoChanges: "速度变化有增减。",
+  changeLogKey: (from, to) => `调从 ${from} 改为 ${to}。`,
+  changeLogKeyChanges: "调的改变有增减。",
+  changeLogMeter: (from, to, count) => (count === 1 ? `拍号从 ${from} 改为 ${to}。` : `${count} 个小节的拍号变了。`),
+  changeLogChords: "和弦有改动。",
+  changeLogLyrics: "歌词有改动。",
+  changeLogStyle: "风格描述有改动。",
+  changeLogScoreMode: (from, to) => `乐谱模式从 ${from} 改为 ${to}。`,
+  changeLogSeed: (from, to) => `seed 从 ${from} 改为 ${to}。`,
+  changeLogSeedNone: "无",
+  changeLogNotes: (count) => `改了 ${count} 个小节的音符。`,
+  changeLogText: "直接修改了乐谱文本。",
+  handoffReview: "交接…",
+  handoffTitle: "交接这一版",
+  handoffCancel: "取消",
+  handoffAction: "用这版重新生成",
+  handoffRejected: "文本视图里有乐谱没读通的文字。交接用编辑器最后读通的乐谱。",
+  handoffInstructionTitle: "标题",
+  handoffInstructionIntro: "用 song2 重新生成，乐谱用附件里的 score.abc，用 --text 传。",
+  handoffInstructionFinal: "下面的风格描述和拼回的歌词是最终版，编辑器已经同步好，不要再改。",
+  handoffInstructionStyle: "风格描述",
+  handoffInstructionLyrics: "拼回的歌词",
+  handoffInstructionMode: "乐谱模式",
+  handoffInstructionSeed: "Seed",
+  handoffInstructionChanges: "改动记录",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
