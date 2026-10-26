@@ -690,7 +690,10 @@ test.describe("destroying the view parts", () => {
     await baseline.detach();
   });
 
-  test("the draft conflict strip draws its two ways out and leaves nothing when destroyed", async ({ page, harness }) => {
+  test("the draft conflict strip draws its two ways out and leaves nothing when destroyed", async ({
+    page,
+    harness,
+  }) => {
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["draft-conflict"] });
     const part = slot(page, "draft-conflict");
     await expect(part.getByRole("alert")).toHaveText(
