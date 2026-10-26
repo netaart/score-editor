@@ -38,11 +38,11 @@ svg { display: block; }
   margin-left: -3px;
   background: linear-gradient(
     to right,
-    color-mix(in srgb, var(--sce-_text) 8%, transparent) 0 2px,
+    color-mix(in srgb, var(--sce-_text) 20%, transparent) 0 2px,
     var(--sce-_bg) 2px 3px,
     var(--sce-_text) 3px 4px,
     var(--sce-_bg) 4px 5px,
-    color-mix(in srgb, var(--sce-_text) 8%, transparent) 5px 7px
+    color-mix(in srgb, var(--sce-_text) 20%, transparent) 5px 7px
   );
   pointer-events: none;
 }
