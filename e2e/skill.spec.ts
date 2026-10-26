@@ -1,5 +1,5 @@
 // ABOUTME: The browser seam of the editor skill: the shipped example pages, with their imports routed to the local build.
-// ABOUTME: The static page keeps its versioned esm.sh specifiers and the bundler page keeps its ./dist/main.js; routing only substitutes the built code.
+// ABOUTME: The static and edit-one-bar pages keep their versioned esm.sh specifiers and the bundler page keeps its ./dist/main.js; routing only substitutes the built code.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
@@ -8,7 +8,11 @@ const version = JSON.parse(readFileSync(new URL("../packages/score-editor/packag
   .version as string;
 const origin = `http://127.0.0.1:${process.env.E2E_PORT ?? 4310}`;
 const staticPage = "/packages/score-editor/skills/score-editor/assets/static-esm/index.html";
+const editOneBarPage = "/packages/score-editor/skills/score-editor/assets/edit-one-bar/index.html";
 const bundlerPage = "/packages/score-editor/skills/score-editor/assets/pnpm-bundler/index.html";
+const editOneBarScore = fileURLToPath(
+  new URL("../packages/score-editor/skills/score-editor/assets/edit-one-bar/score.abc", import.meta.url),
+);
 const coreSpecifier = `https://esm.sh/@neta-art/score-editor@${version}?bundle&target=es2022`;
 const dialectSpecifier = `https://esm.sh/@neta-art/score-dialect-song2@${version}?bundle&target=es2022`;
 const coreLocal = "/packages/score-editor/dist/index.js";
@@ -110,5 +114,48 @@ test.describe("the editor skill: the pnpm project bundled by esbuild", () => {
       requests.some((url) => new URL(url).pathname === bundleRequest),
       "the page asks for the script build:skill writes",
     ).toBe(true);
+  });
+});
+
+test.describe("the editor skill: the edit-one-bar example", () => {
+  test("changes bar 5, keeps every other line byte for byte, and reports the notice", async ({ page }) => {
+    await page.route(
+      (url) => url.href === coreSpecifier || url.href === dialectSpecifier,
+      async (route) => {
+        const url = route.request().url();
+        const body =
+          url === coreSpecifier
+            ? `export * from "${origin}${coreLocal}";`
+            : `export * from "${origin}${dialectLocal}";`;
+        await route.fulfill({ contentType: "text/javascript", body });
+      },
+    );
+
+    await page.goto(editOneBarPage);
+
+    const status = page.getByRole("status", { name: "Edit status" });
+    await expect(status).toHaveText(
+      /^Bar 5 changed with "C" on Vocal:4096; the notice melody-with-chords came with the changed project, not a refusal\./,
+    );
+    await expect(status).toContainText("every other line is byte-for-byte the same.");
+
+    await expect(page.locator('[data-field="note-id"]')).toHaveText("Vocal:4096");
+    await expect(page.locator('[data-field="notices"]')).toContainText("melody-with-chords");
+    await expect(page.locator('[data-field="refusals"]')).toHaveText("None");
+    await expect(page.locator('[data-field="lines"]')).toHaveText("15 (1 of 44 lines)");
+
+    const written = (await page.getByRole("log", { name: "Written score" }).textContent()) ?? "";
+    const input = readFileSync(editOneBarScore, "utf8");
+    const beforeLines = input.split("\n");
+    const afterLines = written.split("\n");
+    expect(afterLines).toHaveLength(beforeLines.length);
+
+    const changedLines = beforeLines.flatMap((line, index) => (afterLines[index] === line ? [] : [index + 1]));
+    expect(changedLines).toEqual([15]);
+    expect(afterLines[14]).toBe('"C"f4g4z8|z16|z16|z16|');
+    for (const [index, line] of beforeLines.entries()) {
+      if (index === 14) continue;
+      expect(afterLines[index], `line ${index + 1}`).toBe(line);
+    }
   });
 });
