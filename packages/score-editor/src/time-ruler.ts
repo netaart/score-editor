@@ -5,6 +5,7 @@ import { type BuiltAxis, headerRow, mountAxisPart } from "./axis-part";
 import { create } from "./dom";
 import { type Messages, messagesFor } from "./i18n";
 import type { Score } from "./score";
+import { createSectionMenus } from "./section-menu";
 import type { EditingSession } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
 
@@ -35,11 +36,19 @@ function buildRuler(
   return { corner: row.corner, timeline: row.timeline, selection };
 }
 
-/** One band per section that has bars; a marker with no bars after it has nothing to cover. */
-function buildSections(canvas: HTMLElement, score: Score, t: Messages): HTMLElement {
+/**
+ * One band per section that has bars; a marker with no bars after it has nothing to cover. `decorate` is called on each
+ * band with the section's index in the score, once the band holds its name.
+ */
+function buildSections(
+  canvas: HTMLElement,
+  score: Score,
+  t: Messages,
+  decorate: (band: HTMLElement, section: number) => void,
+): HTMLElement {
   const doc = canvas.ownerDocument;
   const { timeline } = headerRow(canvas, "sce-sections", t.sections);
-  for (const section of score.sections) {
+  for (const [index, section] of score.sections.entries()) {
     const first = score.bars[section.firstBar];
     const last = score.bars[section.firstBar + section.barCount - 1];
     if (section.barCount < 1 || !first || !last) continue;
@@ -47,6 +56,7 @@ function buildSections(canvas: HTMLElement, score: Score, t: Messages): HTMLElem
     band.setAttribute("role", "listitem");
     band.style.cssText = `--t:${first.start};--d:${last.start + last.length - first.start}`;
     create(doc, "span", "sce-section-name", band).textContent = section.name ?? t.unnamedSection;
+    decorate(band, index);
   }
   return timeline;
 }
@@ -89,12 +99,14 @@ function buildMarks(canvas: HTMLElement, score: Score, t: Messages): HTMLElement
 /**
  * Mounts the time ruler on `el`: the bar numbers, the section bands and the key and meter marks. It draws from the
  * session's score and follows its zoom, scroll and language. Place it above the tracks; it scrolls with them. While the
- * session is editable a bar number chooses its bar, a drag across the ruler chooses a run, and the keys move the run.
+ * session is editable a bar number chooses its bar, a drag across the ruler chooses a run, and the keys move the run;
+ * each section band opens the section menu (see `createSectionMenus`).
  */
 export function mountTimeRuler(el: HTMLElement, session: EditingSession, options?: AxisPartOptions): ViewPart {
   let score: Score | null = null;
   let rulerRoot: HTMLElement | null = null;
-  return mountAxisPart(
+  const menus = createSectionMenus(session, options);
+  const part = mountAxisPart(
     el,
     session,
     {
@@ -102,6 +114,7 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
       who: "mountTimeRuler",
       region: (t) => t.timeRuler,
       attach(root, signal, live) {
+        menus.attach(root, signal, live);
         rulerRoot = root;
         root.setAttribute("data-editable", String(session.view.editable));
         let drag: { pointerId: number; anchor: number; bar: number } | null = null;
@@ -261,6 +274,7 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
         signal.addEventListener("abort", unsubscribe, { once: true });
       },
       refresh() {
+        menus.refresh();
         const root = rulerRoot;
         const editable = session.view.editable;
         root?.setAttribute("data-editable", String(editable));
@@ -292,8 +306,9 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
       },
       build(canvas, found, t): BuiltAxis {
         score = found;
+        const decorate = menus.begin(canvas, found, t);
         const ruler = buildRuler(canvas, found, t);
-        const sections = buildSections(canvas, found, t);
+        const sections = buildSections(canvas, found, t, decorate);
         const marks = buildMarks(canvas, found, t);
         return {
           axes: [ruler.timeline, sections, marks],
@@ -306,4 +321,10 @@ export function mountTimeRuler(el: HTMLElement, session: EditingSession, options
     },
     options,
   );
+  return {
+    destroy() {
+      menus.destroy();
+      part.destroy();
+    },
+  };
 }

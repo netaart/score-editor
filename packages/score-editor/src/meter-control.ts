@@ -6,7 +6,7 @@ import { create } from "./dom";
 import { messagesFor } from "./i18n";
 import { type LiveRegion, sayRefusals } from "./live-region";
 import { meterAllowed, meterChoices } from "./meter";
-import { keepInside, placeUnder } from "./popover-menu";
+import { anchorOf, keepInside, placeUnder } from "./popover-menu";
 import { type Meter, type Score, TICKS_PER_QUARTER } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
@@ -300,14 +300,18 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
     button.title = t2.meterSection(nameOf(t2, next), next.first + 1, next.last + 1);
   }
 
+  /** The room under the button, leaving the window's 12px margin; undefined where there is no window. */
+  function roomBelow(): number | undefined {
+    const view = doc.defaultView;
+    return view === null ? undefined : Math.max(0, view.innerHeight - button.getBoundingClientRect().bottom - 12);
+  }
+
   menu.addEventListener(
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      const view = doc.defaultView;
-      const room =
-        view === null ? undefined : Math.max(0, view.innerHeight - button.getBoundingClientRect().bottom - 12);
-      placeUnder(menu, button, room === undefined ? {} : { maxHeight: room });
+      const room = roomBelow();
+      placeUnder(anchorOf(button), menu, room === undefined ? {} : { maxHeight: room });
       const { reading } = session;
       const next = reading.kind === "score" ? targetOf(reading.score, session) : null;
       if (next !== null) renderMenu(next);
@@ -323,7 +327,8 @@ export function mountMeterControl(el: HTMLElement, session: EditingSession, opti
         if (menu.contains(doc.activeElement)) button.focus();
         return;
       }
-      keepInside(menu);
+      const room = roomBelow();
+      keepInside(menu, anchorOf(button), room === undefined ? {} : { maxHeight: room });
       (choices.find((choice) => choice.getAttribute("aria-checked") === "true") ?? choices[0])?.focus();
     },
     { signal },

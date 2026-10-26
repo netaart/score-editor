@@ -38,21 +38,34 @@ export function withoutUnfinishedChord(truncation: Truncation | null): Truncatio
 }
 
 /**
- * RULES.md W16: only a bar command may move a boundary cut in Vocal into Ins when Ins has no
- * measure at or after it. The cut goes to the first measure Ins lacks.
+ * RULES.md W16: only a bar command may move a boundary cut in Vocal into Ins, and only when Ins's
+ * first missing measure is the cut measure itself. A longer gap would move the cut earlier in time;
+ * the writer then keeps the Vocal cut and its short Ins block (X9).
  */
 export function writableCut(score: Pick<Score, "voices" | "notes">, truncation: Truncation | null): Truncation | null {
   if (truncation === null || truncation.voice !== "Vocal" || truncation.short) return truncation;
   if (!score.voices.includes("Ins")) return truncation;
   let end = 0;
   for (const note of score.notes) if (note.voice === "Ins" && note.bar + 1 > end) end = note.bar + 1;
-  if (end >= truncation.bar) return truncation;
+  if (end !== truncation.bar - 1) return truncation;
   return { voice: "Ins", bar: end, short: false };
+}
+
+/** True when the cut still carries an X4 remainder other than an unfinished chord string. */
+function cutHasOtherTail(score: Score, truncation: Truncation | null): boolean {
+  if (truncation === null || !truncation.short) return false;
+  const source = score.source as
+    | { readonly musicLines?: ReadonlyArray<{ readonly cutTail?: { readonly kind?: string } | null }> }
+    | null
+    | undefined;
+  const tail = source?.musicLines?.[source.musicLines.length - 1]?.cutTail;
+  return tail !== null && tail !== undefined && tail.kind !== "x4-chord";
 }
 
 /** True when the cut measure has no finished note, rest or chord left, so the writer drops its line. */
 function cutBarIsEmptyAfterChords(score: Score, chords: ReadonlyArray<Chord>, truncation: Truncation | null): boolean {
   if (truncation === null || !truncation.short) return false;
+  if (cutHasOtherTail(score, truncation)) return false;
   const bar = score.bars[truncation.bar];
   if (bar === undefined) return false;
   const hasNote = score.notes.some((note) => note.voice === truncation.voice && note.bar === truncation.bar);

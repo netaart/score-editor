@@ -9,6 +9,9 @@ pnpm build     # writes dist/main.js
 pnpm preview   # serves this folder on http://127.0.0.1:8080/
 ```
 
+`pnpm-workspace.yaml` approves esbuild's install script. Without it, pnpm 11 and later stop `pnpm install` with
+`ERR_PNPM_IGNORED_BUILDS`; keep it when you copy the project.
+
 `src/main.js` mounts several view parts on one editing session, registers a custom tool and runs it, then reads the
 score through the `song2` dialect and writes one command back with `applyScoreCommand`.
 

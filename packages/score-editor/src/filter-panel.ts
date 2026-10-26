@@ -7,6 +7,7 @@ import { createConditions, currentFilter, readConditions } from "./filter-condit
 import { type FilterMessages, filterMessagesFor } from "./filter-messages";
 import { countNotes, filterNotes, type NoteSummary, summarizeNotes } from "./filter-notes";
 import { FILTER_SHEET_QUERY } from "./filter-styles";
+import { anchorOf, clearPlacement, keepInside, placeUnder } from "./popover-menu";
 import type { Score } from "./score";
 import { TICKS_PER_QUARTER } from "./score";
 import type { EditingSession, ScoreReading } from "./session";
@@ -354,14 +355,8 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
         render(reading.score);
         rendered = reading;
       }
-      if (isSheet()) {
-        panel.style.left = "";
-        panel.style.top = "";
-        return;
-      }
-      const rect = button.getBoundingClientRect();
-      panel.style.left = `${rect.left}px`;
-      panel.style.top = `${rect.bottom + 4}px`;
+      if (isSheet()) clearPlacement(panel);
+      else placeUnder(anchorOf(button), panel);
     },
     { signal },
   );
@@ -371,18 +366,7 @@ export function mountFilterPanel(el: HTMLElement, session: EditingSession): View
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      const view = doc.defaultView;
-      if (view && !isSheet()) {
-        const rect = panel.getBoundingClientRect();
-        const overflow = rect.right - (view.innerWidth - 8);
-        if (overflow > 0) panel.style.left = `${Math.max(8, rect.left - overflow)}px`;
-        // Under the button when there is room, else over it, else as high as the window allows.
-        const room = view.innerHeight - 8;
-        if (rect.bottom > room) {
-          const over = button.getBoundingClientRect().top - 4 - rect.height;
-          panel.style.top = `${over >= 8 ? over : Math.max(8, room - rect.height)}px`;
-        }
-      }
+      if (!isSheet()) keepInside(panel, anchorOf(button));
       panel.querySelector<HTMLElement>("input, select, button")?.focus();
     },
     { signal },

@@ -8,6 +8,7 @@ import { dragCss } from "./drag-styles";
 import { filterCss } from "./filter-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
+import { sectionMenuCss } from "./section-styles";
 import { songCss } from "./song-styles";
 
 /** Rows of a 12-row octave, counted from the top (B first), whose pitch is a black key. */
@@ -621,7 +622,8 @@ const css = `
 }
 /* The bar number is the handle that chooses a bar; a press on it starts a range, while a swipe elsewhere still scrolls. */
 .sce-root[data-editable="true"] .sce-bar-number {
-  z-index: 1;
+  /* Above a section band's 12px touch reach into the ruler: the visible number is a handle of its own. */
+  z-index: 2;
   cursor: pointer;
 }
 .sce-root .sce-bar-number[data-selected] {
@@ -1283,6 +1285,7 @@ ${labelThinning()}
 }
 ${boxCss}${lyricCss}
 ${draftCss}
+${sectionMenuCss}
 ${chordCss}
 ${songCss}
 ${filterCss}

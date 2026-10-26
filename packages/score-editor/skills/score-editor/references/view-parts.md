@@ -367,3 +367,34 @@ mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws what the panel s
   closes. On a phone (a coarse pointer and a window at most 640 px wide) the panel is a sheet from the bottom edge;
   elsewhere it hangs from its button, over it when there is no room below.
 - Its texts follow `session.view.language` and are part of this part, not of the host's message catalogue.
+
+## The section menu
+
+While the session is editable, each section band of the time ruler opens a menu: Rename (the unnamed music before the
+first marker says "Name this section"), Start a section at a bar, Move earlier, Move later, Duplicate and Delete section. Each
+choice is one command, so it is one undo step, and a screen reader hears what was done. A choice the commands would
+refuse stays in the menu, muted, with the refusal's words under it; choices side by side that are refused in the same
+words share one note. The two choices that need a name open a small form under the band; a name the commands refuse
+stays in the form with the refusal under it, and the refusal also goes to `onRefused`. A read-only session draws the
+bands and no menu.
+
+Bands are not Tab stops: the Tab key walks from the Arrangement region straight to the notes. The section-menu keys
+are in [DESIGN.md](../../../../../DESIGN.md#section-menu).
+
+`sectionActions(session, section)` is the same answer for a control of your own: the six actions of one section, as
+`SectionAction`s named by `SectionActionName` in the menu's order, each with the command that does it and `unavailable`, the
+`Diagnostic` the command layer would refuse it with, or `null` while it can be done. `rename` and
+`start` carry no command, because they need a name (and `start` a bar) first; send `renameSection` or `nameSection`
+with it. It asks the commands without applying them, so the project, the history and the listeners are untouched.
+
+```ts
+import { formatDiagnostic, sectionActions } from "@neta-art/score-editor";
+
+for (const action of sectionActions(session, 1) ?? []) {
+  if (action.unavailable === null) {
+    if (action.command !== null) button(action.name).onclick = () => session.dispatch(action.command);
+  } else {
+    mute(action.name, formatDiagnostic(action.unavailable, session.view.language));
+  }
+}
+```
