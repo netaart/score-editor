@@ -1,5 +1,5 @@
 // ABOUTME: The export-coverage check of the editor skill: every public export of either package entry must be named as code in the skill.
-// ABOUTME: It also checks the skill folder/name, the API index, both examples' version pins, and that SKILL.md stays under 500 lines.
+// ABOUTME: It also checks the skill folder/name, the API index, all examples' version pins, and that SKILL.md stays under 500 lines.
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -116,10 +116,24 @@ const ownerGroups = {
     "NOTICE_CODES",
     "ProjectCommand",
     "schedulePreview",
+    "tickAtSeconds",
     "PreviewSchedule",
     "PreviewEvent",
     "PreviewNoteEvent",
     "PreviewChordEvent",
+    "LyricRow",
+    "LyricEdge",
+    "LyricBoundaryDrag",
+    "LyricBoundaryMove",
+    "LyricBoundaryPlan",
+    "LyricDrop",
+    "LyricDropPlan",
+    "LyricSplit",
+    "lyricRows",
+    "lyricBoundaryPlan",
+    "lyricDropPlan",
+    "lyricSplitCommand",
+    "barLineTick",
   ],
   "references/editing-session.md": [
     "createEditingSession",
@@ -142,6 +156,7 @@ const ownerGroups = {
     "EditingInputResult",
     "ToolbarOptions",
     "ViewPart",
+    "StaffViewPart",
     "VoiceTrackOptions",
     "handleEditingInput",
     "mountChordTrack",
@@ -161,6 +176,8 @@ const ownerGroups = {
     "PreviewPlayer",
     "PreviewStart",
     "PreviewNoteOptions",
+    "mountLyricTrack",
+    "mountDraftConflict",
   ],
   "references/mount.md": ["mount", "MountedEditor", "MountOptions"],
   "references/custom-tools.md": [
@@ -249,15 +266,21 @@ if (lines >= 500) {
 }
 
 const version = JSON.parse(readFileSync(join(root, "packages/score-editor/package.json"), "utf8")).version;
-const staticSource = readFileSync(join(skillDir, "assets/static-esm/main.js"), "utf8");
-const staticPins = ["score-editor", "score-dialect-song2"].map((packageName) => {
-  const pattern = new RegExp(`https://esm\\.sh/@neta-art/${packageName}@([^?"\\s]+)\\?bundle&target=es2022`);
-  return { packageName, pin: pattern.exec(staticSource)?.[1] };
-});
-for (const { packageName, pin } of staticPins) {
-  if (pin !== version) {
-    failed = true;
-    console.error(`The static example pins ${packageName}@${pin ?? "(none)"}, the package is ${version}`);
+const exampleSources = [
+  { name: "static", file: "assets/static-esm/main.js" },
+  { name: "edit-one-bar", file: "assets/edit-one-bar/main.js" },
+];
+for (const example of exampleSources) {
+  const source = readFileSync(join(skillDir, example.file), "utf8");
+  const pins = ["score-editor", "score-dialect-song2"].map((packageName) => {
+    const pattern = new RegExp(`https://esm\\.sh/@neta-art/${packageName}@([^?"\\s]+)\\?bundle&target=es2022`);
+    return { packageName, pin: pattern.exec(source)?.[1] };
+  });
+  for (const { packageName, pin } of pins) {
+    if (pin !== version) {
+      failed = true;
+      console.error(`The ${example.name} example pins ${packageName}@${pin ?? "(none)"}, the package is ${version}`);
+    }
   }
 }
 
@@ -268,6 +291,6 @@ for (const packageName of ["@neta-art/score-editor", "@neta-art/score-dialect-so
     console.error(`The bundler example pins ${packageName}@${bundlerPins[packageName]}, the package is ${version}`);
   }
 }
-if (!failed) console.log(`Both examples pin the package version ${version} exactly.`);
+if (!failed) console.log(`All examples pin the package version ${version} exactly.`);
 
 process.exit(failed ? 1 : 0);

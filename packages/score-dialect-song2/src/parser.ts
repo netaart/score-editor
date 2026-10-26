@@ -14,6 +14,7 @@ import type {
   Tempo,
   Truncation,
 } from "@neta-art/score-editor";
+import { isWhitespace, normalizeLineBreaks, stripTrailingWhitespace, trimWhitespace } from "./text";
 
 // The core's tick unit. The dialect depends on the core for types only, so it restates this one number.
 const TICKS_PER_QUARTER = 256;
@@ -345,11 +346,11 @@ function isDigit(char: string | undefined): boolean {
 }
 
 function isSpace(char: string | undefined): boolean {
-  return char === " " || char === "\t";
+  return isWhitespace(char);
 }
 
 function trimBody(body: string): string {
-  return body.replace(/^[ \t]+/, "").replace(/[ \t]+$/, "");
+  return trimWhitespace(body);
 }
 
 // RULES.md M4: only Z, Z2, Z3 and Z4 are whole-measure rests.
@@ -409,8 +410,8 @@ class Song2Parser {
 
   constructor(normalized: string) {
     this.normalized = normalized;
-    // RULES.md T2 strips trailing space and tab; T3 removes blank lines at the end only.
-    const stripped = normalized.split("\n").map((line) => line.replace(/[ \t]+$/, ""));
+    // RULES.md T2 strips trailing whitespace; T3 removes blank lines at the end only.
+    const stripped = normalized.split("\n").map((line) => stripTrailingWhitespace(line));
     // RULES.md T3: a final LF is not a score line; trailing blank lines are not a cut.
     while (stripped.length > 0 && stripped[stripped.length - 1] === "") stripped.pop();
     this.lines = stripped;
@@ -1110,6 +1111,20 @@ class Song2Parser {
     if (tied) pos += 1;
 
     const duration = this.durationOf(digits, voice, lineNumber, bar);
+    // RULES.md D6: overflow is refused even in a cut tail, where the token would otherwise be X5.
+    if (offset + duration > length) {
+      fail(
+        "bar-length",
+        {
+          bar: bar + 1,
+          meter: meterText(voice.meter),
+          actual: offset + duration,
+          expected: length,
+          reason: "overflow",
+        },
+        this.at(voice, lineNumber, bar + 1),
+      );
+    }
     const written = 60 + LETTER_SEMITONES[letter] + (lower ? 12 : 0) + 12 * (apostrophes - commas);
 
     let pitch: number;
@@ -1129,19 +1144,6 @@ class Song2Parser {
     }
 
     if (accidental !== null) voice.accidental[letter] = accidental;
-    if (offset + duration > length) {
-      fail(
-        "bar-length",
-        {
-          bar: bar + 1,
-          meter: meterText(voice.meter),
-          actual: offset + duration,
-          expected: length,
-          reason: "overflow",
-        },
-        this.at(voice, lineNumber, bar + 1),
-      );
-    }
 
     const note = this.pushNote(voice, measureStart + offset, duration, pitch, tied, bar);
     this.attachChords(voice, note.start, note.id);
@@ -1371,9 +1373,9 @@ class Song2Parser {
 }
 
 /** Reads a score text. It never throws: anything outside RULES.md becomes one diagnostic and a null score. */
-// RULES.md T1: CRLF and a lone CR both become LF before any line is read.
+// RULES.md T1: every line boundary becomes LF before any line is read.
 export function parseSong2(text: string): Song2ParseResult {
-  const normalized = text.replace(/\r\n?/g, "\n");
+  const normalized = normalizeLineBreaks(text);
   try {
     return { score: new Song2Parser(normalized).parse(), diagnostics: [] };
   } catch (error) {

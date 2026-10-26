@@ -161,6 +161,14 @@ export interface EditingSession {
    */
   dispatch(command: ScoreCommand | ProjectCommand): DispatchResult;
   /**
+   * Applies a list of commands as one step of the history, through the same path as `dispatch`: all of them apply, in
+   * order, or none does, and the listeners hear one change. It is how a gesture that needs several commands, such as
+   * dragging a boundary two lyric lines share, stays one undo. A notice does not stop the list, and the notices of the
+   * steps that were taken come back once each; any other diagnostic refuses all of it. An empty list, or one that leaves
+   * the project as it was, adds no step.
+   */
+  dispatchAll(commands: ReadonlyArray<ScoreCommand | ProjectCommand>): DispatchResult;
+  /**
    * What `dispatch` of `replaceScoreText` with `text` would say, without changing or announcing anything: the
    * diagnostics it would be refused with, the notices it would be taken with, and none when it would take the text
    * plainly. `isNoticeDiagnostic` tells the two apart; a result with no other diagnostic is a text the session takes. The
@@ -529,6 +537,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     dispatch(command) {
       return applyCommands([command], isProjectCommand(command) ? command : undefined);
+    },
+    dispatchAll(commands) {
+      return applyCommands(commands);
     },
     runTool(tool, values = {}) {
       const result = applyToolRequest(tool, { project, selection, values }, dialects);

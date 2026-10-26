@@ -1,8 +1,10 @@
 // ABOUTME: The preview player of one editing session: starts and stops the synth preview and publishes the tick under the playhead.
 // ABOUTME: It knows the session and the audio, and no view; the arrangement view subscribes to it and draws the playhead from the tick it publishes.
 import { type PreviewSchedule, schedulePreview } from "./preview-schedule";
+import type { Score } from "./score";
 import type { EditingSession } from "./session";
 import { type AudioUse, audioAvailable, joinAudio, type Sounding, sound } from "./synth-engine";
+import { secondsAtTick, tickAtSeconds } from "./tempo";
 
 /**
  * What `start` came to. `"started"`: the preview is playing. `"nothing-to-play"`: there is no readable score, or nothing
@@ -20,11 +22,12 @@ export interface PreviewPlayer {
   /** The tick the preview started from while it plays; null otherwise. */
   readonly from: number | null;
   /**
-   * Plays the synthetic preview of the session's score from the insertion point, or from the start when there is none
-   * or the session is not editable. A browser lets sound start only for a user gesture, so call this synchronously from
-   * a click, tap or key handler. Does nothing while the preview already plays.
+   * Plays the synthetic preview of the session's score from `fromTick`, or from the insertion point when no tick is
+   * given, or from the start when there is no insertion point or the session is not editable. A browser lets sound
+   * start only for a user gesture, so call this synchronously from a click, tap or key handler. Does nothing while the
+   * preview already plays.
    */
-  start(): Promise<PreviewStart>;
+  start(fromTick?: number): Promise<PreviewStart>;
   /** Silences the preview at once. Does nothing when nothing plays. */
   stop(): void;
   /**
@@ -38,6 +41,7 @@ export interface PreviewPlayer {
 const LEAD = 0.06;
 
 interface Running {
+  readonly score: Score;
   readonly schedule: PreviewSchedule;
   readonly use: AudioUse;
   readonly sounding: Sounding;
@@ -67,21 +71,26 @@ class Player implements PreviewPlayer {
     return this.running?.schedule.fromTick ?? null;
   }
 
-  start(): Promise<PreviewStart> {
+  start(fromTick?: number): Promise<PreviewStart> {
     if (this.running) return Promise.resolve("started");
-    this.pending ??= this.begin().finally(() => {
+    this.pending ??= this.begin(fromTick).finally(() => {
       this.pending = null;
     });
     return this.pending;
   }
 
   /** Runs synchronously as far as asking for the audio context, which is what a browser wants inside a user gesture. */
-  private async begin(): Promise<PreviewStart> {
+  private async begin(fromTick?: number): Promise<PreviewStart> {
     const { session } = this;
     const reading = session.reading;
     if (reading.kind !== "score") return "nothing-to-play";
     if (!audioAvailable()) return "unsupported";
-    const from = session.view.editable ? (session.insertionPoint?.tick ?? 0) : 0;
+    const from =
+      fromTick !== undefined && Number.isFinite(fromTick)
+        ? Math.max(0, Math.floor(fromTick))
+        : session.view.editable
+          ? (session.insertionPoint?.tick ?? 0)
+          : 0;
     const schedule = schedulePreview(reading.score, from);
     if (schedule.events.length === 0) return "nothing-to-play";
     const use = joinAudio();
@@ -97,11 +106,11 @@ class Player implements PreviewPlayer {
       use.leave();
       return "blocked";
     }
-    this.play(schedule, use);
+    this.play(reading.score, schedule, use);
     return "started";
   }
 
-  private play(schedule: PreviewSchedule, use: AudioUse): void {
+  private play(score: Score, schedule: PreviewSchedule, use: AudioUse): void {
     const { context } = use;
     const begin = context.currentTime + LEAD;
     const sounding = sound(context, schedule, begin, () => this.stop());
@@ -121,6 +130,7 @@ class Player implements PreviewPlayer {
     document.addEventListener("keydown", escapeKey);
     document.addEventListener("play", mediaStarted, true);
     this.running = {
+      score,
       schedule,
       use,
       sounding,
@@ -144,7 +154,7 @@ class Player implements PreviewPlayer {
     const { context } = running.use;
     const latency = Number.isFinite(context.outputLatency) ? context.outputLatency : 0;
     const elapsed = Math.min(Math.max(0, context.currentTime - latency - running.begin), running.schedule.length);
-    this.current = running.schedule.fromTick + elapsed / running.schedule.secondsPerTick;
+    this.current = tickAtSeconds(running.score, secondsAtTick(running.score, running.schedule.fromTick) + elapsed);
     this.publish();
   }
 

@@ -10,6 +10,22 @@ export interface PopoverMenu {
   rule(): void;
 }
 
+/** Puts a popover that is about to open under its button, on the button's left edge. */
+export function placeUnder(button: HTMLElement, popover: HTMLElement): void {
+  const rect = button.getBoundingClientRect();
+  popover.style.left = `${rect.left}px`;
+  popover.style.top = `${rect.bottom + 4}px`;
+}
+
+/** Moves an open popover left until it is inside the window, 8px from its edge, when it ran off to the right. */
+export function nudgeIntoWindow(popover: HTMLElement): void {
+  const view = popover.ownerDocument.defaultView;
+  if (!view) return;
+  const rect = popover.getBoundingClientRect();
+  const overflow = rect.right - (view.innerWidth - 8);
+  if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
+}
+
 export interface PopoverMenuOptions {
   /** The item that takes the focus when the menu opens; the first item when this gives none. */
   initialFocus?(items: ReadonlyArray<HTMLButtonElement>): HTMLElement | undefined;
@@ -41,9 +57,7 @@ export function mountPopoverMenu(
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      const rect = button.getBoundingClientRect();
-      menu.style.left = `${rect.left}px`;
-      menu.style.top = `${rect.bottom + 4}px`;
+      placeUnder(button, menu);
     },
     { signal },
   );
@@ -53,12 +67,7 @@ export function mountPopoverMenu(
       const open = (event as ToggleEvent).newState === "open";
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
-      const view = doc.defaultView;
-      if (view) {
-        const rect = menu.getBoundingClientRect();
-        const overflow = rect.right - (view.innerWidth - 8);
-        if (overflow > 0) menu.style.left = `${Math.max(8, rect.left - overflow)}px`;
-      }
+      nudgeIntoWindow(menu);
       (options.initialFocus?.(items) ?? items.find((item) => !item.hidden))?.focus();
     },
     { signal },

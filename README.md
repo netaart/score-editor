@@ -7,7 +7,7 @@ Two packages, versioned and published together:
 | Package | What it is |
 | --- | --- |
 | [`@neta-art/score-editor`](packages/score-editor) | The editor core: `mount(el, { language, project, dialects })` returns `{ update(options), destroy() }`. |
-| [`@neta-art/score-dialect-song2`](packages/score-dialect-song2) | The `song2` score dialect: identity, declarative constraints, `parse` and `serialize`. Depends on the core for types only. |
+| [`@neta-art/score-dialect-song2`](packages/score-dialect-song2) | The `song2` score dialect: identity, declarative constraints, `parse` and `serialize`, plus its format rules and the writing page. Depends on the core for types only. |
 
 More: [PRODUCT.md](PRODUCT.md) (who it is for and what it must do), [DESIGN.md](DESIGN.md) (the theme variable contract and the look of the neutral defaults), [docs/spike.md](docs/spike.md) (what the first spike decided about rendering, events, style isolation and popovers, with what was and was not verified, and the scale numbers).
 
@@ -28,7 +28,7 @@ Both packages always carry the same version and are published together, from a m
 
 1. `pnpm check` passes on the commit to release.
 2. Set the same `version` in both `packages/*/package.json`, and commit it.
-3. `pnpm build`, then `pnpm check:pack`: each tarball must hold only its build output, `LICENSE`, `README.md` and `package.json`.
+3. `pnpm build`, then `pnpm check:pack`: each tarball must hold only its build output, `LICENSE`, `README.md`, `package.json`, and the dialect's `RULES.md` and `WRITING.md`.
 4. Publish the core first, then the dialect: `pnpm publish --no-git-checks` inside `packages/score-editor`, then inside `packages/score-dialect-song2`, with `NPM_ACCESS_TOKEN` supplied to npm through a user config file kept outside the repository (`//registry.npmjs.org/:_authToken=${NPM_ACCESS_TOKEN}`, selected with `npm_config_userconfig`). pnpm rewrites the dialect's `workspace:` dependency on the core to the released version.
 5. In an empty directory outside the repository, install both packages from `https://registry.npmjs.org/` itself (mirrors lag behind it) and import each entry in Node; both imports must succeed. Right after publishing, the version can already be fetched while the package document still answers 404 for a few minutes; wait until it does not.
 6. Tag the commit `v<version>` and push the tag.

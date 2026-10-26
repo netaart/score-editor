@@ -9,7 +9,11 @@
       "ink-light": { "role": "neutral", "displayName": "Default ink (light)", "canonical": "#18181b" },
       "ink-dark": { "role": "neutral", "displayName": "Default ink (dark)", "canonical": "#ececee" },
       "accent-light": { "role": "primary", "displayName": "Default accent (light)", "canonical": "#2457d6" },
-      "accent-dark": { "role": "primary", "displayName": "Default accent (dark)", "canonical": "#7da3ff" }
+      "accent-dark": { "role": "primary", "displayName": "Default accent (dark)", "canonical": "#7da3ff" },
+      "equal-light": { "role": "secondary", "displayName": "Equal green (light)", "canonical": "#2e8b4f" },
+      "equal-dark": { "role": "secondary", "displayName": "Equal green (dark)", "canonical": "#4cc27a" },
+      "unequal-light": { "role": "tertiary", "displayName": "Unequal yellow (light)", "canonical": "#c79100" },
+      "unequal-dark": { "role": "tertiary", "displayName": "Unequal yellow (dark)", "canonical": "#f0c040" }
     },
     "typographyMeta": {
       "base": {
@@ -44,6 +48,8 @@
       { "name": "--sce-color-line-strong", "default": "28% text in bg" },
       { "name": "--sce-color-accent", "default": "light-dark(#2457d6, #7da3ff)" },
       { "name": "--sce-color-note", "default": "the accent value" },
+      { "name": "--sce-color-equal", "default": "light-dark(#2e8b4f, #4cc27a)" },
+      { "name": "--sce-color-unequal", "default": "light-dark(#c79100, #f0c040)" },
       { "name": "--sce-font-family", "default": "inherit" },
       { "name": "--sce-radius", "default": "4px" },
       { "name": "--sce-row-height", "default": "14px fine pointer, 24px coarse pointer" },
@@ -120,7 +126,7 @@
       },
       {
         "name": "The One Accent Rule",
-        "body": "Accent marks focus and the checked menu dot; the note colour defaults to the same value. Nothing else is tinted.",
+        "body": "Accent marks focus and the checked menu dot; the note colour defaults to the same value. Nothing else is tinted but the wash and the line of a lyric phrase, which take the two state hues.",
         "section": "colors"
       },
       {
@@ -130,7 +136,7 @@
       },
       {
         "name": "The Keyword Size Rule",
-        "body": "No px or rem font sizes. The root is a keyword; descendants are em.",
+        "body": "No px or rem font sizes. The root is a keyword; descendants are em. The one exception is the lyric track's text fields on a coarse pointer, 16px, so a phone does not zoom on focus.",
         "section": "typography"
       },
       {

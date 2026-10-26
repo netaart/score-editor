@@ -61,6 +61,8 @@ export interface MountOptions {
   project: SongProject;
   /** The score dialects this editor can read, built by the host with `createDialectRegistry`. */
   dialects: DialectRegistry;
+  /** The host's draft storage; see "In the default editor" in the package README. */
+  drafts?: DraftStore;
 }
 
 export interface MountedEditor {
