@@ -279,9 +279,9 @@ const editor = mount(el, {
 editor.hasUnsavedChanges(); // the same answer, asked just before closing
 ```
 
-The toolbar has **Save** in its right-hand group, before the view switch, with an **Unsaved** pill beside it at desktop
-and phone widths above 360px; at 320px the button becomes a 36px icon with a dot for the unsaved state, so the row does
-not grow. Ctrl/Cmd+S saves while the focus is inside the editor. While there is nothing to save, or a save is in flight or a conflict stands,
+The toolbar has **Save** in its right-hand group, before the view switch. At 1280px an **Unsaved** pill sits beside it;
+below 480px the pill gives way to a 6px dot so the row does not grow, and at 320px the word gives way too, leaving the
+same 36px icon button the others use on a coarse pointer. Ctrl/Cmd+S saves while the focus is inside the editor. While there is nothing to save, or a save is in flight or a conflict stands,
 Save is `aria-disabled`. A slow save reads **Saving…**; a failed one says **Save failed**, leaves the changes in place,
 and sends `notify` the `score-save-failed` notice. A version conflict shows the draft conflict's strip with
 **Overwrite with my version** (read their version, then write ours over it) and **Load the other version** (their text
@@ -293,8 +293,9 @@ A **generated score** (the absent source) keeps drafts as before and adds **Save
 callback receives the current score text. `onSaveAs` is not shown in read-only mode.
 
 `requiredInputs` is the host's list of `ProjectField` values (`"style"`, `"scoreMode"`, `"seed"`, `"lyrics"`). While
-one is missing, the handoff trigger reads **Complete required inputs…** and opens the Project panel on the first missing
-field instead of the review. The editor reads no model declaration. A score-file handoff saves first when the file is
+one is missing, the handoff trigger reads **Complete required inputs…** instead of opening the review. Style, score
+mode and seed open the Project panel on that field; lyrics show the arrangement and open the lyric track's new-line
+editor, because the Project panel shows lyrics read-only. The editor reads no model declaration. A score-file handoff saves first when the file is
 dirty and stays closed on a conflict or a failed save; its instruction title is the file's name.
 
 For a host with its own Save control, `createScoreFileKeeper({ session, original, source, notify?, onUnsavedChange? })`

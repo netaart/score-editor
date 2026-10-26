@@ -751,10 +751,10 @@ refused. The button has the other word buttons' make (ground fill, 1px strong li
 coarse pointer); it is `aria-disabled` while there is nothing to write, while a save is in flight or while a conflict
 stands, and its tooltip names Ctrl/Cmd+S. The shortcut is heard only while the focus is inside the editor, so the
 browser's own save and the host's shortcuts are untouched outside it. The pill takes no new colour: the dirty state is
-the button's own text weight, and the failed state uses the text colour for its line and word. At 412px the word and
-the pill stay; at 320px they would push another control to a row, so the button becomes the same 36px icon button the
-others are on a coarse pointer, with a 6px text-colour dot for the unsaved state, and the pill is not drawn. The
-control adds no row to the phone toolbar at either width: 412 and 320 keep the height they had without it.
+the button's own text weight, and the failed state uses the text colour for its line and word. At 1280px the word and
+the pill stay; below 480px the pill would push another control to a row, so the word stays and a 6px text-colour dot
+carries the unsaved state; at 320px the word gives way too, and the button becomes the same 36px icon button the others
+are on a coarse pointer. The control adds no row at 1280, 412 or 320: each keeps the height it had without it.
 
 A generated score gets the same slot as one word button **Save as…**, only while the host gave `onSaveAs` and while the
 editor is editable. It has the same icon and compact form as Save. Its accessible name is **Save as score file**; it
@@ -768,11 +768,12 @@ two two-line choices, **Overwrite with my version** (reads the other writer's ve
 under it. The file wording replaces the draft wording on Restore original too: **Go back to the last saved version?**,
 **Every change since the last save is discarded. You can't undo this.**, and **The last saved version is back**.
 
-While a required model input is missing, the handoff trigger reads **Complete required inputs…** and it opens the
-Project panel on the first missing field instead of the review; the editor reads no model declaration. The handoff for
-a score file saves first when the file is dirty, keeps the callback closed on a conflict or a failure, and writes the
-file's name as the instruction's title. The decisions and what each rests on are in the ticket's shape document and
-report.
+While a required model input is missing, the handoff trigger reads **Complete required inputs…** instead of opening the
+review. Style, score mode and seed open the Project panel on that field; lyrics show the arrangement if another view is
+shown and open the lyric track's new-line editor on its text box, since the Project panel shows lyrics read-only. The
+editor reads no model declaration. The handoff for a score file saves first when the file is dirty, keeps the callback
+closed on a conflict or a failure, and writes the file's name as the instruction's title. The decisions and what each
+rests on are in the ticket's shape document and report.
 
 ### Change log and handoff
 

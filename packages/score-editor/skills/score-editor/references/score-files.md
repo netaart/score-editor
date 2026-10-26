@@ -65,12 +65,13 @@ const editor = mount(el, {
 editor.hasUnsavedChanges(); // false for a generated score
 ```
 
-- The toolbar gets **Save** in the right-hand group, before the view switch, with the unsaved pill beside it. Save is
+- The toolbar gets **Save** in the right-hand group, before the view switch. At 1280px an **Unsaved** pill sits beside
+  it; below 480px a 6px dot carries the unsaved state, and at 320px the word gives way to the save icon. Save is
   `aria-disabled` while there is nothing to write or while a save is in flight or a conflict stands. Ctrl/Cmd+S saves
   while the focus is inside the editor; outside it the browser's and the host's own shortcuts are untouched.
-- The states are clean (no pill), dirty (`Unsaved`), saving (`Saving…`), conflict (the strip) and failed (`Save failed`;
-  the host also gets `score-save-failed`). A failed save leaves the changes in place, and Save retries with the same
-  version.
+- The states are clean (no mark), dirty (`Unsaved` or the dot), saving (`Saving…`), conflict (the strip) and failed
+  (`Save failed`; the host also gets `score-save-failed`). A failed save leaves the changes in place, and Save retries
+  with the same version.
 - A conflict shows the same strip and two two-line choices as the draft conflict: **Overwrite with my version** reads
   the other writer's version and writes ours over it, **Load the other version** puts their text in the session as a new
   document. The editor never overwrites by itself.
@@ -115,8 +116,9 @@ project when it starts, so an edit made while the host is slow stays unsaved whe
 
 The editor reads no model declaration. `requiredInputs` is the host's list of `ProjectField` values (`"style"`,
 `"scoreMode"`, `"seed"` or `"lyrics"`). While one is missing, the handoff trigger reads **Complete required inputs…**;
-pressing it opens the Project panel on the first missing field instead of the review. Filling the field recomputes the
-state, and the ordinary trigger comes back.
+pressing it opens the Project panel on the first missing field instead of the review, except for lyrics: those show the
+arrangement and open the lyric track's new-line editor on its text box. Filling the field recomputes the state, and the
+ordinary trigger comes back.
 
 With a score file, the handoff saves first when the file is dirty (conflict and failure keep the callback closed), the
 change log compares with the last saved project, and the instruction's title is the file's name. With a generated

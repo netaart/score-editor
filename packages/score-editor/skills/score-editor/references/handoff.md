@@ -43,8 +43,9 @@ options are `{ original, current, title?, language, dialect? }`. It states:
 The joined lyrics come from the current score and lyric lines, not from the stored `lyrics` field alone.
 
 `requiredInputs` is the host's list of `ProjectField` values the model requires. While one is missing, the handoff
-trigger reads **Complete required inputs…** and opens the Project panel on the first missing field instead of the
-review; it comes back when the field is filled. The editor reads no model declaration.
+trigger reads **Complete required inputs…** instead of opening the review; style, score mode and seed open the Project
+panel on that field, while lyrics show the arrangement and open the lyric track's new-line editor. The trigger comes
+back when the field is filled. The editor reads no model declaration.
 
 ## The handoff in `mount`
 

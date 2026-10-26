@@ -69,7 +69,7 @@ change. The tests in the repository check that the list stays complete.
 | `lyricDropPlan` | core | The one-bar phrase, and its command, for a line let go of over a tick; says whether the bar is free. |
 | `lyricSplitCommand` | core | The `splitLyricLine` command for a caret in a line's text, with the bar when the phrase has two bars or more. |
 | `barLineTick` | core | The tick of a bar line, which is what a `LyricBoundaryPlan`'s `boundary` names; a line before the first bar is the start of the score, one past the last bar its end. |
-| `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions`. |
+| `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions` and returns a `LyricTrackPart`. |
 | `changeLog` | core | Reads the original and current projects with a dialect and returns one sentence per kind of change, in the chosen language. |
 | `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`. |
 
@@ -170,6 +170,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `ProjectPanel` | A `ViewPart` with `element`, `commit()` and `focus(field)`: the song project panel's root, the pending field a host takes when it closes its own container, and the field the handoff opens. |
 | `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
+| `LyricTrackPart` | `ViewPart` plus `focusEntry()`: opens the lyric track's new-line editor and focuses its text box. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
 | `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper?, tempoKey?, projectPanel? }` for the toolbar. |
