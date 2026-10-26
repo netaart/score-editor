@@ -142,6 +142,11 @@ const ownerGroups = {
     "lyricDropPlan",
     "lyricSplitCommand",
     "barLineTick",
+    "AddNoteCommand",
+    "CopiedNote",
+    "PasteNotesCommand",
+    "DuplicateNotesCommand",
+    "CopyNotesCommand",
   ],
   "references/editing-session.md": [
     "createEditingSession",

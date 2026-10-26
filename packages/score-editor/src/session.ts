@@ -409,10 +409,28 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   ): DispatchResult {
     return withDialect<DispatchResult>(
       (dialect) => {
-        const following = followedSelection(commands);
+        const before = read();
+        let following = followedSelection(commands);
         const applied = applyCommandList(dialect, project, commands);
         if (!applied.ok) return { ok: false, project, diagnostics: applied.diagnostics };
-        if (!sameProject(project, applied.project)) commit(applied.project, "dispatch", named, following);
+        if (!sameProject(project, applied.project)) {
+          // An edit that places notes follows the notes it made, since their ids are their new starts.
+          const placing =
+            commands.length === 1 &&
+            ["addNote", "pasteNotes", "duplicateNotes", "copyNotes"].includes(
+              (commands[0] as { readonly type: string }).type,
+            );
+          if (placing && before.kind === "score") {
+            const after = dialect.parse(applied.project.score).score;
+            if (after !== null) {
+              const known = new Set(before.score.notes.filter((note) => note.midi !== null).map((note) => note.id));
+              following = after.notes
+                .filter((note) => note.midi !== null && !known.has(note.id))
+                .map((note) => note.id);
+            }
+          }
+          commit(applied.project, "dispatch", named, following);
+        }
         return { ok: true, project, diagnostics: applied.diagnostics };
       },
       (modelId) => ({ ok: false, project, diagnostics: [noDialectDiagnostic(modelId)] }),

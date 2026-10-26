@@ -5,6 +5,13 @@ import { runBarCommand } from "./commands-bars";
 import { setChord } from "./commands-chords";
 import { runRemoveChords, runSetKey, runSetTempo, runTranspose } from "./commands-key-tempo";
 import { type MoveNotesCommand, type ResizeNotesCommand, runNoteCommand } from "./commands-notes";
+import {
+  type AddNoteCommand,
+  type CopyNotesCommand,
+  type DuplicateNotesCommand,
+  type PasteNotesCommand,
+  runPlaceCommand,
+} from "./commands-place";
 import { runSectionCommand } from "./commands-sections";
 import { noteAt, tieChain } from "./commands-shared";
 import { runTruncationCommand } from "./commands-truncation";
@@ -37,7 +44,11 @@ export type ScoreCommand =
   | { readonly type: "renameSection"; readonly section: number; readonly name: string }
   | { readonly type: "nameSection"; readonly bar: number; readonly name: string }
   | MoveNotesCommand
-  | ResizeNotesCommand;
+  | ResizeNotesCommand
+  | AddNoteCommand
+  | PasteNotesCommand
+  | DuplicateNotesCommand
+  | CopyNotesCommand;
 
 export type ToRestCommand = Extract<ScoreCommand, { type: "toRest" }>;
 
@@ -117,5 +128,10 @@ export function runScoreCommand(
     case "moveNotes":
     case "resizeNotes":
       return runNoteCommand(score, command, constraints);
+    case "addNote":
+    case "pasteNotes":
+    case "duplicateNotes":
+    case "copyNotes":
+      return runPlaceCommand(score, command, constraints);
   }
 }
