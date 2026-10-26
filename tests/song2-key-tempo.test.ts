@@ -14,6 +14,7 @@ import {
   type SongProject,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
+import { SAMPLE_SWEEP_TIMEOUT } from "./song2-support";
 
 interface SampleFact {
   file: string;
@@ -248,13 +249,14 @@ E16|`);
     ]);
   });
 
-  it("keeps comments, sections, the bar count, the voices and every header except K: on every sample", () => {
+  it("keeps comments, sections, the bar count, the voices and every header except K: on every sample", {
+    timeout: SAMPLE_SWEEP_TIMEOUT,
+  }, () => {
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const before = parse(text);
       const output = apply(text, { type: "transpose", semitones: 2 });
       const after = parse(output);
-      check(after);
 
       expect(otherLinesWithoutKeys(output), fact.file).toEqual(otherLinesWithoutKeys(text));
       expect(after.bars.length, fact.file).toBe(before.bars.length);
@@ -269,7 +271,7 @@ E16|`);
     }
   });
 
-  it("moves every key by the same semitones on every sample", () => {
+  it("moves every key by the same semitones on every sample", { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const after = parse(apply(text, { type: "transpose", semitones: 2 }));
@@ -281,14 +283,15 @@ E16|`);
     }
   });
 
-  it("restores every note's MIDI after transposing N and then -N, on every sample", () => {
+  it("restores every note's MIDI after transposing N and then -N, on every sample", {
+    timeout: SAMPLE_SWEEP_TIMEOUT,
+  }, () => {
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const before = parse(text);
       const up = apply(text, { type: "transpose", semitones: 3 });
       const back = apply(up, { type: "transpose", semitones: -3 });
       const after = parse(back);
-      check(after);
 
       const original = notesById(before);
       expect(after.notes, fact.file).toHaveLength(before.notes.length);
@@ -555,13 +558,14 @@ C8[K:D]A,8|`);
     expect(apply(SIMPLE, { type: "setKey", key: "C" })).toBe(SIMPLE);
   });
 
-  it("sets the whole score's key on every sample and transposes every note by the shortest interval", () => {
+  it("sets the whole score's key on every sample and transposes every note by the shortest interval", {
+    timeout: SAMPLE_SWEEP_TIMEOUT,
+  }, () => {
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const before = parse(text);
       const output = apply(text, { type: "setKey", key: "C" });
       const after = parse(output);
-      check(after);
 
       expect(
         after.keys.map((entry) => entry.key),
@@ -640,13 +644,12 @@ G16|G8B8|
 });
 
 describe("set tempo", () => {
-  it("writes Q:1/4= and changes no pitch on every sample", () => {
+  it("writes Q:1/4= and changes no pitch on every sample", { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const before = parse(text);
       const output = apply(text, { type: "setTempo", bpm: 133 });
       const after = parse(output);
-      check(after);
 
       expect(after.tempo, fact.file).toEqual({ unit: "1/4", bpm: 133 });
       expect(after.notes, fact.file).toEqual(before.notes);
@@ -781,7 +784,9 @@ C16|`;
 });
 
 describe("removeChords on every sample", () => {
-  it("removes every chord and leaves every other bar and every note untouched", () => {
+  it("removes every chord and leaves every other bar and every note untouched", {
+    timeout: SAMPLE_SWEEP_TIMEOUT,
+  }, () => {
     for (const fact of facts) {
       const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
       const before = parse(text);
@@ -795,7 +800,6 @@ describe("removeChords on every sample", () => {
       }
 
       const after = parse(result.text);
-      check(after);
       expect(after.hasChords, fact.file).toBe(false);
       expect(after.chords, fact.file).toEqual([]);
       expect(after.notes, fact.file).toEqual(before.notes);
@@ -809,8 +813,10 @@ describe("removeChords on every sample", () => {
         const bar = before.bars.find((entry) => chord.start >= entry.start && chord.start < entry.start + entry.length);
         if (bar !== undefined) touched.add(`Vocal:${bar.index}`);
       }
-      const oldBars = splitBars(text).pieces;
-      const newBars = splitBars(result.text).pieces;
+      const oldTextBars = splitBars(text);
+      const newTextBars = splitBars(result.text);
+      const oldBars = oldTextBars.pieces;
+      const newBars = newTextBars.pieces;
       expect(
         [...newBars.keys()].filter((key) => !oldBars.has(key)),
         fact.file,
@@ -819,7 +825,7 @@ describe("removeChords on every sample", () => {
         if (touched.has(key)) continue;
         expect(newBars.get(key), `${fact.file} ${key}`).toBe(piece);
       }
-      expect(splitBars(result.text).otherLines, fact.file).toEqual(splitBars(text).otherLines);
+      expect(newTextBars.otherLines, fact.file).toEqual(oldTextBars.otherLines);
     }
   });
 

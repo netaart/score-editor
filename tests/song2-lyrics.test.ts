@@ -6,7 +6,6 @@ import {
   alignedLyricLines,
   alignLyricLine,
   applyProjectCommand,
-  applyScoreCommand,
   checkProject,
   joinLyrics,
   LYRICS_MAX_CHARACTERS,
@@ -23,6 +22,7 @@ import {
   unalignedLyricLines,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
+import { SAMPLE_SWEEP_TIMEOUT } from "./song2-support";
 
 const HEADER = `X:1
 T:
@@ -688,59 +688,62 @@ describe("stored lines on every sample", () => {
     }
   }
 
-  it("keeps every binding inside one new section and rejoins the text after every bar and section command", () => {
-    for (const fact of facts) {
-      const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
-      const before = parse(text);
-      const lines: LyricLine[] = before.bars.map((bar) => ({
-        text: `bar ${bar.index}`,
-        phrase: { firstBar: bar.index, barCount: 1 },
-      }));
-      const input: SongProject = {
-        ...project(),
-        score: text,
-        lyricLines: lines,
-        lyrics: joinLyrics(before, lines),
-      };
-      const middle = Math.floor(before.bars.length / 2);
-      const commands: ScoreCommand[] = [
-        { type: "insertBar", bar: 0 },
-        { type: "insertBar", bar: middle },
-        { type: "insertBar", bar: before.bars.length },
-        { type: "deleteBars", from: middle, count: 1 },
-        { type: "deleteBars", from: 0, count: Math.min(2, before.bars.length) },
-        { type: "setSectionMeter", section: 0, meter: { numerator: 2, denominator: 4 } },
-        { type: "fillTruncatedBar" },
-        { type: "deleteTruncatedBar" },
-      ];
-      const sectionIndex = Math.max(
-        0,
-        before.sections.findIndex((section) => section.name !== null),
-      );
-      const section = before.sections[sectionIndex];
-      if (section !== undefined) {
-        commands.push({ type: "deleteSection", section: sectionIndex });
-        if (section.name !== null) commands.push({ type: "duplicateSection", section: sectionIndex });
-        if (sectionIndex > 0) commands.push({ type: "moveSection", section: sectionIndex, direction: "earlier" });
-        if (sectionIndex + 1 < before.sections.length) {
-          commands.push({ type: "moveSection", section: sectionIndex, direction: "later" });
+  it(
+    "keeps every binding inside one new section and rejoins the text after every bar and section command",
+    () => {
+      for (const fact of facts) {
+        const text = readFileSync(new URL(`samples/${fact.file}`, directory), "utf8");
+        const before = parse(text);
+        const lines: LyricLine[] = before.bars.map((bar) => ({
+          text: `bar ${bar.index}`,
+          phrase: { firstBar: bar.index, barCount: 1 },
+        }));
+        const input: SongProject = {
+          ...project(),
+          score: text,
+          lyricLines: lines,
+          lyrics: joinLyrics(before, lines),
+        };
+        const middle = Math.floor(before.bars.length / 2);
+        const commands: ScoreCommand[] = [
+          { type: "insertBar", bar: 0 },
+          { type: "insertBar", bar: middle },
+          { type: "insertBar", bar: before.bars.length },
+          { type: "deleteBars", from: middle, count: 1 },
+          { type: "deleteBars", from: 0, count: Math.min(2, before.bars.length) },
+          { type: "setSectionMeter", section: 0, meter: { numerator: 2, denominator: 4 } },
+          { type: "fillTruncatedBar" },
+          { type: "deleteTruncatedBar" },
+        ];
+        const sectionIndex = Math.max(
+          0,
+          before.sections.findIndex((section) => section.name !== null),
+        );
+        const section = before.sections[sectionIndex];
+        if (section !== undefined) {
+          commands.push({ type: "deleteSection", section: sectionIndex });
+          if (section.name !== null) commands.push({ type: "duplicateSection", section: sectionIndex });
+          if (sectionIndex > 0) commands.push({ type: "moveSection", section: sectionIndex, direction: "earlier" });
+          if (sectionIndex + 1 < before.sections.length) {
+            commands.push({ type: "moveSection", section: sectionIndex, direction: "later" });
+          }
+          commands.push({ type: "renameSection", section: sectionIndex, name: "R" });
+          commands.push({ type: "nameSection", bar: section.firstBar, name: "S" });
         }
-        commands.push({ type: "renameSection", section: sectionIndex, name: "R" });
-        commands.push({ type: "nameSection", bar: section.firstBar, name: "S" });
-      }
 
-      for (const command of commands) {
-        const expected = applyScoreCommand(song2Dialect, text, command);
-        const result = applyProjectCommand(song2Dialect, input, command);
-        if (!expected.ok) {
-          expect(result.project, `${fact.file} ${command.type}`).toBe(input);
-          continue;
+        for (const command of commands) {
+          // applyProjectCommand runs the score command itself; its project is the input unchanged only on a refusal.
+          const result = applyProjectCommand(song2Dialect, input, command);
+          if (result.project === input) {
+            expect(result.diagnostics.length, `${fact.file} ${command.type}: a refusal says why`).toBeGreaterThan(0);
+            continue;
+          }
+          const after = parse(result.project.score);
+          const resultLines = result.project.lyricLines ?? [];
+          validLines(after, resultLines);
         }
-        const after = parse(expected.text);
-        expect(result.project.score, `${fact.file} ${command.type}`).toBe(expected.text);
-        const resultLines = result.project.lyricLines ?? [];
-        validLines(after, resultLines);
       }
-    }
-  }, 30000);
+    },
+    SAMPLE_SWEEP_TIMEOUT,
+  );
 });

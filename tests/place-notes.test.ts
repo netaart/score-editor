@@ -10,7 +10,7 @@ import {
   type Note as ScoreNote,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
-import { chainAround, parse, pitched, splitBars } from "./song2-support";
+import { chainAround, parse, pitched, SAMPLE_SWEEP_TIMEOUT, splitBars } from "./song2-support";
 
 const HEADER = `X:1
 T:
@@ -358,8 +358,7 @@ function exerciseSample(file: string): void {
 
 describe("placing on every sample: untouched bars, one note a time, the target reached", () => {
   for (const fact of facts) {
-    // The largest sample runs nineteen commands at about 3 s here; a busy machine can take several times that.
-    it(`${fact.file}: the sweep holds every invariant`, { timeout: 30_000 }, () => {
+    it(`${fact.file}: the sweep holds every invariant`, { timeout: SAMPLE_SWEEP_TIMEOUT }, () => {
       exerciseSample(fact.file);
     });
   }
