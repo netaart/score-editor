@@ -230,6 +230,45 @@ describe("the names a chord picker offers", () => {
     expect(names).toHaveLength(35 * 15 * 2);
     expect(refused).toEqual([]);
   });
+
+  it("build only names the command accepts for a vocabulary with a slash quality", () => {
+    const constraints = {
+      ...song2Dialect.constraints,
+      chords: { roots: ["C", "C#"], qualities: ["", "6/9"], slashBass: true },
+    };
+    const session = createEditingSession({
+      project: { ...project, score: CHORDED },
+      dialects: createDialectRegistry([{ ...song2Dialect, constraints }]),
+    });
+    const choices = chordChoices(constraints.chords);
+    const roots = choices.letters.flatMap((found) => found.roots);
+    const names = [
+      ...roots.flatMap((root) => choices.qualities.map((quality) => `${root}${quality}`)),
+      ...roots.flatMap((bass) => choices.qualities.map((quality) => `C${quality}/${bass}`)),
+    ];
+
+    expect(choices.qualities).toEqual([""]);
+    expect(names).not.toContain("C6/9");
+    const refused = names.filter((name) => !session.dispatch({ type: "setChord", noteId: "Vocal:256", name }).ok);
+    expect(refused).toEqual([]);
+  });
+
+  it("offer only the qualities the grammar can write for every offered root", () => {
+    const vocabulary = { roots: ["C", "C#"], qualities: ["", "6/9"], slashBass: true };
+    const choices = chordChoices(vocabulary);
+    const roots = choices.letters.flatMap((found) => found.roots);
+    const basses: Array<string | null> = [null, ...roots];
+
+    expect(choices.qualities).toEqual([""]);
+    for (const root of roots) {
+      for (const quality of choices.qualities) {
+        for (const bass of basses) {
+          const name = `${root}${quality}${bass === null ? "" : `/${bass}`}`;
+          expect(splitChordName(name, vocabulary), name).toEqual({ root, quality, bass });
+        }
+      }
+    }
+  });
 });
 
 describe("splitting a chord name by a vocabulary", () => {
@@ -262,5 +301,18 @@ describe("splitting a chord name by a vocabulary", () => {
     expect(splitChordName("Cm", narrow)).toBeNull();
     expect(splitChordName("D", narrow)).toBeNull();
     expect(splitChordName("C/D", narrow)).toBeNull();
+  });
+
+  it("gives nothing for a root or a bass root the ChordVocabulary contract does not allow", () => {
+    const roots = { roots: ["C", "C###"], qualities: [""], slashBass: false };
+    const bass = { ...roots, slashBass: true };
+
+    expect(splitChordName("C###", roots)).toBeNull();
+    expect(splitChordName("C/C###", bass)).toBeNull();
+    expect(chordChoices(roots)).toEqual({
+      letters: [{ letter: "C", roots: ["C"] }],
+      qualities: [""],
+      slashBass: false,
+    });
   });
 });
