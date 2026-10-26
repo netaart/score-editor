@@ -98,8 +98,8 @@ The voice edits are `VoiceOctaveCommand` (`octaves`: 1, -1, 2 or -2) and `Instru
 of `VoiceCommand` and of `ScoreCommand`. The octave command moves only Vocal's pitched notes, leaves Ins, the chords and
 the keys alone, and refuses the whole move with `voice-octave-range` when a note would leave MIDI 0-127. The instrumental
 version moves Vocal's pitched tie chains into Ins; an existing Ins note gives way, cut short or split around the moved
-notes or dropped when fully covered, and Vocal keeps rests and chords. It refuses with `instrumental-voice-missing` when
-the score has no Ins voice and `unit-unknown` when it has no written duration unit. A successful `ApplyScoreResult.report`
+notes or dropped when fully covered, and Vocal keeps rests and chords. When the score has no Ins voice it adds one and
+fills its bars with rests; it refuses with `unit-unknown` when the score has no written duration unit. A successful `ApplyScoreResult.report`
 (or `CommandListResult.reports` / `ToolResult.reports`) carries `VoiceOctaveReport`
 (`{ kind: "voiceOctave", octaves, medianMidi, singable }`) or `InstrumentalReport`
 (`{ kind: "instrumentalVersion", moved, shortened, dropped }`); `CommandReport` is their union. The two built-in Tools

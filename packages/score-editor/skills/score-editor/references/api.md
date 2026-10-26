@@ -113,7 +113,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
-| `VoiceOctaveCommand`, `InstrumentalVersionCommand`, `VoiceCommand` | The two voice edits and their union; members of `ScoreCommand`. Voice octave refuses with `voice-octave-range`; the instrumental version with `instrumental-voice-missing` or `unit-unknown`. |
+| `VoiceOctaveCommand`, `InstrumentalVersionCommand`, `VoiceCommand` | The two voice edits and their union; members of `ScoreCommand`. Voice octave refuses with `voice-octave-range`; the instrumental version with `unit-unknown`, and adds an Ins voice when the source has none. |
 | `VoiceOctaveReport`, `InstrumentalReport`, `CommandReport` | What a voice command reports: `{ kind: "voiceOctave", octaves, medianMidi, singable }` and `{ kind: "instrumentalVersion", moved, shortened, dropped }`. `ApplyScoreResult.report`, `CommandListResult.reports` and `ToolResult.reports` carry them. |
 | `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
 | `AddNoteCommand`, `PasteNotesCommand`, `DuplicateNotesCommand`, `CopyNotesCommand`, `CopiedNote` | The placing commands (a new note, a paste at the insertion point, a repeat after the selection, and the Alt-drag copy) and the copied note they take; members of `ScoreCommand`. |
