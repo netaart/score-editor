@@ -44,6 +44,7 @@ const log = (current: SongProject, language: "en" | "zh" = "en") =>
 describe("the change log", () => {
   it("names a score text edit that leaves the parsed score as it was", () => {
     expect(log(changed({ score: SCORE_WITH_TITLE }))).toEqual(["Edited the score text directly."]);
+    expect(log(changed({ score: SCORE_WITH_TITLE }), "zh")).toEqual(["直接修改了乐谱文本。"]);
   });
 });
 
@@ -59,6 +60,7 @@ K:C
 V: Vocal
 "C"C4D4E4F4|G16|`;
     expect(musicLog(withoutChorus)).toEqual(["Removed section “chorus”."]);
+    expect(musicLog(withoutChorus, "zh")).toEqual(["删除了段落「chorus」。"]);
   });
 
   it("names a copied section", () => {
@@ -67,6 +69,7 @@ V: Vocal
 V: Vocal
 A16|B16|`;
     expect(musicLog(twice)).toEqual(["Copied section “chorus”."]);
+    expect(musicLog(twice, "zh")).toEqual(["复制了段落「chorus」。"]);
   });
 
   it("names the section that moved, not the ones whose bar numbers shifted", () => {
@@ -79,6 +82,7 @@ A16|B16|
 V: Vocal
 "C"C4D4E4F4|G16|`;
     expect(musicLog(moved)).toEqual(["Moved section “verse”."]);
+    expect(musicLog(moved, "zh")).toEqual(["移动了段落「verse」。"]);
   });
 
   it("names a renamed section", () => {
