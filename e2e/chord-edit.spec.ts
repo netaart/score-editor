@@ -47,7 +47,10 @@ function twoVoices(vocal: string, ins: string): string {
 /** Four quarter notes then a whole note in Vocal; a whole note in each bar of Ins. */
 const QUARTERS = twoVoices("C4D4E4F4|G16|", "C16|C16|");
 
-const chordTrack = (page: Page) => page.getByRole("region", { name: "Chords" });
+/** The chord track part: a named region when mounted on its own, and no region when it shares the editor's scroller. */
+const chordTrack = (page: Page) => page.locator(".sce-part-chord-track");
+/** The track's own live region, outside the picker while one is open. */
+const live = (page: Page) => chordTrack(page).getByRole("status").first();
 /** The list a track keeps for its chords; empty of chords it is a sentence instead. */
 const timeline = (page: Page) => page.locator(".sce-chords .sce-timeline");
 const picker = (page: Page, name: string | RegExp) => page.getByRole("dialog", { name });
@@ -63,8 +66,8 @@ async function xOfTick(timelineBox: Locator, tick: number): Promise<number> {
 /** The same score with Am already on the second quarter note. */
 const CHORDED = twoVoices('C4"Am"D4E4F4|G16|', "C16|C16|");
 
-/** Sixteen bars in each voice, wide enough that a start can be scrolled off the left edge of the window. */
-const LONG = twoVoices("C16|".repeat(16), "C16|".repeat(16));
+/** Four bars in each voice, wide enough at 400% that a start can be scrolled off the left edge of the window. */
+const LONG = twoVoices("C16|C16|C16|C16|", "C16|C16|C16|C16|");
 
 /** Presses the chord track at `tick`, as a click on a mouse project and a tap on a touch project. */
 async function pressAtTick(
@@ -109,7 +112,7 @@ test.describe("placing a chord", () => {
     await expect(open).toBeVisible();
     await expect(open.getByText("Bar 1, beat 2")).toBeVisible();
     await expect(open.getByRole("status")).toHaveText("C");
-    await expect(chordTrack(page).getByRole("status").first()).toHaveAttribute("role", "status");
+    await expect(live(page)).toHaveAttribute("role", "status");
     await open.getByRole("radiogroup", { name: "Root" }).getByRole("radio", { name: "A", exact: true }).click();
     await open.getByRole("radiogroup", { name: "Type" }).getByRole("radio", { name: "Am", exact: true }).click();
     await open.getByRole("button", { name: "Place", exact: true }).click();
@@ -273,9 +276,9 @@ test.describe("a dialect where two voices allow chords", () => {
     expect(await harness.layout.dispatch({ type: "setChord", noteId: "Ins:256", name: "G" })).toMatchObject({
       ok: true,
     });
-    await expect(chordTrack(page).getByRole("listitem", { name: "G", exact: true })).toBeVisible();
+    await expect(chordTrack(page).getByRole("listitem").filter({ hasText: /^G$/ })).toBeVisible();
 
-    await press(chordTrack(page).getByRole("listitem", { name: "G", exact: true }));
+    await press(chordTrack(page).getByRole("listitem").filter({ hasText: /^G$/ }));
     const open = picker(page, "Chord at bar 1 beat 2");
     await expect(open.getByText("Now G")).toBeVisible();
     await expect(open.getByRole("button", { name: "Remove", exact: true })).toBeVisible();
@@ -291,7 +294,7 @@ test.describe("a dialect where two voices allow chords", () => {
     expect(changed).toContain("% ins-chord 256 Dm");
 
     await press(undoButton(page));
-    await expect(chordTrack(page).getByRole("status")).toHaveText("Chord G at bar 1 beat 2");
+    await expect(live(page)).toHaveText("Chord G at bar 1 beat 2");
     const undone = await harness.layout.scoreText();
     expect(musicLineOf(undone, "Vocal")).toBe('C4"Am"D4E4F4|G16|');
     expect(musicLineOf(undone, "Ins")).toBe("C2D2E2F2G2A2B2c2|C16|");
@@ -307,19 +310,18 @@ test.describe("a dialect where two voices allow chords", () => {
       ok: true,
     });
 
-    await press(chordTrack(page).getByRole("listitem", { name: "G", exact: true }));
+    await press(chordTrack(page).getByRole("listitem").filter({ hasText: /^G$/ }));
     const open = picker(page, "Chord at bar 1 beat 2");
     await choose(open, "D", "Dm");
     await press(open.getByRole("button", { name: "Change", exact: true }));
     await expect(open).toBeHidden();
 
     await press(undoButton(page));
-    await expect(chordTrack(page).getByRole("status")).toHaveText("Chord G at bar 1 beat 2");
+    await expect(live(page)).toHaveText("Chord G at bar 1 beat 2");
   });
 });
 
 const cursor = (page: Page) => page.getByRole("button", { name: /^Chord place, / });
-const live = (page: Page) => chordTrack(page).getByRole("status");
 
 test.describe("Ins has no way in", () => {
   test("a press where only Ins has a start takes the nearest Vocal start, and the chord is written on Vocal", async ({
@@ -794,7 +796,7 @@ test.describe("the picker inside the window", () => {
   test("a start scrolled off to the left still opens a picker inside the window", async ({ page, harness }) => {
     await openParts(harness, { score: { text: LONG } });
     await cursor(page).focus();
-    await harness.layout.setView({ scrollLeft: 800 });
+    await harness.layout.setView({ zoom: 4, scrollLeft: 800 });
     await expect(cursor(page)).toBeFocused();
     await page.keyboard.press("Enter");
 
@@ -869,7 +871,7 @@ test.describe("a picker above the row", () => {
     press,
   }) => {
     const size = page.viewportSize();
-    await page.setViewportSize({ width: size?.width ?? 1280, height: 1000 });
+    await page.setViewportSize({ width: size?.width ?? 1280, height: 600 });
     // The chord row is low in the window: the picker has more room above it than below.
     await openParts(harness, { score: { text: QUARTERS }, top: 700 });
     await pressAtTick(page, press, 0);
@@ -892,7 +894,7 @@ test.describe("a picker above the row", () => {
     expect(Math.abs(toggleAfter.y - toggleBefore.y)).toBeLessThan(1);
     const after = await box(open);
     expect(after.y).toBeGreaterThanOrEqual(0);
-    expect(after.y + after.height).toBeLessThanOrEqual(1000);
+    expect(after.y + after.height).toBeLessThanOrEqual(600);
     const clipped = await open.evaluate((el) => el.scrollHeight - el.clientHeight);
     expect(clipped).toBeLessThanOrEqual(1);
     await press(open.getByRole("button", { name: "Place", exact: true }));
