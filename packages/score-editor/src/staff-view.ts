@@ -4,7 +4,7 @@ import { barIndexAt } from "./arrangement";
 import { create, requireDom } from "./dom";
 import { messagesFor, viewName } from "./i18n";
 import { holdPreviewPlayer } from "./preview-player";
-import type { Score } from "./score";
+import type { Note, Score } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import { tickAtSeconds } from "./tempo";
@@ -31,18 +31,37 @@ svg { display: block; }
 .sce-staff-cursor {
   position: absolute;
   z-index: 1;
-  width: 3px;
-  margin-left: -1px;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  width: 7px;
+  margin-left: -3px;
   background: linear-gradient(
     to right,
-    var(--sce-_bg) 0 1px,
-    var(--sce-_text) 1px 2px,
-    var(--sce-_bg) 2px 3px
+    color-mix(in srgb, var(--sce-_text) 8%, transparent) 0 2px,
+    var(--sce-_bg) 2px 3px,
+    var(--sce-_text) 3px 4px,
+    var(--sce-_bg) 4px 5px,
+    color-mix(in srgb, var(--sce-_text) 8%, transparent) 5px 7px
   );
   pointer-events: none;
 }
 @media (forced-colors: active) {
-  .sce-staff-cursor { background: CanvasText; }
+  /* Forced colours drop a background image, so the band is two 2 px borders and the ink a pseudo-element. */
+  .sce-staff-cursor {
+    background: Canvas;
+    border-left: 2px solid Highlight;
+    border-right: 2px solid Highlight;
+  }
+  .sce-staff-cursor::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 1px;
+    width: 1px;
+    background: CanvasText;
+  }
 }
 `;
 
@@ -55,7 +74,13 @@ export interface StaffViewPart extends ViewPart {
   setPlayPosition(seconds: number | null): void;
 }
 
-/** One bar as abcjs drew it: the model's ticks and the drawing's coordinates. */
+/** A drawn onset inside a bar: its tick and the x abcjs drew it at. */
+interface CursorAnchor {
+  readonly tick: number;
+  readonly x: number;
+}
+
+/** One bar as abcjs drew it: the model's ticks, the drawing's coordinates, and its drawn onsets. */
 interface CursorBar {
   readonly index: number;
   readonly start: number;
@@ -64,6 +89,9 @@ interface CursorBar {
   readonly x1: number;
   readonly top: number;
   readonly bottom: number;
+  readonly systemTop: number;
+  readonly system: number;
+  readonly anchors: ReadonlyArray<CursorAnchor>;
 }
 
 interface CursorGeometry {
@@ -93,6 +121,62 @@ interface AbcStaffGroup {
     readonly absoluteY?: number;
   }>;
   readonly voices?: ReadonlyArray<{ readonly children?: ReadonlyArray<AbcElement> }>;
+}
+
+/** One drawn note or rest, with the model event it draws and the x abcjs placed its left edge at. */
+interface DrawnOnset {
+  readonly bar: number;
+  readonly tick: number;
+  readonly duration: number;
+  readonly rest: boolean;
+  readonly x: number;
+}
+
+/**
+ * Every note and rest drawn on one system, paired with its model event by the marks abcjs writes: `abcjs-v<n>` names
+ * the voice, `abcjs-mm<n>` the bar in the score. The events of a voice are in time order, as its measures are.
+ */
+function drawnOnsetsOf(
+  score: Score,
+  allNotes: ReadonlyArray<SVGGraphicsElement>,
+  lineClass: string,
+  host: HTMLElement,
+): DrawnOnset[] {
+  const drawn: DrawnOnset[] = [];
+  for (const [voiceIndex, voice] of score.voices.entries()) {
+    const voiceClass = `abcjs-v${voiceIndex}`;
+    const nodes = allNotes.filter((node) => node.classList.contains(lineClass) && node.classList.contains(voiceClass));
+    const nodesByBar = new Map<number, SVGGraphicsElement[]>();
+    for (const node of nodes) {
+      const bar = Number(/abcjs-mm(\d+)/.exec(node.getAttribute("class") ?? "")?.[1]);
+      if (!Number.isInteger(bar)) continue;
+      const found = nodesByBar.get(bar);
+      if (found) found.push(node);
+      else nodesByBar.set(bar, [node]);
+    }
+    const modelByBar = new Map<number, Note[]>();
+    for (const note of score.notes) {
+      if (note.voice !== voice) continue;
+      const found = modelByBar.get(note.bar);
+      if (found) found.push(note);
+      else modelByBar.set(note.bar, [note]);
+    }
+    for (const [bar, barNodes] of nodesByBar) {
+      const model = (modelByBar.get(bar) ?? []).sort((a, b) => a.start - b.start);
+      for (const [at, node] of barNodes.entries()) {
+        const note = model[at];
+        if (!note) continue;
+        drawn.push({
+          bar,
+          tick: note.start,
+          duration: note.duration,
+          rest: note.midi === null,
+          x: boxIn(host, node).left,
+        });
+      }
+    }
+  }
+  return drawn;
 }
 
 let loading: Promise<Abcjs> | null = null;
@@ -146,10 +230,12 @@ function boxIn(host: HTMLElement, node: Element): DrawingBox {
  * lines above and below. abcjs orders each line's voice by its measures, so the bars of the drawing follow the model.
  * The boxes are read from the drawn `.abcjs-bar`, `.abcjs-note` and `.abcjs-staff` elements themselves, in the
  * drawing host's pixels: that is the cursor's containing block, the only space its own left and top mean anything in.
- * The elements are picked by the marks abcjs writes on them (`abcjs-v<n>`, `abcjs-l<n>`), so a later voice or staff
- * cannot be mistaken for the voice and line being walked. A bar starts at the drawn line that closes the one before
- * it; the first bar of a system has no line of its own, so it starts at its first drawn note or rest. On a two-staff
- * system the staff box is the span from the first staff's top line to the last staff's bottom line.
+ * The elements are picked by the marks abcjs writes on them (`abcjs-v<n>`, `abcjs-l<n>`, `abcjs-mm<n>`), so a later
+ * voice or staff cannot be mistaken for the voice and line being walked. Every bar starts at the leftmost onset
+ * drawn at its first tick (a note, or a rest shorter than the bar); with none, at the opening bar line, or after the
+ * clef, key and meter on a system's first bar. Its last segment runs to the next bar's start on the same system, or to
+ * its closing line on the last bar of a system. On a two-staff system the staff box is the span from the first staff's
+ * top line to the last staff's bottom line.
  */
 function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeometry {
   const svg = host.shadowRoot?.querySelector("svg");
@@ -186,9 +272,22 @@ function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeome
     const top = staffBoxes.length > 0 ? Math.min(...staffBoxes.map((box) => box.top)) : Math.min(...fallbackTops);
     const bottom =
       staffBoxes.length > 0 ? Math.max(...staffBoxes.map((box) => box.bottom)) : Math.max(...fallbackBottoms);
+    // The first system's top is the drawing's top, so going back to bar 1 scrolls all the way and shows its tempo.
+    const tempoTops = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-tempo")]
+      .filter((node) => node.classList.contains(lineClass))
+      .map((node) => boxIn(host, node).top);
+    const systemTop = index === 0 ? 0 : Math.min(...tempoTops, top);
+    const drawn = drawnOnsetsOf(score, allNotes, lineClass, host);
+    const extras = [
+      ...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-clef, .abcjs-key-signature, .abcjs-time-signature"),
+    ]
+      .filter((node) => node.classList.contains(lineClass))
+      .map((node) => boxIn(host, node).right);
+    const afterExtras = extras.length > 0 ? Math.max(...extras) + 2 : null;
     const children = voice.children ?? [];
     let startX: number | null = null;
     let hasContent = false;
+    let firstOfSystem = true;
     let barAt = 0;
     let noteAt = 0;
     for (const child of children) {
@@ -209,15 +308,44 @@ function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeome
       }
       const model = score.bars[index];
       if (model) {
+        // A whole-bar rest is drawn in the middle of the bar, not at its onset; any voice's onset can open a system.
+        const starts = drawn
+          .filter((onset) => onset.bar === index && onset.tick === model.start)
+          .filter((onset) => !onset.rest || onset.duration < model.length)
+          .map((onset) => onset.x);
+        const x0 =
+          starts.length > 0 ? Math.min(...starts) : firstOfSystem ? (afterExtras ?? startX ?? barX) : (startX ?? barX);
+        // A tick with onsets in both voices has one x: the leftmost of them, as the bar's start does.
+        const xAt = new Map<number, number>();
+        for (const onset of drawn) {
+          if (onset.bar !== index) continue;
+          if (onset.rest && onset.duration >= model.length) continue;
+          const known = xAt.get(onset.tick);
+          if (known === undefined || onset.x < known) xAt.set(onset.tick, onset.x);
+        }
+        xAt.set(model.start, x0);
+        xAt.set(model.start + model.length, barX);
         bars.push({
           index,
           start: model.start,
           end: model.start + model.length,
-          x0: startX ?? barX,
+          x0,
           x1: barX,
           top,
           bottom,
+          systemTop,
+          system: line,
+          anchors: [...xAt].map(([tick, x]) => ({ tick, x })).sort((a, b) => a.tick - b.tick),
         });
+        // A bar on the same system runs its last segment to the next bar's start, not to the line between them.
+        const previousBar = bars[bars.length - 2];
+        if (previousBar && previousBar.system === line) {
+          (previousBar.anchors as CursorAnchor[])[previousBar.anchors.length - 1] = {
+            tick: previousBar.end,
+            x: x0,
+          };
+        }
+        firstOfSystem = false;
       }
       index += 1;
       startX = barX;
@@ -273,6 +401,22 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
   let geometry: CursorGeometry = { bars: [] };
   /** The host's own position, in seconds, kept while the preview plays and shown again when it stops. */
   let hostSeconds: number | null = null;
+  /** The last bar the cursor stood in, so a seek can be told from the next frame of a preview. */
+  let lastBar = -1;
+  /** False while the reader has scrolled the cursor out of view: their scroll is left alone until it is back. */
+  let following = true;
+  /** Set around the part's own reveal, so its scroll event is not taken for the reader's. */
+  let ownScroll = false;
+  let ownTop = 0;
+  let ownLeft = 0;
+  /** The system the cursor's height was last set for, so an unchanged system writes no box properties. */
+  let cursorTop = Number.NaN;
+  let cursorBottom = Number.NaN;
+  /** The drawing's offset in the region's scroll content, and the region's inner size, read once per drawing. */
+  let holderLeft = 0;
+  let holderTop = 0;
+  let regionWidth = 0;
+  let regionHeight = 0;
 
   function say(words: string, role: "status" | "alert"): void {
     message.textContent = words;
@@ -282,6 +426,9 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
 
   function hideCursor(): void {
     cursor.hidden = true;
+    lastBar = -1;
+    cursorTop = Number.NaN;
+    cursorBottom = Number.NaN;
   }
 
   function clear(): void {
@@ -298,16 +445,91 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
     return score === null || hostSeconds === null ? null : tickAtSeconds(score, hostSeconds);
   }
 
-  /** Brings a cursor that has gone out of the region back into it, near the start of the line it is on. */
-  function reveal(): void {
+  /** Whether the whole cursor is inside the region's visible box. */
+  function cursorInView(): boolean {
+    if (cursor.hidden) return false;
     const line = cursor.getBoundingClientRect();
     const view = scroller.getBoundingClientRect();
-    if (line.left < view.left || line.right > view.right) {
-      scroller.scrollLeft = Math.max(0, scroller.scrollLeft + line.left - view.left - REVEAL_MARGIN);
+    return line.left >= view.left && line.right <= view.right && line.top >= view.top && line.bottom <= view.bottom;
+  }
+
+  /** Reads the drawing's place in the region's scroll content and the region's inner size, once per drawing. */
+  function measureRegion(): void {
+    const view = scroller.getBoundingClientRect();
+    const base = holder.getBoundingClientRect();
+    holderLeft = base.left - view.left + scroller.scrollLeft;
+    holderTop = base.top - view.top + scroller.scrollTop;
+    regionWidth = scroller.clientWidth;
+    regionHeight = scroller.clientHeight;
+  }
+
+  /** Whether a cursor at `x` in `bar` is in the region, worked out from the cached layout rather than measured. */
+  function visibleAt(x: number, bar: CursorBar): boolean {
+    const left = holderLeft + x;
+    const top = holderTop + bar.top - 2;
+    const height = bar.bottom - bar.top + 4;
+    const scrollLeft = scroller.scrollLeft;
+    const scrollTop = scroller.scrollTop;
+    return (
+      left >= scrollLeft &&
+      left + 7 <= scrollLeft + regionWidth &&
+      top >= scrollTop &&
+      top + height <= scrollTop + regionHeight
+    );
+  }
+
+  /** Scrolls the region as the part's own move, so the scroll event it causes does not count as the reader's. */
+  function scrollTo(top: number, left: number): void {
+    const nextTop = Math.max(0, top);
+    const nextLeft = Math.max(0, left);
+    if (Math.abs(nextTop - scroller.scrollTop) < 0.5 && Math.abs(nextLeft - scroller.scrollLeft) < 0.5) return;
+    ownScroll = true;
+    ownTop = nextTop;
+    ownLeft = nextLeft;
+    scroller.scrollTop = nextTop;
+    scroller.scrollLeft = nextLeft;
+    win.requestAnimationFrame(() => {
+      ownScroll = false;
+    });
+  }
+
+  /**
+   * Brings a cursor that has gone out of the region back into it. Vertically it brings the top of the cursor's
+   * system, not the cursor, to the margin: the system's tempo and part names are what a reader needs with it.
+   */
+  function reveal(bar: CursorBar): void {
+    if (cursor.hidden) return;
+    const line = cursor.getBoundingClientRect();
+    const view = scroller.getBoundingClientRect();
+    const sideways = line.left < view.left || line.right > view.right;
+    const vertical = line.top < view.top || line.bottom > view.bottom;
+    if (!sideways && !vertical) return;
+    const left = sideways ? scroller.scrollLeft + line.left - view.left - REVEAL_MARGIN : scroller.scrollLeft;
+    let top = scroller.scrollTop;
+    if (vertical) {
+      const holderInView = holder.getBoundingClientRect().top - view.top;
+      top = scroller.scrollTop + holderInView + bar.systemTop - REVEAL_MARGIN;
     }
-    if (line.top < view.top || line.bottom > view.bottom) {
-      scroller.scrollTop = Math.max(0, scroller.scrollTop + line.top - view.top - REVEAL_MARGIN);
+    scrollTo(top, left);
+  }
+
+  /** The x of `tick` in `bar`, linear between the drawn onsets around it rather than across the whole bar. */
+  function xAtTick(bar: CursorBar, tick: number): number {
+    const anchors = bar.anchors;
+    const first = anchors[0];
+    const last = anchors[anchors.length - 1];
+    if (!first || !last) return bar.x0;
+    if (tick <= first.tick) return first.x;
+    if (tick >= last.tick) return last.x;
+    for (let at = 1; at < anchors.length; at += 1) {
+      const before = anchors[at - 1];
+      const after = anchors[at];
+      if (!before || !after || tick > after.tick) continue;
+      const span = after.tick - before.tick;
+      const fraction = span > 0 ? (tick - before.tick) / span : 0;
+      return before.x + fraction * (after.x - before.x);
     }
+    return last.x;
   }
 
   /** Draws the cursor at `tick`, or hides it when there is no tick or no bar to put it on. */
@@ -321,13 +543,26 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
       hideCursor();
       return;
     }
-    const span = bar.end - bar.start;
-    const fraction = span > 0 ? Math.min(1, Math.max(0, (tick - bar.start) / span)) : 0;
+    const jump = lastBar < 0 || bar.index < lastBar || bar.index - lastBar > 1;
+    const x = xAtTick(bar, tick);
     cursor.hidden = false;
-    cursor.style.left = `${bar.x0 + fraction * (bar.x1 - bar.x0)}px`;
-    cursor.style.top = `${bar.top - 2}px`;
-    cursor.style.height = `${bar.bottom - bar.top + 4}px`;
-    reveal();
+    if (bar.top !== cursorTop || bar.bottom !== cursorBottom) {
+      cursor.style.top = `${bar.top - 2}px`;
+      cursor.style.height = `${bar.bottom - bar.top + 4}px`;
+      cursorTop = bar.top;
+      cursorBottom = bar.bottom;
+    }
+    cursor.style.transform = `translate(${x}px, 0)`;
+    const visible = visibleAt(x, bar);
+    if (following) {
+      if (!visible) reveal(bar);
+    } else if (visible) following = true;
+    else if (jump) {
+      // A seek or a press on a note is not the next frame of a preview: it brings the cursor back at once.
+      reveal(bar);
+      following = true;
+    }
+    lastBar = bar.index;
   }
 
   /** The bar a point on the drawing is over, preferring the staff line that point is nearest. */
@@ -403,6 +638,16 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
     },
     { signal: abort.signal },
   );
+  scroller.addEventListener(
+    "scroll",
+    () => {
+      if (destroyed) return;
+      const own = ownScroll && Math.abs(scroller.scrollTop - ownTop) < 1 && Math.abs(scroller.scrollLeft - ownLeft) < 1;
+      if (own || cursor.hidden) return;
+      following = cursorInView();
+    },
+    { signal: abort.signal },
+  );
 
   function draw(): void {
     frame = null;
@@ -430,6 +675,7 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
     const width = Math.floor(holder.clientWidth);
     // A box that is not shown has no width: the drawing waits until it has one, and keeps what it drew before.
     if (width <= 0) return;
+    measureRegion();
     const current = session.reading.score;
     const text = current.drawingText ?? session.project.score;
     if (text === drawnText && width === drawnWidth && current === score) {

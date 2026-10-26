@@ -172,7 +172,7 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `ProjectPanel` | A `ViewPart` with `element`, `commit()` and `focus(field)`: the song project panel's root, the pending field a host takes when it closes its own container, and the field the handoff opens. |
-| `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
+| `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. The cursor brings itself into the staff's region, never the page, so a host that wants it followed keeps the region in view. |
 | `LyricTrackPart` | `ViewPart` plus `focusEntry()`: opens the lyric track's new-line editor and focuses its text box. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
