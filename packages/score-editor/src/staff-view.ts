@@ -90,6 +90,7 @@ interface CursorBar {
   readonly top: number;
   readonly bottom: number;
   readonly systemTop: number;
+  readonly system: number;
   readonly anchors: ReadonlyArray<CursorAnchor>;
 }
 
@@ -230,10 +231,11 @@ function boxIn(host: HTMLElement, node: Element): DrawingBox {
  * The boxes are read from the drawn `.abcjs-bar`, `.abcjs-note` and `.abcjs-staff` elements themselves, in the
  * drawing host's pixels: that is the cursor's containing block, the only space its own left and top mean anything in.
  * The elements are picked by the marks abcjs writes on them (`abcjs-v<n>`, `abcjs-l<n>`, `abcjs-mm<n>`), so a later
- * voice or staff cannot be mistaken for the voice and line being walked. A bar starts at the drawn line that closes
- * the one before it; the first bar of a system has no line of its own, so it starts at the leftmost onset of any voice
- * in that bar (a note, or a rest shorter than the bar), and after the clef, key and meter when there is none. On a
- * two-staff system the staff box is the span from the first staff's top line to the last staff's bottom line.
+ * voice or staff cannot be mistaken for the voice and line being walked. Every bar starts at the leftmost onset
+ * drawn at its first tick (a note, or a rest shorter than the bar); with none, at the opening bar line, or after the
+ * clef, key and meter on a system's first bar. Its last segment runs to the next bar's start on the same system, or to
+ * its closing line on the last bar of a system. On a two-staff system the staff box is the span from the first staff's
+ * top line to the last staff's bottom line.
  */
 function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeometry {
   const svg = host.shadowRoot?.querySelector("svg");
@@ -311,11 +313,8 @@ function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeome
           .filter((onset) => onset.bar === index && onset.tick === model.start)
           .filter((onset) => !onset.rest || onset.duration < model.length)
           .map((onset) => onset.x);
-        const x0 = firstOfSystem
-          ? starts.length > 0
-            ? Math.min(...starts)
-            : (afterExtras ?? startX ?? barX)
-          : (startX ?? barX);
+        const x0 =
+          starts.length > 0 ? Math.min(...starts) : firstOfSystem ? (afterExtras ?? startX ?? barX) : (startX ?? barX);
         // A tick with onsets in both voices has one x: the leftmost of them, as the bar's start does.
         const xAt = new Map<number, number>();
         for (const onset of drawn) {
@@ -335,8 +334,17 @@ function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeome
           top,
           bottom,
           systemTop,
+          system: line,
           anchors: [...xAt].map(([tick, x]) => ({ tick, x })).sort((a, b) => a.tick - b.tick),
         });
+        // A bar on the same system runs its last segment to the next bar's start, not to the line between them.
+        const previousBar = bars[bars.length - 2];
+        if (previousBar && previousBar.system === line) {
+          (previousBar.anchors as CursorAnchor[])[previousBar.anchors.length - 1] = {
+            tick: previousBar.end,
+            x: x0,
+          };
+        }
         firstOfSystem = false;
       }
       index += 1;

@@ -679,47 +679,19 @@ const drawnNotes = (page: Page) => staffSlot(page).locator("svg .abcjs-note");
 const drawnRests = (page: Page) => staffSlot(page).locator("svg .abcjs-rest");
 /** The staff view's cursor, in the drawing's shadow root like the notes it stands over. */
 const staffCursor = (page: Page) => staffSlot(page).locator(".sce-staff-cursor");
-/** A drawing box, in pixels from the drawing host's corner: the coordinates the cursor is positioned in. */
-interface DrawnBox {
+/** One drawn element with the voice, system and measure marks abcjs puts on it. */
+interface StaffMark {
+  kind: "bar" | "note" | "rest" | "staff";
   x: number;
   y: number;
   width: number;
   height: number;
-}
-
-/** The boxes of the elements matching `selector`, in the drawing host's coordinates. */
-function drawnBoxes(page: Page, selector: string): Promise<DrawnBox[]> {
-  return staffSlot(page)
-    .locator(selector)
-    .evaluateAll((nodes) => {
-      const root = nodes[0]?.getRootNode();
-      const host = root && "host" in root ? ((root as ShadowRoot).host as HTMLElement) : null;
-      const base = host?.getBoundingClientRect();
-      if (!base) return [];
-      return nodes.map((node) => {
-        const box = (node as SVGGraphicsElement).getBoundingClientRect();
-        return {
-          x: box.left - base.left,
-          y: box.top - base.top,
-          width: box.width,
-          height: box.height,
-        };
-      });
-    });
-}
-
-/** The bar lines and staff systems abcjs drew, in the drawing host's coordinates. */
-const staffBars = (page: Page) => drawnBoxes(page, "svg .abcjs-bar");
-const staffSystems = (page: Page) => drawnBoxes(page, "svg .abcjs-staff");
-const staffNotes = (page: Page) => drawnBoxes(page, "svg .abcjs-note");
-
-/** One drawn element with the voice, system and measure marks abcjs puts on it. */
-interface StaffMark extends DrawnBox {
-  kind: "bar" | "note" | "rest" | "staff";
   voice: number;
   line: number;
   /** The score's measure, from `abcjs-mm<n>`; null on a staff group, which has no measure of its own. */
   measure: number | null;
+  /** The written note value, from `abcjs-d<n>`; a rest of `"1"` fills a 4/4 bar and is drawn centred. */
+  duration: string | null;
 }
 
 /** Every marked element abcjs drew, with the marks it uses for its voice, line and measure. */
@@ -737,6 +709,7 @@ function staffMarks(page: Page): Promise<StaffMark[]> {
         const line = /abcjs-l(\d+)/.exec(classes)?.[1];
         if (voice === undefined || line === undefined) return [];
         const measure = /abcjs-mm(\d+)/.exec(classes)?.[1];
+        const duration = /abcjs-d([\d-]+)/.exec(classes)?.[1];
         const box = (node as SVGGraphicsElement).getBoundingClientRect();
         const kind = classes.includes("abcjs-staff")
           ? "staff"
@@ -751,6 +724,7 @@ function staffMarks(page: Page): Promise<StaffMark[]> {
             voice: Number(voice),
             line: Number(line),
             measure: measure === undefined ? null : Number(measure),
+            duration: duration ?? null,
             x: box.left - base.left,
             y: box.top - base.top,
             width: box.width,
@@ -799,8 +773,21 @@ function barSpans(marks: StaffMark[], voice = 0): BarSpan[] {
       const closer = closers[index] as StaffMark;
       if (closer.measure === null) throw new Error(`the bar line on line ${line} has no measure mark`);
       const x1 = closer.x;
+      const onsets = marks
+        .filter(
+          (mark) =>
+            (mark.kind === "note" || mark.kind === "rest") &&
+            mark.measure === closer.measure &&
+            !(mark.kind === "rest" && mark.duration === "1"),
+        )
+        .sort((a, b) => a.x - b.x);
       const x0 =
-        index === 0 ? (opening ? (bars[0] as StaffMark).x : (notes[0]?.x ?? x1)) : (closers[index - 1] as StaffMark).x;
+        onsets[0]?.x ??
+        (index === 0
+          ? opening
+            ? (bars[0] as StaffMark).x
+            : (notes[0]?.x ?? x1)
+          : (closers[index - 1] as StaffMark).x);
       spans.push({ measure: closer.measure, line, x0, x1, top, bottom });
     }
   }
@@ -830,30 +817,6 @@ async function staffCursorBox(page: Page) {
 async function staffCursorX(page: Page) {
   const found = await staffCursorBox(page);
   return found.x + found.width / 2;
-}
-
-/** The staff system the cursor is on: the one whose vertical middle is nearest the cursor's. */
-function systemAt(systems: DrawnBox[], y: number): DrawnBox {
-  const first = systems[0];
-  if (!first) throw new Error("the staff drew no system");
-  return systems.reduce((best, system) =>
-    Math.abs(system.y + system.height / 2 - y) < Math.abs(best.y + best.height / 2 - y) ? system : best,
-  );
-}
-
-/** What the drawing shows around the cursor: its system, the bar lines and notes on that system, and all notes. */
-async function staffPlace(page: Page) {
-  const cursor = await staffCursorBox(page);
-  const system = systemAt(await staffSystems(page), cursor.y + cursor.height / 2);
-  const allBars = await staffBars(page);
-  const allNotes = await staffNotes(page);
-  const bars = allBars
-    .filter((bar) => bar.y >= system.y - 2 && bar.y <= system.y + system.height + 2)
-    .sort((a, b) => a.x - b.x);
-  const notes = allNotes
-    .filter((note) => note.y + note.height >= system.y - 30 && note.y <= system.y + system.height + 30)
-    .sort((a, b) => a.x - b.x);
-  return { cursor, system, bars, notes, allNotes };
 }
 
 /** Drives the staff part's play position as a host player does. */
@@ -1151,34 +1114,38 @@ test.describe("the staff view", () => {
     page,
     harness,
   }) => {
-    // QUARTERS is 4/4 at 100: a bar is 2.4 s, and its two bars have a bar line at the end of each. abcjs may also
-    // draw the line the first bar starts at, so the first drawn line can be the opening one or the end of bar 1.
+    // QUARTERS is 4/4 at 100: a bar is 2.4 s. Bar 2's first tick is its drawn whole note; its end is its closing line.
     await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], editable: false });
     await expect(drawnNotes(page)).toHaveCount(5);
+    const marks = await staffMarks(page);
+    const firstBar = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.measure === 0)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const secondBar = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.measure === 1)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const firstNote = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.measure === 0)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const secondNote = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.measure === 1)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
 
     await setStaffPosition(page, 0);
     await expect(staffCursor(page)).toBeVisible();
-    const first = await staffPlace(page);
-    const start = first.bars.length > 2 ? first.bars[0]?.x : first.notes[0]?.x;
-    expect(Math.abs((await staffCursorX(page)) - (start ?? 0))).toBeLessThan(2);
+    expect(Math.abs((await staffCursorX(page)) - firstNote.x)).toBeLessThan(2);
 
     await setStaffPosition(page, 2.4);
-    const second = await staffPlace(page);
-    // A later system starts at its first bar, which has no line of its own; otherwise bar 2 starts at the line
-    // that closes bar 1 (the first line when there is no opening line).
-    const wrapped = second.notes.length < second.allNotes.length;
-    const opening = second.bars.length > 2;
-    const barTwo = wrapped ? second.notes[0]?.x : second.bars[opening ? 1 : 0]?.x;
-    const end = wrapped ? second.bars[0]?.x : second.bars[opening ? 2 : 1]?.x;
-    expect(Math.abs((await staffCursorX(page)) - (barTwo ?? 0))).toBeLessThan(2);
+    expect(Math.abs((await staffCursorX(page)) - secondNote.x)).toBeLessThan(2);
 
-    // 3.6 s is half way through the second bar, which is where the cursor is drawn.
+    // 3.6 s is half way through the second bar; the last bar ends its system, so its segment runs to the closing line.
     await setStaffPosition(page, 3.6);
-    const middle = ((barTwo ?? 0) + (end ?? 0)) / 2;
+    const middle = (secondNote.x + secondBar.x) / 2;
     expect(Math.abs((await staffCursorX(page)) - middle)).toBeLessThan(2);
+    expect(firstBar.line, "both bars are on one system").toBe(secondBar.line);
 
     await setStaffPosition(page, 1000);
-    expect(Math.abs((await staffCursorX(page)) - (end ?? 0))).toBeLessThan(2);
+    expect(Math.abs((await staffCursorX(page)) - secondBar.x)).toBeLessThan(2);
 
     await setStaffPosition(page, null);
     await expect(staffCursor(page)).toBeHidden();
@@ -1307,15 +1274,9 @@ test.describe("the staff view", () => {
     expect(vocalRests, "and one Vocal whole rest").toHaveLength(1);
     expect((vocalRests[0] as StaffMark).x).toBeGreaterThan((insNotes[0] as StaffMark).x + 8);
 
-    // Bar 27 starts after 26 bars; 33 s is an eighth of the way into it. The bar starts at its own onset when it
-    // opens a system, and at the previous bar line when the line already holds bar 26.
-    const lineBars = marks
-      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.line === line)
-      .sort((a, b) => a.x - b.x);
-    const previous = lineBars.find((mark) => mark.measure === 25);
-    const start = lineBars[0]?.measure === 26 ? (insNotes[0] as StaffMark).x : previous?.x;
-    expect(start, "bar 27 starts at its onset or at bar 26's closing line").toBeDefined();
-    if (start === undefined) return;
+    // Bar 27 starts after 26 bars; 33 s is an eighth of the way into it. Its first tick is drawn at the Ins
+    // whole note whether the bar opens its system or not.
+    const start = (insNotes[0] as StaffMark).x;
     const barSeconds = (4 * 60) / 190;
     const fraction = (33 - 26 * barSeconds) / barSeconds;
     const expected = start + fraction * (barLine.x - start);
@@ -1433,6 +1394,144 @@ test.describe("the staff view", () => {
     expect(Math.abs(cursor.y - (staffTop - 2)), `bar ${found.measure + 1} is on its own system`).toBeLessThan(2);
   });
 
+  test("puts a mid-line bar's first tick on its drawn note, and the previous bar's last segment on the way to it", async ({
+    page,
+    harness,
+  }) => {
+    // Two whole notes, one bar each, on one line at either project's width.
+    await harness.layout.open({ score: { text: vocalOnly("C16|G16|") }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page)).toHaveCount(2);
+    const marks = await staffMarks(page);
+    const firstBar = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.measure === 0)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const secondBar = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.measure === 1)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const firstNote = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.measure === 0)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const secondNote = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.measure === 1)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    expect(firstBar.line, "the two bars are on one system").toBe(secondBar.line);
+
+    const barSeconds = 2.4;
+    // The second bar's first tick is drawn at its note, not at the line that closes the first bar.
+    await setStaffPosition(page, barSeconds);
+    expect(Math.abs((await staffCursorX(page)) - secondNote.x), "bar 2 starts on its note").toBeLessThan(1);
+
+    // The first bar's last segment runs from its note to the second bar's note; three quarters of it is not the
+    // closing line, which sits a note's inset to the left of the second note.
+    await setStaffPosition(page, 0.75 * barSeconds);
+    const between = await staffCursorX(page);
+    const expected = firstNote.x + 0.75 * (secondNote.x - firstNote.x);
+    expect(Math.abs(between - expected), "the last segment crosses toward the next onset").toBeLessThan(1.5);
+    expect(between, "after the first bar's onset").toBeGreaterThan(firstNote.x);
+    expect(between, "before the second bar's onset").toBeLessThan(secondNote.x);
+
+    // The last bar has no next bar on its system: the cursor still ends on its closing line.
+    await setStaffPosition(page, 2 * barSeconds);
+    expect(Math.abs((await staffCursorX(page)) - secondBar.x), "the last bar ends at its closing line").toBeLessThan(1);
+  });
+
+  test("puts a real-score mid-line bar on its own drawn onset, and the bar before it on the way to that onset", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    const marks = await staffMarks(page);
+    const model = await page.evaluate(() => {
+      const reading = window.harness.layout.live().reading;
+      if (reading.kind !== "score" || !reading.score) throw new Error("the staff has no readable score");
+      return {
+        bars: reading.score.bars.map((bar) => ({ start: bar.start, length: bar.length })),
+        notes: reading.score.notes.map((note) => ({
+          voice: note.voice,
+          bar: note.bar,
+          start: note.start,
+          duration: note.duration,
+          midi: note.midi,
+        })),
+      };
+    });
+    const lines = [...new Set(marks.map((mark) => mark.line))].sort((a, b) => a - b);
+    let found: { line: number; measure: number; previous: number; previousTick: number; startTick: number } | undefined;
+    for (const line of lines) {
+      const lineBars = marks
+        .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.line === line)
+        .sort((a, b) => a.x - b.x);
+      for (let index = 1; index < lineBars.length; index += 1) {
+        const measure = (lineBars[index] as StaffMark).measure;
+        if (measure === null) continue;
+        const bar = model.bars[measure];
+        const previous = (lineBars[index - 1] as StaffMark).measure;
+        if (!bar || previous === null) continue;
+        const previousBar = model.bars[previous];
+        if (!previousBar) continue;
+        const onsets = model.notes.filter(
+          (note) =>
+            note.bar === measure && note.start === bar.start && (note.midi !== null || note.duration < bar.length),
+        );
+        const previousOnsets = model.notes.filter(
+          (note) =>
+            note.bar === previous &&
+            note.start < previousBar.start + previousBar.length &&
+            (note.midi !== null || note.duration < previousBar.length),
+        );
+        if (onsets.length === 0 || previousOnsets.length === 0) continue;
+        const previousTick = Math.max(...previousOnsets.map((note) => note.start));
+        found = { line, measure, previous, previousTick, startTick: bar.start };
+        break;
+      }
+      if (found) break;
+    }
+    expect(
+      found,
+      "the real score draws a mid-line bar with an onset at its first tick and an earlier bar on its system",
+    ).toBeDefined();
+    if (!found) return;
+
+    const startMarkX = (measure: number, tick: number): number => {
+      const xs: number[] = [];
+      for (const [voiceIndex, voice] of ["Vocal", "Ins"].entries()) {
+        const modelNotes = model.notes
+          .filter((note) => note.voice === voice && note.bar === measure)
+          .sort((a, b) => a.start - b.start);
+        const drawn = marks
+          .filter(
+            (mark) =>
+              (mark.kind === "note" || mark.kind === "rest") && mark.voice === voiceIndex && mark.measure === measure,
+          )
+          .sort((a, b) => a.x - b.x);
+        for (const [index, note] of modelNotes.entries()) {
+          if (note.start !== tick) continue;
+          if (note.midi === null && note.duration >= (model.bars[measure]?.length ?? 0)) continue;
+          const mark = drawn[index] as StaffMark;
+          xs.push(mark.x);
+        }
+      }
+      const x = Math.min(...xs);
+      expect(Number.isFinite(x), `bar ${measure + 1} has an onset at tick ${tick}`).toBe(true);
+      return x;
+    };
+
+    const startX = startMarkX(found.measure, found.startTick);
+    const previousX = startMarkX(found.previous, found.previousTick);
+    const barSeconds = (4 * 60) / 190;
+    await setStaffPosition(page, (found.startTick / 1024) * barSeconds);
+    expect(Math.abs((await staffCursorX(page)) - startX), "the mid-line bar starts on its drawn onset").toBeLessThan(1);
+
+    const at = found.previousTick + 0.75 * (found.startTick - found.previousTick);
+    await setStaffPosition(page, (at / 1024) * barSeconds);
+    const between = await staffCursorX(page);
+    const expected = previousX + 0.75 * (startX - previousX);
+    expect(Math.abs(between - expected), "the previous bar's last segment heads for the start onset").toBeLessThan(1.5);
+    expect(between, "after the previous bar's last onset").toBeGreaterThan(previousX);
+    expect(between, "before the mid-line bar's onset").toBeLessThan(startX);
+  });
+
   test("starts bar 1 of a two-voice system where Ins's whole note is drawn while Vocal holds a whole-bar rest", async ({
     page,
     harness,
@@ -1453,6 +1552,12 @@ test.describe("the staff view", () => {
     const barLine = marks
       .filter((mark) => mark.kind === "bar" && mark.voice === 1 && mark.measure === 0)
       .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const nextBarLine = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 1 && mark.measure === 1)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const nextInsNote = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 1 && mark.measure === 1)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
     expect(insNotes, "bar 1 has one Ins whole note").toHaveLength(1);
     expect(vocalRest.x).toBeGreaterThan((insNotes[0] as StaffMark).x + 20);
 
@@ -1463,7 +1568,9 @@ test.describe("the staff view", () => {
       "bar 1, first system: its start is Ins's drawn note onset",
     ).toBeLessThan(2);
 
-    const quarter = (insNotes[0] as StaffMark).x + ((barLine as StaffMark).x - (insNotes[0] as StaffMark).x) / 4;
+    // A quarter of the way into bar 1 heads for bar 2's onset when bar 2 is on the same system, else for its line.
+    const nextX = nextBarLine.line === barLine.line ? nextInsNote.x : barLine.x;
+    const quarter = (insNotes[0] as StaffMark).x + (nextX - (insNotes[0] as StaffMark).x) / 4;
     await setStaffPosition(page, barSeconds / 4);
     expect(Math.abs((await staffCursorX(page)) - quarter), "and a quarter of the way through the bar").toBeLessThan(2);
   });
@@ -1514,12 +1621,10 @@ test.describe("the staff view", () => {
     const barSeconds = (4 * 60) / 190;
 
     for (let bar = 0; bar < 12; bar += 1) {
-      await setStaffPosition(page, bar * barSeconds + 0.02);
+      await setStaffPosition(page, bar * barSeconds);
       const cursor = await staffCursorBox(page);
       const span = spanForBar(spans, bar);
-      const after = 0.02 / barSeconds;
-      const expected = span.x0 + (span.x1 - span.x0) * after;
-      expect(Math.abs(cursor.x + cursor.width / 2 - expected), `bar ${bar + 1} x`).toBeLessThan(2);
+      expect(Math.abs(cursor.x + cursor.width / 2 - span.x0), `bar ${bar + 1} x`).toBeLessThan(1);
       expect(Math.abs(cursor.y - (span.top - 2)), `bar ${bar + 1} top`).toBeLessThan(2);
       expect(Math.abs(cursor.y + cursor.height - (span.bottom + 2)), `bar ${bar + 1} bottom`).toBeLessThan(2);
     }
