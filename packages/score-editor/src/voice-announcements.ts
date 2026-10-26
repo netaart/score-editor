@@ -1,11 +1,11 @@
 // ABOUTME: What a voice track says to a screen reader: which of its notes were selected, where the insertion point is, what was deleted or moved.
 // ABOUTME: It follows the session and reads only the session and the score; it never looks at another view part.
 import { insertionPosition, lengthInBeats, notesByVoice, pitchName, positionOf } from "./arrangement";
-import { tieChain } from "./commands-shared";
 import { messagesFor } from "./i18n";
 import type { LiveRegion } from "./live-region";
-import type { Score } from "./score";
+import type { Note, Score } from "./score";
 import type { EditingSession } from "./session";
+import { tieChains } from "./tie-chains";
 
 /** Where a selected note stood: its pitch, and the ticks it covered with the notes tied to it. */
 interface Span {
@@ -64,18 +64,34 @@ export function announceVoice(
     const { reading, selection } = session;
     if (reading.kind !== "score") return { score: null, pitched: new Set(), selected: [], spans: [] };
     const notes = notesByVoice(reading.score).get(voice) ?? [];
-    const pitched = new Set(notes.filter((note) => note.midi !== null).map((note) => note.id));
+    // Every note's chain is found once, so a large selection costs one pass over the voice and not one per note.
+    const chainOf = new Map<string, ReadonlyArray<Note>>();
+    for (const members of tieChains(notes)) for (const member of members) chainOf.set(member.id, members);
+    const pitched = new Set(chainOf.keys());
     const selected = selection.filter((id) => pitched.has(id));
     const spans = selected.map((id): Span => {
-      const note = notes.find((found) => found.id === id);
-      if (note === undefined) return { midi: 0, start: 0, end: 0 };
+      const members = chainOf.get(id);
+      if (members === undefined) return { midi: 0, start: 0, end: 0 };
       // The chain starts at its first note, whichever of its halves is selected, so a move of any half is a move of one note.
-      const members = tieChain(notes, note, notes);
-      const first = members[0] ?? note;
-      const last = members[members.length - 1] ?? note;
-      return { midi: first.midi ?? 0, start: first.start, end: last.start + last.duration };
+      const first = members[0];
+      const last = members[members.length - 1] ?? first;
+      return { midi: first?.midi ?? 0, start: first?.start ?? 0, end: (last?.start ?? 0) + (last?.duration ?? 0) };
     });
     return { score: reading.score, pitched, selected, spans };
+  }
+
+  /** Says where the insertion point moved, when this is the voice that speaks for the shared axis. */
+  function sayInsertionPoint(): void {
+    const { insertionPoint } = session;
+    const reading = session.reading;
+    if (
+      !session.view.editable ||
+      insertionPoint === null ||
+      reading.kind !== "score" ||
+      reading.score.voices[0] !== voice
+    )
+      return;
+    live.say(messagesFor(session.view.language).insertionPoint(insertionPosition(reading.score, insertionPoint.tick)));
   }
 
   /** The pitch and place of a pitched note, or undefined for an id that is a rest or names nothing. */
@@ -87,6 +103,18 @@ export function announceVoice(
 
   let seen = look();
   const unsubscribe = session.subscribe((change) => {
+    // A view, insertion-point, grid or other change leaves the score and the selection as they were. Reading the
+    // selection for one would make every scroll and zoom walk it, so only an edit or a selection does that work.
+    if (
+      !change.project &&
+      !change.selection &&
+      change.cause !== "dispatch" &&
+      change.cause !== "undo" &&
+      change.cause !== "redo"
+    ) {
+      if (change.insertionPoint) sayInsertionPoint();
+      return;
+    }
     const before = seen;
     seen = look();
     const { score, selected } = seen;
@@ -143,10 +171,7 @@ export function announceVoice(
       const only = selected.length === 1 ? describe(score, selected[0] ?? "") : undefined;
       live.say(only ? t.selectedNote(only.pitch, only.position) : t.selectedNotes(selected.length));
     }
-    const { insertionPoint } = session;
-    if (change.insertionPoint && insertionPoint !== null && score.voices[0] === voice) {
-      live.say(t.insertionPoint(insertionPosition(score, insertionPoint.tick)));
-    }
+    if (change.insertionPoint) sayInsertionPoint();
   });
   signal.addEventListener("abort", unsubscribe, { once: true });
 }
