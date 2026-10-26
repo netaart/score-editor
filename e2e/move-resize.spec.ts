@@ -248,7 +248,7 @@ test.describe("dragging an edge", () => {
     page,
     harness,
   }) => {
-    await openTrack(harness, vocalOnly("C4D1z11|G16|"));
+    await openTrack(harness, vocalOnly("C4D1z8z3|G16|"));
     await harness.layout.select(["Vocal:0", `Vocal:${BEAT}`]);
     const wide = block(page, "C4, bar 1 beat 1, length 1 beat, selected");
     const narrow = block(page, "D4, bar 1 beat 2, length 0.25 beats, selected");
