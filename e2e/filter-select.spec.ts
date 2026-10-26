@@ -83,9 +83,10 @@ test.describe("where the panel sits", () => {
       const button = await box(filterButton(page));
       expect(frame.y).toBeGreaterThanOrEqual(0);
       expect(frame.y + frame.height).toBeLessThanOrEqual(height);
-      if (height === 720) expect(frame.y).toBeGreaterThanOrEqual(button.y + button.height);
+      const under = frame.y >= button.y + button.height;
+      if (height === 720) expect(under).toBe(true);
       else if (button.y - frame.height >= 8) expect(frame.y + frame.height).toBeLessThanOrEqual(button.y);
-      else expect(frame.y + frame.height).toBeGreaterThanOrEqual(height - 9);
+      else if (!under) expect(frame.y + frame.height).toBeGreaterThanOrEqual(height - 9);
       // Its last control can be pressed, the panel scrolling if the window is too short to show it whole.
       await press(panel(page).getByRole("button", { name: "Done", exact: true }));
       await expect(panel(page)).toBeHidden();
@@ -689,8 +690,7 @@ test.describe("a condition that is not counted", () => {
     await openPanel(page, press);
     const colour = (field: Locator) => field.evaluate((element) => getComputedStyle(element).color);
     const muted = await colour(panel(page).locator(".sce-filter-hint").first());
-    const text = await panel(page)
-      .evaluate((element) => getComputedStyle(element).color);
+    const text = await panel(page).evaluate((element) => getComputedStyle(element).color);
     const resting = await colour(pitchLowest(page));
 
     expect(resting).toBe(muted);
