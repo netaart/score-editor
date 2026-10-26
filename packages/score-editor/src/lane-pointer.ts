@@ -131,6 +131,30 @@ export function installLanePointer(
   options: LanePointerOptions,
 ): void {
   let gesture: Gesture | null = null;
+  /** The selected note whose edge the mouse is over, when the resize cursor is showing. */
+  let edgeCursor: HTMLElement | null = null;
+
+  /** Takes the resize cursor off the note that had it. */
+  function clearEdgeCursor(): void {
+    edgeCursor?.removeAttribute("data-edge-cursor");
+    edgeCursor = null;
+  }
+
+  /**
+   * Shows the resize cursor while a mouse is over an edge zone of a selected note, from the same `grabAt` a press uses.
+   * It marks the one note under the pointer, so no note is decided on a zoom.
+   */
+  function showEdgeCursor(event: PointerEvent): void {
+    if (event.pointerType !== "mouse" || gesture !== null) return;
+    const found = event.target instanceof Element ? event.target.closest(".sce-note") : null;
+    const block = found instanceof HTMLElement && found.hasAttribute("data-selected") ? found : null;
+    const grab = block ? grabAt(block, event.clientX, false) : null;
+    const next = grab?.kind === "resize" ? block : null;
+    if (next === edgeCursor) return;
+    clearEdgeCursor();
+    edgeCursor = next;
+    edgeCursor?.setAttribute("data-edge-cursor", "");
+  }
 
   /** Takes from the page all that a gesture put there: its timer and listeners, the box, the preview and the lane's tint. */
   function tidy(g: Gesture): void {
@@ -146,6 +170,7 @@ export function installLanePointer(
   }
 
   function finish(): void {
+    clearEdgeCursor();
     const g = gesture;
     if (!g) return;
     gesture = null;
@@ -322,6 +347,7 @@ export function installLanePointer(
   root.addEventListener(
     "pointerdown",
     (event) => {
+      clearEdgeCursor();
       finish();
       const primary = event.isPrimary && (event.pointerType !== "mouse" || event.button === 0);
       const geometry = options.lane();
@@ -361,8 +387,12 @@ export function installLanePointer(
   root.addEventListener(
     "pointermove",
     (event) => {
+      if (gesture === null) {
+        showEdgeCursor(event);
+        return;
+      }
       const g = gesture;
-      if (!g || g.id !== event.pointerId) return;
+      if (g.id !== event.pointerId) return;
       g.last = { x: event.clientX, y: event.clientY };
       if (g.phase === "boxing") {
         draw(g);
@@ -443,5 +473,7 @@ export function installLanePointer(
   };
   root.addEventListener("pointercancel", cancel, { signal });
   root.addEventListener("lostpointercapture", cancel, { signal });
+  root.addEventListener("pointerleave", clearEdgeCursor, { signal });
+  signal.addEventListener("abort", clearEdgeCursor, { once: true });
   signal.addEventListener("abort", finish, { once: true });
 }

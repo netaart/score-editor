@@ -29,11 +29,6 @@ export interface BuiltAxis {
   timeline: HTMLElement;
   /** The bars whose numbers thin out as the zoom changes; 0 where the part has no bar numbers. */
   barCount: number;
-  /**
-   * Tells the part the width of the time axis it was laid out at, after every change of that width. A part that marks
-   * its contents by their width does it here, from the one width it now knows, without measuring each of them.
-   */
-  laidOut?(width: number): void;
 }
 
 export interface AxisSpec {
@@ -124,7 +119,6 @@ export function mountAxisPart(
       if (built.barCount > 0 && measured > 0) root.dataset.labelStep = String(barLabelStep(measured / built.barCount));
       else delete root.dataset.labelStep;
       if (built.grids.length > 0 && ticks > 0) drawGrid(built.grids, zoom, measured / ticks);
-      built.laidOut?.(measured);
       return measured;
     },
     frame(): AxisFrame | null {

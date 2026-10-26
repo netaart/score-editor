@@ -32,11 +32,6 @@ function zonesFit(inside: number, zone: number): boolean {
   return inside >= ZONES_PER_NOTE * zone;
 }
 
-/** Whether a selected note of this inside width keeps a body between its two zones; a narrower one is all body. */
-export function hasEdgeZones(inside: number, coarse: boolean): boolean {
-  return zonesFit(inside, edgeZoneWidth(inside, coarse));
-}
-
 /** Where on a selected note a press landed: on its body, which moves the selection, or on an edge, which resizes it. */
 export type Grab = { readonly kind: "move" } | { readonly kind: "resize"; readonly edge: "start" | "end" };
 

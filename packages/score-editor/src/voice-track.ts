@@ -19,7 +19,7 @@ import type { Messages } from "./i18n";
 import { createInsertionPointLine, type InsertionPointLine } from "./insertion-point";
 import { installLanePointer } from "./lane-pointer";
 import { sayRefusals } from "./live-region";
-import { dragChannel, ghostsOf, hasEdgeZones } from "./note-drag";
+import { dragChannel, ghostsOf } from "./note-drag";
 import { mountNoteFocus, type NoteFocus } from "./note-focus";
 import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from "./playhead";
 import { previewPlayer } from "./preview-player";
@@ -44,7 +44,6 @@ interface Drawn {
   readonly top: number;
   readonly joins: ReadonlySet<string>;
   readonly notes: ReadonlyArray<Note>;
-  readonly notesById: ReadonlyMap<string, Note>;
   readonly blocks: Map<string, HTMLElement>;
   readonly owners: Map<Element, string>;
   readonly insertionPoint: InsertionPointLine;
@@ -71,15 +70,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
   let drawn: Drawn | null = null;
   let root: HTMLElement | null = null;
   let noteFocus: NoteFocus | null = null;
-  let sizeWatcher: ResizeObserver | null = null;
-  /** The width of the time axis at the last layout, which each selected note's width is read from. */
-  let drawnWidth = 0;
-  let shown: {
-    drawn: Drawn | null;
-    selection: ReadonlyArray<string>;
-    point: InsertionPoint | null;
-    editable: boolean;
-  } | null = null;
+  let shown: { selection: ReadonlyArray<string>; point: InsertionPoint | null; editable: boolean } | null = null;
 
   /** The ids drawn as selected for a selection: every selected note of this voice, with the whole chain it is tied into. */
   function framedFor(selection: ReadonlyArray<string>): Set<string> {
@@ -99,41 +90,8 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
     const note = drawn?.notes.find((found) => found.id === id);
     if (!drawn || !block || !note) return;
     if (selected) block.dataset.selected = "";
-    else {
-      delete block.dataset.selected;
-      delete block.dataset.gripFine;
-      delete block.dataset.gripCoarse;
-    }
+    else delete block.dataset.selected;
     block.setAttribute("aria-label", labelOf(drawn, note, selected));
-  }
-
-  /**
-   * Marks every selected note with the pointer kinds whose grips it draws at `width`, the time axis' width now. A
-   * note's inside width is its length over the score's, less its border and the side it shares with a tied note. The
-   * stylesheet keys the grips on the marks, so no selected note is a container the browser has to measure on every zoom.
-   */
-  function markGrips(width: number): void {
-    drawnWidth = width;
-    if (!drawn || drawn.ticks <= 0) return;
-    for (const id of drawn.framed) {
-      const block = drawn.blocks.get(id);
-      const note = drawn.notesById.get(id);
-      if (!block || !note) continue;
-      const tiedNext = block.hasAttribute("data-tie-next");
-      const tiedPrev = block.hasAttribute("data-tie-prev");
-      const box = (note.duration / drawn.ticks) * width - (tiedNext ? 0 : 1);
-      const inside = box - (tiedPrev ? 0 : 2) - (tiedNext ? 0 : 2);
-      const fine = hasEdgeZones(inside, false);
-      const coarse = hasEdgeZones(inside, true);
-      if (fine !== block.hasAttribute("data-grip-fine")) {
-        if (fine) block.dataset.gripFine = "";
-        else delete block.dataset.gripFine;
-      }
-      if (coarse !== block.hasAttribute("data-grip-coarse")) {
-        if (coarse) block.dataset.gripCoarse = "";
-        else delete block.dataset.gripCoarse;
-      }
-    }
   }
 
   /**
@@ -163,22 +121,14 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
   function refresh(): void {
     const editable = session.view.editable;
     const { selection, insertionPoint: point } = session;
-    if (
-      shown &&
-      shown.drawn === drawn &&
-      shown.selection === selection &&
-      shown.point === point &&
-      shown.editable === editable
-    )
-      return;
-    shown = { drawn, selection, point, editable };
+    if (shown && shown.selection === selection && shown.point === point && shown.editable === editable) return;
+    shown = { selection, point, editable };
     root?.setAttribute("data-editable", String(editable));
     if (!drawn) return;
     const wanted = editable ? framedFor(selection) : new Set<string>();
     for (const id of drawn.framed) if (!wanted.has(id)) markSelected(id, false);
     for (const id of wanted) if (!drawn.framed.has(id)) markSelected(id, true);
     drawn.framed = wanted;
-    markGrips(drawnWidth);
     drawn.insertionPoint.show(editable ? point : null);
     noteFocus?.sync(editable, selection);
   }
@@ -218,10 +168,7 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
       },
       refresh,
       build(canvas, score, t): BuiltAxis | null {
-        sizeWatcher?.disconnect();
-        sizeWatcher = null;
         drawn = null;
-        drawnWidth = 0;
         shown = null;
         noteFocus?.draw(null);
         if (!score.voices.includes(voice)) return null;
@@ -256,7 +203,6 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         list.setAttribute("aria-label", voice);
 
         const joins = tieJoins(notes);
-        const notesById = new Map<string, Note>();
         const fresh: Drawn = {
           score,
           t,
@@ -266,7 +212,6 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           top: range.hi - 1,
           joins,
           notes,
-          notesById,
           blocks: new Map(),
           owners: new Map(),
           insertionPoint: createInsertionPointLine(lane, score, t),
@@ -282,45 +227,25 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
           if (joins.has(note.id)) block.dataset.tieNext = "";
           if (index > 0 && joins.has(notes[index - 1]?.id ?? "")) block.dataset.tiePrev = "";
           block.setAttribute("aria-label", labelOf(fresh, note, false));
-          notesById.set(note.id, note);
           fresh.blocks.set(note.id, block);
           fresh.owners.set(block, note.id);
           blocks.appendChild(block);
         }
         list.appendChild(blocks);
         drawn = fresh;
-        const View = doc.defaultView;
-        if (View?.ResizeObserver) {
-          sizeWatcher = new View.ResizeObserver((entries) => {
-            const entry = entries[entries.length - 1];
-            if (entry) markGrips(entry.contentRect.width);
-          });
-          sizeWatcher.observe(lane);
-        }
         fresh.playhead.show(previewPlayer(session).tick);
         noteFocus?.draw({
           order: notes.filter((note) => note.midi !== null).map((note) => note.id),
           blocks: fresh.blocks,
           owners: fresh.owners,
         });
-        return {
-          axes: [lane],
-          grids,
-          corner: keys,
-          timeline: lane,
-          barCount: 0,
-          laidOut(width) {
-            markGrips(width);
-          },
-        };
+        return { axes: [lane], grids, corner: keys, timeline: lane, barCount: 0 };
       },
     },
     options,
   );
   return {
     destroy() {
-      sizeWatcher?.disconnect();
-      sizeWatcher = null;
       part.destroy();
       drawn = null;
       root = null;
