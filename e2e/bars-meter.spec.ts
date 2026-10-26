@@ -1,7 +1,7 @@
 // ABOUTME: Seam 5 for choosing bars, inserting and deleting them, changing a section's meter and repairing a cut tail.
 // ABOUTME: Every case runs on the desktop project with a mouse and on the phone project with a finger; locators go by role, name and text.
 import type { Page } from "@playwright/test";
-import { box, expect, type Harness, test } from "./fixtures";
+import { box, expect, test } from "./fixtures";
 
 const CUT = `X:1
 T:
@@ -35,25 +35,23 @@ const barNumber = (page: Page, bar: number) => barsList(page).getByText(String(b
 const barItems = (page: Page) => barsList(page).getByRole("listitem");
 const barsButton = (page: Page) => page.getByRole("button", { name: "Bars", exact: true });
 const meterButton = (page: Page) => page.getByRole("button", { name: /^Meter / });
-const barMenuStatus = (page: Page) => page.locator(".sce-part-bars > [role='status']");
+const toolbarStatus = (page: Page) => page.locator(".sce-part-toolbar > [role='status']");
 const notice = (page: Page) => page.locator(".sce-part-notice");
 const noticeStatus = (page: Page) => page.locator(".sce-part-notice > [role='status']");
 const selectionBand = (page: Page) => page.locator(".sce-bar-selection");
 const insNotes = (page: Page) => page.getByRole("list", { name: "Ins" }).getByRole("listitem");
 const note = (page: Page, name: string) => page.getByRole("listitem", { name, exact: true });
 
-/** Presses `from` and drags across the ruler to `to`: a mouse drag on the desktop project and a finger drag on the phone. */
-async function chooseRange(page: Page, harness: Harness, from: number, to: number, isMobile: boolean) {
+/** Chooses bars `from` to `to`: a mouse drag on the desktop project, two taps on the phone. */
+async function chooseRange(page: Page, from: number, to: number, isMobile: boolean) {
   const start = await box(barNumber(page, from));
   const end = await box(barNumber(page, to));
   const at = { x: start.x + start.width / 2, y: start.y + start.height / 2 };
   const at2 = { x: end.x + end.width / 2, y: end.y + end.height / 2 };
   if (isMobile) {
-    const finger = await harness.finger();
-    await finger.down(at);
-    await finger.move(at2, 10);
-    await finger.up();
-    await finger.close();
+    // A finger taps the first bar and then the last: a swipe on the ruler stays a scroll.
+    await barNumber(page, from).tap();
+    await barNumber(page, to).tap();
   } else {
     await page.mouse.move(at.x, at.y);
     await page.mouse.down();
@@ -83,7 +81,7 @@ test.describe("bars, meter and the cut tail", () => {
     const before = await insNotes(page).count();
     expect(before).toBeGreaterThan(0);
 
-    await chooseRange(page, harness, 1, 2, isMobile);
+    await chooseRange(page, 1, 2, isMobile);
     await expect(barNumber(page, 1)).toHaveAttribute("aria-label", "Bar 1, selected");
     await expect(barNumber(page, 2)).toHaveAttribute("aria-label", "Bar 2, selected");
 
@@ -170,11 +168,12 @@ test.describe("bars, meter and the cut tail", () => {
     await expect(noticeStatus(page)).toContainText("another voice");
     await expect.poll(async () => (await harness.notices()).at(-1)?.code).toBe("command-refused");
 
+    await harness.destroy();
     await harness.mount({ score: { text: CUT } });
     await press(barNumber(page, 3));
     await openBarsMenu(page);
     await page.getByRole("menuitem", { name: "Delete bar 3", exact: true }).click();
-    await expect(barMenuStatus(page)).toContainText("cut");
+    await expect(toolbarStatus(page)).toContainText("cut");
     await expect.poll(async () => (await harness.notices()).at(-1)?.code).toBe("command-refused");
     await expect(barItems(page)).toHaveCount(3);
   });
