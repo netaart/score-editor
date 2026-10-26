@@ -888,14 +888,14 @@ test.describe("the staff view", () => {
     page,
     harness,
   }) => {
-    // The first bar at 120 lasts 2 s; from bar 2 the tempo is 60, so the bar lasts 4 s. 2.5 s is an eighth into bar 2.
+    // The first bar at the score's 100 lasts 2.4 s; from bar 2 the tempo is 60, so the bar lasts 4 s. 2.9 s is an eighth into bar 2.
     await harness.layout.open({
       score: { text: vocalOnly("C4D4E4F4|G4A4B4c4|C16|") },
       parts: ["staff"],
       tempoChanges: [{ at: 1024, tempo: { unit: "1/4", bpm: 60 } }],
     });
     await expect(drawnNotes(page)).toHaveCount(9);
-    await setStaffPosition(page, 2.5);
+    await setStaffPosition(page, 2.9);
 
     const place = await staffPlace(page);
     // On a later system bar 2 is the first bar and starts at its first drawn note; in one system it starts at
