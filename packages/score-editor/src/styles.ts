@@ -188,11 +188,19 @@ const css = `
   border-bottom: 1px solid var(--sce-_line);
 }
 /* A swatch of the cut's hatch ties the sentence to the hatched tail it explains. */
-.sce-root .sce-cut-notice {
+.sce-root .sce-cut-strip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 12px;
+  gap: 0 12px;
+  padding: 0;
+}
+.sce-root .sce-cut-notice {
+  display: flex;
+  flex: 1 1 20em;
+  align-items: center;
+  gap: 0 0.6em;
+  padding: 6px 12px;
 }
 .sce-root .sce-cut-notice::before {
   content: "";
@@ -206,13 +214,14 @@ const css = `
   vertical-align: -0.2em;
 }
 .sce-root .sce-cut-sentence {
-  flex: 1 1 20em;
+  flex: 1 1 auto;
 }
 .sce-root .sce-notice-actions {
   display: inline-flex;
   flex: none;
   flex-wrap: wrap;
   gap: 8px;
+  padding: 6px 12px 6px 0;
 }
 .sce-root .sce-problem {
   flex: 1 1 auto;

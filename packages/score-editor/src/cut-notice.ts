@@ -19,10 +19,11 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession, options
   el.appendChild(root);
   const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
-  const notice = create(doc, "div", "sce-notice sce-cut-notice", root);
+  const strip = create(doc, "div", "sce-notice sce-cut-strip", root);
+  const notice = create(doc, "div", "sce-cut-notice", strip);
   notice.setAttribute("role", "note");
   const sentence = create(doc, "span", "sce-cut-sentence", notice);
-  const actions = create(doc, "span", "sce-notice-actions", notice);
+  const actions = create(doc, "span", "sce-notice-actions", strip);
   const fill = create(doc, "button", "sce-button sce-cut-fill", actions);
   fill.type = "button";
   const remove = create(doc, "button", "sce-button sce-cut-delete", actions);
@@ -38,7 +39,7 @@ export function mountCutNotice(el: HTMLElement, session: EditingSession, options
     root.lang = language;
     const t = messagesFor(language);
     const cut = reading.kind === "score" ? cutOf(reading.score) : null;
-    notice.hidden = !cut;
+    strip.hidden = !cut;
     sentence.textContent = cut ? t.cutNotice(cut) : "";
     const repair = cut?.short === true && editable;
     actions.hidden = !repair;
