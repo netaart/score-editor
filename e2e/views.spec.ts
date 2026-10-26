@@ -847,7 +847,7 @@ test.describe("the staff view", () => {
     const hostX = await staffCursorX(page);
 
     await press(slot(page, "synth").getByRole("button"));
-    expect(await page.evaluate(() => window.harness.previewPlayer().from)).toBe(0);
+    await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().from)).toBe(0);
     await expect
       .poll(() => staffCursorX(page), { message: "the cursor follows the preview" })
       .toBeGreaterThan((bars[0] as number) + 10);
