@@ -497,7 +497,9 @@ function firstDifferentField(score: Score, reread: Score): string | null {
   const before = score as unknown as Record<string, unknown>;
   const after = reread as unknown as Record<string, unknown>;
   const fields = new Set([...Object.keys(before), ...Object.keys(after)]);
+  // `source` is private, and `drawingText` is derived from the text; neither is a field the writer preserves.
   fields.delete("source");
+  fields.delete("drawingText");
   for (const field of fields) {
     if (!sameValue(before[field], after[field])) return field;
   }

@@ -626,7 +626,7 @@ C8C8C2-|C6C6C2z4|`);
   });
 });
 
-it("writes a same-length meter change and keeps the short Ins cut", () => {
+it("refuses a same-length meter change that reaches the short Ins cut", () => {
   const input = `${H2}
 K:Fm
 % intro
@@ -640,16 +640,15 @@ V: Ins
 F2G2A2e2c8-|c8B8|F2G2A2e2c4B4-|B8G8|
 V: Vocal
 "Fm"z16`;
-  const output = succeed(input, {
+  const result = applyScoreCommand(song2Dialect, input, {
     type: "setSectionMeter",
     section: 0,
     meter: { numerator: 2, denominator: 2 },
   });
 
-  const score = roundTrip(output);
-  expect(output.match(/M:2\/2/g)).toHaveLength(2);
-  expect(score.bars).toHaveLength(9);
-  expect(score.truncation).toEqual({ voice: "Ins", bar: 8, short: false });
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.diagnostic.code).toBe("truncated-tail");
 });
 
 describe("trailing whitespace on the header M: line", () => {
@@ -847,7 +846,7 @@ V: Vocal`);
 });
 
 describe("a cut after the section whose meter changed", () => {
-  it("keeps the cut in Vocal at the end of the longer bar grid", () => {
+  it("refuses when the section reaches the short Ins cut", () => {
     const input = `${H2}
 K:C
 V: Vocal
@@ -856,15 +855,15 @@ V: Ins
 Z|Z|
 V: Vocal
 E16|F16`;
-    const output = succeed(input, {
+    const result = applyScoreCommand(song2Dialect, input, {
       type: "setSectionMeter",
       section: 0,
       meter: { numerator: 2, denominator: 4 },
     });
 
-    const score = roundTrip(output);
-    expect(score.bars).toHaveLength(8);
-    expect(score.truncation).toEqual({ voice: "Vocal", bar: 8, short: false });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("truncated-tail");
   });
 });
 
@@ -969,7 +968,7 @@ V: Vocal
 });
 
 describe("a meter command that changes no bars", () => {
-  it("keeps a cut that another short voice would otherwise claim", () => {
+  it("refuses when the same-meter change reaches the short voice", () => {
     const input = `${H2}
 K:C
 V: Vocal
@@ -982,15 +981,15 @@ V: Ins
 Z|
 V: Vocal
 E16`;
-    const output = succeed(input, {
+    const result = applyScoreCommand(song2Dialect, input, {
       type: "setSectionMeter",
       section: 0,
       meter: { numerator: 4, denominator: 4 },
     });
 
-    const score = roundTrip(output);
-    expect(score.truncation).toEqual({ voice: "Vocal", bar: 3, short: false });
-    expect(score.bars).toHaveLength(3);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostic.code).toBe("truncated-tail");
   });
 });
 

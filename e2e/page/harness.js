@@ -262,6 +262,8 @@ const VIEW_PARTS = {
  */
 const EXTRA_PARTS = {
   lyrics: (el, session) => mountLyricTrack(el, session),
+  // The default editor's toolbar shape for placing notes: the pencil is an opt-in control.
+  "toolbar-pencil": (el, session) => mountToolbar(el, session, { synthPreview: false, pencil: true }),
 };
 
 const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS, ...EXTRA_PARTS };

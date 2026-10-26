@@ -96,6 +96,12 @@ export interface Score {
   readonly truncation: Truncation | null;
   /** True when the text carries any chord token, finished or unfinished. */
   readonly hasChords: boolean;
+  /**
+   * The score text as a view that draws it should read it, when that differs from the written text. `song2` fills it so
+   * the staff draws each `Z2`–`Z4` run as separate bars; the project, the text view and every other reader keep the
+   * written text.
+   */
+  readonly drawingText?: string;
   readonly source: unknown;
   /**
    * The score's written duration unit in ticks: one number after a note lasts this many ticks. It is optional so a

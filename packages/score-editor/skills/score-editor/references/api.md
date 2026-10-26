@@ -10,11 +10,11 @@ change. The tests in the repository check that the list stays complete.
 | `mount` | core | Mounts the default editor on an element; returns `MountedEditor`. |
 | `createScoreFileKeeper` | core | Binds a session to a `ScoreFileSource`: saves explicitly, answers a conflict with overwrite or load, restores the last saved version and saves before a handoff. |
 | `createEditingSession` | core | Builds an `EditingSession` from a project and a `DialectRegistry`. |
-| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete and the Select menu; takes `ToolbarOptions`. |
+| `mountToolbar` | core | Mounts the toolbar view part: title, zoom, and while editable undo, redo, Delete, the Select menu, the Bars menu and the meter control; takes `ToolbarOptions`. |
 | `mountZoomControl` | core | Mounts the zoom control view part on `(el, session)`. |
-| `mountCutNotice` | core | Mounts the cut-notice view part. |
+| `mountCutNotice` | core | Mounts the cut-notice view part, with Fill with rests and Delete the incomplete bar on a cut bar. |
 | `mountProblemView` | core | Mounts the problem view part. |
-| `mountTimeRuler` | core | Mounts the time-ruler view part; takes `AxisPartOptions`. |
+| `mountTimeRuler` | core | Mounts the time-ruler view part, whose bar numbers choose a run; takes `AxisPartOptions`. |
 | `mountChordTrack` | core | Mounts the chord-track view part; takes `AxisPartOptions`. While the session is editable, a press places, changes or removes a chord through a picker. |
 | `mountVoiceTrack` | core | Mounts one voice track; takes `VoiceTrackOptions` with `voice`. |
 | `mountTextView` | core | Mounts the text view part: the score text in a box, checked as it is typed, handed to the project when it reads. |
@@ -38,6 +38,9 @@ change. The tests in the repository check that the list stays complete.
 | `alignLyricLine` | core | Compares a line's syllables with its onsets; returns one note per syllable when equal. |
 | `lyricCharacterCount` | core | Counts the characters of a lyrics text as Unicode code points. |
 | `formatDiagnostic` | core | Turns a `Diagnostic` into a sentence in `en` or `zh`. |
+| `meterAllowed` | core | Whether a `Meter` is a positive-integer fraction inside a dialect's `MeterRule`. |
+| `meterChoices` | core | The common meters a dialect's rule allows, for a meter control's radio list. |
+| `COMMON_METERS` | core | The common meter values `meterChoices` filters through a dialect's rule. |
 | `isNoticeDiagnostic` | core | Says whether a diagnostic is a notice, so a changed project is not mistaken for a refusal. |
 | `noteId` | core | Builds a note id from voice and start tick. |
 | `createToolRegistry` | core | Builds a `ToolRegistry` from tools, refusing duplicates and malformed declarations. |
@@ -97,8 +100,9 @@ change. The tests in the repository check that the list stays complete.
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
 | `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
-| `EditingSession` | The headless editing session: project, reading, selection, insertion point, grid, view, shown view, rejected text, dispatch, tools, history, subscribe. |
+| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
+| `BarSelection` | A chosen run of bars: `{ from, count }`, `from` base 0. UI state, outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
 | `DispatchResult` | The project after a command plus its notices when `ok`, or the untouched project and a refusal. |
@@ -107,6 +111,7 @@ change. The tests in the repository check that the list stays complete.
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |
 | `MoveNotesCommand`, `ResizeNotesCommand`, `MoveResizeCommand` | The note edits, and the union of the two; these are members of `ScoreCommand`. |
+| `AddNoteCommand`, `PasteNotesCommand`, `DuplicateNotesCommand`, `CopyNotesCommand`, `CopiedNote` | The placing commands (a new note, a paste at the insertion point, a repeat after the selection, and the Alt-drag copy) and the copied note they take; members of `ScoreCommand`. |
 | `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. The session holds the one in force (`session.grid`, `setGrid`, `allowsGrid`); see [editing-session.md](editing-session.md). |
 | `CommandListResult` | `{ ok, project, diagnostics }` from `applyCommandList`: the applied project, or the untouched one with the refusal. |
 | `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`); each command is listed in the package README. |
@@ -124,7 +129,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`. |
-| `Score` | A parsed score: tempo, optional `tempoChanges`, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, source. |
+| `Score` | A parsed score: tempo, optional `tempoChanges`, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, optional `drawingText`, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |

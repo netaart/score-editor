@@ -26,10 +26,12 @@ the unaligned area. Only that binding is stored; syllables, note onsets and whet
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, an optional `tempoChanges` of `{ at, tempo }` points, `voices`, `bars`, `keys`,
-`sections`, `notes`, `chords`, `truncation`, `hasChords`, an optional `unitTicks`, and a dialect-private `source` the
-core never reads. `unitTicks` is how many ticks one written duration number lasts, so a command can ask the dialect's
-`constraints.durations` what it can write; a score that does not state it is refused by the note commands with
-`unit-unknown`. `noteId(voice, start)` builds the stable id the model uses.
+`sections`, `notes`, `chords`, `truncation`, `hasChords`, an optional `unitTicks`, an optional `drawingText`, and a
+dialect-private `source` the core never reads. `unitTicks` is how many ticks one written duration number lasts, so a
+command can ask the dialect's `constraints.durations` what it can write; a score that does not state it is refused by
+the note commands with `unit-unknown`. `drawingText` is the text a view that draws the score should read when it differs
+from the written text: `song2` expands each `Z2`–`Z4` run into separate one-bar rests there, while the project and the
+text view keep the run. `noteId(voice, start)` builds the stable id the model uses.
 
 `Bar`, `Note`, `Chord`, `Section`, `Tempo`, `Meter`, `KeyChange` and `Truncation` describe those parts. `Meter` is a
 fraction of a whole note; `Note.midi` is 0-127 or `null` for a rest; `Note.tie` continues into the next note of the
@@ -82,6 +84,13 @@ reports those notices for a project as it stands, `isNoticeDiagnostic` tells a n
 `NOTICE_DIAGNOSTIC_CODES` lists the notice codes. A result whose diagnostics are all notices is a command that was taken;
 the session does that for you (`dispatch` returns `ok: true` with the notices), and a host that calls this function itself
 should do the same.
+
+The placing commands are `AddNoteCommand` (`voice`, `start`, `midi`, `grid`, one grid step long), `PasteNotesCommand`
+(`notes: CopiedNote[]`, `at`, `grid`), `DuplicateNotesCommand` (`noteIds`, `grid`) and `CopyNotesCommand` (`noteIds`,
+`timeTicks`, `semitones`, `grid`, the Alt-drag). A `CopiedNote` is `{ voice, start, duration, midi }`, with a copied tie
+chain as one note. All four land on the grid and obey the one-note-a-time rule (a covered start is removed, a covered end
+is shortened); each refusal code is listed with the command in the package README. The session follows the notes a placing
+command makes, so they are selected afterwards.
 
 The note edits are `MoveNotesCommand` and `ResizeNotesCommand`, both members of `MoveResizeCommand` and of `ScoreCommand`.
 They take several note ids and act on each note's whole tie chain. Their `grid` is a `Grid`: its `value` is a
@@ -163,7 +172,7 @@ if (plan && plan.commands.length > 0) project = applyCommandList(song2Dialect, p
 
 `ScoreDialect` is `{ id, constraints, parse, serialize, check }`. `DialectConstraints` declares the voices, keys,
 tempo range, section marker, lyric rule, durations, meter rule and chord vocabulary (`ChordVocabulary`, `DurationSet`,
-`MeterRule`). The editor narrows its interface by those declarations; see [dialect-registry.md](dialect-registry.md).
+`MeterRule`). The editor narrows its interface by those declarations; see [dialect-registry.md](dialect-registry.md). For a meter control, `meterAllowed` says whether one `Meter` is inside the rule, `meterChoices` returns the common meters it allows, and `COMMON_METERS` is that common list before filtering.
 
 `Language` is `"zh" | "en"`. `Notice` is a one-time message for the host's own toast system, `NoticeCode` its
 machine-readable reason, and `NOTICE_CODES` the closed list (today `"command-refused"`, sent when the score would not take an edit the user asked for).

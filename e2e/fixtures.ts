@@ -107,7 +107,10 @@ interface PageSession {
   view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
   reading: {
     kind: string;
-    score?: { notes: Array<{ id: string; voice: string; start: number; duration: number; midi: number | null }> };
+    score?: {
+      bars: Array<{ start: number; length: number }>;
+      notes: Array<{ id: string; voice: string; start: number; duration: number; midi: number | null }>;
+    };
   };
   grid: { value: number; dotted?: boolean };
   activeView: string;
@@ -661,7 +664,7 @@ export class Harness {
   }
 
   /** A finger to put down, slide and lift by hand; close it when the test is done with it. */
-  finger(options: { shift?: boolean } = {}) {
+  finger(options: { shift?: boolean; alt?: boolean } = {}) {
     return Finger.open(this.page, options);
   }
 
@@ -696,9 +699,9 @@ export class Finger {
     private readonly modifiers: number,
   ) {}
 
-  /** `shift` holds Shift on a keyboard that is attached to the touch screen, for the whole life of the finger. */
-  static async open(page: Page, options: { shift?: boolean } = {}) {
-    return new Finger(page, await page.context().newCDPSession(page), options.shift ? 8 : 0);
+  /** `shift` and `alt` hold those keys on a keyboard attached to the touch screen, for the whole life of the finger. */
+  static async open(page: Page, options: { shift?: boolean; alt?: boolean } = {}) {
+    return new Finger(page, await page.context().newCDPSession(page), (options.shift ? 8 : 0) | (options.alt ? 1 : 0));
   }
 
   private send(type: "touchStart" | "touchMove" | "touchEnd", point?: Point) {
@@ -799,24 +802,29 @@ export async function pointerOf(
   page: Page,
   harness: Harness,
   isMobile: boolean,
-  options: { shift?: boolean; holdMs?: number } = {},
+  options: { shift?: boolean; alt?: boolean; holdMs?: number } = {},
 ): Promise<Pointer> {
   if (!isMobile) {
     return {
       async down(point) {
         if (options.shift) await page.keyboard.down("Shift");
+        if (options.alt) await page.keyboard.down("Alt");
         await page.mouse.move(point.x, point.y);
         await page.mouse.down();
       },
       move: (point) => page.mouse.move(point.x, point.y, { steps: 8 }),
       async up() {
         await page.mouse.up();
+        if (options.alt) await page.keyboard.up("Alt");
         if (options.shift) await page.keyboard.up("Shift");
       },
       close: async () => {},
     };
   }
-  const finger = await harness.finger(options.shift ? { shift: true } : {});
+  const finger = await harness.finger({
+    ...(options.shift ? { shift: true } : {}),
+    ...(options.alt ? { alt: true } : {}),
+  });
   return {
     down: (point) => finger.down(point, options.holdMs ?? 550),
     move: (point) => finger.move(point),

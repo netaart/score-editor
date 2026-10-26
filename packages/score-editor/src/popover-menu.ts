@@ -9,6 +9,11 @@ export interface UnderAnchorOptions {
   maxHeight?: number;
 }
 
+export interface KeepInsideOptions extends UnderAnchorOptions {
+  /** Keep the top the layer has and move it up only as far as the bottom edge needs, for a layer that grows after it is placed. */
+  keepTop?: boolean;
+}
+
 /** Where a popover hangs: the left edge of its anchor, the line it sits 4px under, and the top the bottom rule needs. */
 export interface PopoverAnchor {
   readonly left: number;
@@ -43,23 +48,36 @@ export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement, options:
  * is narrow and spans the window. When its bottom runs off, it goes above its anchor when it fits there; otherwise it
  * starts 8px from the top and scrolls inside the room left. A caller's `maxHeight` stays the cap.
  */
-export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options: UnderAnchorOptions = {}): void {
+export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options: KeepInsideOptions = {}): void {
   const view = popover.ownerDocument.defaultView;
   if (!view) return;
+  const room = view.innerHeight - 16;
+  // A growing layer is measured again at full height, so a cap from its first placement cannot clip what it gained.
+  if (options.keepTop) {
+    popover.style.maxHeight = `${options.maxHeight ?? room}px`;
+    popover.style.overflowY = "";
+  }
   const rect = popover.getBoundingClientRect();
   if (!options.narrow) {
-    const overflow = rect.right - (view.innerWidth - 8);
-    if (overflow > 0) popover.style.left = `${Math.max(8, rect.left - overflow)}px`;
+    const layout = Math.min(view.innerWidth, popover.ownerDocument.documentElement.clientWidth || view.innerWidth);
+    popover.style.left = `${Math.max(8, Math.min(rect.left, layout - 8 - rect.width))}px`;
   }
   const below = rect.bottom - (view.innerHeight - 8);
   if (below <= 0) return;
+  if (options.keepTop) {
+    const top = Math.max(8, rect.top - below);
+    popover.style.top = `${top}px`;
+    const left = view.innerHeight - top - 8;
+    popover.style.maxHeight = `${Math.max(1, Math.min(options.maxHeight ?? left, left, room))}px`;
+    popover.style.overflowY = "auto";
+    return;
+  }
   const above = anchor.top - 4 - rect.height;
   if (above >= 8) {
     popover.style.top = `${above}px`;
     return;
   }
   popover.style.top = "8px";
-  const room = view.innerHeight - 16;
   popover.style.maxHeight = `${Math.max(1, Math.min(options.maxHeight ?? room, room))}px`;
   popover.style.overflowY = "auto";
 }
@@ -67,7 +85,11 @@ export function keepInside(popover: HTMLElement, anchor: PopoverAnchor, options:
 export interface PopoverMenu {
   readonly element: HTMLElement;
   /** Adds an item. Choosing it closes the menu first and then runs `choose`. */
-  item(role: "menuitem" | "menuitemradio", choose: () => void): HTMLButtonElement;
+  item(
+    role: "menuitem" | "menuitemradio",
+    choose: () => unknown,
+    options?: { readonly keepOpen?: boolean },
+  ): HTMLButtonElement;
   /** Adds a rule between two groups of items. */
   rule(): void;
 }
@@ -155,15 +177,19 @@ export function mountPopoverMenu(
 
   return {
     element: menu,
-    item(role, choose) {
+    item(role, choose, options = {}) {
       const item = create(doc, "button", "sce-menu-item", menu);
       item.type = "button";
       item.setAttribute("role", role);
       item.addEventListener(
         "click",
         () => {
-          menu.hidePopover();
-          choose();
+          if (!options.keepOpen) {
+            menu.hidePopover();
+            choose();
+            return;
+          }
+          if (choose() !== true) menu.hidePopover();
         },
         { signal },
       );

@@ -202,9 +202,6 @@ const css = `
   display: inline-flex;
   visibility: hidden;
 }
-.sce-root .sce-spacer {
-  flex: 1 1 auto;
-}
 .sce-root .sce-badge {
   flex: none;
   padding: 2px 8px;
@@ -221,15 +218,44 @@ const css = `
   border-bottom: 1px solid var(--sce-_line);
 }
 /* A swatch of the cut's hatch ties the sentence to the hatched tail it explains. */
+.sce-root .sce-cut-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+  padding: 0;
+}
+.sce-root .sce-cut-notice {
+  flex: 1 1 20em;
+  padding: 6px 12px;
+}
 .sce-root .sce-cut-notice::before {
   content: "";
   display: inline-block;
+  flex: none;
   width: 1.1em;
   height: 1.1em;
   margin-right: 0.6em;
   border: 1px dashed var(--sce-_line-strong);
   background: repeating-linear-gradient(135deg, var(--sce-_line-strong) 0 1px, transparent 1px 7px);
   vertical-align: -0.2em;
+}
+.sce-root .sce-cut-sentence {
+  flex: 1 1 auto;
+  text-wrap: pretty;
+}
+.sce-root .sce-cut-refusal {
+  flex: 1 1 100%;
+  padding: 0 12px 6px;
+  color: var(--sce-_text);
+  font-size: 0.92em;
+}
+.sce-root .sce-notice-actions {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px;
 }
 .sce-root .sce-problem {
   flex: 1 1 auto;
@@ -290,7 +316,7 @@ const css = `
   font-weight: 600;
   font-variant-numeric: lining-nums tabular-nums;
 }
-.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button)::after {
+.sce-root :is(.sce-zoom-value, .sce-select-button, .sce-project-button, .sce-grid-button, .sce-bars-button, .sce-meter-button)::after {
   content: "";
   width: 5px;
   height: 5px;
@@ -366,6 +392,9 @@ const css = `
   transform: scaleX(-1);
 }
 @media (pointer: coarse) {
+  .sce-root .sce-toolbar {
+    gap: 4px;
+  }
   .sce-root .sce-button {
     min-height: 36px;
   }
@@ -586,14 +615,59 @@ const css = `
   top: 0;
   bottom: 0;
   left: calc(var(--t) / var(--sce-ticks) * 100%);
-  padding: 4px 0 0 5px;
+  min-width: 24px;
+  padding: 4px 4px 0 5px;
   border-left: 1px solid var(--sce-_line-strong);
   color: var(--sce-_muted);
   font-size: 0.92em;
   font-variant-numeric: lining-nums tabular-nums;
 }
+/* The bar number is the handle that chooses a bar; a press on it starts a range, while a swipe elsewhere still scrolls. */
+.sce-root[data-editable="true"] .sce-bar-number {
+  /* Above a section band's 12px touch reach into the ruler: the visible number is a handle of its own. */
+  z-index: 2;
+  cursor: pointer;
+}
+.sce-root .sce-bar-number[data-selected] {
+  display: block;
+  color: var(--sce-_text);
+  font-weight: 600;
+}
+.sce-root .sce-bar-number:focus,
+.sce-root .sce-bar-number[data-pointer-focus]:focus {
+  outline: none;
+}
+.sce-root .sce-bar-number[data-key-focus]:focus,
+.sce-root .sce-bar-number:focus-visible:not([data-pointer-focus]),
+.sce-root .sce-meter-input:focus-visible {
+  outline: 2px solid var(--sce-_accent);
+  outline-offset: 2px;
+}
+/* The chosen run reads as a band under the numbers, with a 2px text-colour edge at each end and a quiet wash. */
+.sce-root .sce-bar-selection {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--t) / var(--sce-ticks) * 100%);
+  width: calc(var(--d) / var(--sce-ticks) * 100%);
+  border-inline: 2px solid var(--sce-_text);
+  background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
+  pointer-events: none;
+}
 
 ${labelThinning()}
+/* A chosen bar keeps its number visible even where the zoom thins the numbers out, so the keys have something to focus. */
+.sce-root[data-label-step] .sce-bar-number[data-selected] {
+  display: block;
+}
+@media (pointer: coarse) {
+  .sce-root .sce-title {
+    min-width: 2.5em;
+  }
+  .sce-root .sce-bar-number {
+    min-width: 36px;
+  }
+}
 
 .sce-root .sce-track-group {
   position: relative;
@@ -766,6 +840,92 @@ ${labelThinning()}
   border-bottom-width: 0;
 }
 
+/* The meter control: one button in the toolbar and a popover of common meters over a custom pair of fields. */
+.sce-root .sce-meter-popover {
+  width: min(22em, calc(100vw - 16px));
+  padding: 8px;
+}
+.sce-root .sce-meter-summary {
+  padding: 2px 6px 4px;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-meter-effect {
+  padding: 0 6px 8px;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-menu-hint {
+  padding: 4px 8px 6px;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-menu-refusal {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--sce-_line);
+  color: var(--sce-_text);
+  font-size: 0.92em;
+}
+.sce-root .sce-meter-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+}
+.sce-root .sce-meter-choice {
+  justify-content: center;
+  padding: 0 6px;
+}
+.sce-root .sce-meter-choice::before {
+  display: none;
+}
+.sce-root .sce-meter-choice[aria-checked="true"] {
+  background: color-mix(in srgb, var(--sce-_text) 8%, transparent);
+  font-weight: 600;
+}
+.sce-root .sce-meter-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--sce-_line);
+}
+.sce-root .sce-meter-custom-label {
+  flex: 1 1 100%;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-meter-field {
+  display: flex;
+  flex: 1 1 5.5em;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--sce-_muted);
+  font-size: 0.92em;
+}
+.sce-root .sce-meter-input {
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--sce-_line-strong);
+  border-radius: var(--sce-_radius);
+  background: var(--sce-_bg);
+  color: var(--sce-_text);
+  font: inherit;
+}
+.sce-root .sce-meter-apply {
+  flex: none;
+}
+@media (pointer: coarse) {
+  .sce-root .sce-meter-input {
+    min-height: 36px;
+    font-size: 16px;
+  }
+  .sce-root .sce-meter-apply {
+    min-height: 36px;
+  }
+}
 .sce-root .sce-popover {
   position: fixed;
   inset: auto;
@@ -1017,6 +1177,14 @@ ${labelThinning()}
   border-color: var(--sce-_text);
   background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
 }
+/* The pencil is a mode like the view switch, and carries its state the same way: fill, border and weight, never hue. */
+.sce-root .sce-pencil-button[aria-pressed="true"] {
+  border-color: var(--sce-_text);
+  background: color-mix(in srgb, var(--sce-_text) 12%, var(--sce-_bg));
+}
+.sce-root .sce-pencil-button[aria-pressed="true"] .sce-icon {
+  stroke-width: 2px;
+}
 .sce-root .sce-view-button[aria-pressed="true"] .sce-icon {
   stroke-width: 2px;
 }
@@ -1103,6 +1271,12 @@ ${labelThinning()}
   /* Chinese breaks after its comma, and not between any two characters. */
   word-break: keep-all;
   text-wrap: balance;
+}
+@media (pointer: coarse) {
+  /* The caption shares the row with the project and Filter buttons on a phone; 11em keeps all three on one line. */
+  .sce-root .sce-synth-caption {
+    max-width: 11em;
+  }
 }
 .sce-root .sce-synth-told {
   color: var(--sce-_text);

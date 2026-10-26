@@ -282,13 +282,17 @@ test.describe("the toolbar part", () => {
 
     if (isMobile) {
       const at = { x: shown.x + shown.width / 2, y: shown.y + shown.height / 2 };
-      // The row is wider than one swipe once the Grid control is in it, so swipe until Delete comes into sight.
+      // The row is wider than one swipe once the Grid control is in it, so swipe until Delete is wholly in sight. Each
+      // swipe is shorter than the room Redo and Delete leave in the box, so it cannot carry Redo out on the other side.
       await expect
-        .poll(async () => {
-          await harness.swipe({ x: at.x + 80, y: at.y }, { x: at.x - 80, y: at.y });
-          return (await box(deleteButton(page))).x;
-        })
-        .toBeLessThan(shown.x + shown.width);
+        .poll(
+          async () => {
+            await harness.swipe({ x: at.x + 40, y: at.y }, { x: at.x - 40, y: at.y });
+            return rightEdge(deleteButton(page));
+          },
+          { intervals: [0], timeout: 20_000 },
+        )
+        .toBeLessThanOrEqual(shown.x + shown.width + 1);
     } else {
       await deleteButton(page).focus();
     }

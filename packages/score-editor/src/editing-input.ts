@@ -4,8 +4,11 @@
 import { gridTicks } from "./arrangement";
 import type { ScoreCommand } from "./commands";
 import { type Grid, gridStepOf } from "./commands-notes";
+import type { CopiedNote } from "./commands-place";
+import { tieChain } from "./commands-shared";
 import type { Diagnostic } from "./diagnostics";
 import { gridLineAfter, gridLineBefore, snapToGrid } from "./grid";
+import { pencilMode } from "./pencil-mode";
 import type { Score } from "./score";
 import {
   clearSelection,
@@ -58,7 +61,13 @@ export type EditingInput =
    */
   | { readonly type: "move-notes"; readonly timeTicks: number; readonly semitones: number }
   /** A drag of one edge of the selected notes, as one edit: the edge moves by `timeTicks`, snapped to the session's grid. */
-  | { readonly type: "resize-notes"; readonly edge: "start" | "end"; readonly timeTicks: number };
+  | { readonly type: "resize-notes"; readonly edge: "start" | "end"; readonly timeTicks: number }
+  /** A click or tap that draws one note of one grid step in a voice. */
+  | { readonly type: "add-note"; readonly voice: string; readonly tick: number; readonly midi: number }
+  /** A double click or tap that turns one note into a rest, whether or not it is selected. */
+  | { readonly type: "delete-note"; readonly noteId: string }
+  /** An Alt-drag: copies of the selected notes at the distance the pointer covered, the originals left in place. */
+  | { readonly type: "copy-notes"; readonly timeTicks: number; readonly semitones: number };
 
 /** What an input came to. */
 export interface EditingInputResult {
@@ -246,7 +255,108 @@ function selectWith(session: EditingSession, act: (score: Score) => EditingInput
   return score === null ? IGNORED : act(score);
 }
 
+/** What the copy key holds for a session: the notes of the selection as one screen note each, tie chains joined. */
+const copied = new WeakMap<EditingSession, ReadonlyArray<CopiedNote>>();
+
+/** Copies the selected pitched notes, a whole tie chain as one note, for a paste at the insertion point. */
+function copySelection(session: EditingSession): EditingInputResult {
+  const score = readableScore(session);
+  if (score === null) return IGNORED;
+  const notes: CopiedNote[] = [];
+  const seen = new Set<string>();
+  for (const id of pitchedSelection(score, session.selection)) {
+    const note = score.notes.find((candidate) => candidate.id === id);
+    if (note === undefined) continue;
+    const chain = tieChain(score.notes, note);
+    const first = chain[0];
+    const last = chain[chain.length - 1];
+    if (first === undefined || last === undefined || seen.has(first.id)) continue;
+    seen.add(first.id);
+    notes.push({
+      voice: first.voice,
+      start: first.start,
+      duration: last.start + last.duration - first.start,
+      midi: first.midi as number,
+    });
+  }
+  if (notes.length === 0) return IGNORED;
+  copied.set(session, notes);
+  return HANDLED;
+}
+
+/** Pastes what copy holds at the insertion point, or does nothing when there is none or no point. */
+function pasteSelection(session: EditingSession): EditingInputResult {
+  const notes = copied.get(session);
+  const point = session.insertionPoint;
+  if (notes === undefined || notes.length === 0 || point === null) return IGNORED;
+  const result = session.dispatch({ type: "pasteNotes", notes, at: point.tick, grid: session.grid });
+  return { handled: true, refused: result.ok ? [] : result.diagnostics };
+}
+
+/** Repeats the selected notes right after the selection. */
+function duplicateSelection(session: EditingSession): EditingInputResult {
+  const score = readableScore(session);
+  if (score === null) return IGNORED;
+  const noteIds = pitchedSelection(score, session.selection);
+  if (noteIds.length === 0) return IGNORED;
+  const result = session.dispatch({ type: "duplicateNotes", noteIds, grid: session.grid });
+  return { handled: true, refused: result.ok ? [] : result.diagnostics };
+}
+
+/** Ctrl or Cmd with C, V or D, when it means the notes and not the browser's own copy, paste or bookmark. */
+function noteClipboardActionOf(input: EditingKeyInput): "copy" | "paste" | "duplicate" | null {
+  if (input.altKey === true || (input.ctrlKey !== true && input.metaKey !== true) || input.shiftKey === true)
+    return null;
+  switch (input.key.toLowerCase()) {
+    case "c":
+      return "copy";
+    case "v":
+      return "paste";
+    case "d":
+      return "duplicate";
+    default:
+      return null;
+  }
+}
+
+/** Draws one note at the nearest grid line to a click, or refuses as the command does. */
+function addNoteAt(session: EditingSession, input: { voice: string; tick: number; midi: number }): EditingInputResult {
+  const score = readableScore(session);
+  if (score === null || !Number.isFinite(input.tick) || !score.voices.includes(input.voice)) return IGNORED;
+  const step = gridStepOf(session.grid) ?? 1;
+  const tick = snapToGrid(input.tick, step, gridTicks(score));
+  const result = session.dispatch({
+    type: "addNote",
+    voice: input.voice,
+    start: tick,
+    midi: input.midi,
+    grid: session.grid,
+  });
+  return { handled: true, refused: result.ok ? [] : result.diagnostics };
+}
+
+/** Turns one note into a rest, whether or not it is selected. */
+function deleteNote(session: EditingSession, noteId: string): EditingInputResult {
+  const note = readableScore(session)?.notes.find((found) => found.id === noteId);
+  if (note === undefined || note.midi === null) return IGNORED;
+  const result = session.dispatch({ type: "toRest", noteId });
+  return { handled: true, refused: result.ok ? [] : result.diagnostics };
+}
+
 function pressKey(session: EditingSession, input: EditingKeyInput, step: number | null): EditingInputResult {
+  if (input.altKey === true) return IGNORED;
+  const command = input.ctrlKey === true || input.metaKey === true ? null : input.key.toLowerCase();
+  if (command === "b" && input.shiftKey !== true) {
+    if (session.view.editable && arrangementShown(session) && session.reading.kind === "score") {
+      pencilMode(session).toggle();
+      return HANDLED;
+    }
+    return IGNORED;
+  }
+  const clipboard = noteClipboardActionOf(input);
+  if (clipboard === "copy") return copySelection(session);
+  if (clipboard === "paste") return pasteSelection(session);
+  if (clipboard === "duplicate") return duplicateSelection(session);
   if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(session);
   const history = historyActionOf(input);
   if (history !== null) {
@@ -292,6 +402,18 @@ export function handleEditingInput(session: EditingSession, input: EditingInput)
       return moveSelection(session, input.timeTicks, input.semitones);
     case "resize-notes":
       return resizeSelection(session, input.edge, input.timeTicks);
+    case "add-note":
+      return addNoteAt(session, input);
+    case "delete-note":
+      return deleteNote(session, input.noteId);
+    case "copy-notes":
+      return editSelection(session, (noteIds, grid) => ({
+        type: "copyNotes",
+        noteIds,
+        timeTicks: Math.round(input.timeTicks),
+        semitones: Math.round(input.semitones),
+        grid,
+      }));
     case "key":
       return pressKey(session, input, step);
   }

@@ -75,6 +75,7 @@ export {
   syllableCount,
   unalignedLyricLines,
 } from "./lyrics";
+export { COMMON_METERS, meterAllowed, meterChoices } from "./meter";
 export { mount } from "./mount";
 export type {
   ScoreFileHandoffResult,
@@ -112,6 +113,7 @@ export { noteId, TICKS_PER_QUARTER } from "./score";
 export type { SectionAction, SectionActionName } from "./section-actions";
 export { sectionActions } from "./section-actions";
 export type {
+  BarSelection,
   DispatchResult,
   EditingSession,
   InsertionPoint,
@@ -184,3 +186,11 @@ export { mountZoomControl } from "./zoom-control";
 export type { NoteFilter } from "./filter-notes";
 export { filterNotes } from "./filter-notes";
 export { mountFilterPanel } from "./filter-panel";
+// Placing notes: add, paste at the insertion point, duplicate, and the Alt-drag copy.
+export type {
+  AddNoteCommand,
+  CopiedNote,
+  CopyNotesCommand,
+  DuplicateNotesCommand,
+  PasteNotesCommand,
+} from "./commands-place";
