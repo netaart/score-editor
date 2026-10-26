@@ -687,12 +687,19 @@ ${labelThinning()}
   background: var(--sce-_surface);
   border-bottom: 1px solid var(--sce-_line);
 }
-.sce-root .sce-track-name {
+.sce-root .sce-track-label {
   position: sticky;
   left: 0;
   z-index: 1;
-  padding: 0 10px;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding-inline-end: 8px;
   background: var(--sce-_surface);
+}
+.sce-root .sce-track-name {
+  padding: 0 10px;
   font-size: 0.92em;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -701,7 +708,6 @@ ${labelThinning()}
 .sce-root .sce-draw-mode {
   flex: none;
   height: 1.45em;
-  margin-inline: auto 8px;
   padding: 0 6px;
   border: 1px solid var(--sce-_text);
   border-radius: 999px;

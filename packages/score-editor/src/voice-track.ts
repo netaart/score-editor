@@ -268,8 +268,11 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         const range = pitchRangeOf(notes);
         const group = create(doc, "div", "sce-track-group", canvas);
         const head = create(doc, "div", "sce-track-head", group);
-        create(doc, "span", "sce-track-name", head).textContent = voice;
-        const drawMode = create(doc, "span", "sce-draw-mode", head);
+        // The label is pinned horizontally for the same reason the head is pinned vertically: a mode word at the far
+        // end of a song-wide head is never seen where the person is drawing.
+        const label = create(doc, "div", "sce-track-label", head);
+        create(doc, "span", "sce-track-name", label).textContent = voice;
+        const drawMode = create(doc, "span", "sce-draw-mode", label);
         drawMode.textContent = t.drawMode;
         drawMode.hidden = true;
         const track = create(doc, "div", "sce-track", group);
