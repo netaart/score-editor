@@ -49,8 +49,7 @@ interface PageWithStore {
 
 const writes = (page: Page) =>
   page.evaluate(
-    () =>
-      (window as unknown as PageWithStore).harness.drafts.calls().filter((call) => call.method === "write").length,
+    () => (window as unknown as PageWithStore).harness.drafts.calls().filter((call) => call.method === "write").length,
   );
 
 const fileOf = (page: Page, key: string) =>
@@ -58,8 +57,7 @@ const fileOf = (page: Page, key: string) =>
 
 const external = (page: Page, key: string, text: string) =>
   page.evaluate(
-    ([name, body]) =>
-      (window as unknown as PageWithStore).harness.drafts.external(name as string, body as string),
+    ([name, body]) => (window as unknown as PageWithStore).harness.drafts.external(name as string, body as string),
     [key, text] as const,
   );
 
@@ -143,12 +141,7 @@ async function insideRoot(page: Page, target: Locator) {
 test.describe("C1: the music stays reachable", () => {
   for (const height of [420, 288] as const) {
     for (const state of ["editable", "read-only", "conflict", "conflict-cut-notice"] as const) {
-      test(`${state} at ${height} keeps three rows and a note in reach`, async ({
-        page,
-        harness,
-        press,
-        isMobile,
-      }) => {
+      test(`${state} at ${height} keeps three rows and a note in reach`, async ({ page, harness, press, isMobile }) => {
         await mountState(page, harness, press, state, isMobile ? 412 : 1280);
         await harness.stageHeight(height);
 
@@ -199,21 +192,15 @@ test.describe("C6: the pin rule", () => {
     expect(at.y).toBeCloseTo(frame.y, 0);
 
     await harness.stageHeight(288);
-    await expect
-      .poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1)
-      .toBe(true);
+    await expect.poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1).toBe(true);
     frame = await box(scroller);
     expect((await box(page.locator(".sce-track-head").first())).y).toBeCloseTo(frame.y, 0);
 
     await harness.stageHeight(420);
-    await expect
-      .poll(async () => Math.abs((await box(ruler)).y - (await box(scroller)).y))
-      .toBeLessThan(1);
+    await expect.poll(async () => Math.abs((await box(ruler)).y - (await box(scroller)).y)).toBeLessThan(1);
 
     await harness.stageHeight(288);
-    await expect
-      .poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1)
-      .toBe(true);
+    await expect.poll(async () => (await box(ruler)).y < (await box(scroller)).y - 1).toBe(true);
   });
 });
 
