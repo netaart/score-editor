@@ -12,7 +12,7 @@ added; calling it twice is harmless.
 
 | Function | Draws | Options |
 | --- | --- | --- |
-| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons and the Select menu; the read-only badge while it is not. | `ToolbarOptions` |
+| `mountToolbar(el, session, options?)` | The title, the zoom controls and, while the session is editable, the undo, redo and Delete buttons, the Select menu and the Grid menu; the read-only badge while it is not. | `ToolbarOptions` |
 | `mountZoomControl(el, session)` | The zoom-out, readout/menu and zoom-in buttons. Hidden while the session has no readable score. | — |
 | `mountCutNotice(el, session)` | The one sentence saying the score text stops before the song does, or nothing. | — |
 | `mountProblemView(el, session)` | Why there is no score to show: the dialect's diagnostics, or the model with no dialect. | — |
@@ -112,15 +112,13 @@ control (a control of your own can send `select-all` and `invert-selection` to `
 | The user | Where | What happens |
 | --- | --- | --- |
 | Clicks or taps a note | A voice track | Selects it; a tied chain is selected as a whole. |
-| Clicks or taps empty lane space | A voice track | Puts the insertion point on the nearest beat line, and clears the selection. |
+| Clicks or taps empty lane space | A voice track | Puts the insertion point on the nearest line of the grid (`session.grid`), and clears the selection. |
 | Holds Shift while clicking or tapping a note | A voice track | Adds the note to the selection, or takes it and its tied chain out; on empty space nothing happens. |
 | Presses on empty lane space with a mouse and drags | A voice track | Draws a box. The notes it touches are framed while it is open and selected when it is let go; Shift at the press adds; Escape gives it up. |
 | Rests a finger on empty lane space for about 0.4 s, then slides | A voice track | Draws the same box (a swipe that starts at once still scrolls). Resting a finger on a note toggles it, as Shift does. |
-| Presses Ctrl or Cmd plus A, plus Shift, or Escape; or chooses an item of the Select menu | A part that hears the key; the toolbar | Selects every pitched note; inverts the selection; clears it (Escape clears whatever ids are selected, and is left to the host when none is). |
-| Presses Tab, then Left and Right, Home and End, Enter or Space | The notes of a voice track | The notes are one tab stop. With a note in focus, Left and Right step to the neighbour and select it, Home and End go to the first and last, Enter or Space selects the one in focus. With Ctrl or Cmd the four navigation keys move the focus without selecting, and Shift plus Space or Enter adds the note in focus or takes it out with its tie chain. |
-| Presses Left, Right, Home or End with the focus elsewhere in a part | Any time-axis part | Moves the insertion point; Left and Right keep scrolling while there is none. |
-| Presses Delete or Backspace, or the Delete button | A part that hears the key; the toolbar | Turns every selected pitched note into a rest as one history step. The button is muted until a pitched note is selected. |
-| Presses Ctrl or Cmd plus Z, plus Shift for redo, Ctrl plus Y, or the undo and redo buttons | A part that hears the key; the toolbar | Moves one history step. |
+| Presses a key | A part that hears the key | [The key map](../../../../../DESIGN.md#moving-and-resizing) gives each key with a note selected and with none. A part that handles one keeps it from the browser. |
+| Presses on a selected note and drags, by its body or by an edge | A voice track | [Moving and resizing](../../../../../DESIGN.md#moving-and-resizing) gives the edges, the ghost and the landing. One drag sends one `move-notes` or `resize-notes` input, one history step; Escape gives it up. |
+| Chooses an item of the Select or Grid menu | The toolbar | The selection actions, and the grid step with which notes move, resize and land. Both are also on the keys of the map above. The grid is UI state, not an undo step. |
 
 Keys are heard by a part while the focus is inside it; a part that handles one keeps it from the browser. Each part
 also keeps one polite live region (`role="status"`, visually hidden) and says in the session's language what happened:
@@ -230,6 +228,8 @@ type EditingInput =
   | { type: "click-note"; noteId: string }
   | { type: "click-empty"; tick: number } // a position on the time axis, not necessarily whole
   | { type: "delete" } // what a Delete control sends; it does what the Delete key does
+  | { type: "move-notes"; timeTicks: number; semitones: number } // a drag of the selection: ticks are snapped to session.grid
+  | { type: "resize-notes"; edge: "start" | "end"; timeTicks: number } // a drag of one edge of the selection, snapped to session.grid
   | { type: "toggle-note"; noteId: string } // a click on a note with Shift held
   | { type: "select-notes"; noteIds: ReadonlyArray<string>; add?: boolean } // a box: select these, or add them
   | { type: "select-all" } // Ctrl or Cmd plus A

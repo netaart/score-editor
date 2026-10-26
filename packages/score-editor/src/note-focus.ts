@@ -1,6 +1,10 @@
 // ABOUTME: Keyboard focus on the notes of one voice track: a single tab stop, stepping from note to note, and keeping the focus through a redraw.
 // ABOUTME: Only one note carries a tabindex at a time (a roving tabindex); the track tells this module what it drew and what is selected.
+import { canEditSelection, isNoteEditKey } from "./editing-input";
 import type { EditingSession } from "./session";
+
+/** `focusVisible` is in the browsers' `FocusOptions` but not yet in the type library. */
+const FOCUS_RING: FocusOptions & { readonly focusVisible: boolean } = { focusVisible: true };
 
 /** The notes a voice track drew, which is all this module needs to know about the track. */
 export interface DrawnNotes {
@@ -51,7 +55,10 @@ export function mountNoteFocus(
     readonly order: ReadonlyArray<string>;
     /** What holds the focus when no note is left to hold it. */
     readonly fallback: HTMLElement | null;
+    /** Where the note stood in the selection before the change, or -1: a move gives the selection new ids in the same order. */
+    readonly selectedAt: number;
   } | null = null;
+  let before: ReadonlyArray<string> = session.selection;
   let stepping = false;
 
   function setStop(noteId: string | null): void {
@@ -67,9 +74,10 @@ export function mountNoteFocus(
     return block ? drawn?.owners.get(block) : undefined;
   }
 
-  const focus = (noteId: string): void => {
+  /** Puts the focus on a note. A key that walked there asks for the ring too, whatever moved the focus before it. */
+  const focus = (noteId: string, options: { byKey?: boolean } = {}): void => {
     setStop(noteId);
-    drawn?.blocks.get(noteId)?.focus();
+    drawn?.blocks.get(noteId)?.focus(options.byKey === true ? FOCUS_RING : undefined);
   };
 
   root.addEventListener(
@@ -80,6 +88,8 @@ export function mountNoteFocus(
       if (event.altKey || (command && event.shiftKey)) return;
       const noteId = noteIn(event.target);
       if (noteId === undefined) return;
+      // With a note selected the editing keys edit the selection; the stepping below is for walking with none selected.
+      if (isNoteEditKey(event) && canEditSelection(session)) return;
       const { order } = drawn;
       const at = order.indexOf(noteId);
       let to: string | undefined;
@@ -97,7 +107,7 @@ export function mountNoteFocus(
       if (to === undefined || event.shiftKey) return;
       event.preventDefault();
       if (command) {
-        focus(to);
+        focus(to, { byKey: true });
         return;
       }
       stepping = true;
@@ -106,7 +116,7 @@ export function mountNoteFocus(
       } finally {
         stepping = false;
       }
-      focus(to);
+      focus(to, { byKey: true });
     },
     { signal },
   );
@@ -116,7 +126,11 @@ export function mountNoteFocus(
     const active = root.ownerDocument.activeElement;
     const noteId = noteIn(active);
     const fallback = active?.parentElement?.closest<HTMLElement>("[tabindex]") ?? null;
-    lost = drawn && noteId !== undefined ? { noteId, order: drawn.order, fallback } : null;
+    lost =
+      drawn && noteId !== undefined
+        ? { noteId, order: drawn.order, fallback, selectedAt: before.indexOf(noteId) }
+        : null;
+    before = session.selection;
   });
   signal.addEventListener("abort", unsubscribe, { once: true });
 
@@ -143,8 +157,12 @@ export function mountNoteFocus(
         if (!active || !root.contains(active)) {
           const kept = (id: string) => current.blocks.has(id);
           const at = lost.order.indexOf(lost.noteId);
+          // A note the keys or a drag moved has a new id and is the same place in the selection: the focus goes with it.
+          const followed = lost.selectedAt < 0 ? undefined : selection[lost.selectedAt];
           const next =
-            [lost.noteId, ...lost.order.slice(at + 1), ...lost.order.slice(0, at).reverse()].find(kept) ?? null;
+            (followed !== undefined && followed !== lost.noteId && kept(followed) ? followed : undefined) ??
+            [lost.noteId, ...lost.order.slice(at + 1), ...lost.order.slice(0, at).reverse()].find(kept) ??
+            null;
           if (next !== null) focus(next);
           else lost.fallback?.focus();
         }

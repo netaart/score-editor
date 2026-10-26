@@ -1,12 +1,13 @@
-// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control, the Filter button and the hint.
+// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the Select and Grid menus, the read-only badge, the synth preview control, the Filter button and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
 import { create, requireDom } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { mountRestoreControl } from "./draft-restore";
 import { installEditKeys } from "./edit-keys";
-import { canDeleteSelection, handleEditingInput } from "./editing-input";
+import { canEditSelection, handleEditingInput } from "./editing-input";
 import { mountFilterPanel } from "./filter-panel";
+import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
@@ -48,7 +49,7 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
 
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
- * read-only badge (while the session is not editable), the view switch when asked, the synth preview control, which is
+ * Select and Grid menus (while it is editable and the arrangement is shown), the read-only badge (while the session is not editable), the view switch when asked, the synth preview control, which is
  * there either way unless `synthPreview` is off, the Filter button, last in the row, and, when asked, the screen-reader
  * hint. The controls are in that order in the row and in the tab order, the Filter button last. It follows the session's
  * language.
@@ -59,6 +60,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const releaseStyles = acquireStyles(el);
   const root = create(doc, "div", "sce-root sce-part sce-part-toolbar");
   el.appendChild(root);
+  const live = createLiveRegion(root);
 
   const row = create(doc, "div", "sce-toolbar", root);
   if (options.viewSwitch) row.dataset.views = "";
@@ -79,6 +81,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   remove.setAttribute("aria-disabled", "true");
   remove.appendChild(lineIcon(doc, BIN));
   const select = mountSelectionMenu(row, session);
+  const grid = mountGridControl(row, session, live);
   const spacer = create(doc, "span", "sce-spacer", row);
   // The badge and the switch end the row as one item, so a narrow row moves them to the next line together. They come
   // before the preview control in the row, and so in the tab order: the preview control comes and goes with the score
@@ -90,7 +93,6 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const views: ViewPart | null = end === null ? null : mountViewSwitch(end, session);
   const hint = options.hintId === undefined ? null : create(doc, "div", "sce-sr-only", root);
   if (hint && options.hintId !== undefined) hint.id = options.hintId;
-  const live = createLiveRegion(root);
   const refused = sayRefusals(live, session, options.onRefused);
   let restore: ViewPart | null = null;
   /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
@@ -157,7 +159,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     if (session.view.language !== language) applyLanguage();
     const { editable } = session.view;
     const readable = session.reading.kind === "score";
-    const deletable = canDeleteSelection(session);
+    const deletable = canEditSelection(session);
     const arrangement = !options.viewSwitch || arrangementShown(session);
     const opening = options.draftKeeper?.status === "opening";
     const shown = [editable, readable, session.canUndo, session.canRedo, deletable, session.activeView, opening].join();
@@ -189,6 +191,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       views?.destroy();
       select.destroy();
       filter.destroy();
+      grid.destroy();
       restore?.destroy();
       synth?.destroy();
       root.remove();

@@ -1,7 +1,10 @@
-// ABOUTME: The pointer gestures of a voice lane: a click or tap, a toggle with Shift or a touch and hold, and a box drawn on empty space.
+// ABOUTME: The pointer gestures of a voice lane: a click or tap, a toggle with Shift or a touch and hold, a box on empty space, and a drag of selected notes.
 // ABOUTME: It turns pointer events into editing inputs and draws the box over the lane; it reads the lane's geometry and never the score.
+
+import type { Diagnostic } from "./diagnostics";
 import { create } from "./dom";
 import { handleEditingInput } from "./editing-input";
+import { type DragChannel, type Grab, grabAt, inputOf, isStill, previewOf } from "./note-drag";
 import type { Note } from "./score";
 import type { EditingSession } from "./session";
 
@@ -34,14 +37,18 @@ export interface LanePointerOptions {
   lane(): LaneGeometry | null;
   /** Moves the keyboard focus onto a note a mouse has just acted on. */
   focus(noteId: string): void;
+  /** Where a drag shows what it would do, in every voice track at once. */
+  readonly preview: DragChannel;
+  /** Told why a drag was refused, when the release asked for an edit the score cannot take. */
+  refused(diagnostics: ReadonlyArray<Diagnostic>): void;
 }
 
 /**
  * A press is `pressed` until it becomes something. A finger that rests on empty space is `armed`, and a pointer that
- * has gone on from there draws a `boxing` box. `done` is a press that came to nothing, or was given up: its release
- * does nothing.
+ * has gone on from there draws a `boxing` box. A press on a selected note that has gone on from there is `dragging`
+ * the selection. `done` is a press that came to nothing, or was given up: its release does nothing.
  */
-type Phase = "pressed" | "armed" | "boxing" | "done";
+type Phase = "pressed" | "armed" | "boxing" | "dragging" | "done";
 
 interface Gesture {
   readonly id: number;
@@ -51,6 +58,8 @@ interface Gesture {
   readonly geometry: LaneGeometry;
   /** The note the press landed on, if any. */
   readonly noteId: string | undefined;
+  /** What a drag from this press would take hold of: set only when the press landed on a selected note. */
+  readonly grab: Grab | null;
   readonly shift: boolean;
   /** Where the box started, in ticks and in rows from the top of the lane. */
   readonly anchor: { readonly tick: number; readonly row: number };
@@ -111,7 +120,9 @@ function reachOf(geometry: LaneGeometry, t0: number, t1: number, r0: number, r1:
  * editable. A click or tap on a note selects it and one with Shift held toggles it; a click or tap on empty space drops
  * the insertion point. A mouse that is pressed on empty space and dragged draws a box. A finger that rests on a note
  * toggles it, as Shift does, and one that rests on empty space and then slides draws the box, since a slide that starts
- * at once is a scroll. The box selects what it touches when it is let go, and Escape gives it up.
+ * at once on a note that is not selected, or on empty space, is a scroll. The box selects what it touches when it is let go, and Escape gives it up. A press on a selected
+ * note that moves is a drag: on the body it moves the selection, on an edge it resizes it, both by one edit when it is
+ * let go (see `grabAt`), and while it lasts the notes' ghosts are shown through `options.preview`. Escape gives it up too.
  */
 export function installLanePointer(
   root: HTMLElement,
@@ -120,6 +131,30 @@ export function installLanePointer(
   options: LanePointerOptions,
 ): void {
   let gesture: Gesture | null = null;
+  /** The selected note whose edge the mouse is over, when the resize cursor is showing. */
+  let edgeCursor: HTMLElement | null = null;
+
+  /** Takes the resize cursor off the note that had it. */
+  function clearEdgeCursor(): void {
+    edgeCursor?.removeAttribute("data-edge-cursor");
+    edgeCursor = null;
+  }
+
+  /**
+   * Shows the resize cursor while a mouse is over an edge zone of a selected note, from the same `grabAt` a press uses.
+   * It marks the one note under the pointer, so no note is decided on a zoom.
+   */
+  function showEdgeCursor(event: PointerEvent): void {
+    if (event.pointerType !== "mouse" || gesture !== null) return;
+    const found = event.target instanceof Element ? event.target.closest(".sce-note") : null;
+    const block = found instanceof HTMLElement && found.hasAttribute("data-selected") ? found : null;
+    const grab = block ? grabAt(block, event.clientX, false) : null;
+    const next = grab?.kind === "resize" ? block : null;
+    if (next === edgeCursor) return;
+    clearEdgeCursor();
+    edgeCursor = next;
+    edgeCursor?.setAttribute("data-edge-cursor", "");
+  }
 
   /** Takes from the page all that a gesture put there: its timer and listeners, the box, the preview and the lane's tint. */
   function tidy(g: Gesture): void {
@@ -130,9 +165,12 @@ export function installLanePointer(
     for (const id of g.boxed) unmark(g, id);
     g.boxed = new Set();
     delete g.geometry.lane.dataset.boxing;
+    delete g.geometry.lane.dataset.dragging;
+    options.preview.show(null);
   }
 
   function finish(): void {
+    clearEdgeCursor();
     const g = gesture;
     if (!g) return;
     gesture = null;
@@ -163,13 +201,53 @@ export function installLanePointer(
       },
       { capture: true, ...own },
     );
-    scope.addEventListener("scroll", () => draw(g), { capture: true, passive: true, ...own });
+    scope.addEventListener("scroll", () => (g.phase === "dragging" ? drag(g) : draw(g)), {
+      capture: true,
+      passive: true,
+      ...own,
+    });
     // A page that loses the focus mid-gesture (a switch of window) may never hear the release.
     root.ownerDocument.defaultView?.addEventListener("blur", () => giveUp(g), own);
     const unsubscribe = session.subscribe(() => {
       if (!session.view.editable || options.lane() !== g.geometry) giveUp(g);
     });
     g.ends.signal.addEventListener("abort", unsubscribe, { once: true });
+  }
+
+  /** Shows where the selected notes would land if the pointer were let go where it is. */
+  function drag(g: Gesture): void {
+    if (g.phase !== "dragging" || g.grab === null) return;
+    const now = placeIn(g.geometry, g.last.x, g.last.y);
+    if (now) options.preview.show(previewOf(g.grab, g.anchor, now));
+  }
+
+  /** The press on a selected note has moved: the selection is carried by the pointer from here on. */
+  function carry(g: Gesture): void {
+    if (g.grab === null) return;
+    clearTimeout(g.hold);
+    g.phase = "dragging";
+    g.geometry.lane.dataset.dragging = g.grab.kind;
+    watch(g);
+    if (!g.touch) {
+      try {
+        root.setPointerCapture(g.id);
+      } catch {
+        // The pointer is gone already; the release that follows is the pointercancel.
+      }
+    }
+    drag(g);
+  }
+
+  /** Lets the selected notes go where the drag took them: one edit, as the keys make it. */
+  function drop(g: Gesture): void {
+    const now = g.grab === null ? null : placeIn(g.geometry, g.last.x, g.last.y);
+    // Taken out of the way first: the edit redraws the notes, and the ghosts must not outlive the drag.
+    finish();
+    if (g.grab === null || now === null) return;
+    const preview = previewOf(g.grab, g.anchor, now);
+    if (isStill(preview)) return;
+    const { refused } = handleEditingInput(session, inputOf(preview));
+    if (refused.length > 0) options.refused(refused);
   }
 
   /** Draws the box from its anchor to the pointer's last place, and previews what it touches. */
@@ -269,6 +347,7 @@ export function installLanePointer(
   root.addEventListener(
     "pointerdown",
     (event) => {
+      clearEdgeCursor();
       finish();
       const primary = event.isPrimary && (event.pointerType !== "mouse" || event.button === 0);
       const geometry = options.lane();
@@ -278,13 +357,18 @@ export function installLanePointer(
       if (noteId === undefined && !event.target.closest(".sce-lane")) return;
       const anchor = placeIn(geometry, event.clientX, event.clientY);
       if (!anchor) return;
+      const touch = event.pointerType !== "mouse";
+      // Only a selected note is taken hold of; Shift toggles it instead, and a press on any other note is a click.
+      const grab =
+        block && !event.shiftKey && block.hasAttribute("data-selected") ? grabAt(block, event.clientX, touch) : null;
       const g: Gesture = {
         id: event.pointerId,
-        touch: event.pointerType !== "mouse",
+        touch,
         x: event.clientX,
         y: event.clientY,
         geometry,
         noteId,
+        grab,
         shift: event.shiftKey,
         anchor,
         phase: "pressed",
@@ -303,14 +387,26 @@ export function installLanePointer(
   root.addEventListener(
     "pointermove",
     (event) => {
+      if (gesture === null) {
+        showEdgeCursor(event);
+        return;
+      }
       const g = gesture;
-      if (!g || g.id !== event.pointerId) return;
+      if (g.id !== event.pointerId) return;
       g.last = { x: event.clientX, y: event.clientY };
       if (g.phase === "boxing") {
         draw(g);
         return;
       }
+      if (g.phase === "dragging") {
+        drag(g);
+        return;
+      }
       if (g.phase === "done" || Math.hypot(g.last.x - g.x, g.last.y - g.y) <= (g.touch ? TOUCH_SLOP : SLOP)) return;
+      if (g.grab !== null && g.phase === "pressed") {
+        carry(g);
+        return;
+      }
       if (g.phase === "armed" || (g.phase === "pressed" && !g.touch && g.noteId === undefined)) {
         if (g.phase === "pressed") watch(g);
         open(g);
@@ -328,7 +424,10 @@ export function installLanePointer(
   root.addEventListener(
     "touchmove",
     (event) => {
-      if ((gesture?.phase === "armed" || gesture?.phase === "boxing") && event.cancelable) event.preventDefault();
+      const phase = gesture?.phase;
+      if ((phase === "armed" || phase === "boxing" || phase === "dragging") && event.cancelable) {
+        event.preventDefault();
+      }
     },
     { passive: false, signal },
   );
@@ -339,6 +438,10 @@ export function installLanePointer(
       const g = gesture;
       if (!g || g.id !== event.pointerId) return;
       g.last = { x: event.clientX, y: event.clientY };
+      if (g.phase === "dragging") {
+        drop(g);
+        return;
+      }
       if (g.phase === "boxing") {
         const now = placeIn(g.geometry, g.last.x, g.last.y);
         if (now) {
@@ -370,5 +473,7 @@ export function installLanePointer(
   };
   root.addEventListener("pointercancel", cancel, { signal });
   root.addEventListener("lostpointercapture", cancel, { signal });
+  root.addEventListener("pointerleave", clearEdgeCursor, { signal });
+  signal.addEventListener("abort", clearEdgeCursor, { once: true });
   signal.addEventListener("abort", finish, { once: true });
 }
