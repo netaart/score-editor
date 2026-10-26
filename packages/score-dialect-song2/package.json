@@ -28,7 +28,9 @@
   "files": [
     "dist",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "RULES.md",
+    "WRITING.md"
   ],
   "scripts": {
     "build": "tsdown",

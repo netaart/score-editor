@@ -5,14 +5,14 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const packages = [
-  { dir: "packages/score-editor", skill: true },
-  { dir: "packages/score-dialect-song2", skill: false },
+  { dir: "packages/score-editor", skill: true, docs: [] },
+  { dir: "packages/score-dialect-song2", skill: false, docs: ["RULES.md", "WRITING.md"] },
 ];
 const common = ["LICENSE", "README.md", "package.json", "dist/index.js", "dist/index.d.ts"];
 
 let failed = false;
-for (const { dir, skill } of packages) {
-  const required = skill ? [...common, "skills/score-editor/SKILL.md"] : common;
+for (const { dir, skill, docs } of packages) {
+  const required = [...common, ...docs, ...(skill ? ["skills/score-editor/SKILL.md"] : [])];
   const allowed = (path) =>
     required.includes(path) || path.startsWith("dist/") || (skill && path.startsWith("skills/score-editor/"));
   const out = execFileSync("npm", ["pack", "--dry-run", "--json"], {
