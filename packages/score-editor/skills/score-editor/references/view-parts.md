@@ -26,17 +26,17 @@ added; calling it twice is harmless.
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
 | `mountToolPanel(el, session, options?)` | The Tools button and its panel: every registered tool, grouped, with a control per declared parameter, a preview and Apply (see [The Tools panel](#the-tools-panel)). Hidden while the session is read-only or another view is shown. | `ToolPanelOptions` |
 | `mountFilterPanel(el, session)` | The Filter button and its panel for selecting notes by condition (see [Selecting by filter](#selecting-by-filter)). Shown in read-only mode too. | — |
-| `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). | `AxisPartOptions` |
+| `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). Returns a `LyricTrackPart`, whose `focusEntry()` opens a new line's editor and focuses its text box. | `AxisPartOptions` |
 | `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, tempoKey?: boolean, projectPanel?: boolean, tools?: ScoreTool[], onChooseBars?: (bar: number) => void }`:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, tempoKey?: boolean, projectPanel?: boolean, pencil?: boolean, tools?: ScoreTool[], onChooseBars?: (bar: number) => void }`; `mountToolbar` returns a `ToolbarPart`, whose `setTools(tools)` replaces the Tools panel's host tools and whose `openProject(field?)` opens the Project panel on a field. The options are:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
 switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
 (zoom and Delete) while another view is shown; `draftKeeper` binds the toolbar to a draft keeper (see [drafts.md](drafts.md)), so that it
 offers Restore original while the keeper is ready or in conflict and the session is editable, and its badge says "Opening draft…"
-while the keeper is still opening; `tools` (an array, possibly empty) adds the Tools button and its panel before the Filter button, with the built-in note tools always listed; `tempoKey` and `projectPanel` are the song controls and the Project button; `onChooseBars` receives the bar the Bars menu chose, so a host that mounts a ruler can put the focus on it. The toolbar's row wraps when its element is narrower than its controls
+while the keeper is still opening; `tools` (an array, possibly empty) adds the Tools button and its panel before the Filter button, with the built-in note tools always listed; `tempoKey` adds the tempo, key and transpose group and `projectPanel` adds the Project button; `pencil` adds the pencil after Delete; `onChooseBars` receives the bar the Bars menu chose, so a host that mounts a ruler can put the focus on it. The toolbar's row wraps when its element is narrower than its controls
 if it holds the preview control or the switch (the read-only badge and the switch go together to a line of their own, and the
 preview control and its caption take the line after it), or scrolls sideways when it holds neither, so every
 control can still be reached.
@@ -324,7 +324,7 @@ turns both on. The behaviour, the rules and the controls are in
 [DESIGN's tempo and transpose section](../../../../../DESIGN.md#tempo-key-and-transpose) and
 [its panel section](../../../../../DESIGN.md#song-project-panel).
 
-A host that wants the panel somewhere of its own mounts it and leaves `projectPanel` off; it gets a `ProjectPanel`,
+A host that wants the panel somewhere of its own mounts it and leaves `projectPanel` off; it gets a `ProjectPanel`, whose `focus(field)` puts the focus on one of `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`,
 whose `commit()` takes a field that has not been let go and whose `destroy()` changes no document:
 
 ```ts

@@ -26,6 +26,12 @@ import type { LyricPhrase, Score } from "./score";
 import type { EditingSession } from "./session";
 import type { AxisPartOptions, ViewPart } from "./types";
 
+/** The lyric track part: the track itself, and the control that opens its editor for a new line. */
+export interface LyricTrackPart extends ViewPart {
+  /** Opens the editor on a new line and puts the focus in its text box; does nothing when the track is read-only. */
+  focusEntry(): void;
+}
+
 /** The start of a phrase's first bar and the end of its last, in ticks. The phrase is one the score holds. */
 function phraseTicks(score: Score, phrase: LyricPhrase): { start: number; end: number } {
   const first = score.bars[phrase.firstBar];
@@ -121,7 +127,7 @@ function followViewWidth(root: HTMLElement, surface: HTMLElement, signal: AbortS
  * note. Lines not on bars are listed under the lane. While the session is editable a click or tap on a line chooses it
  * and opens its text in the editor under the lane.
  */
-export function mountLyricTrack(el: HTMLElement, session: EditingSession, options?: AxisPartOptions): ViewPart {
+export function mountLyricTrack(el: HTMLElement, session: EditingSession, options?: AxisPartOptions): LyricTrackPart {
   let drawn: Drawn | null = null;
   let root: HTMLElement | null = null;
   /** Ends the listeners on the elements one drawing of the track made: the button that adds a line and the editor's fields and buttons. */
@@ -738,6 +744,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     options,
   );
   return {
+    focusEntry: startAdding,
     destroy() {
       part.destroy();
       drawn = null;

@@ -14,7 +14,7 @@ import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
 import { mountMeterControl } from "./meter-control";
 import { pencilMode } from "./pencil-mode";
-import { mountProjectControl } from "./project-control";
+import { mountProjectControl, type ProjectControl } from "./project-control";
 import { mountProjectNoticeStrip } from "./project-notice-strip";
 import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
@@ -23,14 +23,18 @@ import { mountSynthControl } from "./synth-preview";
 import { mountTempoKeyControls } from "./tempo-key";
 import type { ScoreTool } from "./tool";
 import { mountToolPanel } from "./tool-panel";
-import type { EditingPartOptions, Language, ViewPart } from "./types";
+import type { EditingPartOptions, Language, ProjectField, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
 import { mountZoomControl } from "./zoom-control";
 
-/** The toolbar part: `setTools` replaces the Tools panel's host tools, and does nothing without the `tools` option. */
+/**
+ * The toolbar part: `setTools` replaces the Tools panel's host tools (it does nothing without the `tools` option), and
+ * `openProject` is the way the frame asks its Project control to open on a missing field.
+ */
 export interface ToolbarPart extends ViewPart {
   setTools(tools: ReadonlyArray<ScoreTool>): void;
+  openProject(field?: ProjectField): void;
 }
 
 export interface ToolbarOptions extends EditingPartOptions {
@@ -168,14 +172,28 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
         showNotices: (notices) => noticeStrip.show(notices),
       })
     : null;
-  const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
+  const projectControl: ProjectControl | null = options.projectPanel
+    ? mountProjectControl(row, root, session, live, options.onRefused)
+    : null;
   let restore: ViewPart | null = null;
   /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
   function syncRestore(): void {
     const keeper = options.draftKeeper;
     if (keeper !== undefined && keeper.status !== "destroyed") {
       if (restore === null) {
-        restore = mountRestoreControl(row, session, keeper, (words) => live.say(words), spacer);
+        restore = mountRestoreControl(
+          row,
+          session,
+          {
+            get status() {
+              return keeper.status;
+            },
+            subscribe: (listener) => keeper.subscribe(() => listener()),
+            restoreOriginal: () => keeper.restoreOriginal(),
+          },
+          (words) => live.say(words),
+          spacer,
+        );
       }
     } else if (restore !== null) {
       restore.destroy();
@@ -292,6 +310,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   return {
     setTools(next) {
       tools?.setTools(next);
+    },
+    openProject(field) {
+      projectControl?.open(field);
     },
     destroy() {
       if (destroyed) return;

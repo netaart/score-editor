@@ -2,6 +2,7 @@
 // ABOUTME: The host is the bare test page; it builds the dialect registry and fetches the test scores itself.
 
 import { createFakeDraftStore } from "/e2e/page/draft-store.js";
+import { createFakeScoreFile } from "/e2e/page/score-file.js";
 import { syntheticSong } from "/e2e/page/synthetic.js";
 import { song2Dialect } from "/packages/score-dialect-song2/dist/index.js";
 import {
@@ -118,6 +119,12 @@ let vectors = null;
 const notices = [];
 /** The host's draft store: what `drafts: true` in the options of `mount` and `update` stands for. */
 const drafts = createFakeDraftStore();
+/** The host's score file of the last mount that asked for one. */
+let scoreFile = null;
+/** What the host's save-as callback received. */
+const saveAs = [];
+/** Every unsaved state the host was told about. */
+const unsavedChanges = [];
 /** What the host callback of the mounted editor received, each with the store calls made before it ran. */
 const handoffs = [];
 /** The options of `mount` and `update`, with the page's store and callback standing in for the host's. */
@@ -574,6 +581,11 @@ window.harness = {
   notices,
   drafts,
   handoffs,
+  get scoreFile() {
+    return scoreFile;
+  },
+  saveAs,
+  unsavedChanges,
   host: hostPage,
   shadowRoot: null,
   /** The single-note preview export, called as a host calls it. */
@@ -591,9 +603,26 @@ window.harness = {
     dialect,
     hostLayer,
     tools,
+    scoreFile: fileOptions,
+    saveAs: wantsSaveAs,
     ...options
   } = {}) {
     project = await projectFrom(blank, score, fields);
+    notices.length = 0;
+    handoffs.length = 0;
+    saveAs.length = 0;
+    unsavedChanges.length = 0;
+    scoreFile = null;
+    if (fileOptions !== undefined) {
+      scoreFile = createFakeScoreFile({
+        name: fileOptions.name ?? "tune.abc",
+        text: project.score,
+        version: fileOptions.version ?? "file-1",
+      });
+      options.source = scoreFile.source;
+      if (fileOptions.requiredInputs !== undefined) options.requiredInputs = fileOptions.requiredInputs;
+    }
+    if (wantsSaveAs) options.onSaveAs = (text) => saveAs.push(text);
     let target = stage;
     if (hostLayer) {
       const host = document.createElement("div");
@@ -614,14 +643,13 @@ window.harness = {
       target.style.height = "420px";
       window.harness.shadowRoot.append(target);
     }
-    notices.length = 0;
-    handoffs.length = 0;
     editor = mount(target, {
       language: "en",
       project,
       dialects: registry(dialect),
       notify: (notice) => notices.push(notice),
       ...(tools === undefined ? {} : { tools: TOOL_SETS[tools] }),
+      onUnsavedChange: (unsaved) => unsavedChanges.push(unsaved),
       ...hostOptions(options),
     });
   },
@@ -631,6 +659,9 @@ window.harness = {
       options.project = project;
     }
     editor.update({ ...(tools === undefined ? {} : { tools: TOOL_SETS[tools] }), ...hostOptions(options) });
+  },
+  hasUnsavedChanges() {
+    return editor?.hasUnsavedChanges() ?? false;
   },
   destroy() {
     editor?.destroy();

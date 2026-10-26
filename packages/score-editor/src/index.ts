@@ -60,6 +60,7 @@ export type {
   LyricSplit,
 } from "./lyric-edit";
 export { barLineTick, lyricBoundaryPlan, lyricDropPlan, lyricRows, lyricSplitCommand } from "./lyric-edit";
+export type { LyricTrackPart } from "./lyric-track";
 export { mountLyricTrack } from "./lyric-track";
 export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
 export {
@@ -77,6 +78,14 @@ export {
 } from "./lyrics";
 export { COMMON_METERS, meterAllowed, meterChoices } from "./meter";
 export { mount } from "./mount";
+export type {
+  ScoreFileHandoffResult,
+  ScoreFileKeeper,
+  ScoreFileKeeperChange,
+  ScoreFileKeeperOptions,
+  ScoreFileKeeperStatus,
+} from "./score-source";
+export { createScoreFileKeeper } from "./score-source";
 // The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
 export { previewNote } from "./preview-note";
@@ -165,6 +174,13 @@ export type {
   MountOptions,
   Notice,
   NoticeCode,
+  ProjectField,
+  RequiredInput,
+  ScoreFileEntry,
+  ScoreFileSaveResult,
+  ScoreFileSource,
+  ScoreSource,
+  GeneratedScoreSource,
   ViewPart,
 } from "./types";
 export { NOTICE_CODES } from "./types";

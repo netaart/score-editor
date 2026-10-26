@@ -11,13 +11,15 @@ import { carriedNotices } from "./project-notices";
 import type { SongProject } from "./score";
 import type { EditingSession, ScoreReading } from "./session";
 import { acquireStyles } from "./styles";
-import type { EditingPartOptions, Language, ViewPart } from "./types";
+import type { EditingPartOptions, Language, ProjectField, ViewPart } from "./types";
 
 /** The panel as the toolbar's popover holds it: `commit` takes a value typed into a field that has not been let go. */
 export interface ProjectPanel extends ViewPart {
   /** The element the popover moves the focus to when it opens. */
   readonly element: HTMLElement;
   commit(): void;
+  /** Puts the focus on one field, as the handoff does when a required input is missing. */
+  focus(field: ProjectField): void;
 }
 
 let panels = 0;
@@ -281,6 +283,13 @@ export function drawProjectPanel(
       commitStyle();
       commitSeed();
     },
+    focus(field) {
+      if (field === "style") styleBox.focus();
+      else if (field === "seed") seedField.focus();
+      else if (field === "scoreMode")
+        (radios.get(modeOf(session.project) ?? "full") ?? radios.get("full"))?.input.focus();
+      else lyricsText.focus();
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
@@ -314,6 +323,9 @@ export function mountProjectPanel(
     element: panel.element,
     commit() {
       panel.commit();
+    },
+    focus(field) {
+      panel.focus(field);
     },
     destroy() {
       if (destroyed) return;

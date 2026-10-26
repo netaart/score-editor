@@ -3,13 +3,13 @@
 import { changeLog, handoffInstruction } from "./change-log";
 import type { DialectRegistry } from "./dialect";
 import { create } from "./dom";
-import type { DraftKeeper } from "./draft-keeper";
+import type { DraftHandoffResult, DraftKeeperStatus } from "./draft-keeper";
 import { messagesFor } from "./i18n";
 import { anchorOf, placePopover } from "./popover-menu";
 import type { SongProject } from "./score";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
-import type { HandoffPayload, Language, Notice } from "./types";
+import type { HandoffPayload, Language, Notice, ProjectField } from "./types";
 
 /** What the control needs to know at the moment it draws or hands off; null takes the control away. */
 export interface HandoffSource {
@@ -17,8 +17,20 @@ export interface HandoffSource {
   readonly title?: string;
   readonly dialects: DialectRegistry;
   readonly onHandoff: (handoff: HandoffPayload) => void;
+  /** Saves the generated draft, or the score file, before the host is called. */
+  readonly save: () => Promise<DraftHandoffResult>;
+  /** The required inputs the host says are missing now, in the order they should be filled. */
+  readonly missingRequired?: () => ReadonlyArray<ProjectField>;
+  /** Opens the Project panel on one missing field, instead of the handoff review. */
+  readonly openProject?: (field: ProjectField) => void;
   /** Where an unexpected rejection of the save goes, as the keeper sends its own failures. */
   readonly notify?: (notice: Notice) => void;
+}
+
+/** What the control needs from the keeper whose state it follows: the opening badge and the state changes. */
+export interface HandoffKeeper {
+  readonly status: DraftKeeperStatus;
+  subscribe(listener: () => void): () => void;
 }
 
 export interface HandoffControl {
@@ -36,7 +48,7 @@ let instanceCount = 0;
 export function mountHandoffControl(
   el: HTMLElement,
   session: EditingSession,
-  keeper: DraftKeeper,
+  keeper: HandoffKeeper,
   source: () => HandoffSource | null,
   before?: ChildNode | null,
 ): HandoffControl {
@@ -77,6 +89,10 @@ export function mountHandoffControl(
   let language: Language | null = null;
   let busy = false;
   let destroyed = false;
+
+  function missingNow(): ReadonlyArray<ProjectField> {
+    return source()?.missingRequired?.() ?? [];
+  }
 
   /** The one placement rule: under the trigger, with the room below it, and never past the window. */
   function place(): void {
@@ -130,6 +146,12 @@ export function mountHandoffControl(
     popover.setAttribute("aria-describedby", entries.length === 0 ? empty.id : changes.id);
   }
 
+  /** The trigger's normal word, so a language change and the busy state do not fight the missing-input word. */
+  function buttonText(): string {
+    const t = messagesFor(session.view.language);
+    return busy ? t.handoffSaving : t.handoffReview;
+  }
+
   function draw(): void {
     const config = source();
     const present = !destroyed && config !== null && session.view.editable;
@@ -137,6 +159,11 @@ export function mountHandoffControl(
     if (!present && popover.matches(":popover-open")) popover.hidePopover();
     if (!present) return;
     if (session.view.language !== language) applyLanguage();
+    const missing = missingNow();
+    button.textContent = missing.length > 0 ? messagesFor(session.view.language).handoffMissing : buttonText();
+    if (missing.length > 0) button.setAttribute("aria-description", messagesFor(session.view.language).handoffMissing);
+    else button.removeAttribute("aria-description");
+    if (missing.length > 0 && popover.matches(":popover-open")) popover.hidePopover();
     if (popover.matches(":popover-open")) renderLog();
   }
 
@@ -144,6 +171,18 @@ export function mountHandoffControl(
     "beforetoggle",
     (event) => {
       const open = (event as ToggleEvent).newState === "open";
+      if (open) {
+        const missing = missingNow();
+        const first = missing[0];
+        if (first !== undefined) {
+          event.preventDefault();
+          // A popover cannot open while another show operation is running; this one is being cancelled.
+          setTimeout(() => {
+            if (!destroyed) source()?.openProject?.(first);
+          }, 0);
+          return;
+        }
+      }
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
       place();
@@ -200,7 +239,7 @@ export function mountHandoffControl(
     setBusy(true);
     let result: "written" | "unchanged" | "conflict" | "failed";
     try {
-      result = await keeper.handoff();
+      result = await config.save();
     } catch {
       const t = messagesFor(session.view.language);
       if (!destroyed) {

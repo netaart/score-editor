@@ -9,6 +9,7 @@ import { filterCss } from "./filter-styles";
 import { handoffCss } from "./handoff-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
+import { scoreSourceCss } from "./score-source-styles";
 import { sectionMenuCss } from "./section-styles";
 import { songCss } from "./song-styles";
 import { toolCss } from "./tool-styles";
@@ -1337,6 +1338,8 @@ ${handoffCss}
 ${sectionMenuCss}
 ${chordCss}
 ${songCss}
+${scoreSourceCss}
+
 ${filterCss}
 ${toolCss}
 ${dragCss}`;

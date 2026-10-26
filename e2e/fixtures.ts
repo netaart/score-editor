@@ -184,6 +184,17 @@ interface PageHarness {
   stage: HTMLElement;
   notices: PageNotice[];
   handoffs: PageHandoff[];
+  drafts: { calls(): Array<Record<string, unknown>> };
+  scoreFile: null | {
+    file(): { text: string; version: string };
+    calls(): Array<Record<string, unknown>>;
+    external(text: string): string;
+    failNext(method: "save" | "read", count?: number): void;
+    holdSave(): void;
+    releaseSave(): void;
+  };
+  saveAs: string[];
+  unsavedChanges: boolean[];
   probes?: Partial<PageProbes>;
   layout: PageLayout;
   host: {
@@ -203,6 +214,7 @@ interface PageHarness {
   };
   mount(options?: Record<string, unknown>): Promise<void>;
   update(options: Record<string, unknown>): Promise<void>;
+  hasUnsavedChanges(): boolean;
   destroy(): void;
 }
 
@@ -464,6 +476,66 @@ export class Harness {
   /** The notices the mounted editor has sent to its host so far, in order. */
   notices() {
     return this.page.evaluate(() => window.harness.notices.map((notice) => ({ ...notice })));
+  }
+
+  /** The page's fake score file, or null when the mounted editor did not open one. */
+  scoreFile() {
+    return this.page.evaluate(() => {
+      const file = window.harness.scoreFile;
+      return file === null
+        ? null
+        : {
+            file: file.file(),
+            calls: file.calls(),
+          };
+    });
+  }
+
+  /** Every call the fake score file recorded. */
+  scoreCalls() {
+    return this.page.evaluate(() => window.harness.scoreFile?.calls() ?? []);
+  }
+
+  /** Another window writes the score file. */
+  externalScore(text: string) {
+    return this.page.evaluate((next) => window.harness.scoreFile?.external(next), text);
+  }
+
+  /** Makes the next score-file calls of one kind fail. */
+  failScoreNext(method: "save" | "read", count = 1) {
+    return this.page.evaluate(
+      ([kind, times]) => window.harness.scoreFile?.failNext(kind as "save" | "read", times as number),
+      [method, count] as const,
+    );
+  }
+
+  /** Makes the next score-file save wait until `releaseScoreSave`. */
+  holdScoreSave() {
+    return this.page.evaluate(() => window.harness.scoreFile?.holdSave());
+  }
+
+  releaseScoreSave() {
+    return this.page.evaluate(() => window.harness.scoreFile?.releaseSave());
+  }
+
+  /** Every call the page's fake draft store recorded. */
+  draftCalls() {
+    return this.page.evaluate(() => window.harness.drafts.calls());
+  }
+
+  /** What the save-as callback has received. */
+  savedAs() {
+    return this.page.evaluate(() => [...window.harness.saveAs]);
+  }
+
+  /** Every unsaved state the host was told about. */
+  unsavedChanges() {
+    return this.page.evaluate(() => [...window.harness.unsavedChanges]);
+  }
+
+  /** What the mounted editor answers for `hasUnsavedChanges()`. */
+  hasUnsavedChanges() {
+    return this.page.evaluate(() => window.harness.hasUnsavedChanges());
   }
 
   /** What the handoff callback has received so far, in order, with the store calls made before each. */
