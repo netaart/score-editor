@@ -206,7 +206,7 @@ if (score) {
 
 - Every field is optional and an absent field is no condition; the present ones combine with "and". `{}` takes every
   pitched note: that is the pure function's meaning. The panel's own rule for no condition on is separate: it selects
-  nothing and says so (`DESIGN.md`, "Filter panel").
+  nothing and says so ([DESIGN.md](../../../../DESIGN.md#filter-panel)).
 - A note here is a tie chain: pitched notes joined by ties are one note that starts where the first starts, lasts as long as
   all of them and has the pitch of the first. A rest is not a note. The ids returned are those of every part of each
   chain that matched, so a tied note is selected whole.

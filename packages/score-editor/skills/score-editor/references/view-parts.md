@@ -297,7 +297,7 @@ mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws what the panel s
   has a checkbox that says whether the condition counts. The conditions combine with "and".
 - Changing a field turns its condition on and selects at once, through `session.select`. Re-apply selects again from the
   conditions the panel holds, against the score as it is now. A selection made through the panel is not a history step. The
-  panel's own rules (an empty filter, Invert, its status line) are in `DESIGN.md`, "Filter panel"; what the pure filter
+  panel's own rules (an empty filter, Invert, its status line) are in [DESIGN.md](../../../../DESIGN.md#filter-panel); what the pure filter
   means is in [headless-layer.md](headless-layer.md#picking-notes-by-conditions).
 - The panel holds the conditions of its last selection, so it shows them again when it is opened. Its status line is a
   polite live region that says the result, or that the score or the selection has changed since (Re-apply selects again).
