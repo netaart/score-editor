@@ -1,5 +1,6 @@
 // ABOUTME: Main entry of @neta-art/score-editor. Importing it has no side effects and touches no DOM.
 // ABOUTME: Only a call to mount() or to a view part's mount function creates nodes or listeners; the editing session touches no DOM.
+// biome-ignore-all assist/source/organizeImports: the shared list keeps its new entries in one block at the end (COMMON-UI.md).
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
@@ -40,10 +41,6 @@ export type { DraftProject, ScoreDraft } from "./drafts";
 export { contentHash, DRAFT_FORMAT_VERSION, draftText, readDraft } from "./drafts";
 export type { EditingInput, EditingInputResult } from "./editing-input";
 export { handleEditingInput } from "./editing-input";
-// Selecting notes by conditions.
-export type { NoteFilter } from "./filter-notes";
-export { filterNotes } from "./filter-notes";
-export { mountFilterPanel } from "./filter-panel";
 export type { LyricAlignment, LyricSyllableNote } from "./lyrics";
 export {
   alignedLyricLines,
@@ -141,3 +138,7 @@ export { mountViewSwitch } from "./view-switch";
 export type { VoiceTrackOptions } from "./voice-track";
 export { mountVoiceTrack } from "./voice-track";
 export { mountZoomControl } from "./zoom-control";
+// Selecting notes by conditions.
+export type { NoteFilter } from "./filter-notes";
+export { filterNotes } from "./filter-notes";
+export { mountFilterPanel } from "./filter-panel";
