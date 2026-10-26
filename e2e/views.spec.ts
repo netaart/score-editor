@@ -1146,9 +1146,15 @@ test.describe("the staff view", () => {
         const insSpans = barSpans(marks, 1);
         expect(spans).toHaveLength(8);
         expect(insSpans).toHaveLength(8);
+        // The bar lines of the two voices line up. A line's first bar starts at its first drawn mark, which
+        // differs by voice (a note against a centred rest), so only bar lines are compared.
         for (let index = 0; index < spans.length; index += 1) {
-          expect(Math.abs((spans[index] as BarSpan).x0 - (insSpans[index] as BarSpan).x0)).toBeLessThan(1);
-          expect(Math.abs((spans[index] as BarSpan).x1 - (insSpans[index] as BarSpan).x1)).toBeLessThan(1);
+          const span = spans[index] as BarSpan;
+          const ins = insSpans[index] as BarSpan;
+          expect(Math.abs(span.x1 - ins.x1), `bar ${index + 1} end`).toBeLessThan(1);
+          if (index > 0 && (spans[index - 1] as BarSpan).line === span.line) {
+            expect(Math.abs(span.x0 - ins.x0), `bar ${index + 1} start`).toBeLessThan(1);
+          }
         }
 
         const barSeconds = 2.4;
