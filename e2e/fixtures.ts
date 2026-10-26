@@ -402,6 +402,14 @@ export class Harness {
     return this.page.evaluate(() => window.harness.destroy());
   }
 
+  /** Sets the height of the stage the editor fills, as a host resizing the editor's box does. */
+  async stageHeight(px: number) {
+    await this.page.evaluate((height) => {
+      window.harness.stage.style.height = `${height}px`;
+    }, px);
+    await this.frames(1);
+  }
+
   /**
    * Adds to the page the element rules a host page might have: "important" ones, or plainly "hostile" ones; `inShadowRoot`
    * adds them to the open shadow root the editor or the layout stands in.
@@ -629,6 +637,32 @@ export class Finger {
   async close() {
     await this.cdp.detach();
   }
+}
+
+/**
+ * Taps or clicks the first note of Vocal whose centre is the top element at that point, and gives back its name. It
+ * works through the DOM and the pointer directly, so it does not scroll the note into view the way `locator.tap()` does.
+ */
+export async function tapFirstVisibleNote(page: Page): Promise<string> {
+  const at = await page.evaluate(() => {
+    const notes = document.querySelectorAll<HTMLElement>('[role="list"][aria-label="Vocal"] [role="listitem"]');
+    for (const note of notes) {
+      const rect = note.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+      if (document.elementFromPoint(x, y) !== note) continue;
+      return { x, y, name: note.getAttribute("aria-label") ?? "" };
+    }
+    return null;
+  });
+  if (at === null) throw new Error("no note is hit-testable");
+  if (await page.evaluate(() => matchMedia("(pointer: coarse)").matches)) {
+    await page.touchscreen.tap(at.x, at.y);
+  } else {
+    await page.mouse.click(at.x, at.y);
+  }
+  return at.name;
 }
 
 export const test = base.extend<{
