@@ -15,6 +15,7 @@ export type Language = "zh" | "en";
  * `draft-save-failed`: a draft write or removal did not reach the host store.
  * `score-save-failed`: a score file write did not reach the host, and the changes are still unsaved.
  * `score-load-failed`: the other writer's version of a score file could not be read, so the conflict is still open.
+ * `handoff-not-sent`: the handoff could not send the song because its save conflicted or failed.
  */
 export const NOTICE_CODES = [
   "command-refused",
@@ -22,6 +23,7 @@ export const NOTICE_CODES = [
   "draft-save-failed",
   "score-save-failed",
   "score-load-failed",
+  "handoff-not-sent",
 ] as const;
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */

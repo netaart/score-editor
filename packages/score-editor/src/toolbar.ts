@@ -35,6 +35,8 @@ import { mountZoomControl } from "./zoom-control";
 export interface ToolbarPart extends ViewPart {
   setTools(tools: ReadonlyArray<ScoreTool>): void;
   openProject(field?: ProjectField): void;
+  /** Says a sentence in the toolbar's own polite live region. */
+  say(words: string): void;
 }
 
 export interface ToolbarOptions extends EditingPartOptions {
@@ -68,6 +70,8 @@ export interface ToolbarOptions extends EditingPartOptions {
   projectPanel?: boolean;
   /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
+  /** The model inputs the host marked required; the Project panel says so on their empty fields. */
+  requiredInputs?: ReadonlyArray<ProjectField>;
   /**
    * The host's tools. Giving this option, even an empty list, puts the Tools button and panel in the row before the Filter
    * button; the built-in note tools are always listed. Off by default, so a toolbar a host already mounts gains no control.
@@ -173,7 +177,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       })
     : null;
   const projectControl: ProjectControl | null = options.projectPanel
-    ? mountProjectControl(row, root, session, live, options.onRefused)
+    ? mountProjectControl(row, root, session, live, options.onRefused, options.requiredInputs)
     : null;
   let restore: ViewPart | null = null;
   /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
@@ -313,6 +317,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     },
     openProject(field) {
       projectControl?.open(field);
+    },
+    say(words) {
+      live.say(words);
     },
     destroy() {
       if (destroyed) return;

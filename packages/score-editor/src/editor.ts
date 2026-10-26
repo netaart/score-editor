@@ -179,6 +179,7 @@ export class Editor implements MountedEditor {
       projectPanel: true,
       pencil: true,
       draftKeeper: this.drafts,
+      requiredInputs: this.options.requiredInputs ?? [],
       tools: this.options.tools ?? [],
       onChooseBars: (bar) => {
         const number = this.root.querySelector<HTMLElement>(`.sce-bar-number[data-bar="${bar}"]`);
@@ -391,8 +392,10 @@ export class Editor implements MountedEditor {
       },
       missingRequired: () => this.missingRequired(),
       openProject: (field) => this.openRequired(field),
+      savesFirst: () => (file?.unsaved ? (this.scoreSource?.name ?? null) : null),
       ...(title === undefined ? {} : { title }),
       ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
+      say: (words) => this.toolbar.say(words),
     };
   }
 
@@ -429,6 +432,7 @@ export class Editor implements MountedEditor {
           },
           subscribe: (listener) => file.subscribe(() => listener()),
           restoreOriginal: () => file.restoreOriginal(),
+          canRestore: () => file.unsaved,
         },
         (words) => this.live.say(words),
         row.querySelector(".sce-spacer"),
@@ -441,6 +445,7 @@ export class Editor implements MountedEditor {
       saveAs: () => this.options.onSaveAs,
       scope: this.root,
       before: end.firstChild,
+      say: (words) => this.toolbar.say(words),
     });
   }
 

@@ -192,6 +192,19 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     draw();
   }
 
+  /** Puts the first row of the track just below its pinned head, so a gate that lands here leaves it in sight. */
+  function revealFirstRow(): void {
+    if (!drawn || root === null) return;
+    const scroller = options?.scroller ?? root.closest<HTMLElement>(".sce-scroller");
+    const head = root.querySelector<HTMLElement>(".sce-lyric-head");
+    const target = drawn.empty.hidden ? null : drawn.empty;
+    if (scroller === null || head === null || target === null) return;
+    const headBox = head.getBoundingClientRect();
+    const rowBox = target.getBoundingClientRect();
+    const delta = rowBox.top - (headBox.bottom + 6);
+    if (Math.abs(delta) > 0.5) scroller.scrollTop += delta;
+  }
+
   /** Opens the editor on an empty box for a line that does not exist yet. */
   function startAdding(): void {
     if (!drawn || !session.view.editable) return;
@@ -200,6 +213,7 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     drawn.editor.show("new", "", { canMerge: false, line: 0, canPlace: false });
     draw();
     drawn.editor.focus();
+    revealFirstRow();
   }
 
   function draw(): void {

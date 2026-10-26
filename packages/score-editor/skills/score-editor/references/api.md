@@ -83,7 +83,7 @@ change. The tests in the repository check that the list stays complete.
 | `COMMAND_DIAGNOSTIC_CODES` | core | The closed command diagnostic codes. |
 | `NOTICE_DIAGNOSTIC_CODES` | core | The closed notice diagnostic codes (`style-no-bpm`, `melody-with-chords`, `lyrics-unaligned`, `lyrics-too-long`). |
 | `LYRICS_MAX_CHARACTERS` | core | 4000; the limit song2 generation accepts for the joined `lyrics` text. |
-| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`, `"score-save-failed"`, `"score-load-failed"`. |
+| `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`, `"score-save-failed"`, `"score-load-failed"`, `"handoff-not-sent"`. |
 | `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `NOTE_TOOLS` | core | The built-in note tools as `ScoreTool`s: split at the insertion point, chop on the grid, join same pitch, legato, reverse, flip, snap to key, length ×2 and ÷2, set length and fit into bars. |
@@ -172,6 +172,7 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- |
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `ProjectPanel` | A `ViewPart` with `element`, `commit()` and `focus(field)`: the song project panel's root, the pending field a host takes when it closes its own container, and the field the handoff opens. |
+| `ProjectPanelOptions` | `{ onRefused?, requiredInputs? }` for `mountProjectPanel`; a required empty field's hint says so. |
 | `StaffViewPart` | `ViewPart` plus `setPlayPosition(seconds \| null)`: the host player's cursor on the staff, cleared with null. |
 | `LyricTrackPart` | `ViewPart` plus `focusEntry()`: opens the lyric track's new-line editor and focuses its text box. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |

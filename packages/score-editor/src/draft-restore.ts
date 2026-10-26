@@ -14,6 +14,8 @@ export interface RestoreKeeper {
   readonly status: DraftKeeperStatus | "clean" | "dirty" | "saving";
   subscribe(listener: () => void): () => void;
   restoreOriginal(): Promise<boolean>;
+  /** Whether there is anything to restore; a score file with no unsaved change is muted. Defaults to true. */
+  canRestore?: () => boolean;
 }
 
 /**
@@ -56,7 +58,12 @@ export function mountRestoreControl(
   popover.addEventListener(
     "beforetoggle",
     (event) => {
-      if ((event as ToggleEvent).newState === "open") placeUnder(anchorOf(button), popover);
+      if ((event as ToggleEvent).newState !== "open") return;
+      if (!canRestore()) {
+        event.preventDefault();
+        return;
+      }
+      placeUnder(anchorOf(button), popover);
     },
     { signal },
   );
@@ -86,6 +93,10 @@ export function mountRestoreControl(
     { signal },
   );
 
+  function canRestore(): boolean {
+    return keeper.canRestore?.() ?? true;
+  }
+
   let language: Language | null = null;
   function applyLanguage(): void {
     language = session.view.language;
@@ -98,7 +109,7 @@ export function mountRestoreControl(
     question.textContent = asked;
     warning.textContent = savedVersion ? t.restoreSavedWarning : t.restoreWarning;
     cancel.textContent = t.restoreCancel;
-    confirm.textContent = t.restoreOriginal;
+    confirm.textContent = savedVersion ? t.restoreSavedConfirm : t.restoreOriginal;
   }
 
   function draw(): void {
@@ -108,6 +119,7 @@ export function mountRestoreControl(
       session.view.editable &&
       (savedVersion ? status !== "opening" && status !== "destroyed" : status === "ready" || status === "conflict");
     root.hidden = !present;
+    button.setAttribute("aria-disabled", String(savedVersion && !canRestore()));
     if (!present && popover.matches(":popover-open")) popover.hidePopover();
   }
 

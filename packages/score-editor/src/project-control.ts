@@ -26,6 +26,7 @@ export function mountProjectControl(
   session: EditingSession,
   live: LiveRegion,
   onRefused: EditingPartOptions["onRefused"],
+  requiredInputs: ReadonlyArray<ProjectField> = [],
 ): ProjectControl {
   const doc = row.ownerDocument;
   const abort = new AbortController();
@@ -42,7 +43,7 @@ export function mountProjectControl(
   button.setAttribute("aria-expanded", "false");
   button.popoverTargetElement = popover;
   button.popoverTargetAction = "toggle";
-  const panel = drawProjectPanel(popover, session, live, onRefused, false);
+  const panel = drawProjectPanel(popover, session, live, onRefused, false, requiredInputs);
 
   /** Puts the popover under the button: on a narrow window it spans the window, and its height is the room below the button. */
   function place(): void {

@@ -175,6 +175,7 @@ const ownerGroups = {
     "ToolbarPart",
     "ViewPart",
     "ProjectPanel",
+    "ProjectPanelOptions",
     "StaffViewPart",
     "VoiceTrackOptions",
     "handleEditingInput",

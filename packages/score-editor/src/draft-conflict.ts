@@ -4,6 +4,7 @@
 import { create, requireDom } from "./dom";
 import type { DraftKeeper } from "./draft-keeper";
 import { messagesFor } from "./i18n";
+import { revealConflictInChrome } from "./reveal-conflict";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
@@ -75,9 +76,13 @@ export function mountDraftConflict(el: HTMLElement, session: EditingSession, kee
     }
   }
 
+  let visible = false;
   function draw(): void {
     if (session.view.language !== language) applyLanguage();
-    strip.hidden = keeper.status !== "conflict";
+    const next = keeper.status === "conflict";
+    strip.hidden = !next;
+    if (next && !visible) revealConflictInChrome(strip);
+    visible = next;
   }
 
   draw();

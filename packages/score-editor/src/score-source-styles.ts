@@ -28,21 +28,22 @@ export const scoreSourceCss = `
 .sce-root .sce-save-button[aria-busy="true"] {
   cursor: progress;
 }
-/* The dot is the unsaved state where the pill has no room: a small mark on the Save drawing. */
-.sce-root .sce-save-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--sce-_text);
+/* The mark is the state where the word has no room: one glyph per state, never a single dot for all. */
+.sce-root .sce-save-mark {
+  position: absolute;
+  inset-block-start: 1px;
+  inset-inline-end: 2px;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
 }
-/* Below 480px the pill would push a control to another row; the dot carries the unsaved state. */
-.sce-root.sce-part-save[data-pill="false"] .sce-save-state {
+.sce-root.sce-part-save[data-word="false"] .sce-save-state {
   display: none;
 }
-.sce-root.sce-part-save[data-pill="true"] .sce-save-dot {
+.sce-root.sce-part-save[data-word="true"] .sce-save-mark {
   display: none;
 }
-/* At 320px the word would do the same; the icon and the dot stay. */
+/* At 320px the action word also gives way to the icon and its mark. */
 .sce-root.sce-part-save[data-compact="true"] .sce-save-label {
   display: none;
 }
@@ -52,8 +53,8 @@ export const scoreSourceCss = `
   padding: 0;
 }
 @media (forced-colors: active) {
-  .sce-root .sce-save-dot {
-    background: CanvasText;
+  .sce-root .sce-save-mark {
+    color: CanvasText;
   }
 }
 /* The score-file conflict strip uses the draft strip's classes for its shared shape and choices. */

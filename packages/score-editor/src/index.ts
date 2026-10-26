@@ -94,7 +94,7 @@ export { previewPlayer } from "./preview-player";
 export type { PreviewChordEvent, PreviewEvent, PreviewNoteEvent, PreviewSchedule } from "./preview-schedule";
 export { schedulePreview } from "./preview-schedule";
 export { mountProblemView } from "./problem-view";
-export type { ProjectPanel } from "./project-panel";
+export type { ProjectPanel, ProjectPanelOptions } from "./project-panel";
 export { mountProjectPanel } from "./project-panel";
 export type {
   Bar,
