@@ -278,7 +278,7 @@ Why one menu and not three icon buttons: three pictograms that a person must tel
 
 - **Buttons:** ground fill, 1px strong line, 4px radius, 28px high (36px coarse). The step buttons are square (28px or 36px). Hover darkens by 6% of text; expanded state 10%. A step that has nowhere to go is `aria-disabled` and muted.
 - **Value button:** shows the zoom as a percentage in 600 weight and opens the menu; its accessible name is "Zoom 100%" and it carries the popover's expanded state.
-- **Popover:** a native popover (`popover="auto"`), so it lives in the top layer and stacks above a host's full-screen layer. Surface fill, 1px strong line, 8px/24px shadow, positioned under the button and nudged left if it would overflow the viewport (8px margin).
+- **Popover:** a native popover (`popover="auto"`), so it lives in the top layer and stacks above a host's full-screen layer. Surface fill, 1px strong line, 8px/24px shadow, positioned under the button with an 8px margin from the window's edges: it is nudged left when it would run off the right, and when it would run off the bottom it is put above its anchor if it fits there, else it keeps its top 8px from the window's top, with a max-height to the bottom margin and its own scroll.
 - **Menu items:** radio items for the presets, a rule, then "Fit whole song" as a plain item. A 6px dot at the start marks the checked preset in the accent colour; hover is 8% of text. Arrow keys, Home and End walk the items; Enter or Space picks; Escape closes and returns focus to the button.
 - **Keys and wheel:** `+`, `=` step in; `-`, `_` step out (on the focused view); control plus the wheel zooms smoothly around the pointer, and stops the page from zooming itself.
 
