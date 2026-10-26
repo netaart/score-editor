@@ -88,18 +88,6 @@ const css = `
   /* The music keeps the header, a track head and three rows; the chrome scrolls inside itself when it needs more. */
   --sce-_floor: calc(var(--sce-_head-top) + var(--sce-_band) + 3 * var(--sce-_row));
 }
-/*
- * Everything above the music: the toolbar, the conflict strip, the cut sentence and the stale notice. Its height is
- * bounded so the body keeps the floor; what does not fit scrolls inside it, and nothing is cut or hidden.
- */
-.sce-root .sce-chrome {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  max-height: calc(100% - var(--sce-_floor));
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
 .sce-part.sce-part {
   display: block;
 }
@@ -139,6 +127,19 @@ const css = `
 }
 .sce-root.sce-root [hidden] {
   display: none;
+}
+
+/*
+ * Everything above the music: the toolbar, the conflict strip, the cut sentence and the stale notice. Its height is
+ * bounded so the body keeps the floor; what does not fit scrolls inside it, and nothing is cut or hidden.
+ */
+.sce-root .sce-chrome {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  max-height: calc(100% - var(--sce-_floor));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sce-root .sce-toolbar {
