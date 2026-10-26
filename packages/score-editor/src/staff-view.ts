@@ -86,6 +86,7 @@ interface AbcElement {
 }
 
 interface AbcStaffGroup {
+  readonly line?: number;
   readonly staffs?: ReadonlyArray<{
     readonly topLine?: number;
     readonly bottomLine?: number;
@@ -145,35 +146,51 @@ function boxIn(host: HTMLElement, node: Element): DrawingBox {
  * lines above and below. abcjs orders each line's voice by its measures, so the bars of the drawing follow the model.
  * The boxes are read from the drawn `.abcjs-bar`, `.abcjs-note` and `.abcjs-staff` elements themselves, in the
  * drawing host's pixels: that is the cursor's containing block, the only space its own left and top mean anything in.
- * A bar starts at the drawn line that closes the one before it; the first bar of a system has no line of its own, so it
- * starts at its first drawn note or rest.
+ * The elements are picked by the marks abcjs writes on them (`abcjs-v<n>`, `abcjs-l<n>`), so a later voice or staff
+ * cannot be mistaken for the voice and line being walked. A bar starts at the drawn line that closes the one before
+ * it; the first bar of a system has no line of its own, so it starts at its first drawn note or rest. On a two-staff
+ * system the staff box is the span from the first staff's top line to the last staff's bottom line.
  */
 function geometryOf(tune: unknown, score: Score, host: HTMLElement): CursorGeometry {
   const svg = host.shadowRoot?.querySelector("svg");
   if (!(svg instanceof SVGSVGElement)) return { bars: [] };
   const engraver = (tune as { engraver?: { staffgroups?: ReadonlyArray<AbcStaffGroup> } } | null)?.engraver;
   const groups = engraver?.staffgroups ?? [];
-  const barNodes = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-bar")];
-  const noteNodes = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-note, .abcjs-rest")];
-  const staffNodes = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-staff")];
+  const allBars = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-bar")];
+  const allNotes = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-note, .abcjs-rest")];
+  const allStaffs = [...svg.querySelectorAll<SVGGraphicsElement>(".abcjs-staff")];
   const bars: CursorBar[] = [];
   let index = 0;
-  let barAt = 0;
-  let noteAt = 0;
-  let staffAt = 0;
-  for (const group of groups) {
+  for (const [groupIndex, group] of groups.entries()) {
     const voice = group.voices?.[0];
-    const staff = group.staffs?.[0];
-    if (!voice || !staff) continue;
-    const middle = staff.absoluteY ?? 0;
-    const drawnStaff = staffNodes[staffAt];
-    staffAt += 1;
-    const staffBox = drawnStaff ? boxIn(host, drawnStaff) : null;
-    const top = staffBox?.top ?? staff.topLine ?? middle - 10 * STAFF_STEP;
-    const bottom = staffBox?.bottom ?? staff.bottomLine ?? middle + 2 * STAFF_STEP;
+    if (!voice) continue;
+    const line = group.line ?? groupIndex;
+    const lineClass = `abcjs-l${line}`;
+    const voiceClass = "abcjs-v0";
+    const barNodes = allBars.filter(
+      (node) => node.classList.contains(lineClass) && node.classList.contains(voiceClass),
+    );
+    const noteNodes = allNotes.filter(
+      (node) => node.classList.contains(lineClass) && node.classList.contains(voiceClass),
+    );
+    const staffNodes = allStaffs.filter((node) => node.classList.contains(lineClass));
+    const staffBoxes = staffNodes.map((node) => boxIn(host, node));
+    const fallbackTops = (group.staffs ?? []).map((staff) => {
+      const middle = staff.absoluteY ?? 0;
+      return staff.topLine ?? middle - 10 * STAFF_STEP;
+    });
+    const fallbackBottoms = (group.staffs ?? []).map((staff) => {
+      const middle = staff.absoluteY ?? 0;
+      return staff.bottomLine ?? middle + 2 * STAFF_STEP;
+    });
+    const top = staffBoxes.length > 0 ? Math.min(...staffBoxes.map((box) => box.top)) : Math.min(...fallbackTops);
+    const bottom =
+      staffBoxes.length > 0 ? Math.max(...staffBoxes.map((box) => box.bottom)) : Math.max(...fallbackBottoms);
     const children = voice.children ?? [];
     let startX: number | null = null;
     let hasContent = false;
+    let barAt = 0;
+    let noteAt = 0;
     for (const child of children) {
       if (child.type === "note" || child.type === "rest") {
         const note = noteNodes[noteAt];
@@ -335,11 +352,11 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
     return { x: event.clientX - base.left, y: event.clientY - base.top };
   }
 
-  /** The drawn note a point is on, from the boxes of the notes rather than the element under the pointer. */
+  /** The drawn note or rest a point is on, from the boxes rather than the element under the pointer. */
   function noteBoxAt(x: number, y: number): DrawingBox | null {
     let found: DrawingBox | null = null;
     let nearest = Number.POSITIVE_INFINITY;
-    for (const note of target.querySelectorAll<SVGGraphicsElement>(".abcjs-note")) {
+    for (const note of target.querySelectorAll<SVGGraphicsElement>(".abcjs-note, .abcjs-rest")) {
       const box = boxIn(holder, note);
       const dx = x < box.left ? box.left - x : x > box.right ? x - box.right : 0;
       const dy = y < box.top ? box.top - y : y > box.bottom ? y - box.bottom : 0;
@@ -413,8 +430,8 @@ export function mountStaffView(el: HTMLElement, session: EditingSession): StaffV
     const width = Math.floor(holder.clientWidth);
     // A box that is not shown has no width: the drawing waits until it has one, and keeps what it drew before.
     if (width <= 0) return;
-    const text = session.project.score;
     const current = session.reading.score;
+    const text = current.drawingText ?? session.project.score;
     if (text === drawnText && width === drawnWidth && current === score) {
       placeCursor(player.playing ? player.tick : hostTick());
       return;

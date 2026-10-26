@@ -1348,6 +1348,23 @@ class Song2Parser {
       })),
     };
 
+    const drawingLines = this.normalized.split("\n");
+    for (const musicLine of this.sourceLines) {
+      const parts = drawingLines[musicLine.line]?.split("|");
+      if (!parts) continue;
+      for (const [segmentIndex, segment] of musicLine.segments.entries()) {
+        const count = wholeRestCount(trimBody(segment.raw));
+        const bar = segment.bars[0]?.bar;
+        const meter = bar === undefined ? undefined : bars[bar]?.meter;
+        if (count === null || meter === undefined) continue;
+        // A full bar in the score's written unit: L:1/16 in 4/4 is 16, in 2/4 is 8, in 6/8 is 12.
+        const units = (this.unitDenominator * meter.numerator) / meter.denominator;
+        parts[segmentIndex] = Array.from({ length: count }, () => `z${units}`).join("|");
+      }
+      drawingLines[musicLine.line] = parts.join("|");
+    }
+    const drawingText = drawingLines.join("\n");
+
     return {
       tempo: this.tempo,
       voices: this.hasIns ? ["Vocal", "Ins"] : ["Vocal"],
@@ -1358,6 +1375,7 @@ class Song2Parser {
       chords,
       truncation,
       hasChords: this.hasChords,
+      drawingText,
       source,
       unitTicks: (4 * TICKS_PER_QUARTER) / this.unitDenominator,
     };

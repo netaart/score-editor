@@ -107,7 +107,10 @@ interface PageSession {
   view: { zoom: number; scrollLeft: number; language: string; editable: boolean };
   reading: {
     kind: string;
-    score?: { notes: Array<{ id: string; voice: string; start: number; duration: number; midi: number | null }> };
+    score?: {
+      bars: Array<{ start: number; length: number }>;
+      notes: Array<{ id: string; voice: string; start: number; duration: number; midi: number | null }>;
+    };
   };
   grid: { value: number; dotted?: boolean };
   activeView: string;
