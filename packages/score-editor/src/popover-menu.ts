@@ -22,6 +22,14 @@ export function anchorOf(element: HTMLElement): PopoverAnchor {
   return { left: rect.left, bottom: rect.bottom, top: rect.top };
 }
 
+/** Leaves a popover to the stylesheet's own placement, such as a sheet fixed to the bottom edge of a phone. */
+export function clearPlacement(popover: HTMLElement): void {
+  popover.style.left = "";
+  popover.style.top = "";
+  popover.style.maxHeight = "";
+  popover.style.overflowY = "";
+}
+
 /** Puts a popover that is about to open under its anchor, on the anchor's left edge, with no old height limit. */
 export function placeUnder(anchor: PopoverAnchor, popover: HTMLElement, options: UnderAnchorOptions = {}): void {
   popover.style.maxHeight = options.maxHeight === undefined ? "" : `${options.maxHeight}px`;
