@@ -778,8 +778,9 @@ function barSpans(marks: StaffMark[], voice = 0): BarSpan[] {
       .filter((mark) => mark.kind === "bar" && mark.voice === voice && mark.line === line)
       .sort((a, b) => a.x - b.x);
     if (bars.length === 0) continue;
+    // A system's first bar starts where any voice's first onset is drawn; later bars start at the line before them.
     const notes = marks
-      .filter((mark) => (mark.kind === "note" || mark.kind === "rest") && mark.voice === voice && mark.line === line)
+      .filter((mark) => (mark.kind === "note" || mark.kind === "rest") && mark.line === line)
       .sort((a, b) => a.x - b.x);
     const staves = marks.filter((mark) => mark.kind === "staff" && mark.line === line);
     const top = staves.length > 0 ? Math.min(...staves.map((mark) => mark.y)) : (bars[0] as StaffMark).y;
@@ -842,6 +843,26 @@ async function staffPlace(page: Page) {
 /** Drives the staff part's play position as a host player does. */
 const setStaffPosition = (page: Page, seconds: number | null) =>
   page.evaluate((value) => window.harness.layout.setPlayPosition(value), seconds);
+
+/** Gives the staff slot a fixed height, as a host with a band of its own does, and waits for the part to see it. */
+async function fixStaffHeight(page: Page, height = 300): Promise<void> {
+  await staffSlot(page).evaluate((el, pixels) => {
+    (el as HTMLElement).style.height = `${pixels}px`;
+  }, height);
+  await framesPass(page);
+}
+
+const staffScrollTop = (page: Page) => staffRegion(page).evaluate((el) => el.scrollTop);
+
+/** The cursor's box is inside the region's visible box, not only in the DOM. */
+async function expectCursorInRegion(page: Page): Promise<void> {
+  const cursor = await box(staffCursor(page));
+  const region = await box(staffRegion(page));
+  expect(cursor.y, "the cursor is below the region's top").toBeGreaterThanOrEqual(region.y - 1);
+  expect(cursor.y + cursor.height, "and above its bottom").toBeLessThanOrEqual(region.y + region.height + 1);
+  expect(cursor.x, "and inside its left edge").toBeGreaterThanOrEqual(region.x - 1);
+  expect(cursor.x + cursor.width, "and its right edge").toBeLessThanOrEqual(region.x + region.width + 1);
+}
 
 const ABCJS_URL = "**/e2e/page/vendor/abcjs.js";
 /** Two frames: whatever a change started in the page, such as a request for abcjs, has been started by then. */
@@ -956,6 +977,158 @@ test.describe("the staff view", () => {
     await expect(drawnNotes(page)).toHaveCount(5);
   });
 
+  test("draws the play cursor as a 7 px band of text colour, and as a Highlight band under forced colours", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page)).toHaveCount(5);
+    await setStaffPosition(page, 0);
+    const read = () =>
+      staffCursor(page).evaluate((el) => {
+        const style = getComputedStyle(el);
+        const after = getComputedStyle(el, "::after");
+        return {
+          width: style.width,
+          marginLeft: style.marginLeft,
+          backgroundImage: style.backgroundImage,
+          backgroundColor: style.backgroundColor,
+          borderLeftWidth: style.borderLeftWidth,
+          borderLeftColor: style.borderLeftColor,
+          borderRightWidth: style.borderRightWidth,
+          afterContent: after.content,
+          afterWidth: after.width,
+          afterBackground: after.backgroundColor,
+        };
+      });
+
+    const normal = await read();
+    expect(normal.width, "a 7 px box: 2 px band, 1 px edge, 1 px ink, 1 px edge, 2 px band").toBe("7px");
+    expect(normal.marginLeft, "the ink stays where the 3 px box put it").toBe("-3px");
+    expect(normal.backgroundImage).toContain("linear-gradient");
+    expect(normal.backgroundImage, "the band is a wash of the text colour").toContain("0.08");
+
+    await page.emulateMedia({ forcedColors: "active" });
+    const forced = await read();
+    expect(forced.width).toBe("7px");
+    expect(forced.marginLeft).toBe("-3px");
+    expect(forced.borderLeftWidth, "the band is two 2 px borders, because forced colours drop the wash").toBe("2px");
+    expect(forced.borderRightWidth).toBe("2px");
+    expect(forced.afterContent, "a pseudo-element keeps the 1 px ink between Canvas edges").toBe('""');
+    expect(forced.afterWidth).toBe("1px");
+    expect(forced.borderLeftColor).not.toBe(forced.backgroundColor);
+    expect(forced.afterBackground).not.toBe(forced.backgroundColor);
+    expect(forced.afterBackground).not.toBe(forced.borderLeftColor);
+  });
+
+  test("reveals the system, so bar 1 from a later system gives scrollTop 0 and shows the tempo mark", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    await fixStaffHeight(page);
+    const marks = await staffMarks(page);
+    const spans = barSpans(marks, 0);
+    const later = spans[8] as BarSpan;
+    expect(later, "bar 9, on a later system").toBeDefined();
+    expect(later.line, "not the first system").toBeGreaterThan(0);
+
+    await setStaffPosition(page, 0);
+    expect(await staffScrollTop(page), "bar 1 at the top").toBe(0);
+    const pageTop = await page.evaluate(() => window.scrollY);
+
+    await setStaffPosition(page, 8 * ((4 * 60) / 190) + 0.02);
+    await expect
+      .poll(() => staffScrollTop(page), { message: "bar 9's system is brought into view" })
+      .toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY), "the reveal scrolls the region, never the page").toBe(pageTop);
+    const cursor = await box(staffCursor(page));
+    const region = await box(staffRegion(page));
+    // The cursor's top is the system's top staff line minus 2, so add it back to measure the system's top.
+    expect(
+      Math.abs(cursor.y + 2 - region.y - 16),
+      "the system's top staff line sits 16 px below the region's top",
+    ).toBeLessThan(1.5);
+    await expectCursorInRegion(page);
+
+    await setStaffPosition(page, 0);
+    await expect.poll(() => staffScrollTop(page), { message: "back to bar 1, at the top" }).toBe(0);
+    const tempo = await box(staffSlot(page).locator("svg .abcjs-tempo"));
+    const back = await box(staffRegion(page));
+    expect(tempo.y, "the tempo mark is in the region's visible box").toBeGreaterThanOrEqual(back.y - 1);
+    expect(tempo.y + tempo.height).toBeLessThanOrEqual(back.y + back.height + 1);
+    await expectCursorInRegion(page);
+
+    await setStaffPosition(page, 0.5);
+    await framesPass(page);
+    expect(await staffScrollTop(page), "a position on the same visible system moves nothing").toBe(0);
+    await expectCursorInRegion(page);
+  });
+
+  test("leaves the reader's scroll alone while the preview plays, and a backward seek reveals the cursor at once", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff", "synth"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    await fixStaffHeight(page);
+    await press(slot(page, "synth").getByRole("button"));
+    await expect.poll(() => page.evaluate(() => window.harness.previewPlayer().tick ?? 0)).toBeGreaterThan(1024);
+    const pageTop = await page.evaluate(() => window.scrollY);
+
+    const reader = await staffRegion(page).evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+      return el.scrollTop;
+    });
+    expect(reader, "the reader has scrolled well away from the cursor").toBeGreaterThan(300);
+    await framesPass(page);
+    expect(await staffScrollTop(page), "the region stays where the reader put it").toBe(reader);
+    await page.waitForTimeout(500);
+    expect(await staffScrollTop(page), "the preview does not pull the region back to the cursor").toBe(reader);
+    expect(await page.evaluate(() => window.scrollY), "the reveal never scrolls the page").toBe(pageTop);
+
+    await page.evaluate(() => window.harness.previewPlayer().stop());
+    await setStaffPosition(page, 0);
+    await expect
+      .poll(() => staffScrollTop(page), { message: "a backward seek brings the cursor back at once" })
+      .toBe(0);
+    expect(await page.evaluate(() => window.scrollY), "and still leaves the page alone").toBe(pageTop);
+    await expectCursorInRegion(page);
+  });
+
+  test("moves the cursor with a transform inside a system and leaves its top and height alone", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: QUARTERS }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page)).toHaveCount(5);
+    const read = () =>
+      staffCursor(page).evaluate((el) => ({
+        left: el.style.left,
+        top: el.style.top,
+        height: el.style.height,
+        transform: el.style.transform,
+        computedLeft: getComputedStyle(el).left,
+        computedTransform: getComputedStyle(el).transform,
+      }));
+
+    await setStaffPosition(page, 0);
+    const start = await read();
+    await setStaffPosition(page, 0.5);
+    await framesPass(page);
+    const moved = await read();
+    expect(start.top, "the first position sets the system's top").not.toBe("");
+    expect(moved.transform, "the x move is a transform").toContain("translate");
+    expect(moved.computedTransform, "and reaches the rendered box").not.toBe("none");
+    expect(moved.transform).not.toBe(start.transform);
+    expect(moved.top, "the top is set only when the system changes").toBe(start.top);
+    expect(moved.height, "and so is the height").toBe(start.height);
+    expect(moved.left, "the box itself stays at the drawing's left edge").toBe("");
+    expect(moved.computedLeft).toBe("0px");
+  });
+
   test("puts the host's play position on the bar at that second, mid-bar and at the end, and takes it away for null", async ({
     page,
     harness,
@@ -993,11 +1166,11 @@ test.describe("the staff view", () => {
     await expect(staffCursor(page)).toBeHidden();
   });
 
-  test("follows a tempo change in the middle of the score: 0.5 s into the second bar is an eighth of it at 60 BPM", async ({
+  test("follows a tempo change in the middle of the score: 0.5 s into the second bar is half way from its start to its second note", async ({
     page,
     harness,
   }) => {
-    // The first bar at the score's 100 lasts 2.4 s; from bar 2 the tempo is 60, so the bar lasts 4 s. 2.9 s is an eighth into bar 2.
+    // The first bar at the score's 100 lasts 2.4 s; from bar 2 the tempo is 60, so the bar lasts 4 s. 2.9 s is half a beat into bar 2.
     await harness.layout.open({
       score: { text: vocalOnly("C4D4E4F4|G4A4B4c4|C16|") },
       parts: ["staff"],
@@ -1006,15 +1179,23 @@ test.describe("the staff view", () => {
     await expect(drawnNotes(page)).toHaveCount(9);
     await setStaffPosition(page, 2.9);
 
-    const place = await staffPlace(page);
-    // On a later system bar 2 is the first bar and starts at its first drawn note; in one system it starts at
-    // the line that closes bar 1.
-    const wrapped = place.notes.length < place.allNotes.length;
-    const opening = place.bars.length > 3;
-    const barTwo = wrapped ? place.notes[0]?.x : place.bars[opening ? 1 : 0]?.x;
-    const barThree = wrapped ? place.bars[0]?.x : place.bars[opening ? 2 : 1]?.x;
-
-    const expected = (barTwo ?? 0) + ((barThree ?? 0) - (barTwo ?? 0)) / 8;
+    const marks = await staffMarks(page);
+    const spans = barSpans(marks, 0);
+    const barTwo = spans[1] as BarSpan;
+    const notes = marks
+      .filter(
+        (mark) =>
+          mark.kind === "note" &&
+          mark.voice === 0 &&
+          mark.line === barTwo.line &&
+          mark.x >= barTwo.x0 - 1 &&
+          mark.x < barTwo.x1,
+      )
+      .sort((a, b) => a.x - b.x);
+    expect(notes.length, "bar 2 has four quarter notes").toBe(4);
+    // The bar's start is the anchor at its first tick; the next anchor is A, the first onset after it. Half a beat
+    // is half way between the two in x.
+    const expected = barTwo.x0 + ((notes[1] as StaffMark).x - barTwo.x0) / 2;
     expect(Math.abs((await staffCursorX(page)) - expected)).toBeLessThan(2);
   });
 
@@ -1092,6 +1273,118 @@ test.describe("the staff view", () => {
     expect(await harness.layout.scoreText()).toBe(REAL_SCORE);
   });
 
+  test("starts bar 27, the last system's only bar, at its drawn Ins whole note and not at the centred Vocal rest", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    const marks = await staffMarks(page);
+    const lastLine = Math.max(...marks.map((mark) => mark.line));
+    const insNotes = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 1 && mark.line === lastLine)
+      .sort((a, b) => a.x - b.x);
+    const vocalRests = marks
+      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.line === lastLine)
+      .sort((a, b) => a.x - b.x);
+    const barLine = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 0 && mark.line === lastLine)
+      .sort((a, b) => a.x - b.x)[0];
+    expect(insNotes, "the last bar has one Ins whole note").toHaveLength(1);
+    expect(vocalRests, "and one Vocal whole rest").toHaveLength(1);
+    expect(barLine, "and closes at a bar line").toBeDefined();
+    // The Vocal rest is drawn in the middle of the bar; it is not an onset. The Ins whole note is drawn at one.
+    expect((vocalRests[0] as StaffMark).x).toBeGreaterThan((insNotes[0] as StaffMark).x + 8);
+
+    const barSeconds = (4 * 60) / 190;
+    // Bar 27 starts after 26 bars; 33 s is an eighth of the way into it.
+    const fraction = (33 - 26 * barSeconds) / barSeconds;
+    const expected =
+      (insNotes[0] as StaffMark).x + fraction * ((barLine as StaffMark).x - (insNotes[0] as StaffMark).x);
+    await setStaffPosition(page, 33);
+    const cursor = await staffCursorBox(page);
+    expect(Math.abs(cursor.x + cursor.width / 2 - expected), "33 s at the drawn Ins onset").toBeLessThan(2);
+    const staffTop = Math.min(
+      ...marks.filter((mark) => mark.kind === "staff" && mark.line === lastLine).map((mark) => mark.y),
+    );
+    expect(Math.abs(cursor.y - (staffTop - 2)), "on the last system").toBeLessThan(2);
+  });
+
+  test("starts bar 1 of a two-voice system where Ins's whole note is drawn while Vocal holds a whole-bar rest", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({
+      score: { text: twoVoice(["z16|C16|D16|E16|"], ["C16|D16|E16|F16|"]) },
+      parts: ["staff"],
+      editable: false,
+    });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    const marks = await staffMarks(page);
+    const firstLine = Math.min(...marks.map((mark) => mark.line));
+    const insNotes = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 1 && mark.line === firstLine)
+      .sort((a, b) => a.x - b.x);
+    const vocalRest = marks
+      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.line === firstLine)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const barLine = marks
+      .filter((mark) => mark.kind === "bar" && mark.voice === 1 && mark.line === firstLine)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    expect(insNotes.length, "Ins draws a note in each bar of the system").toBeGreaterThanOrEqual(2);
+    expect(vocalRest.x).toBeGreaterThan((insNotes[0] as StaffMark).x + 20);
+
+    const barSeconds = 2.4;
+    await setStaffPosition(page, 0);
+    expect(
+      Math.abs((await staffCursorX(page)) - (insNotes[0] as StaffMark).x),
+      "bar 1, first system: its start is Ins's drawn note onset",
+    ).toBeLessThan(2);
+
+    const quarter = (insNotes[0] as StaffMark).x + ((barLine as StaffMark).x - (insNotes[0] as StaffMark).x) / 4;
+    await setStaffPosition(page, barSeconds / 4);
+    expect(Math.abs((await staffCursorX(page)) - quarter), "and a quarter of the way through the bar").toBeLessThan(2);
+  });
+
+  test("follows bar 1's drawn rest and two eighths in the real score: 0.5 s between them, and the first eighth's x at 0.95 s", async ({
+    page,
+    harness,
+  }) => {
+    await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
+    await expect(drawnNotes(page).first()).toBeVisible();
+    const marks = await staffMarks(page);
+    const line = Math.min(...marks.map((mark) => mark.line));
+    const rest = marks
+      .filter((mark) => mark.kind === "rest" && mark.voice === 0 && mark.line === line)
+      .sort((a, b) => a.x - b.x)[0] as StaffMark;
+    const notes = marks
+      .filter((mark) => mark.kind === "note" && mark.voice === 0 && mark.line === line)
+      .sort((a, b) => a.x - b.x);
+    const firstEighth = notes[0] as StaffMark;
+    const secondEighth = notes[1] as StaffMark;
+    // Bar 1 of the real score, first system: a dotted half rest (three beats) and two eighths.
+    const barSeconds = (4 * 60) / 190;
+    expect(firstEighth.x).toBeGreaterThan(rest.x + rest.width);
+    expect(secondEighth.x).toBeGreaterThan(firstEighth.x);
+
+    await setStaffPosition(page, 0.5);
+    const between = await staffCursorBox(page);
+    const intoBar = 0.5 / barSeconds;
+    const expected = rest.x + (intoBar / 0.75) * (firstEighth.x - rest.x);
+    expect(
+      Math.abs(between.x + between.width / 2 - expected),
+      "0.5 s, between the rest and the first eighth",
+    ).toBeLessThan(2);
+    expect(between.x + between.width / 2, "past the rest's drawn ink").toBeGreaterThan(rest.x + rest.width - 1);
+    expect(between.x + between.width / 2, "before the first eighth's ink").toBeLessThan(firstEighth.x);
+
+    await setStaffPosition(page, 0.75 * barSeconds);
+    expect(
+      Math.abs((await staffCursorX(page)) - firstEighth.x),
+      "the first eighth's onset time puts the cursor on its x",
+    ).toBeLessThan(2);
+  });
+
   test("follows the start of the first twelve bars in Vocal, on the right system", async ({ page, harness }) => {
     await harness.layout.open({ score: { text: REAL_SCORE }, parts: ["staff"], editable: false });
     await expect(drawnNotes(page).first()).toBeVisible();
@@ -1160,18 +1453,23 @@ test.describe("the staff view", () => {
         const barSeconds = 2.4;
         const middle = Math.floor((count - 1) / 2);
         const runBar = spans[middle] as BarSpan;
+        // A run is drawn as whole-bar rests, which are not onsets: take its start from the cursor at the bar's tick.
+        await setStaffPosition(page, middle * barSeconds);
+        const runStart = await staffCursorX(page);
         for (const fraction of [0.25, 0.75]) {
           await setStaffPosition(page, (middle + fraction) * barSeconds);
           const cursor = await staffCursorBox(page);
-          const expected = runBar.x0 + (runBar.x1 - runBar.x0) * fraction;
+          const expected = runStart + (runBar.x1 - runStart) * fraction;
           expect(Math.abs(cursor.x + cursor.width / 2 - expected), `inside the run at ${fraction}`).toBeLessThan(2);
         }
 
         const after = spans[count] as BarSpan;
+        await setStaffPosition(page, count * barSeconds);
+        const afterStart = await staffCursorX(page);
         await setStaffPosition(page, count * barSeconds + 0.02);
         const cursor = await staffCursorBox(page);
         const afterFraction = 0.02 / barSeconds;
-        const afterX = after.x0 + (after.x1 - after.x0) * afterFraction;
+        const afterX = afterStart + (after.x1 - afterStart) * afterFraction;
         expect(Math.abs(cursor.x + cursor.width / 2 - afterX), "first bar after the run").toBeLessThan(2);
 
         // The drawn rest of the run starts the preview at that run bar, though a staff line may be over it.
