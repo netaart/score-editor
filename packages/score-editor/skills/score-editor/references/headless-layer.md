@@ -135,6 +135,28 @@ The rules — what a label matches, where unaligned lines go, what counts as a s
 lines and when `lyrics` is rewritten — are the contract in the package README's
 [lyrics section](../../../README.md#lyrics-on-the-song-project). Do not restate them here.
 
+### The rules of the lyric track
+
+The types are `LyricRow`, `LyricEdge`, `LyricBoundaryDrag`, `LyricBoundaryMove`, `LyricBoundaryPlan`, `LyricDrop`, `LyricDropPlan` and `LyricSplit`.
+
+A host that draws its own lyric view reuses what the default track does, with no DOM. `lyricRows(score, lines)` gives each
+line (`LyricRow`) its place in the list, the phrase it sits on and its alignment, with a phrase that does not fit the
+score counted as unaligned. `lyricBoundaryPlan(score, lines, { line, edge, tick })` says where a dragged edge of a phrase
+lands (the nearest bar line, held inside the line's section, one bar at least, clear of other lines) and the
+`setLyricLinePhrase` commands to send; a line that shares the edge moves with it, and the one that gives up bars goes
+first. `lyricDropPlan` gives a line one bar, the bar under a tick. `lyricSplitCommand` builds the `splitLyricLine`
+command for a caret. `barLineTick(score, index)` gives the tick of the bar line a plan's `boundary` names, to draw a guide
+there; an index before the first bar gives the start of the score and one past the last bar its end. Send a plan's
+commands as one list (`applyCommandList`, or `session.dispatchAll`) so one gesture is one undo step.
+
+```ts
+import { applyCommandList, lyricBoundaryPlan, lyricLinesOf } from "@neta-art/score-editor";
+
+const lines = lyricLinesOf(project, score);
+const plan = lyricBoundaryPlan(score, lines, { line: 1, edge: "end", tick: 5 * 1024 }); // null if line 1 is unaligned
+if (plan && plan.commands.length > 0) project = applyCommandList(song2Dialect, project, plan.commands).project;
+```
+
 ## The dialect and its constraints
 
 `ScoreDialect` is `{ id, constraints, parse, serialize, check }`. `DialectConstraints` declares the voices, keys,

@@ -10,6 +10,7 @@ import { create } from "./dom";
 import { installEditKeys } from "./edit-keys";
 import { messagesFor } from "./i18n";
 import { createLiveRegion, sayRefusals } from "./live-region";
+import { mountLyricTrack } from "./lyric-track";
 import { mountProblemView } from "./problem-view";
 import {
   createEditingSession,
@@ -56,6 +57,8 @@ export class Editor implements MountedEditor {
   private centreDue = false;
   private tracks: ViewPart[] = [];
   private voices: string[] = [];
+  /** The lyric track, the bottom track of the arrangement: it is mounted after the voice tracks and replaced with them. */
+  private lyricTrack: ViewPart | null = null;
   private reading: ScoreReading;
   private language: Language;
   private openingViewDue = false;
@@ -143,6 +146,7 @@ export class Editor implements MountedEditor {
     this.abort.abort();
     for (const stop of this.unsubscribe) stop();
     for (const part of [...this.parts, ...this.tracks]) part.destroy();
+    this.lyricTrack?.destroy();
     this.root.remove();
     this.releaseStyles();
     this.onDestroy();
@@ -180,6 +184,7 @@ export class Editor implements MountedEditor {
     const voices = this.reading.kind === "score" ? [...this.reading.score.voices] : [];
     if (voices.length === this.voices.length && voices.every((voice, at) => voice === this.voices[at])) return;
     for (const track of this.tracks) track.destroy();
+    this.lyricTrack?.destroy();
     this.voices = voices;
     this.tracks = voices.map((voice) =>
       mountVoiceTrack(this.content, this.session, {
@@ -188,6 +193,13 @@ export class Editor implements MountedEditor {
         onRefused: (diagnostics) => this.refused(diagnostics),
       }),
     );
+    this.lyricTrack =
+      voices.length === 0
+        ? null
+        : mountLyricTrack(this.content, this.session, {
+            scroller: this.scroller,
+            onRefused: (diagnostics) => this.refused(diagnostics),
+          });
   }
 
   /**

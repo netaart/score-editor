@@ -9,6 +9,7 @@ import {
   mount,
   mountChordTrack,
   mountCutNotice,
+  mountLyricTrack,
   mountProblemView,
   mountStaffView,
   mountStaleNotice,
@@ -87,7 +88,15 @@ const VIEW_PARTS = {
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
 };
 
-const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS };
+/**
+ * Parts a test asks for by name that the lists above leave out on purpose: older specs walk those lists and name the
+ * region of every part in them. These have a slot only when a test opens a layout with them.
+ */
+const EXTRA_PARTS = {
+  lyrics: (el, session) => mountLyricTrack(el, session),
+};
+
+const PART_FACTORIES = { ...LAYOUT_PARTS, ...VIEW_PARTS, ...EXTRA_PARTS };
 
 /** The parts that draw on the time axis. */
 const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
@@ -98,7 +107,7 @@ const AXIS_PART_NAMES = ["ruler", "chords", "vocal", "ins"];
  */
 function viewCards(names) {
   return names
-    .filter((name) => name in VIEW_PARTS)
+    .filter((name) => name in VIEW_PARTS || name in EXTRA_PARTS)
     .map(
       (name) => `<div class="layout-card layout-card-wide"><div class="layout-slot" data-slot="${name}"></div></div>`,
     )

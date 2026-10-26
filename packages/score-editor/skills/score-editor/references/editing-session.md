@@ -57,6 +57,7 @@ const session = createEditingSession({
 | `replaceProject(next)` | Starts a new document from outside: history, selection and insertion point go; view state stays. No-op when every field is the same. |
 | `replaceDialects(next)` | Reads the project with another registry. The history stays. No-op for the same registry. |
 | `subscribe(listener)` | Calls `listener(change)` after every change and returns the unsubscribe function. |
+| `dispatchAll(commands)` | Applies a list of `ScoreCommand` and `ProjectCommand` as one history step, all or none, and announces one change. Returns `DispatchResult`. An empty list adds no step. It is how one gesture that needs several commands (dragging a boundary two lyric lines share) stays one undo. |
 
 `SessionChange` is `{ cause, project, selection, insertionPoint, view, command? }`. The four booleans say which state the change
 touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,

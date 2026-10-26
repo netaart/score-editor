@@ -50,6 +50,12 @@ change. The tests in the repository check that the list stays complete.
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
+| `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
+| `lyricBoundaryPlan` | core | The phrases that change and the `setLyricLinePhrase` commands, the line that gives up bars first, when an edge of a phrase is dragged to a tick. |
+| `lyricDropPlan` | core | The one-bar phrase, and its command, for a line let go of over a tick; says whether the bar is free. |
+| `lyricSplitCommand` | core | The `splitLyricLine` command for a caret in a line's text, with the bar when the phrase has two bars or more. |
+| `barLineTick` | core | The tick of a bar line, which is what a `LyricBoundaryPlan`'s `boundary` names; a line before the first bar is the start of the score, one past the last bar its end. |
+| `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions`. |
 
 ## Constants and values
 
@@ -183,3 +189,16 @@ change. The tests in the repository check that the list stays complete.
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
 | `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
 | `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
+
+## Lyric track types
+
+| Export | What it is |
+| --- | --- |
+| `LyricRow` | `{ index, line, phrase, alignment }`: one line as the track places it; `phrase` and `alignment` are null in the unaligned area. |
+| `LyricEdge` | `"start" \| "end"`: which edge of a phrase is dragged. |
+| `LyricBoundaryDrag` | `{ line, edge, tick }`: an edge dragged to a tick. |
+| `LyricBoundaryMove` | `{ line, phrase }`: one phrase a drag changes. |
+| `LyricBoundaryPlan` | `{ boundary, moves, commands }`: where the edge lands and what to send, in order. |
+| `LyricDrop` | `{ line, tick }`: a line let go of over a tick. |
+| `LyricDropPlan` | `{ phrase, free, commands }`: the phrase a drop gives, whether its bar is free, and the command. |
+| `LyricSplit` | `{ line, offset }`: a caret, in code points, in a line's text. |
