@@ -820,7 +820,7 @@ test.describe("the staff view", () => {
     expect(Math.abs((await staffCursorX(page)) - end)).toBeLessThan(4);
 
     await setStaffPosition(page, null);
-    await expect(staffCursor(page)).toHaveCount(0);
+    await expect(staffCursor(page)).toBeHidden();
   });
 
   test("follows a tempo change in the middle of the score: 0.5 s into the second bar is an eighth of it at 60 BPM", async ({
