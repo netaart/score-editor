@@ -151,6 +151,20 @@ describe("instrumental version", () => {
     expect(result.report).toEqual({ kind: "instrumentalVersion", moved: 3, shortened: 2, dropped: 1 });
   });
 
+  it("adds an Ins voice to a Vocal-only score, with the sample's header and body layout", () => {
+    const before = oneVoice('z8C8-|C8z8|"G"z16|');
+    const result = applyScoreCommand(song2Dialect, before, { type: "instrumentalVersion" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.text).toBe(twoVoices('z16|z16|"G"z16|', "z8C8-|C8z8|z16|"));
+    expect(result.report).toEqual({ kind: "instrumentalVersion", moved: 1, shortened: 0, dropped: 0 });
+    const parsed = song2Dialect.parse(result.text).score;
+    expect(parsed?.voices).toEqual(["Vocal", "Ins"]);
+    if (parsed === null) throw new Error("the written score did not read");
+    expect(song2Dialect.check(parsed)).toEqual([]);
+  });
+
   it("keeps a Vocal tie across a bar as one moved Ins span", () => {
     const before = twoVoices("z8C8-|C8z8|", "Z|Z|");
     const result = applyScoreCommand(song2Dialect, before, { type: "instrumentalVersion" });
@@ -219,12 +233,6 @@ describe("the voice commands on every sample", () => {
       }
 
       const instrumental = applyScoreCommand(song2Dialect, text, { type: "instrumentalVersion" });
-      if (!before.voices.includes("Ins")) {
-        expect(instrumental.ok, `${fact.file}: instrumental version needs Ins`).toBe(false);
-        if (instrumental.ok) return;
-        expect(instrumental.diagnostic.code).toBe("instrumental-voice-missing");
-        return;
-      }
       expect(instrumental.ok, `${fact.file}: instrumental version`).toBe(true);
       if (!instrumental.ok) return;
       const after = song2Dialect.parse(instrumental.text).score;
