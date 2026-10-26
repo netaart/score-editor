@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  type ApplyScoreResult,
   applyProjectCommand,
   applyScoreCommand,
   formatDiagnostic,
@@ -11,6 +12,12 @@ import {
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 import { chainAround, noteFacts, parse, pitched, SAMPLE_SWEEP_TIMEOUT, splitBars } from "./song2-support";
+
+/** The result without the additive `rewrittenBars` field; tests/rewritten-bars.test.ts asserts that field. */
+function textOnly(text: string, command: Parameters<typeof applyScoreCommand>[2]): ApplyScoreResult {
+  const result = applyScoreCommand(song2Dialect, text, command);
+  return result.ok ? { ok: true, text: result.text } : result;
+}
 
 const HEADER = `X:1
 T:
@@ -27,7 +34,7 @@ C4D4E4F4|G16|`;
 
 describe("toRests on a hand-worked score", () => {
   it("turns every named note into a rest, and leaves the others and the bars they sit in as they were", () => {
-    const result = applyScoreCommand(song2Dialect, SCORE, { type: "toRests", noteIds: ["Vocal:0", "Vocal:512"] });
+    const result = textOnly(SCORE, { type: "toRests", noteIds: ["Vocal:0", "Vocal:512"] });
 
     expect(result).toEqual({
       ok: true,
@@ -39,11 +46,11 @@ z4D4z4F4|G16|`,
   });
 
   it("gives the text the same single commands give one after the other", () => {
-    const first = applyScoreCommand(song2Dialect, SCORE, { type: "toRest", noteId: "Vocal:256" });
+    const first = textOnly(SCORE, { type: "toRest", noteId: "Vocal:256" });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
-    const second = applyScoreCommand(song2Dialect, first.text, { type: "toRest", noteId: "Vocal:768" });
-    const both = applyScoreCommand(song2Dialect, SCORE, { type: "toRests", noteIds: ["Vocal:768", "Vocal:256"] });
+    const second = textOnly(first.text, { type: "toRest", noteId: "Vocal:768" });
+    const both = textOnly(SCORE, { type: "toRests", noteIds: ["Vocal:768", "Vocal:256"] });
 
     expect(second).toEqual(both);
     expect(both).toEqual({
@@ -61,7 +68,7 @@ K:D
 V: Vocal
 A4^F12-|F16|`;
 
-    const named = applyScoreCommand(song2Dialect, tied, {
+    const named = textOnly(tied, {
       type: "toRests",
       noteIds: ["Vocal:1024", "Vocal:256", "Vocal:1024", "Vocal:0"],
     });
@@ -76,14 +83,14 @@ z4z12|z16|`,
   });
 
   it("turns nothing into a rest when it names nothing: the text comes back as it was", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, { type: "toRests", noteIds: [] })).toEqual({
+    expect(textOnly(SCORE, { type: "toRests", noteIds: [] })).toEqual({
       ok: true,
       text: SCORE,
     });
   });
 
   it("is refused as a whole by an id that names no note, and says which id", () => {
-    const result = applyScoreCommand(song2Dialect, SCORE, { type: "toRests", noteIds: ["Vocal:0", "Vocal:999"] });
+    const result = textOnly(SCORE, { type: "toRests", noteIds: ["Vocal:0", "Vocal:999"] });
 
     expect(result).toEqual({
       ok: false,
@@ -97,7 +104,7 @@ K:C
 V: Vocal
 C4z4E4F4|G16|`;
 
-    const result = applyScoreCommand(song2Dialect, withRest, {
+    const result = textOnly(withRest, {
       type: "toRests",
       noteIds: ["Vocal:0", "Vocal:256", "Vocal:512"],
     });
@@ -113,7 +120,7 @@ C4z4E4F4|G16|`;
   });
 
   it("names the first of two bad ids in the order the command lists them", () => {
-    const result = applyScoreCommand(song2Dialect, SCORE, {
+    const result = textOnly(SCORE, {
       type: "toRests",
       noteIds: ["Vocal:0", "Vocal:999", "Vocal:998"],
     });
@@ -203,7 +210,7 @@ describe("toRests writes once and checks once", () => {
 
 describe("toRests refused by the check", () => {
   it("is refused as a whole, with the score left as it was", () => {
-    const result = applyScoreCommand(song2Dialect, CUT, { type: "toRests", noteIds: ["Vocal:0", "Vocal:1024"] });
+    const result = textOnly(CUT, { type: "toRests", noteIds: ["Vocal:0", "Vocal:1024"] });
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -211,7 +218,7 @@ describe("toRests refused by the check", () => {
   });
 
   it("points at the first note the command names when the check names no place of its own", () => {
-    const result = applyScoreCommand(song2Dialect, CUT, {
+    const result = textOnly(CUT, {
       type: "toRests",
       noteIds: ["Vocal:256", "Vocal:1024", "Vocal:0"],
     });
@@ -310,7 +317,7 @@ function oneByOne(text: string, ids: string[], input: Score) {
   let current = text;
   for (const noteId of ids) {
     if (done.has(noteId)) continue;
-    const step = applyScoreCommand(song2Dialect, current, { type: "toRest", noteId });
+    const step = textOnly(current, { type: "toRest", noteId });
     if (!step.ok) return step;
     current = step.text;
     for (const member of chainAround(input, noteId)) done.add(member.id);
@@ -332,7 +339,7 @@ function exerciseSet(
   before: ReturnType<typeof splitBars>,
 ): void {
   const command = { type: "toRests", noteIds: ids } as const;
-  const result = applyScoreCommand(song2Dialect, text, command);
+  const result = textOnly(text, command);
 
   if (SMALL_SETS.has(name))
     expect(result, `${label}: against the single commands one by one`).toEqual(oneByOne(text, ids, input));

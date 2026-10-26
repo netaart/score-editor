@@ -1,7 +1,7 @@
 // ABOUTME: Seam 1 for the change log: pairs of original and current projects in, readable changes out.
 // ABOUTME: Expected sentences are written by hand in both languages; the dialect is the real song2 reader.
 import { song2Dialect } from "@neta-art/score-dialect-song2";
-import { changeLog, handoffInstruction, type SongProject } from "@neta-art/score-editor";
+import { changeLog, changeLogEntries, handoffInstruction, type SongProject } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 
 const HEADER = `X:1
@@ -40,6 +40,16 @@ const changed = (patch: Partial<SongProject> = {}): SongProject => ({ ...project
 
 const log = (current: SongProject, language: "en" | "zh" = "en") =>
   changeLog(project, current, { language, dialect: song2Dialect });
+
+describe("the structured change log", () => {
+  it("keeps the sentences and names the bars a note entry reports", () => {
+    const current = changed({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") });
+    const options = { language: "en" as const, dialect: song2Dialect };
+    const entries = changeLogEntries(project, current, options);
+    expect(entries.map((entry) => entry.text)).toEqual(changeLog(project, current, options));
+    expect(entries.find((entry) => entry.text.startsWith("The notes of"))?.bars).toEqual([1]);
+  });
+});
 
 describe("the change log", () => {
   it("names a score text edit that leaves the parsed score as it was", () => {
