@@ -1,4 +1,4 @@
-// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control and the hint.
+// ABOUTME: The toolbar view part: the title, the zoom control, undo and redo, the read-only badge, the synth preview control, the Filter button and the hint.
 // ABOUTME: Undo and redo are there while the session is editable; the row scrolls sideways when its box is narrower than its controls.
 
 import { create, requireDom } from "./dom";
@@ -6,6 +6,7 @@ import type { DraftKeeper } from "./draft-keeper";
 import { mountRestoreControl } from "./draft-restore";
 import { installEditKeys } from "./edit-keys";
 import { canDeleteSelection, handleEditingInput } from "./editing-input";
+import { mountFilterPanel } from "./filter-panel";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
@@ -48,8 +49,9 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
 /**
  * Mounts the toolbar on `el`. It holds the title, the zoom control, undo and redo (while the session is editable), the
  * read-only badge (while the session is not editable), the view switch when asked, the synth preview control, which is
- * there either way unless `synthPreview` is off, and, when asked, the screen-reader hint. The controls are in that order
- * in the row and in the tab order, the preview control last. It follows the session's language.
+ * there either way unless `synthPreview` is off, the Filter button, last in the row, and, when asked, the screen-reader
+ * hint. The controls are in that order in the row and in the tab order, the Filter button last. It follows the session's
+ * language.
  */
 export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
   requireDom("mountToolbar");
@@ -105,6 +107,8 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
+  // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
+  const filter = mountFilterPanel(row, session);
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -184,6 +188,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       zoom.destroy();
       views?.destroy();
       select.destroy();
+      filter.destroy();
       restore?.destroy();
       synth?.destroy();
       root.remove();

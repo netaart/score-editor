@@ -24,6 +24,7 @@ added; calling it twice is harmless.
 | `mountStaleNotice(el, session)` | One sentence while the text view holds text the project did not take, or nothing. | — |
 | `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
+| `mountFilterPanel(el, session)` | The Filter button and its panel for selecting notes by condition (see [Selecting by filter](#selecting-by-filter)). Shown in read-only mode too. | — |
 | `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). | `AxisPartOptions` |
 | `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
@@ -303,3 +304,40 @@ noteEl.addEventListener("pointerdown", () => void previewNote(64)); // true once
   nothing plays. `PreviewStart` is the string union `start()` resolves.
 - `previewPlayer(session)` touches no audio until `start()`. Destroying the last control that holds the player stops it.
 - The headless half, `schedulePreview`, is in [headless-layer.md](headless-layer.md#the-preview-schedule).
+
+## Selecting by filter
+
+Use this when a person should pick notes by condition instead of by pointing: a Filter button that opens a panel named
+"Select by filter" ("筛选选中"). The logic is `filterNotes`, which is in
+[headless-layer.md](headless-layer.md#picking-notes-by-conditions); this part is its form.
+
+| Export | What it is |
+| --- | --- |
+| `mountFilterPanel(el, session)` | A view part: a button labelled "Filter" ("筛选") and its panel. Returns a `ViewPart`. |
+
+`mountToolbar` mounts it by default, last in its row. Mount it yourself on an element of your own when the toolbar is
+not used; there is no option to leave it out.
+
+```ts
+import { mountFilterPanel, mountVoiceTrack } from "@neta-art/score-editor";
+
+mountFilterPanel(filterEl, session); // the button, and the panel it opens
+mountVoiceTrack(vocalEl, session, { voice: "Vocal" }); // draws what the panel selected
+```
+
+- The panel is a native popover (top layer) with a row for each condition: Pitch (lowest and highest note), Time (first and
+  last bar), Length (shortest and longest note value, a part of a whole note), Key (in or out of the key) and Count (one in
+  every N of each voice, after skipping the first M), then Invert, a status line and the buttons Re-apply and Done. Each row
+  has a checkbox that says whether the condition counts. The conditions combine with "and".
+- Changing a field turns its condition on and selects at once, through `session.select`. Re-apply selects again from the
+  conditions the panel holds, against the score as it is now. A selection made through the panel is not a history step. The
+  panel's own rules (an empty filter, Invert, its status line) are in [DESIGN.md](../../../../DESIGN.md#filter-panel); what the pure filter
+  means is in [headless-layer.md](headless-layer.md#picking-notes-by-conditions).
+- The panel holds the conditions of its last selection, so it shows them again when it is opened. Its status line is a
+  polite live region that says the result, or that the score or the selection has changed since (Re-apply selects again).
+- It selects through `session.select`, so it works while `session.view.editable` is false; the arrangement draws no
+  selection frame then, and the status line is what shows the result.
+- It is there while the score reads and the arrangement is the view shown; otherwise the button is hidden and an open panel
+  closes. On a phone (a coarse pointer and a window at most 640 px wide) the panel is a sheet from the bottom edge;
+  elsewhere it hangs from its button, over it when there is no room below.
+- Its texts follow `session.view.language` and are part of this part, not of the host's message catalogue.

@@ -52,6 +52,8 @@ change. The tests in the repository check that the list stays complete.
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
+| `filterNotes` | core | The ids of the notes that satisfy a `NoteFilter` (pitch, time, length, in or out of key, one in every N, invert) in a `Score`. Pure. |
+| `mountFilterPanel` | core | Mounts the Filter button and its panel on `(el, session)`: selects notes by condition through `session.select`; shown in read-only mode too. |
 | `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
 | `lyricBoundaryPlan` | core | The phrases that change and the `setLyricLinePhrase` commands, the line that gives up bars first, when an edge of a phrase is dragged to a tick. |
 | `lyricDropPlan` | core | The one-bar phrase, and its command, for a line let go of over a tick; says whether the bar is free. |
@@ -192,6 +194,12 @@ change. The tests in the repository check that the list stays complete.
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
 | `DraftKeeperStatus` | `"opening" \| "ready" \| "conflict" \| "destroyed"`. |
 | `DraftHandoffResult` | `"written" \| "unchanged" \| "conflict" \| "failed"`. |
+
+## Filter types
+
+| Export | What it is |
+| --- | --- |
+| `NoteFilter` | The conditions of `filterNotes`, each optional: `pitch`, `time`, `duration`, `key`, `count` and `invert`. |
 
 ## Lyric track types
 

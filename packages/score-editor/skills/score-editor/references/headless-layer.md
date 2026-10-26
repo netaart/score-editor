@@ -203,3 +203,49 @@ if (score) {
 - `tickAtSeconds(score, seconds)` is the reverse for a host player's clock: the tick at that time from the start, a
   tempo change included, the last tick past the end and the first at or before zero. `secondsPerTick` is the opening
   tempo's, so use `tickAtSeconds` rather than dividing when a score has changes.
+
+## Picking notes by conditions
+
+Use this when a note set is defined by what the notes are (the high ones, the short ones, the ones out of key, every
+second one) and not by where a person pointed. `filterNotes(score, filter)` takes a parsed `Score` and a `NoteFilter`
+and returns the ids of the notes that satisfy it, in the order of `score.notes`, ready for `session.select`. It is pure,
+touches no DOM and runs in Node and in a worker. The panel that drives it is in
+[view-parts.md](view-parts.md#selecting-by-filter).
+
+```ts
+import { filterNotes } from "@neta-art/score-editor";
+import type { NoteFilter } from "@neta-art/score-editor";
+
+const { score } = song2Dialect.parse(project.score);
+if (score) {
+  const filter: NoteFilter = {
+    pitch: { min: 64, max: 69 }, // E4 to A4, both ends included
+    time: { from: 0, to: 1024 }, // notes that start in the first bar of a 4/4 score: from included, to excluded
+    duration: { min: 256 }, // at least a quarter note, a tie chain counted whole
+    key: "in", // in the key in force where the note starts
+    count: { every: 2, skip: 0 }, // of those, the 1st, 3rd, 5th... of each voice
+    invert: false,
+  };
+  const ids: string[] = filterNotes(score, filter);
+  session.select(ids); // selecting is not an edit: no history step
+}
+```
+
+- Every field is optional and an absent field is no condition; the present ones combine with "and". `{}` takes every
+  pitched note: that is the pure function's meaning. The panel's own rule for no condition on is separate: it selects
+  nothing and says so ([DESIGN.md](../../../../DESIGN.md#filter-panel)).
+- A note here is a tie chain: pitched notes joined by ties are one note that starts where the first starts, lasts as long as
+  all of them and has the pitch of the first. A rest is not a note. The ids returned are those of every part of each
+  chain that matched, so a tied note is selected whole.
+- `pitch` is in MIDI numbers, `duration` in ticks (`TICKS_PER_QUARTER` to the quarter note), both with their ends included;
+  `time` is in ticks too, and a note passes when it starts in `[from, to)`. An end that is left out is open; a range whose
+  ends are crossed takes nothing. No number is clamped.
+- `key` judges the pitch class against the major scale of the key in force at the note's start (a minor key counts as its
+  natural minor), not against how the note is spelt. A key that cannot be read makes the note neither in nor out.
+- `count` is "every Nth note" with an offset, as in a sequencer's filter: among the notes the other conditions let through,
+  counted along each voice in time order, it takes the ones at the places `skip`, `skip + every`, and so on (places count
+  from 0). `every` must be a whole number of 1 or more and `skip` a whole number of 0 or more; `skip` defaults to 0.
+  Anything else takes nothing. Nothing throws.
+- `invert` takes the pitched notes of the whole score that the other conditions, `count` included, did not take. With no
+  other condition it takes nothing; with conditions that take nothing it takes every note.
+- There is no cap on how many notes a filter takes.

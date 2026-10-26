@@ -20,9 +20,11 @@ describe("package entries in a node environment", () => {
     const editor = await import("@neta-art/score-editor");
     const functions = [
       "createEditingSession",
+      "filterNotes",
       "handleEditingInput",
       "mountChordTrack",
       "mountCutNotice",
+      "mountFilterPanel",
       "mountProblemView",
       "mountStaffView",
       "mountStaleNotice",
@@ -56,6 +58,7 @@ describe("package entries in a node environment", () => {
     const {
       createDialectRegistry,
       createEditingSession,
+      mountFilterPanel,
       mountStaffView,
       mountStaleNotice,
       mountTextView,
@@ -75,6 +78,7 @@ describe("package entries in a node environment", () => {
     } as const;
     const session = createEditingSession({ project, dialects: createDialectRegistry([]) });
     expect(() => mountTimeRuler({} as HTMLElement, session)).toThrow(/browser/i);
+    expect(() => mountFilterPanel({} as HTMLElement, session)).toThrow(/browser/i);
     expect(() => mountToolbar({} as HTMLElement, session)).toThrow(/browser/i);
     expect(() => mountZoomControl({} as HTMLElement, session)).toThrow(/browser/i);
     expect(() => mountStaffView({} as HTMLElement, session)).toThrow(/browser/i);

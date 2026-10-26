@@ -3,6 +3,7 @@
 import { MAX_LABEL_STEP } from "./arrangement";
 import { boxCss } from "./box-styles";
 import { draftCss } from "./draft-styles";
+import { filterCss } from "./filter-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
 
@@ -145,6 +146,10 @@ const css = `
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* A toolbar that holds the Filter button keeps at least 2em of the title, so the extra control cannot take its last pixel. */
+.sce-root .sce-toolbar:has(.sce-filter-button) .sce-title {
+  min-width: 2em;
 }
 /*
  * With the preview control or the view switch the row wraps instead of scrolling: DESIGN.md, "Toolbar". The title counts at
@@ -1060,7 +1065,8 @@ ${labelThinning()}
   pointer-events: none;
 }
 ${boxCss}${lyricCss}
-${draftCss}`;
+${draftCss}
+${filterCss}`;
 
 interface Injection {
   remove(): void;
