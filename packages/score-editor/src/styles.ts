@@ -350,10 +350,17 @@ const css = `
   .sce-root .sce-grid-dot {
     background: CanvasText;
   }
-  .sce-root .sce-pencil-button[aria-pressed="true"],
-  .sce-root .sce-view-button[aria-pressed="true"] {
-    outline: 2px solid CanvasText;
-    outline-offset: -2px;
+  /* The shared focus ring is an outline too, and it comes later, so the pressed mark is a pseudo-element instead:
+     focus can change the outline without taking this mark away. The inset keeps the ring outside the box visible. */
+  .sce-root .sce-pencil-button[aria-pressed="true"]::after,
+  .sce-root .sce-view-button[aria-pressed="true"]::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border: 2px solid CanvasText;
+    border-radius: 2px;
+    pointer-events: none;
+    forced-color-adjust: none;
   }
 }
 /* The zoom steps draw their own minus and plus, so no glyph or font is involved. */
@@ -376,6 +383,13 @@ const css = `
 .sce-root .sce-step[data-step="in"]::after {
   width: 2px;
   height: 10px;
+}
+/* Last, after the bars have their currentColor, so the system colour is the one that paints. */
+@media (forced-colors: active) {
+  .sce-root .sce-step::before,
+  .sce-root .sce-step[data-step="in"]::after {
+    background: CanvasText;
+  }
 }
 /* Undo and redo draw an arrow; the stylesheet gives it its stroke, since the reset above would revert attributes. */
 .sce-root .sce-icon-button {
