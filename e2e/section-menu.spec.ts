@@ -167,6 +167,29 @@ test.describe("opening the menu of a section", () => {
     expect(Math.abs(near.width - roomy.width)).toBeLessThan(1);
   });
 
+  test("a menu with no room below the band stays in the window, and its last choice can be pressed", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error("the page has no viewport");
+    const height = 520;
+    await page.setViewportSize({ width: viewport.width, height });
+    await openSong(harness);
+    await press(bandButton(page, "Section verse"));
+
+    const band = await box(bandButton(page, "Section verse"));
+    const open = await box(menu(page, "Section verse"));
+    expect(open.y).toBeGreaterThanOrEqual(8);
+    expect(open.y + open.height).toBeLessThanOrEqual(height - 8 + 1);
+    // The menu did not fit below the band, so it was put above it.
+    expect(open.y + open.height).toBeLessThanOrEqual(band.y + 1);
+
+    await press(choice(page, "Section verse", "Delete section"));
+    await expect(bandNames(page)).toHaveText(["Unnamed", "chorus"]);
+  });
+
   test("a band is not a Tab stop, so the Tab key still goes from the region to the notes", async ({
     page,
     harness,
