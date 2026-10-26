@@ -143,9 +143,9 @@ function compose(draft: Draft): string {
 }
 
 /**
- * Makes the picker for the part whose root is `root`. The picker is a native popover, so it stands in the top layer, above
- * a host's full-screen layer; it is the last child of `root`, so the part's style sheet and theme reach it, and it goes with
- * `root`. `onToggle` hears when it opens and closes, including when the browser closes it (Escape, a press outside).
+ * Makes the picker for the part whose root is `root`. It is a native popover in the top layer, and the last child of
+ * `root`, so the part's style sheet and theme reach it and it goes with `root`; the reasons are in
+ * DESIGN.md#chord-editing. `onToggle` hears when it opens and closes, including when the browser closes it.
  */
 export function mountChordPicker(
   root: HTMLElement,
@@ -177,6 +177,7 @@ export function mountChordPicker(
     create(doc, "span", "sce-picker-place", head).textContent = t.pickerPlace(request.position);
     create(doc, "span", "sce-picker-now", head).textContent = t.pickerNow(slot.chord);
     const readout = create(doc, "div", "sce-picker-name", panel);
+    readout.setAttribute("role", "status");
     readout.setAttribute("aria-live", "polite");
 
     const confirm = (): void => {
@@ -282,7 +283,7 @@ export function mountChordPicker(
       readout.textContent = compose(draft);
       if (!letters || !accidentals || !types) return;
       // Opening the bass note or choosing a spelling changes the height, so the picker is fitted to the window again.
-      const grows = panel.matches(":popover-open");
+      const isOpen = panel.matches(":popover-open");
       letters.set(letterItems, rootLetter(draft.root));
       accidentals.set(spellings(draft.root), draft.root);
       types.set(
@@ -300,7 +301,7 @@ export function mountChordPicker(
         bassAccidentals.set(draft.bass === null ? [] : spellings(draft.bass), draft.bass);
         bassAccidentals.element.hidden = draft.bass === null;
       }
-      if (grows) refit(panel);
+      if (isOpen) refit(panel);
     }
 
     const actions = create(doc, "div", "sce-picker-actions", panel);
@@ -334,39 +335,46 @@ export function mountChordPicker(
     return letters?.stop() ?? actions.querySelector("button") ?? undefined;
   }
 
-  /** Puts the picker under the chord row at the chosen start, kept inside the window, above the row when there is no room below. */
-  function place(panel: HTMLElement, anchor: ChordPickerRequest["anchor"]): void {
+  /**
+   * Fits the picker to the window: its left edge is clamped to the width the page lays out in, its height to the visible
+   * height, and on a first placement it goes under the row, or above it when that has more room. A refit keeps the top it
+   * has and moves up only as far as the edge needs.
+   */
+  function fit(panel: HTMLElement, anchor: ChordPickerRequest["anchor"], mode: "place" | "refit"): void {
     const view = doc.defaultView;
     if (!view) return;
-    panel.style.left = `${anchor.left}px`;
-    panel.style.top = `${anchor.top}px`;
-    panel.style.maxHeight = "";
-    const rect = panel.getBoundingClientRect();
-    const below = view.innerHeight - anchor.top - 8;
-    const above = anchor.rowTop - 4 - 8;
-    if (rect.height > below && above > below) {
-      panel.style.maxHeight = `${above}px`;
-      panel.style.top = `${Math.max(8, anchor.rowTop - 4 - Math.min(rect.height, above))}px`;
+    const innerHeight = view.innerHeight;
+    const highest = Math.max(0, innerHeight - 16);
+    panel.style.maxHeight = `${highest}px`;
+    if (mode === "place") {
+      panel.style.left = `${anchor.left}px`;
+      panel.style.top = `${anchor.top}px`;
+      const rect = panel.getBoundingClientRect();
+      const below = Math.max(0, innerHeight - anchor.top - 8);
+      const above = Math.max(0, anchor.rowTop - 4 - 8);
+      if (rect.height > below && above > below) {
+        const height = Math.min(rect.height, above);
+        panel.style.maxHeight = `${Math.min(highest, height)}px`;
+        panel.style.top = `${Math.max(8, anchor.rowTop - 4 - height)}px`;
+      } else {
+        panel.style.maxHeight = `${Math.min(highest, below)}px`;
+      }
     } else {
-      panel.style.maxHeight = `${below}px`;
+      const rect = panel.getBoundingClientRect();
+      panel.style.top = `${Math.max(8, Math.min(rect.top, innerHeight - 8 - rect.height))}px`;
     }
-    // The width the page lays out in, which a scroll bar or a page wider than the screen makes smaller than the window's.
-    const width = Math.min(view.innerWidth, doc.documentElement.clientWidth || view.innerWidth);
-    const overflow = rect.right - (width - 8);
-    if (overflow > 0) panel.style.left = `${Math.max(8, anchor.left - overflow)}px`;
+    const rect = panel.getBoundingClientRect();
+    const layoutWidth = Math.min(view.innerWidth, doc.documentElement.clientWidth || view.innerWidth);
+    const left = mode === "place" ? anchor.left : rect.left;
+    panel.style.left = `${Math.max(8, Math.min(left, layoutWidth - 8 - rect.width))}px`;
   }
 
-  /**
-   * Called when a choice makes the open picker taller or shorter: it stays where it is, so that what a finger is on does not
-   * move, and moves up only as far as the edge of the window makes it.
-   */
+  function place(panel: HTMLElement, anchor: ChordPickerRequest["anchor"]): void {
+    fit(panel, anchor, "place");
+  }
+
   function refit(panel: HTMLElement): void {
-    const view = doc.defaultView;
-    if (!view) return;
-    panel.style.maxHeight = "";
-    const rect = panel.getBoundingClientRect();
-    const height = Math.min(rect.height, view.innerHeight - 16);
-    panel.style.top = `${Math.max(8, Math.min(rect.top, view.innerHeight - 8 - height))}px`;
+    fit(panel, { left: panel.getBoundingClientRect().left, top: 0, rowTop: 0 }, "refit");
   }
 
   return {

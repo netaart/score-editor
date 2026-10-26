@@ -35,11 +35,7 @@ export const chordCss = `
 .sce-root .sce-chord-hover {
   border: 1px dashed var(--sce-_text);
 }
-/*
- * Solid says "chosen": the place the picker is for, and where the keyboard cursor stands. The cursor is a button that is
- * always there and always the row's tab stop; at rest it has no frame, so nothing is drawn where the system forces its
- * colours either. The accent ring of keyboard focus is drawn inside the frame, since the row clips what is drawn outside it.
- */
+/* The chosen place and the cursor: DESIGN.md#chord-editing has the frame and the ring. */
 .sce-root .sce-chord-cursor {
   appearance: none;
   border: 0 solid var(--sce-_text);
@@ -56,10 +52,7 @@ export const chordCss = `
 .sce-root.sce-part-chord-track[data-editable="true"] .sce-timeline {
   cursor: pointer;
 }
-/*
- * Where the system forces its colours the fill of a checked choice is lost, so its border thickens to 2px, as a selected
- * note's does; the padding gives the pixel back, so nothing moves.
- */
+/* Forced colours: DESIGN.md#chord-editing says why the border thickens. */
 @media (forced-colors: active) {
   .sce-root .sce-chip[aria-checked="true"] {
     border-width: 2px;
@@ -70,10 +63,7 @@ export const chordCss = `
   }
 }
 
-/*
- * The picker is a popover of the menu kind: surface fill, a strong hairline, the one floating shadow. Its buttons are the
- * editor's buttons; a checked choice is drawn as the view switch draws its shown view, by fill, border and weight.
- */
+/* The picker's look and its chosen chip are in DESIGN.md#chord-editing. */
 .sce-root .sce-chord-picker {
   box-sizing: border-box;
   width: min(21em, calc(100vw - 16px));
@@ -120,7 +110,7 @@ export const chordCss = `
   display: grid;
   gap: 4px;
 }
-/* The letters and the spellings keep their columns, so a choice stays where it was when the root changes. */
+/* Each row keeps its columns: DESIGN.md#chord-editing. */
 .sce-root .sce-chip-letters {
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
@@ -187,7 +177,7 @@ export const chordCss = `
 .sce-root .sce-picker-gap {
   flex: 1 1 auto;
 }
-/* A finger gets the width of the window, so the choices are as wide as they are tall and the picker does not stand under the hand that opened it. */
+/* A finger's width: DESIGN.md#chord-editing. */
 @media (pointer: coarse) {
   .sce-root .sce-chord-picker {
     width: calc(100vw - 16px);
