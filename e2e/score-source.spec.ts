@@ -1,7 +1,14 @@
 // ABOUTME: Seam 5 for score sources: the save and save-as callbacks, the unsaved state, the conflict and the handoff gate.
 // ABOUTME: Host callbacks are faked on the test page; every case runs on the desktop project and the phone project.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
+
+const REAL_SCORE = readFileSync(
+  fileURLToPath(new URL("../packages/score-editor/skills/score-editor/assets/edit-one-bar/score.abc", import.meta.url)),
+  "utf8",
+);
 
 /** Four quarter notes, then a whole note. */
 const QUARTERS = vocalOnly("C4D4E4F4|G16|");
@@ -43,6 +50,7 @@ test.describe("saving a score file", () => {
     page,
     harness,
     press,
+    isMobile,
   }) => {
     await openFile(harness, { drafts: true });
     await expect(saveButton(page)).toHaveAttribute("aria-disabled", "true");
@@ -51,7 +59,8 @@ test.describe("saving a score file", () => {
     expect(await harness.hasUnsavedChanges()).toBe(false);
 
     await deleteD(page, press);
-    await expect(unsavedPill(page)).toBeVisible();
+    if (isMobile) await expect(page.locator(".sce-save-dot")).toBeVisible();
+    else await expect(unsavedPill(page)).toBeVisible();
     expect(await harness.hasUnsavedChanges()).toBe(true);
     expect(await harness.unsavedChanges()).toEqual([true]);
     expect(await harness.scoreCalls()).toEqual([]);
@@ -97,7 +106,6 @@ test.describe("saving a score file", () => {
 
     await press(saveButton(page));
     await expect(page.getByRole("button", { name: "Saving…", exact: true })).toBeVisible();
-    await expect(page.locator(".sce-save-state")).toHaveText("Saving…");
 
     await harness.releaseScoreSave();
     await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
@@ -110,7 +118,9 @@ test.describe("saving a score file", () => {
     await harness.failScoreNext("save");
 
     await press(saveButton(page));
-    await expect(page.getByText("Save failed", { exact: true })).toBeVisible();
+    const failed = page.locator(".sce-save-button");
+    await expect(failed).toHaveAttribute("aria-label", "Save failed");
+    await expect(failed).toHaveText("Save failed");
     expect(await harness.hasUnsavedChanges()).toBe(true);
     expect(await harness.notices()).toEqual([
       {
@@ -120,7 +130,7 @@ test.describe("saving a score file", () => {
       },
     ]);
 
-    await press(saveButton(page));
+    await press(failed);
     await expect.poll(async () => (await harness.scoreCalls()).length).toBe(2);
     await expect(unsavedPill(page)).toBeHidden();
     expect((await harness.scoreCalls()).map((call) => call.expected)).toEqual(["file-1", "file-1"]);
@@ -185,6 +195,7 @@ test.describe("Restore original for a score file", () => {
     page,
     harness,
     press,
+    isMobile,
   }) => {
     await openFile(harness);
     await deleteD(page, press);
@@ -194,7 +205,8 @@ test.describe("Restore original for a score file", () => {
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await expect(noteNamed(page, E4)).toHaveCount(0);
-    await expect(unsavedPill(page)).toBeVisible();
+    if (isMobile) await expect(page.locator(".sce-save-dot")).toBeVisible();
+    else await expect(unsavedPill(page)).toBeVisible();
 
     await press(restore(page));
     await expect(restoreQuestion(page)).toBeVisible();
@@ -238,6 +250,33 @@ test.describe("a generated score", () => {
   });
 });
 
+test.describe("a real score as a score file", () => {
+  test("saves only the changed bar, keeps the Ins Z4, and opens again clean", async ({ page, harness, press }) => {
+    /** The first Vocal note of bar 1 turns into a rest; every other byte of the score is unchanged. */
+    const saved = REAL_SCORE.replace("z12e2e2|", "z12z2e2|");
+    await openFile(harness, { score: { text: REAL_SCORE }, scoreFile: { name: "score.abc" } });
+    await press(
+      page
+        .getByRole("list", { name: "Vocal" })
+        .getByRole("listitem", { name: "E5, bar 1 beat 4, length 0.5 beats", exact: true }),
+    );
+    await page.keyboard.press("Delete");
+    await press(saveButton(page));
+    await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
+
+    const [call] = await harness.scoreCalls();
+    expect(call?.text).toBe(saved);
+    expect(call?.text).toContain("V: Ins\nZ4|");
+
+    await harness.destroy();
+    await openFile(harness, { score: { text: saved }, scoreFile: { name: "score.abc" } });
+    await expect(unsavedPill(page)).toBeHidden();
+    expect(await harness.hasUnsavedChanges()).toBe(false);
+    await press(page.getByRole("group", { name: "View" }).getByRole("button", { name: "Score text", exact: true }));
+    await expect(page.getByRole("textbox", { name: "Score text", exact: true })).toHaveValue(saved);
+  });
+});
+
 test.describe("the handoff with a score file", () => {
   const handoffButton = (page: Page) => page.getByRole("button", { name: "Regenerate…", exact: true });
   const missingButton = (page: Page) => page.getByRole("button", { name: "Complete required inputs…", exact: true });
@@ -277,6 +316,24 @@ test.describe("the handoff with a score file", () => {
     expect(handoff?.payload.instruction).toContain("Style description:\npop");
     expect(handoff?.payload.project.score).toBe(QUARTERS);
     expect(await harness.scoreCalls()).toEqual([]);
+  });
+
+  test("a missing lyrics input shows the arrangement and opens the new-line editor", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await openFile(harness, { handoff: true, requiredInputs: ["lyrics"] });
+    await press(page.getByRole("group", { name: "View" }).getByRole("button", { name: "Staff", exact: true }));
+    await expect(page.getByRole("region", { name: "Staff" })).toBeVisible();
+
+    await expect(missingButton(page)).toBeVisible();
+    await press(missingButton(page));
+
+    await expect(page.getByRole("region", { name: "Arrangement" })).toBeVisible();
+    const entry = page.getByRole("textbox", { name: "New lyric line text", exact: true });
+    await expect(entry).toBeVisible();
+    await expect(entry).toBeFocused();
   });
 
   test("a conflicted save keeps the handoff closed until the conflict is answered", async ({
@@ -342,8 +399,8 @@ test.describe("the save control adds no toolbar row on a phone", () => {
       await openFile(harness);
       await page.getByRole("listitem", { name: D4, exact: true }).tap();
       await page.keyboard.press("Delete");
-      if (width >= 360) await expect(unsavedPill(page)).toBeVisible();
-      else await expect(page.locator(".sce-save-dot")).toBeVisible();
+      await expect(page.locator(".sce-save-dot")).toBeVisible();
+      if (width >= 480) await expect(unsavedPill(page)).toBeVisible();
       const after = await box(page.locator(".sce-toolbar"));
       expect(after.height).toBe(before.height);
       await harness.destroy();
