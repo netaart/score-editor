@@ -2,7 +2,7 @@
 // ABOUTME: Host callbacks are faked on the test page; every case runs on the desktop project and the phone project.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { box, expect, type Harness, test, vocalOnly } from "./fixtures";
 
 const REAL_SCORE = readFileSync(
@@ -34,6 +34,9 @@ const conflictStrip = (page: Page, language: "en" | "zh" = "en") =>
 const overwriteButton = (page: Page) => page.getByRole("button", { name: "Overwrite with my version", exact: true });
 const loadTheirsButton = (page: Page) => page.getByRole("button", { name: "Load the other version", exact: true });
 const restore = (page: Page) => page.getByRole("button", { name: "Restore original", exact: true });
+/** The same control in the language a test mounts; its name is the only word the baseline shares. */
+const restoreIn = (page: Page, language: "en" | "zh") =>
+  page.getByRole("button", { name: language === "zh" ? "恢复原谱" : "Restore original", exact: true });
 const restoreQuestion = (page: Page) =>
   page.getByRole("dialog", { name: "Go back to the last saved version?", exact: true });
 
@@ -61,7 +64,6 @@ test.describe("saving a score file", () => {
     page,
     harness,
     press,
-    isMobile,
   }) => {
     await openFile(harness, { drafts: true });
     await expect(saveButton(page)).toHaveAttribute("aria-disabled", "true");
@@ -70,8 +72,8 @@ test.describe("saving a score file", () => {
     expect(await harness.hasUnsavedChanges()).toBe(false);
 
     await deleteD(page, press);
-    if (isMobile) await expect(page.locator(".sce-save-mark")).toBeVisible();
-    else await expect(unsavedPill(page)).toBeVisible();
+    // The form is chosen for the width once, so a phone can show the pill's word or the mark; either says unsaved.
+    await expect(page.locator(".sce-part-save")).toContainText(/Unsaved|•/);
     expect(await harness.hasUnsavedChanges()).toBe(true);
     expect(await harness.unsavedChanges()).toEqual([true]);
     expect(await harness.scoreCalls()).toEqual([]);
@@ -149,71 +151,285 @@ test.describe("saving a score file", () => {
   });
 });
 
-test.describe("the save state at every width", () => {
-  const words = {
-    en: { unsaved: "Unsaved", saving: "Saving…", failed: "Save failed", again: "Save again", save: "Save" },
-    zh: { unsaved: "未保存", saving: "保存中…", failed: "保存失败", again: "重新保存", save: "保存" },
-  } as const;
+/** The words the save control says in each language. */
+const words = {
+  en: { unsaved: "Unsaved", saving: "Saving…", failed: "Save failed", again: "Save again", save: "Save" },
+  zh: { unsaved: "未保存", saving: "保存中…", failed: "保存失败", again: "重新保存", save: "保存" },
+} as const;
 
-  test("shows a word or a distinct mark, and adds no toolbar row", async ({ page, harness, press, isMobile }) => {
-    test.setTimeout(120_000);
+/** The recovery sentence a failed save carries in the button's description. */
+const recovery = {
+  en: "The score file was not saved. Your changes are still here; try Save again.",
+  zh: "乐谱文件没有保存成功，你的修改还在，再按保存试一次。",
+} as const;
+
+/** What one save state shows where a person can see it: the form, the visible words and mark, and what is spoken. */
+interface SaveLooks {
+  /** The toolbar's height in the state; the form must not change it. */
+  height: number;
+  /** The form chosen for the width: "false" for words, "true" for the icon and its mark. */
+  form: string | undefined;
+  /** The button's accessible name. */
+  name: string | null;
+  /** The action word, "" while the icon form hides it. */
+  action: string;
+  /** The pill's word, "" when it is hidden or out of sight. */
+  pill: string;
+  /** The mark's glyph, "" when it is hidden or out of sight. */
+  mark: string;
+  description: string;
+  disabled: string | null;
+  buttonInSight: boolean;
+}
+
+/** Reads the save control where it is drawn: a word or a mark outside the toolbar's visible box is not in sight. */
+async function saveLooks(page: Page): Promise<SaveLooks> {
+  return page.evaluate(() => {
+    const toolbar = document.querySelector<HTMLElement>(".sce-toolbar");
+    const part = document.querySelector<HTMLElement>(".sce-part-save");
+    const button = part?.querySelector<HTMLElement>(".sce-save-button");
+    if (!toolbar || !part || !button) throw new Error("the save control is not drawn");
+    // A conflict strip shows by scrolling the chrome; read the control with the chrome at its top, as a swipe would.
+    toolbar.closest<HTMLElement>(".sce-chrome")?.scrollTo({ top: 0, left: 0 });
+    const frame = toolbar.getBoundingClientRect();
+    const sight = {
+      left: Math.max(0, frame.left),
+      right: Math.min(innerWidth, frame.left + toolbar.clientWidth),
+      top: Math.max(0, frame.top),
+      bottom: Math.min(innerHeight, frame.top + toolbar.clientHeight),
+    };
+    const inSight = (el: Element | null): boolean => {
+      if (!(el instanceof HTMLElement) || el.hidden) return false;
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      const area = el.getBoundingClientRect();
+      return (
+        area.width > 0 &&
+        area.height > 0 &&
+        area.left >= sight.left - 0.5 &&
+        area.right <= sight.right + 0.5 &&
+        area.top >= sight.top - 0.5 &&
+        area.bottom <= sight.bottom + 0.5
+      );
+    };
+    const word = (selector: string): string => {
+      const el = part.querySelector(selector);
+      return inSight(el) ? (el?.textContent ?? "").trim() : "";
+    };
+    return {
+      height: frame.height,
+      form: part.dataset.compact,
+      name: button.getAttribute("aria-label"),
+      action: word(".sce-save-label"),
+      pill: word(".sce-save-state"),
+      mark: word(".sce-save-mark"),
+      description: button.getAttribute("aria-description") ?? "",
+      disabled: button.getAttribute("aria-disabled"),
+      buttonInSight: inSight(button),
+    };
+  });
+}
+
+type SaveState = "clean" | "dirty" | "saving" | "failed" | "conflict";
+const SAVE_STATES: ReadonlyArray<SaveState> = ["clean", "dirty", "saving", "failed", "conflict"];
+
+/**
+ * The height the control takes in its narrowest form, measured by hiding its word and pill. It is the least room any
+ * form needs; a box with no room for it makes one row unavoidable, whatever the state's form.
+ */
+async function iconFormHeight(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const toolbar = document.querySelector<HTMLElement>(".sce-toolbar");
+    const part = document.querySelector<HTMLElement>(".sce-part-save");
+    if (!toolbar || !part) throw new Error("the save control is not drawn");
+    const state = part.querySelector<HTMLElement>(".sce-save-state");
+    const mark = part.querySelector<HTMLElement>(".sce-save-mark");
+    const compact = part.dataset.compact;
+    const word = part.dataset.word;
+    const stateHidden = state?.hidden ?? true;
+    const markHidden = mark?.hidden ?? true;
+    part.dataset.compact = "true";
+    part.dataset.word = "false";
+    if (state) state.hidden = true;
+    if (mark) mark.hidden = true;
+    const height = toolbar.getBoundingClientRect().height;
+    part.dataset.compact = compact;
+    part.dataset.word = word;
+    if (state) state.hidden = stateHidden;
+    if (mark) mark.hidden = markHidden;
+    return height;
+  });
+}
+
+/**
+ * The height the widest state's words take, measured with those words in the control. The five states' longest pair
+ * is the failed state's pill and action, so the test uses them as the room the one form must have.
+ */
+async function widestWordsHeight(page: Page, language: "en" | "zh"): Promise<number> {
+  const t = words[language];
+  return page.evaluate(
+    ({ failed, again }) => {
+      const toolbar = document.querySelector<HTMLElement>(".sce-toolbar");
+      const part = document.querySelector<HTMLElement>(".sce-part-save");
+      if (!toolbar || !part) throw new Error("the save control is not drawn");
+      const state = part.querySelector<HTMLElement>(".sce-save-state");
+      const mark = part.querySelector<HTMLElement>(".sce-save-mark");
+      const label = part.querySelector<HTMLElement>(".sce-save-label");
+      if (!state || !mark || !label) throw new Error("the save control is not drawn");
+      const compact = part.dataset.compact;
+      const word = part.dataset.word;
+      const stateHidden = state.hidden;
+      const stateText = state.textContent;
+      const markHidden = mark.hidden;
+      const labelText = label.textContent;
+      part.dataset.compact = "false";
+      part.dataset.word = "true";
+      state.hidden = false;
+      state.textContent = failed;
+      mark.hidden = true;
+      label.textContent = again;
+      const height = toolbar.getBoundingClientRect().height;
+      part.dataset.compact = compact;
+      part.dataset.word = word;
+      state.hidden = stateHidden;
+      state.textContent = stateText;
+      mark.hidden = markHidden;
+      label.textContent = labelText;
+      return height;
+    },
+    { failed: t.failed, again: t.again },
+  );
+}
+
+/** Drives one score file through its five states in the current language and reads the control in each. */
+async function saveStates(
+  page: Page,
+  harness: Harness,
+  press: (target: Locator) => Promise<void>,
+  language: "en" | "zh",
+): Promise<Record<SaveState, SaveLooks>> {
+  const t = words[language];
+  const states = {} as Record<SaveState, SaveLooks>;
+  states.clean = await saveLooks(page);
+
+  await deleteD(page, press, language);
+  states.dirty = await saveLooks(page);
+
+  await harness.holdScoreSave();
+  await press(page.getByRole("button", { name: t.save, exact: true }));
+  await expect(page.getByRole("button", { name: t.saving, exact: true })).toBeVisible();
+  states.saving = await saveLooks(page);
+  await harness.releaseScoreSave();
+  await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
+  await expect(page.getByRole("button", { name: t.save, exact: true })).toBeVisible();
+
+  await press(noteNamed(page, noteLabel(language, "E4", 1, 3, 1)));
+  await page.keyboard.press("Delete");
+  await harness.failScoreNext("save");
+  await press(page.getByRole("button", { name: t.save, exact: true }));
+  states.failed = await saveLooks(page);
+  await press(page.getByRole("button", { name: t.again, exact: true }));
+  await expect.poll(async () => (await harness.scoreCalls()).length).toBe(3);
+  await expect(page.getByRole("button", { name: t.save, exact: true })).toBeVisible();
+
+  await harness.externalScore(THEIR_SCORE);
+  await press(noteNamed(page, noteLabel(language, "F4", 1, 4, 1)));
+  await page.keyboard.press("Delete");
+  await expect(noteNamed(page, noteLabel(language, "F4", 1, 4, 1))).toHaveCount(0);
+  await press(page.getByRole("button", { name: t.save, exact: true }));
+  await expect(conflictStrip(page, language)).toBeVisible();
+  states.conflict = await saveLooks(page);
+
+  return states;
+}
+
+/** The invariants that hold for any fonts: one form, one height, every state readable, and the states told apart. */
+function checkSaveStates(
+  states: Record<SaveState, SaveLooks>,
+  base: number,
+  icon: number,
+  width: number,
+  language: "en" | "zh",
+): void {
+  const t = words[language];
+  const where = `${width} ${language}`;
+  for (const state of SAVE_STATES) {
+    const look = states[state];
+    expect(look.height, `${where} ${state}: the height does not follow the state`).toBe(states.clean.height);
+    // Where even the narrowest form needs the box's next row, that row is the box's, not a state's.
+    expect([base, icon], `${where} ${state}: only the box's own rows`).toContain(look.height);
+    if (look.height !== base) {
+      expect(states.clean.form, `${where}: only the narrowest form may take the box's row`).toBe("true");
+    }
+    expect(look.form, `${where} ${state}: one form for the width`).toBe(states.clean.form);
+    expect(look.buttonInSight, `${where} ${state}: the button is in sight`).toBe(true);
+  }
+  expect(states.clean.name, `${where} clean: the button is named`).toBe(t.save);
+
+  expect(states.dirty.pill || states.dirty.mark, `${where} dirty: a word or a mark`).not.toBe("");
+  expect(states.dirty.description, `${where} dirty: description`).toBe(t.unsaved);
+  expect(states.saving.action || states.saving.mark, `${where} saving: a word or a mark`).not.toBe("");
+  expect(states.saving.description, `${where} saving: description`).toBe(t.saving);
+  expect(states.failed.pill || states.failed.mark, `${where} failed: a word or a mark`).not.toBe("");
+  expect(states.failed.description, `${where} failed: description`).toBe(recovery[language]);
+  expect(states.conflict.pill || states.conflict.mark, `${where} conflict: a word or a mark`).not.toBe("");
+  expect(states.conflict.description, `${where} conflict: description`).toBe(t.unsaved);
+  expect(states.conflict.disabled, `${where} conflict: Save is disabled`).toBe("true");
+
+  const signature = (look: SaveLooks) =>
+    `${look.action}|${look.pill}|${look.mark}|${look.description}|${look.disabled}`;
+  expect(signature(states.failed), `${where} failed differs from dirty`).not.toBe(signature(states.dirty));
+  expect(signature(states.conflict), `${where} conflict differs from dirty`).not.toBe(signature(states.dirty));
+}
+
+test.describe("the save state at every width", () => {
+  test("keeps one form and one height, and every state reads, at every width", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.setTimeout(240_000);
     const widths = isMobile ? [412, 360, 320] : [1280];
     for (const width of widths) {
       for (const language of ["en", "zh"] as const) {
-        const t = words[language];
-        const height = async () => (await box(page.locator(".sce-toolbar"))).height;
-        const visible = async () => page.locator(".sce-part-save").innerText();
         await page.setViewportSize({ width, height: isMobile ? 839 : 720 });
+        // The same editor without the save control: the draft Restore control is the one a score file also has.
+        await harness.mount({ score: { text: QUARTERS }, drafts: true, language });
+        await expect(restoreIn(page, language)).toBeVisible();
+        const base = (await box(page.locator(".sce-toolbar"))).height;
+        await harness.destroy();
+
         await openFile(harness, { language });
-        const clean = await height();
-
-        await deleteD(page, press, language);
-        const dirtyWords = await visible();
-        expect(
-          dirtyWords.includes(t.unsaved) || dirtyWords.includes("•"),
-          `${width} ${language} dirty: ${dirtyWords}`,
-        ).toBe(true);
-        expect(await height(), `${width} ${language} dirty`).toBe(clean);
-
-        await harness.holdScoreSave();
-        await press(page.getByRole("button", { name: t.save, exact: true }));
-        await expect(page.getByRole("button", { name: t.saving, exact: true })).toBeVisible();
-        const savingWords = await visible();
-        expect(savingWords.includes(t.saving) || savingWords.includes("…")).toBe(true);
-        expect(page.locator(".sce-save-mark")).toBeHidden();
-        expect(await height(), `${width} ${language} saving`).toBe(clean);
-        await harness.releaseScoreSave();
-        await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
-        await expect(page.getByRole("button", { name: t.save, exact: true })).toBeVisible();
-        await press(noteNamed(page, noteLabel(language, "E4", 1, 3, 1)));
-        await page.keyboard.press("Delete");
-
-        await harness.failScoreNext("save");
-        await press(page.getByRole("button", { name: t.save, exact: true }));
-        const failedWords = await visible();
-        expect(
-          failedWords.includes(t.failed) || failedWords.includes(t.again) || failedWords.includes("!"),
-          `${width} ${language} failed: ${failedWords}`,
-        ).toBe(true);
-        expect(await height(), `${width} ${language} failed`).toBe(clean);
-
-        await press(page.getByRole("button", { name: t.again, exact: true }));
-        await expect.poll(async () => (await harness.scoreCalls()).length).toBe(3);
-        await expect(page.getByRole("button", { name: t.save, exact: true })).toBeVisible();
-        await harness.externalScore(THEIR_SCORE);
-        await press(noteNamed(page, noteLabel(language, "F4", 1, 4, 1)));
-        await page.keyboard.press("Delete");
-        await expect(noteNamed(page, noteLabel(language, "F4", 1, 4, 1))).toHaveCount(0);
-        await press(page.getByRole("button", { name: t.save, exact: true }));
-        await expect(conflictStrip(page, language)).toBeVisible();
-        const conflictWords = await visible();
-        expect(
-          conflictWords.includes(t.unsaved) || conflictWords.includes("?"),
-          `${width} ${language} conflict: ${conflictWords}`,
-        ).toBe(true);
-        expect(await height(), `${width} ${language} conflict`).toBe(clean);
+        const states = await saveStates(page, harness, press, language);
+        checkSaveStates(states, base, await iconFormHeight(page), width, language);
         await harness.destroy();
       }
+    }
+  });
+
+  test("chooses one form for the box, wide and narrow", async ({ page, harness, press, isMobile }) => {
+    test.skip(isMobile, "the toolbar's box is narrowed on the desktop project");
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const width of [1280, 320]) {
+      await page.evaluate((w) => (window.harness.stage.style.width = `${w}px`), width);
+      await harness.mount({ score: { text: QUARTERS }, drafts: true });
+      await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
+      const base = (await box(page.locator(".sce-toolbar"))).height;
+      await harness.destroy();
+
+      await openFile(harness);
+      const states = await saveStates(page, harness, press, "en");
+      const widest = await widestWordsHeight(page, "en");
+      // The form is the box's, read from the room the widest state needs: words only while they fit its height.
+      const form = widest > base ? "true" : "false";
+      if (width === 1280) expect(widest, `${width}: the wide box fits the widest words`).toBe(base);
+      for (const state of SAVE_STATES) {
+        expect(states[state].form, `${width} ${state}: the box chooses one form`).toBe(form);
+      }
+      checkSaveStates(states, base, await iconFormHeight(page), width, "en");
+      await harness.destroy();
     }
   });
 });
@@ -367,7 +583,6 @@ test.describe("Restore original for a score file", () => {
     page,
     harness,
     press,
-    isMobile,
   }) => {
     await openFile(harness);
     await expect(restore(page)).toHaveAttribute("aria-disabled", "true");
@@ -382,8 +597,8 @@ test.describe("Restore original for a score file", () => {
     await press(noteNamed(page, E4));
     await page.keyboard.press("Delete");
     await expect(noteNamed(page, E4)).toHaveCount(0);
-    if (isMobile) await expect(page.locator(".sce-save-mark")).toBeVisible();
-    else await expect(unsavedPill(page)).toBeVisible();
+    // The state is a word or a mark, whichever form the width chose; both say unsaved.
+    await expect(page.locator(".sce-part-save")).toContainText(/Unsaved|•/);
 
     await press(restore(page));
     await expect(restoreQuestion(page)).toBeVisible();
@@ -634,29 +849,77 @@ test.describe("the handoff with a score file", () => {
   });
 });
 
-test.describe("the save control adds no toolbar row on a phone", () => {
-  test("at 412 and 320 the toolbar keeps the height it had without the control", async ({
+test.describe("the save control re-chooses with the box and the language, not with the state", () => {
+  test("a language change re-chooses the form and keeps the phone's toolbar height", async ({
     page,
     harness,
+    press,
     isMobile,
   }) => {
     test.skip(!isMobile, "phone chrome is checked on the phone project");
-    for (const width of [412, 320]) {
-      await page.setViewportSize({ width, height: 900 });
+    for (const width of [412, 360, 320]) {
+      await page.setViewportSize({ width, height: 839 });
       // The draft Restore control is the same one a score file has, so only Save is being compared.
-      await harness.mount({ score: { text: QUARTERS }, drafts: true });
-      await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
-      const before = await box(page.locator(".sce-toolbar"));
-      await harness.destroy();
+      const base = {} as Record<"en" | "zh", number>;
+      for (const language of ["en", "zh"] as const) {
+        await harness.mount({ score: { text: QUARTERS }, drafts: true, language });
+        await expect(restoreIn(page, language)).toBeVisible();
+        base[language] = (await box(page.locator(".sce-toolbar"))).height;
+        await harness.destroy();
+      }
 
       await openFile(harness);
-      await page.getByRole("listitem", { name: D4, exact: true }).tap();
-      await page.keyboard.press("Delete");
-      await expect(page.locator(".sce-save-mark")).toBeVisible();
-      if (width >= 480) await expect(unsavedPill(page)).toBeVisible();
-      const after = await box(page.locator(".sce-toolbar"));
-      expect(after.height).toBe(before.height);
+      await deleteD(page, press);
+      const english = await saveLooks(page);
+      expect(english.height, `${width} en: the toolbar keeps its height`).toBe(base.en);
+
+      await harness.update({ language: "zh" });
+      const chinese = await saveLooks(page);
+      const icon = await iconFormHeight(page);
+      expect([base.zh, icon], `${width} zh: the toolbar keeps its height`).toContain(chinese.height);
+      expect(chinese.pill || chinese.mark, `${width} zh: a word or a mark`).not.toBe("");
+
+      await harness.holdScoreSave();
+      await press(page.getByRole("button", { name: words.zh.save, exact: true }));
+      await expect(page.getByRole("button", { name: words.zh.saving, exact: true })).toBeVisible();
+      const saving = await saveLooks(page);
+      expect(saving.form, `${width} zh: one form across the language and the state`).toBe(chinese.form);
+      expect([base.zh, icon], `${width} zh saving: the toolbar keeps its height`).toContain(saving.height);
+      await harness.releaseScoreSave();
+      await expect.poll(async () => (await harness.scoreCalls()).length).toBe(1);
       await harness.destroy();
     }
+  });
+
+  test("a settled font re-chooses the form, and the state does not", async ({ page, harness, press, isMobile }) => {
+    test.skip(isMobile, "the font is changed on the desktop project");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    // A box where the words fit in the page's first font and do not fit once a wider face settles.
+    await page.evaluate(() => {
+      window.harness.stage.style.width = "340px";
+    });
+    await openFile(harness);
+    const before = await saveLooks(page);
+    expect(before.form, "the first font keeps the words").toBe("false");
+
+    await page.evaluate(() => {
+      window.harness.stage.style.setProperty("--sce-font-family", "monospace");
+      // The event the browser sends when the face that was loading has settled.
+      document.fonts.dispatchEvent(new Event("loadingdone"));
+    });
+    const clean = await saveLooks(page);
+    expect(clean.form, "the settled font chooses the icon").toBe("true");
+
+    await deleteD(page, press);
+    const dirty = await saveLooks(page);
+    expect(dirty.form, "the state keeps the settled form").toBe(clean.form);
+    expect(dirty.height, "the height does not wait for the state to change").toBe(clean.height);
+    const icon = await iconFormHeight(page);
+
+    await harness.destroy();
+    await harness.mount({ score: { text: QUARTERS }, drafts: true });
+    await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
+    const base = (await box(page.locator(".sce-toolbar"))).height;
+    expect([base, icon], "only the narrowest form may take the box's row").toContain(clean.height);
   });
 });
