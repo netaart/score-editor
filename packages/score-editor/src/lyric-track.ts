@@ -205,6 +205,36 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     if (Math.abs(delta) > 0.5) scroller.scrollTop += delta;
   }
 
+  /**
+   * Scrolls the editor's own scroller the least it takes for the new-line field and its Add button to lie inside its
+   * visible box, below the lyric track's pinned head. It moves no focus and never the page.
+   */
+  function revealEntry(): void {
+    if (!drawn || root === null) return;
+    const scroller = options?.scroller ?? root.closest<HTMLElement>(".sce-scroller");
+    const head = root.querySelector<HTMLElement>(".sce-lyric-head");
+    const input = drawn.editor.element.querySelector<HTMLElement>(".sce-lyric-input");
+    const add = [...drawn.editor.element.querySelectorAll<HTMLElement>(".sce-lyric-actions .sce-lyric-button")].find(
+      (button) => !button.hidden,
+    );
+    if (scroller === null || head === null || input === null || add === undefined) return;
+    const frame = scroller.getBoundingClientRect();
+    const maxBottom = frame.top + scroller.clientHeight;
+    const inputBox = input.getBoundingClientRect();
+    const addBox = add.getBoundingClientRect();
+    const bottom = Math.max(inputBox.bottom, addBox.bottom);
+    const delta = bottom > maxBottom ? bottom - maxBottom : 0;
+    if (Math.abs(delta) > 0.5) scroller.scrollTop += delta;
+    // Once the track is in view its head pins to the scroller's top; a second, usually zero, move keeps the field below it.
+    const headAfter = head.getBoundingClientRect();
+    const inputAfter = input.getBoundingClientRect();
+    const addAfter = add.getBoundingClientRect();
+    const topAfter = Math.min(inputAfter.top, addAfter.top);
+    const minTop = headAfter.bottom + 6;
+    const lift = topAfter < minTop ? topAfter - minTop : 0;
+    if (Math.abs(lift) > 0.5) scroller.scrollTop += lift;
+  }
+
   /** Opens the editor on an empty box for a line that does not exist yet. */
   function startAdding(): void {
     if (!drawn || !session.view.editable) return;
@@ -212,8 +242,9 @@ export function mountLyricTrack(el: HTMLElement, session: EditingSession, option
     adding = true;
     drawn.editor.show("new", "", { canMerge: false, line: 0, canPlace: false });
     draw();
-    drawn.editor.focus();
+    drawn.editor.focus({ preventScroll: true });
     revealFirstRow();
+    revealEntry();
   }
 
   function draw(): void {

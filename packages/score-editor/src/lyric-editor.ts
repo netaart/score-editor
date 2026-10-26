@@ -28,7 +28,8 @@ export interface LyricEditor {
   show(mode: LyricEditorMode, text: string, options: { canMerge: boolean; line: number; canPlace: boolean }): void;
   /** Takes the text the line now has, and whether it has a next line, unless the person is typing in the box. */
   sync(text: string, canMerge: boolean): void;
-  focus(): void;
+  /** Puts the focus in the text box; `preventScroll` leaves the scrolling to the part that owns the scroller. */
+  focus(options?: { preventScroll?: boolean }): void;
 }
 
 /** The number of code points before `index` in `text`: the offset the split command counts in. */
@@ -192,8 +193,8 @@ export function createLyricEditor(
       refusedText = null;
       mark(null);
     },
-    focus() {
-      input.focus();
+    focus(options) {
+      input.focus(options);
     },
   };
 }

@@ -84,6 +84,17 @@ const css = `
   }
 }
 
+/*
+ * The browser's tap highlight is not one of the editor's states. Every control draws its own: the 2px accent ring on
+ * keyboard focus, the hover and open fills, a pressed toggle's 12% text fill and text-colour border, and a note's
+ * selection frame (DESIGN.md, "Focus treatment"). All the root's controls are turned off in this one rule; a note is a
+ * control only while it can be selected, so its flash belongs to editing (the note's own rule below).
+ */
+.sce-root.sce-root :is(button, input, select, textarea, a, [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="slider"], [role="radio"], [role="option"]),
+.sce-root.sce-root[data-editable="true"] [role="listitem"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .sce-editor.sce-editor {
   display: flex;
   flex-direction: column;
