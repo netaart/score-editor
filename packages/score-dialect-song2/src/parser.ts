@@ -1348,6 +1348,18 @@ class Song2Parser {
       })),
     };
 
+    const musicLines = new Set(this.sourceLines.map((line) => line.line));
+    const drawingText = this.normalized
+      .split("\n")
+      .map((line, index) =>
+        musicLines.has(index)
+          ? line.replace(/\bZ([2-4])\b/g, (_token, count: string) =>
+              Array.from({ length: Number(count) }, () => "Z").join("|"),
+            )
+          : line,
+      )
+      .join("\n");
+
     return {
       tempo: this.tempo,
       voices: this.hasIns ? ["Vocal", "Ins"] : ["Vocal"],
@@ -1358,6 +1370,7 @@ class Song2Parser {
       chords,
       truncation,
       hasChords: this.hasChords,
+      drawingText,
       source,
       unitTicks: (4 * TICKS_PER_QUARTER) / this.unitDenominator,
     };
