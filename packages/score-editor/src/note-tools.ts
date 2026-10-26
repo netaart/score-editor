@@ -134,6 +134,43 @@ export const NOTE_TOOLS: ReadonlyArray<ScoreTool> = [
     },
   },
   {
+    id: "voice-octave",
+    group: "transform",
+    needsSelection: false,
+    needsGrid: false,
+    name: { en: "Voice octave", zh: "人声移八度" },
+    description: {
+      en: "Move only the Vocal voice by whole octaves.",
+      zh: "只把人声按整个八度升降。",
+    },
+    parameters: [
+      {
+        name: "octaves",
+        label: { en: "Octaves", zh: "八度" },
+        type: "choice",
+        values: ["-2", "-1", "1", "2"],
+        default: "1",
+      },
+    ],
+    commands(_project, _selection, values) {
+      return [{ type: "voiceOctave", octaves: Number(values.octaves) as 1 | -1 | 2 | -2 }];
+    },
+  },
+  {
+    id: "instrumental-version",
+    group: "transform",
+    needsSelection: false,
+    needsGrid: false,
+    name: { en: "Instrumental version", zh: "转器乐版" },
+    description: {
+      en: "Move Vocal's notes to Ins; keep rests and chords.",
+      zh: "把人声的音移到器乐声部，只留休止和和弦。",
+    },
+    commands() {
+      return [{ type: "instrumentalVersion" }];
+    },
+  },
+  {
     id: "fit-range",
     group: "note",
     name: { en: "Fit into bars", zh: "压缩或拉伸到小节" },

@@ -191,6 +191,8 @@ function placementsFor(score: Score, after: Score, command: ScoreCommand): BarPl
     case "scaleNoteLengths":
     case "setNoteLength":
     case "fitNotesToRange":
+    case "voiceOctave":
+    case "instrumentalVersion":
       return identityPlacements(score);
     default:
       return assertNever(command);

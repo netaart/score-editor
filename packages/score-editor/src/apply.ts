@@ -4,18 +4,21 @@ import { commandRefusal } from "./command-refusal";
 import { commandAt, runScoreCommand, type ScoreCommand } from "./commands";
 import { withRemappedLyrics } from "./commands-lyrics";
 import { applyProjectRules, isProjectCommand, type ProjectCommand, runProjectCommand } from "./commands-project";
+import type { CommandReport } from "./commands-voice";
 import type { Diagnostic, DiagnosticAt } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import type { SongProject } from "./score";
 import { fallbackDiagnostic } from "./score-text";
 
 export type ApplyScoreResult =
-  | { readonly ok: true; readonly text: string }
+  | { readonly ok: true; readonly text: string; readonly report?: CommandReport }
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
 export type ApplyProjectResult = {
   readonly project: SongProject;
   readonly diagnostics: ReadonlyArray<Diagnostic>;
+  /** What the score command did, when it has more to say than its text. */
+  readonly reports?: ReadonlyArray<CommandReport>;
 };
 
 /** A diagnostic the dialect left without a bar points where the command acted; one that has its own place keeps it. */
@@ -51,7 +54,9 @@ export function applyScoreCommand(dialect: ScoreDialect, text: string, command: 
   const diagnostics = dialect.check(applied.score);
   const first = diagnostics[0];
   if (first !== undefined) return { ok: false, diagnostic: located(first, commandAt(parsed.score, command)) };
-  return { ok: true, text: written };
+  return applied.report === undefined
+    ? { ok: true, text: written }
+    : { ok: true, text: written, report: applied.report };
 }
 
 /**
@@ -73,5 +78,6 @@ export function applyProjectCommand(
   const applied = applyScoreCommand(dialect, project.score, command);
   if (!applied.ok) return { project, diagnostics: [applied.diagnostic] };
   const next = withRemappedLyrics(dialect, project, command, applied.text);
-  return applyProjectRules(dialect, next, command);
+  const checked = applyProjectRules(dialect, next, command);
+  return applied.report === undefined ? checked : { ...checked, reports: [applied.report] };
 }

@@ -4,6 +4,7 @@ import { applyProjectCommand } from "./apply";
 import type { ScoreCommand } from "./commands";
 import { type Grid, gridStepOf } from "./commands-notes";
 import type { ProjectCommand } from "./commands-project";
+import type { CommandReport } from "./commands-voice";
 import { type Diagnostic, isNoticeDiagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import type { Score, SongProject } from "./score";
@@ -95,6 +96,10 @@ export interface ScoreTool {
   readonly description?: ToolText;
   /** The group the panel lists it under; absent means "more". */
   readonly group?: ToolGroup;
+  /** False for a tool that acts on the whole song and needs no selected notes; omitted means it needs a selection. */
+  readonly needsSelection?: boolean;
+  /** False for a tool that keeps the score's own timing and needs no grid; omitted means its result must sit on the grid. */
+  readonly needsGrid?: boolean;
   readonly parameters?: ReadonlyArray<ToolParameter>;
   readonly commands: ToolCommandBuilder;
 }
@@ -262,12 +267,15 @@ export type ToolResult =
       readonly project: SongProject;
       readonly diagnostics: ReadonlyArray<Diagnostic>;
       readonly commands: ReadonlyArray<ScoreCommand>;
+      /** What the commands reported, for the panel's status line. */
+      readonly reports?: ReadonlyArray<CommandReport>;
     }
   | {
       readonly ok: false;
       readonly project: SongProject;
       readonly diagnostics: ReadonlyArray<Diagnostic>;
       readonly commands: ReadonlyArray<ScoreCommand>;
+      readonly reports?: ReadonlyArray<CommandReport>;
     };
 
 interface ToolRequest {
@@ -294,6 +302,8 @@ export interface CommandListResult {
   readonly ok: boolean;
   readonly project: SongProject;
   readonly diagnostics: ReadonlyArray<Diagnostic>;
+  /** What the commands did, in their order, when they have more to say than the project. */
+  readonly reports?: ReadonlyArray<CommandReport>;
 }
 
 /**
@@ -308,12 +318,14 @@ export function applyCommandList(
 ): CommandListResult {
   let next = project;
   const notices: Diagnostic[] = [];
+  const reports: CommandReport[] = [];
   const seen = new Set<string>();
   for (const command of commands) {
     const applied = applyProjectCommand(dialect, next, command);
     const refusals = applied.diagnostics.filter((diagnostic) => !isNoticeDiagnostic(diagnostic));
     if (refusals.length > 0) return { ok: false, project, diagnostics: refusals };
     next = applied.project;
+    reports.push(...(applied.reports ?? []));
     for (const notice of applied.diagnostics) {
       const key = JSON.stringify([notice.code, notice.params, notice.at]);
       if (seen.has(key)) continue;
@@ -321,7 +333,9 @@ export function applyCommandList(
       notices.push(notice);
     }
   }
-  return { ok: true, project: next, diagnostics: notices };
+  return reports.length === 0
+    ? { ok: true, project: next, diagnostics: notices }
+    : { ok: true, project: next, diagnostics: notices, reports };
 }
 
 function failure(
@@ -399,6 +413,7 @@ function toolResultDiagnostic(
     reached = Math.max(reached, span.end);
   }
 
+  if (tool.needsGrid === false) return undefined;
   const step = gridStepOf(context.grid);
   if (step === null) return undefined;
   const original = dialect.parse(before.score).score;
@@ -437,7 +452,9 @@ export function applyToolRequest(
   if (!applied.ok) return failure(request.project, applied.diagnostics, commands);
   const problem = toolResultDiagnostic(tool, request.project, applied.project, dialect, context);
   if (problem !== undefined) return failure(request.project, [problem], commands);
-  return { ok: true, project: applied.project, diagnostics: applied.diagnostics, commands };
+  return applied.reports === undefined
+    ? { ok: true, project: applied.project, diagnostics: applied.diagnostics, commands }
+    : { ok: true, project: applied.project, diagnostics: applied.diagnostics, commands, reports: applied.reports };
 }
 
 /** What running a tool would make, computed without a session. Invalid parameters and a failing step return diagnostics. */

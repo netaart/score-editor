@@ -12,6 +12,14 @@ export { mountChordTrack } from "./chord-track";
 export type { ChordChoices, ChordLetter, ChordNameParts } from "./chord-vocabulary";
 export { chordChoices, splitChordName } from "./chord-vocabulary";
 export type { ScoreCommand } from "./commands";
+export type {
+  CommandReport,
+  InstrumentalReport,
+  InstrumentalVersionCommand,
+  VoiceCommand,
+  VoiceOctaveCommand,
+  VoiceOctaveReport,
+} from "./commands-voice";
 export type { Grid, GridValue, MoveNotesCommand, MoveResizeCommand, ResizeNotesCommand } from "./commands-notes";
 export type { ProjectCommand } from "./commands-project";
 export { checkProject } from "./commands-project";
