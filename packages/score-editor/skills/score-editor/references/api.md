@@ -58,6 +58,8 @@ change. The tests in the repository check that the list stays complete.
 | `lyricSplitCommand` | core | The `splitLyricLine` command for a caret in a line's text, with the bar when the phrase has two bars or more. |
 | `barLineTick` | core | The tick of a bar line, which is what a `LyricBoundaryPlan`'s `boundary` names; a line before the first bar is the start of the score, one past the last bar its end. |
 | `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions`. |
+| `changeLog` | core | Reads the original and current projects with a dialect and returns one sentence per kind of change, in the chosen language. |
+| `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`. |
 
 ## Constants and values
 
@@ -79,7 +81,7 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, drafts. |
+| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, drafts, title, onHandoff. |
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
@@ -97,6 +99,14 @@ change. The tests in the repository check that the list stays complete.
 | `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. |
 | `CommandListResult` | `{ ok, project, diagnostics }` from `applyCommandList`: the applied project, or the untouched one with the refusal. |
 | `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`); each command is listed in the package README. |
+
+## Change log and handoff types
+
+| Export | What it is |
+| --- | --- |
+| `ChangeLogOptions` | `{ language, dialect? }`: the language of the sentences and the dialect that reads both scores. |
+| `HandoffInstructionOptions` | `{ original, current, title?, language, dialect? }` for `handoffInstruction`. |
+| `HandoffPayload` | The attachment (`score.abc`, `text/plain`), the prefilled instruction and the final project handed to the host. |
 
 ## Score model types
 

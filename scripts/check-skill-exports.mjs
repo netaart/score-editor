@@ -198,6 +198,13 @@ const ownerGroups = {
     "previewTool",
     "validateToolParameters",
   ],
+  "references/handoff.md": [
+    "ChangeLogOptions",
+    "HandoffInstructionOptions",
+    "HandoffPayload",
+    "changeLog",
+    "handoffInstruction",
+  ],
   "references/drafts.md": [
     "DRAFT_FORMAT_VERSION",
     "DraftHandoffResult",

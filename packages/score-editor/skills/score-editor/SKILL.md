@@ -1,6 +1,6 @@
 ---
 name: score-editor
-description: Build, customize or edit a browser score editor for song projects with @neta-art/score-editor. Use when a user asks to put a C chord on bar 5, delete the last two bars, set the tempo to 90, change the key, turn a note into a rest, edit the lyrics, or repair or write a song2 score; when mounting the default editor, assembling view parts on a headless editing session, writing a custom tool, reading or writing a song2 score without a DOM, registering a score dialect, preserving edits as host-stored drafts, or theming the editor with CSS variables.
+description: Build, customize or edit a browser score editor for song projects with @neta-art/score-editor. Use when a user asks to put a C chord on bar 5, delete the last two bars, set the tempo to 90, change the key, turn a note into a rest, edit the lyrics, or repair or write a song2 score; when mounting the default editor, assembling view parts on a headless editing session, writing a custom tool, reading or writing a song2 score without a DOM, registering a score dialect, preserving edits as host-stored drafts, reviewing what changed and handing the project to a host callback, or theming the editor with CSS variables.
 ---
 
 # Score editor
@@ -20,6 +20,7 @@ Every layer is public and usable on its own. Pick the smallest one that serves t
 | Get a working editor in one call and choose only its language and project | `mount(el, options)` | [references/mount.md](references/mount.md) |
 | Let a person hear the score as a synthetic preview with a playhead, or sound one note | View parts, and the headless schedule | [references/view-parts.md](references/view-parts.md#the-synth-preview) |
 | Save edits as host-stored drafts, restore them on open, or inherit lyric lines into a regenerated song | Draft keeper, or `mount`'s `drafts` option | [references/drafts.md](references/drafts.md) |
+| Show what changed since the original and hand the score, instruction and project to the host | Change log and handoff | [references/handoff.md](references/handoff.md) |
 
 ## Choose an extension point
 
@@ -64,7 +65,7 @@ and checking it before handing it over.
 
 ## What this package does not do
 
-It edits and reads score text. It does not generate music, call a model or a network API, store drafts by itself, talk to a host's chat, send a handoff, manage files or permissions, export MIDI or PDF, or play a real instrument. The draft keeper is the headless half and the host supplies the store; saving, conflicts, handoff and permissions belong to the host. The synth preview is a browser preview, not a render of the final song. If a request needs one of those, name the layer that owns it instead of looking for it here.
+It edits and reads score text. It does not generate music, call a model or a network API, store drafts by itself, talk to a host's chat, manage files or permissions, export MIDI or PDF, or play a real instrument. The draft keeper is the headless half and the host supplies the store; `onHandoff` only calls the host's callback with the attachment, instruction and project, and the host decides where they go. Saving, conflicts, chat and permissions belong to the host. The synth preview is a browser preview, not a render of the final song. If a request needs one of those, name the layer that owns it instead of looking for it here.
 
 ## Recipes, smallest first
 
@@ -73,6 +74,7 @@ It edits and reads score text. It does not generate music, call a model or a net
 3. **Assemble a layout of your own.** Mount only the parts you need on one editing session; each part follows the session and its own `destroy()` removes it. See [references/view-parts.md](references/view-parts.md).
 4. **Add a repeatable edit.** Declare a `ScoreTool`, register it, preview its commands and run them as one undo step. See [references/custom-tools.md](references/custom-tools.md).
 5. **Add a dialect or a theme.** Register a second `ScoreDialect`, or map the host's colours onto the `--sce-*` variables. See [references/dialect-registry.md](references/dialect-registry.md) and [references/theme.md](references/theme.md).
+6. **Review and hand off.** Get a readable change log from the original and current projects, then give the host the `score.abc` text, the prefilled instruction and the final project through `onHandoff`. See [references/handoff.md](references/handoff.md).
 
 If none of these fits, start at [references/api.md](references/api.md).
 

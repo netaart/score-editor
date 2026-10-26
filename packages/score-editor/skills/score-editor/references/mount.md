@@ -26,6 +26,8 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 | `editable?: boolean` | Defaults to true. While true the toolbar offers undo, redo, Delete and a Select menu, a click or tap selects a note or sets the insertion point, and the editing keys act; see [view-parts.md](view-parts.md#editing-in-the-parts). While false the score is only shown and the toolbar shows a read-only badge. |
 | `notify?: (notice: Notice) => void` | Receives one-time messages. `Notice` is already in the current language. `command-refused` is an edit the user asked for that the score would not take, with nothing changed; the message says why and where. `draft-source-changed` and `draft-save-failed` come from the draft keeper (see `drafts`); the editor draws nothing of its own for them. |
 | `drafts?: DraftStore` | The host's draft store. With it, and while `editable`, the editor keeps the user's edits as a draft under `project.sourceKey`, restores it on open, offers Restore original and shows the conflict strip; see [drafts.md](drafts.md#in-the-default-editor). Without it, or while read-only, nothing is kept and the store is never called. |
+| `title?: string` | The work's title in the handoff instruction; the project's `sourceKey` when absent or blank. |
+| `onHandoff?: (handoff: HandoffPayload) => void` | Adds the handoff button while `editable`. It receives the `score.abc` attachment text, the prefilled instruction and the final project after the draft is saved with the handoff hash; see [handoff.md](handoff.md). Without it there is no button. |
 
 `MountedEditor`:
 
@@ -47,6 +49,8 @@ const editor = mount(document.querySelector("#editor")!, {
   project, // a SongProject with modelId "song2"
   dialects: createDialectRegistry([song2Dialect]),
   drafts: store, // optional: a DraftStore; see drafts.md
+  title: "My Song", // optional: the title in the handoff instruction
+  onHandoff: (handoff) => putInChat(handoff), // optional: adds the handoff button; see handoff.md
   notify: (notice) => showToast(notice.message),
 });
 
