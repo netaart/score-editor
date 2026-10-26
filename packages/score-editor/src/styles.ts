@@ -6,6 +6,7 @@ import { chordCss } from "./chord-styles";
 import { draftCss } from "./draft-styles";
 import { dragCss } from "./drag-styles";
 import { filterCss } from "./filter-styles";
+import { handoffCss } from "./handoff-styles";
 import { lyricCss } from "./lyric-styles";
 import { TICKS_PER_QUARTER } from "./score";
 import { sectionMenuCss } from "./section-styles";
@@ -1119,6 +1120,7 @@ ${labelThinning()}
 }
 ${boxCss}${lyricCss}
 ${draftCss}
+${handoffCss}
 ${sectionMenuCss}
 ${chordCss}
 ${songCss}

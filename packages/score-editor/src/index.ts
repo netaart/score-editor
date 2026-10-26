@@ -4,6 +4,8 @@
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
+export type { ChangeLogOptions, HandoffInstructionOptions } from "./change-log";
+export { changeLog, handoffInstruction } from "./change-log";
 export type { ChordSlot } from "./chord-edit";
 export { chordSlots, nearestChordSlot } from "./chord-edit";
 export { mountChordTrack } from "./chord-track";
@@ -149,6 +151,7 @@ export type {
   DraftStoreEntry,
   DraftWriteResult,
   DurationSet,
+  HandoffPayload,
   Language,
   MeterRule,
   MountedEditor,

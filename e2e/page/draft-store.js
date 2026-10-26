@@ -15,10 +15,14 @@ export function createFakeDraftStore() {
   const failures = { write: 0, remove: 0, read: 0, list: 0 };
   let versions = 0;
   let gate = null;
+  let writeGate = null;
 
   const newVersion = () => `v${++versions}`;
   const wait = async () => {
     if (gate) await gate.promise;
+  };
+  const waitWrite = async () => {
+    if (writeGate) await writeGate.promise;
   };
   const record = (call) => {
     calls.push(call);
@@ -54,6 +58,7 @@ export function createFakeDraftStore() {
     },
     async write(key, text, expected) {
       const call = record({ method: "write", key, text, expected });
+      await waitWrite();
       const refusal = refuse("write", call, key, expected);
       if (refusal) return refusal;
       const version = newVersion();
@@ -114,6 +119,18 @@ export function createFakeDraftStore() {
     release() {
       gate?.release();
       gate = null;
+    },
+    /** Makes `write` calls wait until `releaseWrite`, as a slow save does. */
+    holdWrite() {
+      let release = () => {};
+      const promise = new Promise((resolve) => {
+        release = resolve;
+      });
+      writeGate = { promise, release };
+    },
+    releaseWrite() {
+      writeGate?.release();
+      writeGate = null;
     },
   };
 }

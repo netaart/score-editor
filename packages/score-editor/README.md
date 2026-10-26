@@ -15,6 +15,8 @@ const editor = mount(element, {
   project, // a SongProject: the score text and the model ID are read
   dialects: createDialectRegistry([song2Dialect]), // the formats this editor can read
   drafts: store, // optional: a DraftStore; edits are kept as a draft of this project (see Drafts)
+  title: "My Song", // optional: the work's title in the handoff instruction
+  onHandoff: (handoff) => openChatInput(handoff), // optional: adds the handoff button (see Change log and handoff)
   notify: (notice) => showToast(notice.message), // already in the current language; `notice.code` is one of `NOTICE_CODES`
 });
 
@@ -290,6 +292,33 @@ Give `mount` a `drafts` store and the editor does the keeper's half that a perso
 - **Notices.** `draft-source-changed` and `draft-save-failed` reach the `notify` of the options, in the current language. The editor draws nothing of its own for them; a failed save is tried again after the next edit.
 - **`update`.** A project with another `sourceKey`, `lyrics` or score text is a new original: the keeper is destroyed (it writes what it still holds under the old key), the project is replaced, and a new keeper opens on it. A project with the same original but another `style`, `scoreMode` or `seed` keeps the keeper and the user's edits, and those fields go to the session through the project commands, as one history step. A change to `modelId` has no project command, and a change to the stored `lyricLines` alone is not carried; the editor keeps what it has for those. Passing a project whose every field is equal (the lyric lines by content) is not news, so a host that re-renders does not take the user's edits away. `update({ drafts })` with another store ends the keeper of the old one (it writes what it holds) and opens one on the new, `update({ drafts: undefined })` takes the store away (a pending write is made first, and later edits write nothing), and `update({ editable: false })` ends the keeper in the same way while `update({ editable: true })` opens one again.
 - **Parts.** A host with its own layout puts the strip where it likes with `mountDraftConflict(el, session, keeper)`. The Restore original button and the opening badge belong to the toolbar part and appear when it is given the keeper in its `draftKeeper` option.
+
+## Change log and handoff
+
+The change log is a pure function of the original and the current project. It reads both score texts with the project's dialect and returns one sentence per kind of change: a deleted, copied, moved or renamed section; the tempo, key, meter or chords; the lyrics, style description, score mode or seed; the bars whose notes changed, named by bar and range; and the text view's own edit. Score modes and the seed use the Project panel's words, and a meter change names the new meter and the bars. The package recomputes it every time; it never reads a stored draft. A score text that changed while it still reads as the same score is the text view's edit; when the text changed the music, the music changes are named instead.
+
+```ts
+import { changeLog, handoffInstruction } from "@neta-art/score-editor";
+
+const changes = changeLog(original, current, { language: "en", dialect: song2Dialect });
+const instruction = handoffInstruction({
+  original,
+  current,
+  title: "My Song",
+  language: "en",
+  dialect: song2Dialect,
+});
+```
+
+`handoffInstruction` writes the prefilled text: the title, the request to regenerate with song2 and pass the attached score through `--text`, the final style description and joined lyrics (already synced, not to be changed), the score mode and the seed when there is one, and the change log. The joined lyrics come from the current score and lyric lines, not from the stored `lyrics` field alone.
+
+With `onHandoff`, and while the editor is editable, the toolbar has a **Regenerate…** button after the Select and Grid buttons and before Restore original. It opens a native popover headed **Check before regenerating**, with the change log and the action **Regenerate with this version**; the focus starts on Cancel. Pressing the action closes the popover, saves the draft through the keeper's `handoff()` so the draft carries the handoff hash, and then calls the host with a `HandoffPayload`:
+
+- `attachment`: `{ name: "score.abc", mediaType: "text/plain", text }`, where `text` is the current score;
+- `instruction`: the prefilled instruction in the interface language;
+- `project`: the final song project.
+
+The payload is taken before the save is awaited, from the project the review showed, so an edit made while a slow save is pending does not reach the attachment, instruction or project. While the save runs the trigger reads **Saving…** with `aria-busy="true"` and cannot open the review; afterwards it reads as before. The editor never calls a generation API and never sends anything itself. When the keeper answers `"written"` or `"unchanged"` the host is called; `"conflict"` leaves the draft conflict strip to answer, and `"failed"` leaves the `draft-save-failed` notice to answer, so neither calls the host. A host with no draft store still gets the handoff, without a draft to save. Without `onHandoff`, or while read-only, the button is not there. While the text view holds text the project did not take, the popover says that the last readable score is what is handed off; it is not disabled. The review is bounded by the room under the trigger and scrolls its change list in a short window. The control adds no fixed height to the toolbar: it is a word button in the existing row, 28px high (36px on a coarse pointer). With the current controls its word takes one more toolbar row at 320px in English (229.7px to 261.7px on a fine pointer, 329px to 369px coarse) and at 412px in English on a fine pointer (133.7px to 165.7px); the phone toolbar change is the leader's next decision.
 
 ## Editor skill
 
