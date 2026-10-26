@@ -1348,17 +1348,22 @@ class Song2Parser {
       })),
     };
 
-    const musicLines = new Set(this.sourceLines.map((line) => line.line));
-    const drawingText = this.normalized
-      .split("\n")
-      .map((line, index) =>
-        musicLines.has(index)
-          ? line.replace(/\bZ([2-4])\b/g, (_token, count: string) =>
-              Array.from({ length: Number(count) }, () => "Z").join("|"),
-            )
-          : line,
-      )
-      .join("\n");
+    const drawingLines = this.normalized.split("\n");
+    for (const musicLine of this.sourceLines) {
+      const parts = drawingLines[musicLine.line]?.split("|");
+      if (!parts) continue;
+      for (const [segmentIndex, segment] of musicLine.segments.entries()) {
+        const count = wholeRestCount(trimBody(segment.raw));
+        const bar = segment.bars[0]?.bar;
+        const meter = bar === undefined ? undefined : bars[bar]?.meter;
+        if (count === null || meter === undefined) continue;
+        // A full bar in the score's written unit: L:1/16 in 4/4 is 16, in 2/4 is 8, in 6/8 is 12.
+        const units = (this.unitDenominator * meter.numerator) / meter.denominator;
+        parts[segmentIndex] = Array.from({ length: count }, () => `z${units}`).join("|");
+      }
+      drawingLines[musicLine.line] = parts.join("|");
+    }
+    const drawingText = drawingLines.join("\n");
 
     return {
       tempo: this.tempo,
