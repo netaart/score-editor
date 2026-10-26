@@ -25,13 +25,16 @@ added; calling it twice is harmless.
 | `mountViewSwitch(el, session)` | Three buttons, one for each of `VIEW_NAMES`, that set `session.activeView`. | — |
 | `mountSynthPreview(el, session)` | The synth preview control: a Preview / Stop button and the caption that says the sound is synthetic. Shown in read-only mode too. | — |
 | `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). | `AxisPartOptions` |
+| `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
-voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean }`:
+voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper }`:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
 switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
-(zoom and Delete) while another view is shown. The toolbar's row wraps when its element is narrower than its controls
+(zoom and Delete) while another view is shown; `draftKeeper` binds the toolbar to a draft keeper (see [drafts.md](drafts.md)), so that it
+offers Restore original while the keeper is ready or in conflict and the session is editable, and its badge says "Opening draft…"
+while the keeper is still opening. The toolbar's row wraps when its element is narrower than its controls
 if it holds the preview control or the switch (the read-only badge and the switch go together to a line of their own, and the
 preview control and its caption take the line after it), or scrolls sideways when it holds neither, so every
 control can still be reached.

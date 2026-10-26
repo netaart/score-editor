@@ -20,6 +20,7 @@ change. The tests in the repository check that the list stays complete.
 | `mountStaffView` | core | Mounts the staff view part: the score drawn by abcjs, read-only; abcjs is loaded by this call. |
 | `mountStaleNotice` | core | Mounts the stale notice part: one sentence while the text view holds text the project did not take. |
 | `mountViewSwitch` | core | Mounts the view switch part: three buttons that set the session's `activeView`. |
+| `mountDraftConflict` | core | Mounts the draft conflict strip: shown while a `DraftKeeper` is in conflict, with the two ways out. |
 | `createDialectRegistry` | core | Builds a `DialectRegistry` lookup from an array of dialects. |
 | `applyScoreCommand` | core | Applies one `ScoreCommand` to score text and checks it; returns `ApplyScoreResult` and refuses a `ProjectCommand`. |
 | `applyProjectCommand` | core | Applies one `ScoreCommand` or `ProjectCommand` to a `SongProject`; returns `ApplyProjectResult`. |
@@ -77,7 +78,7 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify. |
+| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, drafts. |
 | `MountedEditor` | `{ update(options), destroy() }`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
@@ -142,7 +143,7 @@ change. The tests in the repository check that the list stays complete.
 | `ViewPart` | `{ destroy() }`; safe to destroy twice. |
 | `AxisPartOptions` | `{ scroller?, onRefused? }` for the ruler, chord track and voice tracks. |
 | `VoiceTrackOptions` | `AxisPartOptions` plus `voice`. |
-| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview? }` for the toolbar. |
+| `ToolbarOptions` | `{ hintId?, onRefused?, viewSwitch?, synthPreview?, draftKeeper? }` for the toolbar. |
 | `EditingInput` | One thing the user did, as data: a key, a click on a note, a click on empty space, a delete, a toggle of one note, a box of notes, select all, invert, or clear. |
 | `EditingInputResult` | `{ handled, refused }`: whether the input meant something, and the diagnostics of an edit the score refused. |
 

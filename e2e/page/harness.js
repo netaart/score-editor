@@ -1,6 +1,7 @@
 // ABOUTME: Page-side half of the mount seam: mounts the built editor, or single view parts on one session, and exposes window.harness.
 // ABOUTME: The host is the bare test page; it builds the dialect registry and fetches the test scores itself.
 
+import { createFakeDraftStore } from "/e2e/page/draft-store.js";
 import { syntheticSong } from "/e2e/page/synthetic.js";
 import { song2Dialect } from "/packages/score-dialect-song2/dist/index.js";
 import {
@@ -9,6 +10,7 @@ import {
   mount,
   mountChordTrack,
   mountCutNotice,
+  mountDraftConflict,
   mountLyricTrack,
   mountProblemView,
   mountStaffView,
@@ -32,6 +34,13 @@ let project = null;
 let vectors = null;
 /** The notices the mounted editor sent to its host, in order. */
 const notices = [];
+/** The host's draft store: what `drafts: true` in the options of `mount` and `update` stands for. */
+const drafts = createFakeDraftStore();
+const withDrafts = (options) => {
+  if (options.drafts === true) return { ...options, drafts };
+  if (options.drafts === false) return { ...options, drafts: undefined };
+  return options;
+};
 
 /**
  * The score text a test asks for: `{ sample }` is a file of the dialect's samples, `{ vector }` the text of a
@@ -77,6 +86,29 @@ const LAYOUT_PARTS = {
 };
 
 /**
+ * A draft keeper already in conflict, for the conflict strip's lifetime case: the part reads its status, subscribes, and
+ * takes the two ways out, so the stub answers those and nothing else.
+ */
+function conflictKeeper() {
+  const listeners = new Set();
+  return {
+    status: "conflict",
+    ready: Promise.resolve(),
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    overwrite: () => Promise.resolve(),
+    loadTheirs: () => Promise.resolve(),
+    restoreOriginal: () => Promise.resolve(true),
+    handoff: () => Promise.resolve("unchanged"),
+    destroy() {
+      listeners.clear();
+    },
+  };
+}
+
+/**
  * The view parts that stand for a view and not for a bar of the layout page: they have a slot only when a test asks for
  * them, and the lists of the parts the older specs walk through do not include them.
  */
@@ -86,6 +118,7 @@ const VIEW_PARTS = {
   stale: (el, session) => mountStaleNotice(el, session),
   switch: (el, session) => mountViewSwitch(el, session),
   "toolbar-views": (el, session) => mountToolbar(el, session, { viewSwitch: true }),
+  "draft-conflict": (el, session) => mountDraftConflict(el, session, conflictKeeper()),
 };
 
 /**
@@ -333,6 +366,7 @@ window.harness = {
   stage,
   layout,
   notices,
+  drafts,
   host: hostPage,
   shadowRoot: null,
   /** The single-note preview export, called as a host calls it. */
@@ -361,7 +395,7 @@ window.harness = {
       project,
       dialects,
       notify: (notice) => notices.push(notice),
-      ...options,
+      ...withDrafts(options),
     });
   },
   async update({ score, project: fields, ...options } = {}) {
@@ -369,7 +403,7 @@ window.harness = {
       project = await projectFrom(project, score, fields);
       options.project = project;
     }
-    editor.update(options);
+    editor.update(withDrafts(options));
   },
   destroy() {
     editor.destroy();

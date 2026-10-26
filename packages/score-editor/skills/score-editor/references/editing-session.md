@@ -45,6 +45,7 @@ const session = createEditingSession({
 | Method | Effect |
 | --- | --- |
 | `dispatch(command: ScoreCommand \| ProjectCommand)` | Applies one command as one history step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. A command that comes back with notices only (`isNoticeDiagnostic`) is taken: the result is `ok` with the notices in `diagnostics`. |
+| `dispatchAll(commands)` | Applies a list of `ScoreCommand` and `ProjectCommand` as one history step through the same path as `dispatch`, all or none, and announces one change. Returns `DispatchResult`. One refusal refuses the whole list and changes nothing; the notices of the steps that were taken come back once each. An empty list adds no step. It is how one gesture that needs several commands (dragging a boundary two lyric lines share) stays one undo. |
 | `checkScoreText(text)` | What `dispatch` of `replaceScoreText` with `text` would say: the diagnostics it would be refused with, or the notices it would be taken with, the song-project rules included; a result with no diagnostic that `isNoticeDiagnostic` rejects is a text the session takes. Changes and announces nothing. |
 | `setActiveView(name)` | Shows another view. Throws `RangeError` for a name outside `VIEW_NAMES`. |
 | `setRejectedText(next \| null)` | Says which unreadable text the text view holds, or that it holds none. No-op for the same text. |
@@ -57,7 +58,6 @@ const session = createEditingSession({
 | `replaceProject(next)` | Starts a new document from outside: history, selection and insertion point go; view state stays. No-op when every field is the same. |
 | `replaceDialects(next)` | Reads the project with another registry. The history stays. No-op for the same registry. |
 | `subscribe(listener)` | Calls `listener(change)` after every change and returns the unsubscribe function. |
-| `dispatchAll(commands)` | Applies a list of `ScoreCommand` and `ProjectCommand` as one history step, all or none, and announces one change. Returns `DispatchResult`. An empty list adds no step. It is how one gesture that needs several commands (dragging a boundary two lyric lines share) stays one undo. |
 
 `SessionChange` is `{ cause, project, selection, insertionPoint, view, command? }`. The four booleans say which state the change
 touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"insertion-point"`, `"view"`,

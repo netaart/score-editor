@@ -1,6 +1,6 @@
 // ABOUTME: Playwright fixtures of seam 5: a harness that drives the test page, a press that taps or clicks, and real touch input.
 // ABOUTME: Tests talk to the page only through window.harness and through what a user can see and do.
-import { test as base, type CDPSession, type Locator, type Page } from "@playwright/test";
+import { test as base, type CDPSession, expect, type Locator, type Page } from "@playwright/test";
 
 export interface Point {
   x: number;
@@ -89,6 +89,14 @@ export async function listenerCounter(page: Page) {
     },
     detach: () => cdp.detach(),
   };
+}
+
+/**
+ * Waits until the list `read` gives has `count` entries. The page fills such a list as the editor works (the calls a fake
+ * store was made, the notices a host was sent), so a test waits for it instead of counting once.
+ */
+export async function expectCount(read: () => Promise<ReadonlyArray<unknown>>, count: number) {
+  await expect.poll(async () => (await read()).length).toBe(count);
 }
 
 /** The editing session as the test page exposes it to the helpers below. */

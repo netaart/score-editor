@@ -175,6 +175,7 @@ const ownerGroups = {
     "PreviewStart",
     "PreviewNoteOptions",
     "mountLyricTrack",
+    "mountDraftConflict",
   ],
   "references/mount.md": ["mount", "MountedEditor", "MountOptions"],
   "references/custom-tools.md": [

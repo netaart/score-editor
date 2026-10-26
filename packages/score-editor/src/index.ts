@@ -27,6 +27,7 @@ export {
 } from "./diagnostics";
 export type { DialectRegistry, ParseResult, ScoreDialect } from "./dialect";
 export { createDialectRegistry } from "./dialect";
+export { mountDraftConflict } from "./draft-conflict";
 // Drafts below the UI.
 export type {
   DraftHandoffResult,

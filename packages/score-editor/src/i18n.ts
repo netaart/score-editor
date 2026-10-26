@@ -116,6 +116,23 @@ export interface Messages {
   lyricDeleted(line: number): string;
   lyricSplitDone(line: number): string;
   lyricMerged(line: number): string;
+  /** What the badge says in place of "Read only" while a draft keeper is still reading the host's store. */
+  draftOpening: string;
+  /** The conflict strip: its name, the sentence that says what happened, and each way out with what it does. */
+  draftConflict: string;
+  draftConflictText: string;
+  draftOverwrite: string;
+  draftOverwriteNote: string;
+  draftLoadTheirs: string;
+  draftLoadTheirsNote: string;
+  /** Restore original: the button, the question it asks and what that costs, the two answers, and what is said once it is done. */
+  restoreOriginal: string;
+  restoreQuestion: string;
+  restoreWarning: string;
+  restoreCancel: string;
+  restoreDone: string;
+  /** Said when the original is back but the stored draft could not be cleared. */
+  restoreNotCleared: string;
 }
 
 /** What a phrase's name says about it; `first` and `last` are 1-based bars. */
@@ -244,6 +261,21 @@ const en: Messages = {
   lyricDeleted: (line) => `Line ${line} deleted`,
   lyricSplitDone: (line) => `Line ${line} split into lines ${line} and ${line + 1}`,
   lyricMerged: (line) => `Lines ${line} and ${line + 1} merged`,
+  draftOpening: "Opening draft…",
+  draftConflict: "Draft conflict",
+  draftConflictText:
+    "This draft was changed somewhere else after you opened it. Your changes are not being saved until you choose.",
+  draftOverwrite: "Overwrite with my version",
+  draftOverwriteNote: "The other version is replaced by yours.",
+  draftLoadTheirs: "Load the other version",
+  draftLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
+  restoreOriginal: "Restore original",
+  restoreQuestion: "Go back to the original score?",
+  restoreWarning: "Every change you made is discarded and the saved draft is deleted. You can't undo this.",
+  restoreCancel: "Cancel",
+  restoreDone: "The original score is back",
+  restoreNotCleared:
+    "The original score is back, but the saved draft could not be deleted. The next change tries again.",
 };
 
 const zh: Messages = {
@@ -351,6 +383,19 @@ const zh: Messages = {
   lyricDeleted: (line) => `已删除第 ${line} 行`,
   lyricSplitDone: (line) => `第 ${line} 行已拆成第 ${line} 行和第 ${line + 1} 行`,
   lyricMerged: (line) => `第 ${line} 行和第 ${line + 1} 行已合并`,
+  draftOpening: "正在打开草稿…",
+  draftConflict: "草稿冲突",
+  draftConflictText: "这份草稿在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
+  draftOverwrite: "用我的版本覆盖",
+  draftOverwriteNote: "对方的版本会被你的版本替换。",
+  draftLoadTheirs: "载入对方的版本",
+  draftLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
+  restoreOriginal: "恢复原谱",
+  restoreQuestion: "恢复到原来的乐谱？",
+  restoreWarning: "你做过的所有修改都会丢弃，已保存的草稿也会删除，之后无法撤销。",
+  restoreCancel: "取消",
+  restoreDone: "已恢复原谱",
+  restoreNotCleared: "已恢复原谱，但保存的草稿没能删除。下一次改动会再试。",
 };
 
 const catalogs: Record<Language, Messages> = { en, zh };
