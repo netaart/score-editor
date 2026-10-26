@@ -956,7 +956,7 @@ test.describe("the staff view", () => {
     await expect(drawnNotes(page)).toHaveCount(5);
   });
 
-  test("draws the play cursor as a 20% band in light and dark, and as a Highlight band under forced colours", async ({
+  test("draws the play cursor in the note colour, centred on the old ink, and as a Highlight band under forced colours", async ({
     page,
     harness,
   }) => {
@@ -975,7 +975,18 @@ test.describe("the staff view", () => {
         const root = el.getRootNode();
         const host = root instanceof ShadowRoot ? root.host : null;
         const region = host?.closest(".sce-staff");
+        const probe = document.createElement("span");
+        if (region) {
+          probe.style.color = "var(--sce-_note)";
+          region.appendChild(probe);
+        }
+        const note = parse(probe ? getComputedStyle(probe).color : "rgb(0, 0, 0)");
+        probe.remove();
         const band = /color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\/\s*([\d.]+)\)/.exec(style.backgroundImage);
+        const ink = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(style.backgroundImage);
+        const translated = /translate\(([-\d.]+)px/.exec(el.style.transform);
+        const box = el.getBoundingClientRect();
+        const hostBox = host?.getBoundingClientRect();
         return {
           width: style.width,
           marginLeft: style.marginLeft,
@@ -988,6 +999,7 @@ test.describe("the staff view", () => {
           afterWidth: after.width,
           afterBackground: after.backgroundColor,
           text: parse(style.color),
+          note,
           ground: region ? parse(getComputedStyle(region).backgroundColor) : null,
           band: band
             ? {
@@ -997,6 +1009,10 @@ test.describe("the staff view", () => {
                 alpha: Number(band[4]),
               }
             : null,
+          ink: ink ? { r: Number(ink[1]), g: Number(ink[2]), b: Number(ink[3]) } : null,
+          boxWidth: box.width,
+          boxLeft: hostBox ? box.left - hostBox.left : 0,
+          anchor: translated ? Number(translated[1]) : null,
         };
       });
 
@@ -1009,14 +1025,20 @@ test.describe("the staff view", () => {
       const second = 0.2126 * luminance(other.r) + 0.7152 * luminance(other.g) + 0.0722 * luminance(other.b);
       return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
     };
-    const checkBand = (scheme: string, state: Awaited<ReturnType<typeof read>>) => {
+    const checkForm = (scheme: string, state: Awaited<ReturnType<typeof read>>) => {
+      expect(state.width, `${scheme}: an 8 px box: 3 px band, 2 px ink, 3 px band`).toBe("8px");
+      expect(state.marginLeft, `${scheme}: centred on the old 1 px ink`).toBe("-3.5px");
       expect(state.band, `${scheme}: a band colour is computed`).not.toBeNull();
+      expect(state.ink, `${scheme}: an ink colour is computed`).not.toBeNull();
       expect(state.ground, `${scheme}: the staff ground is known`).not.toBeNull();
-      if (!state.band || !state.ground) return;
-      expect(state.band.alpha, `${scheme}: 20% of the text colour`).toBeCloseTo(0.2, 2);
-      expect(Math.abs(state.band.r - state.text.r), `${scheme}: band red is the text red`).toBeLessThan(1.5);
-      expect(Math.abs(state.band.g - state.text.g), `${scheme}: band green is the text green`).toBeLessThan(1.5);
-      expect(Math.abs(state.band.b - state.text.b), `${scheme}: band blue is the text blue`).toBeLessThan(1.5);
+      if (!state.band || !state.ink || !state.ground || state.anchor === null) return;
+      expect(state.band.alpha, `${scheme}: 20% of the note colour`).toBeCloseTo(0.2, 2);
+      expect(Math.abs(state.band.r - state.note.r), `${scheme}: band red is the note red`).toBeLessThan(1.5);
+      expect(Math.abs(state.band.g - state.note.g), `${scheme}: band green is the note green`).toBeLessThan(1.5);
+      expect(Math.abs(state.band.b - state.note.b), `${scheme}: band blue is the note blue`).toBeLessThan(1.5);
+      expect(Math.abs(state.ink.r - state.note.r), `${scheme}: ink red is the note red`).toBeLessThan(1.5);
+      expect(Math.abs(state.ink.g - state.note.g), `${scheme}: ink green is the note green`).toBeLessThan(1.5);
+      expect(Math.abs(state.ink.b - state.note.b), `${scheme}: ink blue is the note blue`).toBeLessThan(1.5);
       const over = {
         r: state.band.r * state.band.alpha + state.ground.r * (1 - state.band.alpha),
         g: state.band.g * state.band.alpha + state.ground.g * (1 - state.band.alpha),
@@ -1026,13 +1048,19 @@ test.describe("the staff view", () => {
         contrast(over, state.ground),
         `${scheme}: the band is at least 1.3:1 against the ground`,
       ).toBeGreaterThanOrEqual(1.3);
+      expect(
+        contrast(state.ink, state.ground),
+        `${scheme}: the ink is at least 3:1 against the ground`,
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        Math.abs(state.boxLeft + state.boxWidth / 2 - (state.anchor + 0.5)),
+        `${scheme}: the 8 px box is centred on the old ink position`,
+      ).toBeLessThanOrEqual(0.5);
     };
 
     const light = await read();
-    expect(light.width, "a 7 px box: 2 px band, 1 px edge, 1 px ink, 1 px edge, 2 px band").toBe("7px");
-    expect(light.marginLeft, "the ink stays where the 3 px box put it").toBe("-3px");
     expect(light.backgroundImage).toContain("linear-gradient");
-    checkBand("light", light);
+    checkForm("light", light);
 
     await page.evaluate(() => {
       document.documentElement.style.colorScheme = "dark";
@@ -1040,16 +1068,25 @@ test.describe("the staff view", () => {
     await framesPass(page);
     const dark = await read();
     expect(dark.backgroundImage).toContain("linear-gradient");
-    checkBand("dark", dark);
+    checkForm("dark", dark);
     await page.evaluate(() => {
       document.documentElement.style.colorScheme = "";
     });
+    await framesPass(page);
+
+    await harness.layout.setTheme({ "--sce-color-note": "#b00020" });
+    await framesPass(page);
+    const hostNote = await read();
+    expect(hostNote.note).toEqual({ r: 176, g: 0, b: 32 });
+    checkForm("host note colour", hostNote);
+    await harness.layout.setTheme({ "--sce-color-note": "" });
     await framesPass(page);
 
     await page.emulateMedia({ forcedColors: "active" });
     const forced = await read();
     expect(forced.width).toBe("7px");
     expect(forced.marginLeft).toBe("-3px");
+    expect(forced.boxWidth).toBe(7);
     expect(forced.borderLeftWidth, "the band is two 2 px borders, because forced colours drop the wash").toBe("2px");
     expect(forced.borderRightWidth).toBe("2px");
     expect(forced.afterContent, "a pseudo-element keeps the 1 px ink between Canvas edges").toBe('""');
