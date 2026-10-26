@@ -849,7 +849,7 @@ test.describe("the handoff with a score file", () => {
   });
 });
 
-test.describe("the save control re-chooses with the box and the language, not with the state", () => {
+test.describe("the save control re-chooses with the box, the language and the fonts, not with the state", () => {
   test("a language change re-chooses the form and keeps the phone's toolbar height", async ({
     page,
     harness,
@@ -894,32 +894,33 @@ test.describe("the save control re-chooses with the box and the language, not wi
   test("a settled font re-chooses the form, and the state does not", async ({ page, harness, press, isMobile }) => {
     test.skip(isMobile, "the font is changed on the desktop project");
     await page.setViewportSize({ width: 1280, height: 900 });
-    // A box where the words fit in the page's first font and do not fit once a wider face settles.
+    // A box the first text size fits the widest words in and a larger one does not.
     await page.evaluate(() => {
       window.harness.stage.style.width = "340px";
     });
     await openFile(harness);
-    const before = await saveLooks(page);
-    expect(before.form, "the first font keeps the words").toBe("false");
 
     await page.evaluate(() => {
-      window.harness.stage.style.setProperty("--sce-font-family", "monospace");
+      const style = document.createElement("style");
+      style.dataset.fontChange = "";
+      style.textContent = ".sce-root.sce-root { font-size: 22px !important; }";
+      document.head.append(style);
       // The event the browser sends when the face that was loading has settled.
       document.fonts.dispatchEvent(new Event("loadingdone"));
     });
     const clean = await saveLooks(page);
-    expect(clean.form, "the settled font chooses the icon").toBe("true");
-
     await deleteD(page, press);
     const dirty = await saveLooks(page);
-    expect(dirty.form, "the state keeps the settled form").toBe(clean.form);
     expect(dirty.height, "the height does not wait for the state to change").toBe(clean.height);
+    expect(dirty.form, "the state keeps the settled form").toBe(clean.form);
     const icon = await iconFormHeight(page);
+    const widest = await widestWordsHeight(page, "en");
 
     await harness.destroy();
     await harness.mount({ score: { text: QUARTERS }, drafts: true });
     await expect(page.getByRole("button", { name: "Restore original", exact: true })).toBeVisible();
     const base = (await box(page.locator(".sce-toolbar"))).height;
+    expect(clean.form, "the settled font's own form").toBe(widest > base ? "true" : "false");
     expect([base, icon], "only the narrowest form may take the box's row").toContain(clean.height);
   });
 });
