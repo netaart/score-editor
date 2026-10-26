@@ -871,7 +871,7 @@ test.describe("a picker above the row", () => {
     const size = page.viewportSize();
     await page.setViewportSize({ width: size?.width ?? 1280, height: 1000 });
     // The chord row is low in the window: the picker has more room above it than below.
-    await openParts(harness, { score: { text: QUARTERS }, top: 200 });
+    await openParts(harness, { score: { text: QUARTERS }, top: 700 });
     await pressAtTick(page, press, 0);
     const open = picker(page, "Chord at bar 1 beat 1");
     await expect(open).toBeVisible();
