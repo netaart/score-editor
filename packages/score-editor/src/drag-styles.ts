@@ -1,6 +1,6 @@
 // ABOUTME: The look of dragging selected notes, as a stylesheet fragment: the edge grips, the cursors, the ghosts and the touch behaviour.
 // ABOUTME: styles.ts appends it to the editor's stylesheet; the edge widths come from note-drag.ts, so the zones a press finds are the ones drawn.
-import { EDGE_ZONE, EDGE_ZONE_FLOOR, EDGE_ZONE_SHARE, ZONES_PER_NOTE } from "./note-drag";
+import { EDGE_ZONE, EDGE_ZONE_FLOOR, EDGE_ZONE_SHARE } from "./note-drag";
 
 const fine = EDGE_ZONE.fine;
 const coarse = EDGE_ZONE.coarse;
@@ -21,15 +21,15 @@ const grip = (side: "start" | "end") => `
 export const dragCss = `
 /*
  * A selected note is taken hold of by its body, which moves the selection, or by an edge zone, which resizes it. The
- * body shows it with the move cursor, and the zones with grips; a note narrower than ${ZONES_PER_NOTE} zones has none, and is all
+ * body shows it with the move cursor, and the zones with grips; a note narrower than three zones has none, and is all
  * body. A note that continues into a tied note has no zone on that side. A finger gets the wider zone, narrowed on a
- * narrow note to ${share}% of its width but never below ${floor}px, which is the share and the floor note-drag.ts reads. The
- * browser keeps its hands off a selected note, so that a slide on it moves it and does not scroll the lane.
+ * narrow note to ${share}% of its width but never below ${floor}px, which is the share and the floor note-drag.ts reads.
+ * The track marks a note wide enough for each pointer kind; no selected note is a size container the browser measures on
+ * every zoom. The browser keeps its hands off a selected note, so that a slide on it moves it and does not scroll the lane.
  */
 .sce-root[data-editable="true"] .sce-note[data-selected] {
   cursor: move;
   touch-action: none;
-  container-type: inline-size;
   --sce-_edge: ${fine}px;
   --sce-_grip: var(--sce-_bg);
 }
@@ -38,20 +38,16 @@ export const dragCss = `
     --sce-_edge: max(${floor}px, min(${coarse}px, ${share}%));
   }
 }
-@container (min-width: ${ZONES_PER_NOTE * fine}px) {
-  @media not (pointer: coarse) {
-    .sce-root[data-editable="true"] .sce-note[data-selected]:not([data-tie-prev])::before {${grip("start")}
-    }
-    .sce-root[data-editable="true"] .sce-note[data-selected]:not([data-tie-next])::after {${grip("end")}
-    }
+@media not (pointer: coarse) {
+  .sce-root[data-editable="true"] .sce-note[data-selected][data-grip-fine]:not([data-tie-prev])::before {${grip("start")}
+  }
+  .sce-root[data-editable="true"] .sce-note[data-selected][data-grip-fine]:not([data-tie-next])::after {${grip("end")}
   }
 }
-@container (min-width: ${ZONES_PER_NOTE * floor}px) {
-  @media (pointer: coarse) {
-    .sce-root[data-editable="true"] .sce-note[data-selected]:not([data-tie-prev])::before {${grip("start")}
-    }
-    .sce-root[data-editable="true"] .sce-note[data-selected]:not([data-tie-next])::after {${grip("end")}
-    }
+@media (pointer: coarse) {
+  .sce-root[data-editable="true"] .sce-note[data-selected][data-grip-coarse]:not([data-tie-prev])::before {${grip("start")}
+  }
+  .sce-root[data-editable="true"] .sce-note[data-selected][data-grip-coarse]:not([data-tie-next])::after {${grip("end")}
   }
 }
 /* While the notes are carried the lane keeps one cursor, and the notes wait where they are, a little quieter, under the ghosts. */

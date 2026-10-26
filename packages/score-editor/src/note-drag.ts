@@ -22,6 +22,26 @@ export const EDGE_ZONE_FLOOR = 8;
 /** A zone is only there while the note is at least this many zones wide; a narrower note is all body, and moves. */
 export const ZONES_PER_NOTE = 3;
 
+/** The width of one edge zone inside a selected note: fixed for a fine pointer, a share of a narrow note for a coarse one. */
+export function edgeZoneWidth(inside: number, coarse: boolean): number {
+  return coarse ? Math.max(EDGE_ZONE_FLOOR, Math.min(EDGE_ZONE.coarse, inside * EDGE_ZONE_SHARE)) : EDGE_ZONE.fine;
+}
+
+/** Whether two zones of this width fit inside a note of this inside width and leave a body between them. */
+function zonesFit(inside: number, zone: number): boolean {
+  return inside >= ZONES_PER_NOTE * zone;
+}
+
+/** Whether a selected note of this inside width keeps a body between its two zones; a narrower one is all body. */
+export function hasEdgeZones(inside: number, coarse: boolean): boolean {
+  return zonesFit(inside, edgeZoneWidth(inside, coarse));
+}
+
+/** Which pointer kinds a selected note of this inside width draws grips for: a wide note may draw both, a narrow none. */
+export function gripKindsOf(inside: number): { readonly fine: boolean; readonly coarse: boolean } {
+  return { fine: hasEdgeZones(inside, false), coarse: hasEdgeZones(inside, true) };
+}
+
 /** Where on a selected note a press landed: on its body, which moves the selection, or on an edge, which resizes it. */
 export type Grab = { readonly kind: "move" } | { readonly kind: "resize"; readonly edge: "start" | "end" };
 
@@ -38,10 +58,8 @@ export function grabAt(block: Element, clientX: number, coarse: boolean): Grab {
   const left = html?.clientLeft ?? 0;
   const right = html ? html.offsetWidth - html.clientWidth - left : 0;
   const inside = area.width - left - right;
-  const zone = coarse
-    ? Math.max(EDGE_ZONE_FLOOR, Math.min(EDGE_ZONE.coarse, inside * EDGE_ZONE_SHARE))
-    : EDGE_ZONE.fine;
-  if (inside < ZONES_PER_NOTE * zone) return { kind: "move" };
+  const zone = edgeZoneWidth(inside, coarse);
+  if (!zonesFit(inside, zone)) return { kind: "move" };
   if (!block.hasAttribute("data-tie-prev") && clientX - (area.left + left) < zone)
     return { kind: "resize", edge: "start" };
   if (!block.hasAttribute("data-tie-next") && area.right - right - clientX < zone)
