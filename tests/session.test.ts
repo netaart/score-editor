@@ -758,7 +758,7 @@ describe("a project command through the session", () => {
     expect(changes).toHaveLength(1);
     expect(session.undo()).toBe(true);
     expect(session.project).toEqual(project);
-    expect(session.canUndo()).toBe(false);
+    expect(session.canUndo).toBe(false);
   });
 });
 
