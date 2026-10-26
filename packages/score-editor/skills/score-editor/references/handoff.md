@@ -66,7 +66,7 @@ const editor = mount(el, {
 });
 ```
 
-The toolbar shows **Regenerate…** after the Select and Grid buttons, before Restore original, only while the editor is
+The toolbar shows **Regenerate…** in the strip after Restore original and before the song controls, only while the editor is
 editable and `onHandoff` is given; read-only, or without the callback, there is no button. It opens a review headed
 **Check before regenerating**, with the change log and the action **Regenerate with this version**. Pressing that
 action:
@@ -75,7 +75,7 @@ action:
 2. saves the draft through the keeper's `handoff()` at once, with the handoff hash of that project's joined lyrics and
    score;
 3. calls `onHandoff` when the keeper answers `"written"` or `"unchanged"`;
-4. does not call `onHandoff` on `"conflict"` (the conflict strip offers the two ways out) or `"failed"` (the host has
+4. does not call `onHandoff` on `"conflict"` (the conflict banner's Choose opens the two ways out) or `"failed"` (the host has
    the `draft-save-failed` notice).
 
 While the save runs, the trigger reads **Saving…** and cannot open the review. A host with no draft store still gets

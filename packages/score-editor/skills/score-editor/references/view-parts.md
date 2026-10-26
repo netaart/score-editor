@@ -27,19 +27,16 @@ added; calling it twice is harmless.
 | `mountToolPanel(el, session, options?)` | The Tools button and its panel: every registered tool, grouped, with a control per declared parameter, a preview and Apply (see [The Tools panel](#the-tools-panel)). Hidden while the session is read-only or another view is shown. | `ToolPanelOptions` |
 | `mountFilterPanel(el, session)` | The Filter button and its panel for selecting notes by condition (see [Selecting by filter](#selecting-by-filter)). Shown in read-only mode too. | — |
 | `mountLyricTrack(el, session, options?)` | The lyric lines as phrase blocks over their bars, each with its syllable count over its note-start count (green when equal, yellow with a broken line when not), the syllables on their notes when equal, and the lines that are not on bars listed under the lane. While the session is editable: the edits of a line (see The lyric track). Returns a `LyricTrackPart`, whose `focusEntry()` opens a new line's editor and focuses its text box. | `AxisPartOptions` |
-| `mountDraftConflict(el, session, keeper)` | The strip that says the draft was changed in another window, with "Overwrite with my version" and "Load the other version"; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
+| `mountDraftConflict(el, session, keeper)` | The banner that says the draft was changed in another window, with one Choose button that opens "Overwrite with my version" and "Load the other version" in a dialog; hidden unless `keeper.status` is `"conflict"`. | a `DraftKeeper` |
 
 `AxisPartOptions` is `{ scroller?: HTMLElement, onRefused? }`. `VoiceTrackOptions` extends it with `voice: string`, the
 voice name the dialect declares (for `song2`, `"Vocal"` or `"Ins"`). `ToolbarOptions` is `{ hintId?: string, onRefused?, viewSwitch?: boolean, synthPreview?: boolean, draftKeeper?: DraftKeeper, tempoKey?: boolean, projectPanel?: boolean, pencil?: boolean, tools?: ScoreTool[], onChooseBars?: (bar: number) => void }`; `mountToolbar` returns a `ToolbarPart`, whose `setTools(tools)` replaces the Tools panel's host tools and whose `openProject(field?)` opens the Project panel on a field and whose `say(words)` speaks in the toolbar's live region. The options are:
 `hintId` gives the screen-reader hint, a sentence naming the editing keys, an id for a view's `aria-describedby` (without
 it the toolbar draws no hint); `onRefused` is described under editing below; `viewSwitch` adds the view
-switch before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
+switch to the always-visible bar before the preview control (so a control that comes and goes with the score cannot move the switch), names the shown view in the title, and leaves out the controls that only mean something on the arrangement
 (zoom and Delete) while another view is shown; `draftKeeper` binds the toolbar to a draft keeper (see [drafts.md](drafts.md)), so that it
 offers Restore original while the keeper is ready or in conflict and the session is editable, and its badge says "Opening draft…"
-while the keeper is still opening; `tools` (an array, possibly empty) adds the Tools button and its panel before the Filter button, with the built-in note tools always listed; `tempoKey` adds the tempo, key and transpose group and `projectPanel` adds the Project button; `pencil` adds the pencil after Delete; `onChooseBars` receives the bar the Bars menu chose, so a host that mounts a ruler can put the focus on it. The toolbar's row wraps when its element is narrower than its controls
-if it holds the preview control or the switch (the read-only badge and the switch go together to a line of their own, and the
-preview control and its caption take the line after it), or scrolls sideways when it holds neither, so every
-control can still be reached.
+while the keeper is still opening; `tools` (an array, possibly empty) adds the Tools button and its panel before the Filter button, with the built-in note tools always listed; `tempoKey` adds the tempo, key and transpose group and `projectPanel` adds the Project button; `pencil` adds the pencil after Delete; `onChooseBars` receives the bar the Bars menu chose, so a host that mounts a ruler can put the focus on it. The toolbar has two rows when it holds the switch or the preview control: a one-line, sideways-scrolling strip with the editing and song controls, and an always-visible bar with Save, the switch and the preview control. A toolbar with neither is the older single scrolling row. The strip is reached by a swipe or by Tab; the bar never scrolls out of view.
 
 ## The text view, the staff view and the view switch
 
@@ -281,7 +278,7 @@ the control says so beside itself, in the session's language ("Synthetic preview
 | `previewPlayer(session)` | The session's one `PreviewPlayer`: `playing`, `tick`, `from`, `start()`, `stop()`, `subscribe(listener)`. |
 | `previewNote(midi, options?)` | One pitch for a short time, for a view that sounds a note as the user picks or draws it. Takes `PreviewNoteOptions`, `{ duration? }` in seconds. |
 
-`mountToolbar` holds the same control by default, after the read-only badge. Mount `mountSynthPreview` yourself, and
+`mountToolbar` holds the same control by default, in the bar after the view switch. Mount `mountSynthPreview` yourself, and
 pass `{ synthPreview: false }` in `ToolbarOptions`, when the host wants the control in a place of its own.
 
 ```ts
@@ -345,7 +342,7 @@ Use this when a person should pick notes by condition instead of by pointing: a 
 | --- | --- |
 | `mountFilterPanel(el, session)` | A view part: a button labelled "Filter" ("筛选") and its panel. Returns a `ViewPart`. |
 
-`mountToolbar` mounts it by default, last in its row, after the Tools panel when the toolbar has one; the two are held to the row's right edge as one pair, so the Tools panel hangs from the right and leaves the arrangement in view for a preview. Mount it yourself on an element of your own when the toolbar is
+`mountToolbar` mounts it by default, last in the strip, after the Tools panel when the toolbar has one; the two are held together as one pair, so the Tools panel hangs from the right and leaves the arrangement in view for a preview. Mount it yourself on an element of your own when the toolbar is
 not used; there is no option to leave it out.
 
 ```ts
@@ -421,7 +418,7 @@ mountToolPanel(row, session, { tools: [] }); // only the built-in note tools
   8 px under the toolbar and shrinks and scrolls inside to fit the window. On a coarse pointer at a window of at most
   640 px it is a sheet from the bottom edge, capped so the music floor stays in view above it, with its status on the
   sheet's full width above Apply and Close. Its texts follow `session.view.language`.
-- `mount` passes its `tools` option here; `mountToolbar` with `tools` mounts it in the toolbar row before the Filter
+- `mount` passes its `tools` option here; `mountToolbar` with `tools` mounts it in the toolbar's strip before the Filter
   button. A host that mounts the part itself puts it where it likes.
 
 ## The section menu
