@@ -18,6 +18,8 @@ import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import { mountSynthControl } from "./synth-preview";
 import { mountTempoKeyControls } from "./tempo-key";
+import type { ScoreTool } from "./tool";
+import { mountToolPanel } from "./tool-panel";
 import type { EditingPartOptions, Language, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
@@ -54,6 +56,11 @@ export interface ToolbarOptions extends EditingPartOptions {
   projectPanel?: boolean;
   /** The draft keeper of this editor; see "In the default editor" in the package README. */
   draftKeeper?: DraftKeeper;
+  /**
+   * The host's tools. Giving this option, even an empty list, puts the Tools button and panel in the row before the Filter
+   * button; the built-in note tools are always listed. Off by default, so a toolbar a host already mounts gains no control.
+   */
+  tools?: ReadonlyArray<ScoreTool>;
 }
 
 /** An arrow that turns back on itself; redo is the same drawing mirrored by the stylesheet. */
@@ -135,6 +142,15 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   }
   const synth = options.synthPreview === false ? null : mountSynthControl(row, session, live);
   if (synth) row.dataset.synth = "";
+  // The Tools button and then the Filter button end the row, both held to its right edge by the tool button's auto
+  // margin: its panel hangs from the right, so the arrangement a preview draws stays in view on the left.
+  const tools =
+    options.tools === undefined
+      ? null
+      : mountToolPanel(row, session, {
+          tools: options.tools,
+          ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
+        });
   // Last in the row, so the Tab order and the wrapping of the controls before it are as they were.
   const filter = mountFilterPanel(row, session);
 
@@ -222,6 +238,7 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
       noticeStrip.destroy();
       song?.destroy();
       projectControl?.destroy();
+      tools?.destroy();
       filter.destroy();
       grid.destroy();
       restore?.destroy();

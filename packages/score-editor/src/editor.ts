@@ -119,6 +119,7 @@ export class Editor implements MountedEditor {
         tempoKey: true,
         projectPanel: true,
         draftKeeper: this.drafts,
+        tools: this.options.tools ?? [],
       }),
     );
     this.draftAnchor = doc.createComment("draft conflict");

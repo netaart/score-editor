@@ -121,6 +121,8 @@ export { tickAtSeconds } from "./tempo";
 export { mountTextView } from "./text-view";
 export { mountTimeRuler } from "./time-ruler";
 export { NOTE_TOOLS } from "./note-tools";
+export type { ToolPanelOptions } from "./tool-panel";
+export { mountToolPanel } from "./tool-panel";
 export type {
   BooleanToolParameter,
   ChoiceToolParameter,

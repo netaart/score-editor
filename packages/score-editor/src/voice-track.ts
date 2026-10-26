@@ -25,6 +25,7 @@ import { createPlayheadFollower, createPlayheadLine, type PlayheadLine } from ".
 import { previewPlayer } from "./preview-player";
 import type { Note, Score } from "./score";
 import type { EditingSession, InsertionPoint } from "./session";
+import { toolPreviewChannel } from "./tool-preview";
 import type { AxisPartOptions, ViewPart } from "./types";
 import { announceVoice } from "./voice-announcements";
 
@@ -99,22 +100,65 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
    * the ghosts of the last frame down. A ghost is an outline over the lane: the notes themselves stay where they are
    * until the release, and the bar lines show through the outline where a note would cross one.
    */
+  /** One pitched tie chain per key, the way the drag and a tool preview compare where a note is. */
+  function spanKeys(notes: ReadonlyArray<Note>): Set<string> {
+    const keys = new Set<string>();
+    const pitched = notes.filter((note) => note.midi !== null).sort((left, right) => left.start - right.start);
+    for (let index = 0; index < pitched.length; index += 1) {
+      const first = pitched[index] as Note;
+      let last = first;
+      while (last.tie) {
+        const next = pitched[index + 1];
+        if (next === undefined || next.start !== last.start + last.duration || next.midi !== last.midi) break;
+        index += 1;
+        last = next;
+      }
+      keys.add(`${first.voice}:${first.start}:${last.start + last.duration}:${String(first.midi)}`);
+    }
+    return keys;
+  }
+
   function drawGhosts(): void {
     if (!drawn) return;
     const { lane, notes, top, ticks } = drawn;
     for (const old of lane.querySelectorAll(".sce-ghost")) old.remove();
-    const preview = dragChannel(session).current;
-    // Every lane with a selected note in the drag lets its notes wait quietly under the ghosts, whichever lane the pointer is in.
-    if (preview === null) delete lane.dataset.ghosted;
-    else lane.dataset.ghosted = "";
-    if (preview === null) return;
     const doc = lane.ownerDocument;
-    for (const ghost of ghostsOf(notes, session.selection, preview, session.grid)) {
-      const { start, end, midi } = ghost.lands;
-      if (!(end > start) || end < 0 || start > ticks) continue;
+    const draw = (start: number, end: number, midi: number): void => {
+      if (!(end > start) || end < 0 || start > ticks) return;
       const el = create(doc, "div", "sce-ghost", lane);
       el.setAttribute("aria-hidden", "true");
       el.style.cssText = `--t:${start};--d:${end - start};--r:${top - midi}`;
+    };
+    const preview = dragChannel(session).current;
+    const tool = toolPreviewChannel(session).current;
+    // Every lane whose notes are being carried or previewed lets them wait quietly under the outlines, whichever lane holds the pointer.
+    if (preview === null && tool === null) delete lane.dataset.ghosted;
+    else lane.dataset.ghosted = "";
+    if (preview !== null) {
+      for (const ghost of ghostsOf(notes, session.selection, preview, session.grid)) {
+        draw(ghost.lands.start, ghost.lands.end, ghost.lands.midi);
+      }
+    }
+    if (tool === null) return;
+    const dialect = session.dialect;
+    const result = dialect?.parse(tool.project.score).score;
+    if (result === undefined || result === null) return;
+    const now = spanKeys(notes);
+    for (let index = 0; index < result.notes.length; index += 1) {
+      const note = result.notes[index] as Note;
+      if (note.voice !== voice || note.midi === null) continue;
+      let last = note;
+      let at = index;
+      while (last.tie) {
+        const next = result.notes[at + 1];
+        if (next === undefined || next.start !== last.start + last.duration || next.midi !== last.midi) break;
+        at += 1;
+        last = next;
+      }
+      index = at;
+      const key = `${voice}:${note.start}:${last.start + last.duration}:${String(note.midi)}`;
+      if (now.has(key)) continue;
+      draw(note.start, last.start + last.duration, note.midi);
     }
   }
 
@@ -151,6 +195,8 @@ export function mountVoiceTrack(el: HTMLElement, session: EditingSession, option
         const channel = dragChannel(session);
         const unsubscribeGhosts = channel.subscribe(drawGhosts);
         signal.addEventListener("abort", unsubscribeGhosts, { once: true });
+        const unsubscribeTool = toolPreviewChannel(session).subscribe(drawGhosts);
+        signal.addEventListener("abort", unsubscribeTool, { once: true });
         const player = previewPlayer(session);
         const follower = createPlayheadFollower(session);
         const unsubscribePlayer = player.subscribe(() => {
