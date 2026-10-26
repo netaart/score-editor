@@ -93,6 +93,8 @@ export function mountSynthControl(parent: HTMLElement, session: EditingSession, 
     playIcon.toggleAttribute("hidden", playing);
     stopIcon.toggleAttribute("hidden", !playing);
     label.textContent = playing ? t.previewStop : t.previewPlay;
+    // The name stays whole where a narrow bar shows the icon alone.
+    button.setAttribute("aria-label", playing ? t.previewStop : t.previewPlay);
     button.setAttribute("aria-disabled", String(!available));
     button.title = available ? "" : t.previewUnsupported;
     drawCaption();
