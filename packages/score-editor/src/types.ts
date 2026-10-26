@@ -12,8 +12,16 @@ export type Language = "zh" | "en";
  * here. `command-refused`: the user asked for an edit and the score would not take it, so nothing changed.
  * `draft-source-changed`: a draft was discarded because the original's lyrics and score changed under it.
  * `draft-save-failed`: a draft write or removal did not reach the host store.
+ * `score-save-failed`: a score file write did not reach the host, and the changes are still unsaved.
+ * `score-load-failed`: the other writer's version of a score file could not be read, so the conflict is still open.
  */
-export const NOTICE_CODES = ["command-refused", "draft-source-changed", "draft-save-failed"] as const;
+export const NOTICE_CODES = [
+  "command-refused",
+  "draft-source-changed",
+  "draft-save-failed",
+  "score-save-failed",
+  "score-load-failed",
+] as const;
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */
 export type NoticeCode = (typeof NOTICE_CODES)[number];
@@ -62,6 +70,43 @@ export interface HandoffPayload {
   readonly project: SongProject;
 }
 
+/** A field of the song project a host may mark as required for a generation. */
+export type ProjectField = "style" | "scoreMode" | "seed" | "lyrics";
+
+/** A model input the host says is required before the handoff; the editor reads no model declaration. */
+export type RequiredInput = ProjectField;
+
+/** A generated score: the original, edited through drafts. It is what an absent `source` means. */
+export interface GeneratedScoreSource {
+  readonly kind: "generated";
+}
+
+/**
+ * A score file the host owns. The editor saves the score text back through `save` with the version it opened or last
+ * saved at. `read` answers the file's current text and version, which is how "load theirs" gets the other version.
+ * A version is an opaque string, as a `DraftStore` version is.
+ */
+export interface ScoreFileSource {
+  readonly kind: "scoreFile";
+  /** The file's name, shown in the handoff instruction's title. */
+  readonly name: string;
+  /** The version the file was opened at. */
+  readonly version: string;
+  /** Writes `text` over the file, if it is still at `expected`; answers as a `DraftStore` write does. */
+  save(text: string, expected: string): Promise<ScoreFileSaveResult>;
+  /** The file's text and version now, or null when it is gone. */
+  read(): Promise<ScoreFileEntry | null>;
+}
+
+/** Where the score came from: a generated score or a score file. */
+export type ScoreSource = GeneratedScoreSource | ScoreFileSource;
+
+/** A score file's text and version; the same shape a draft store entry has, for the same reason. */
+export type ScoreFileEntry = DraftStoreEntry;
+
+/** The answer to a versioned save: success with the new version, a conflict, or a failure; the draft write's shape. */
+export type ScoreFileSaveResult = DraftWriteResult;
+
 export interface MountOptions {
   /** Interface language. */
   language: Language;
@@ -75,6 +120,26 @@ export interface MountOptions {
   notify?: (notice: Notice) => void;
   /** The song project to show. Only its score text and model ID are read in this version. */
   project: SongProject;
+  /**
+   * Where the score came from. Absent means a generated score, which keeps drafts as before. A score file saves through
+   * its own `save` and never reads or writes a draft, even when `drafts` is also given.
+   */
+  source?: ScoreSource;
+  /**
+   * Receives the current score text when the user asks to save a generated score as a score file. Where it goes is the
+   * host's business. Without it there is no "Save as" entry.
+   */
+  onSaveAs?: (text: string) => void;
+  /**
+   * Receives the file's unsaved state when it changes, so a host can guard closing or leaving. `hasUnsavedChanges()` on
+   * the mounted editor answers the same question when the host asks. Generated scores have no unsaved state.
+   */
+  onUnsavedChange?: (unsaved: boolean) => void;
+  /**
+   * The model inputs the host says are required before a handoff. A missing one makes the handoff button ask the user to
+   * fill it in the Project panel first. The editor reads no model declaration.
+   */
+  requiredInputs?: ReadonlyArray<RequiredInput>;
   /** The score dialects this editor can read, built by the host with `createDialectRegistry`. */
   dialects: DialectRegistry;
   /** The host's draft storage; see "In the default editor" in the package README. */
@@ -92,6 +157,8 @@ export interface MountOptions {
 export interface MountedEditor {
   /** Applies new options. Only the given keys change. Does nothing after `destroy`. */
   update(options: Partial<MountOptions>): void;
+  /** Whether a score file has changes that are not saved. Always false for a generated score. */
+  hasUnsavedChanges(): boolean;
   /** Removes every listener and node the editor added. Safe to call twice. */
   destroy(): void;
 }

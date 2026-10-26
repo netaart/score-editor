@@ -11,13 +11,18 @@ import { type Diagnostic, formatDiagnostic, isNoticeDiagnostic } from "./diagnos
 import { create } from "./dom";
 import { createDraftBinding, type DraftBinding } from "./draft-binding";
 import { mountDraftConflict } from "./draft-conflict";
+import { mountRestoreControl } from "./draft-restore";
 import { installEditKeys } from "./edit-keys";
-import { type HandoffControl, type HandoffSource, mountHandoffControl } from "./handoff-control";
+import { type HandoffControl, type HandoffKeeper, type HandoffSource, mountHandoffControl } from "./handoff-control";
 import { hostChanges } from "./host-changes";
 import { messagesFor } from "./i18n";
-import { createLiveRegion, sayRefusals } from "./live-region";
+import { createLiveRegion, type LiveRegion, sayRefusals } from "./live-region";
 import { mountLyricTrack } from "./lyric-track";
+import { joinLyrics, lyricLinesOf } from "./lyrics";
 import { mountProblemView } from "./problem-view";
+import { mountSaveConflict } from "./save-conflict";
+import { mountScoreSourceControl } from "./save-control";
+import { createScoreFileKeeper, type ScoreFileKeeper } from "./score-source";
 import {
   createEditingSession,
   type EditingSession,
@@ -30,10 +35,46 @@ import { mountStaleNotice } from "./stale-notice";
 import { acquireStyles } from "./styles";
 import { mountTextView } from "./text-view";
 import { mountTimeRuler } from "./time-ruler";
-import { mountToolbar } from "./toolbar";
-import type { DraftStore, Language, MountedEditor, MountOptions, ViewPart } from "./types";
+import { mountToolbar, type ToolbarPart } from "./toolbar";
+import type {
+  DraftStore,
+  Language,
+  MountedEditor,
+  MountOptions,
+  ProjectField,
+  ScoreFileSource,
+  ViewPart,
+} from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountVoiceTrack } from "./voice-track";
+
+/** A score file the host gave, or null for a generated score. A source the editor cannot use is a host mistake. */
+function scoreFileOf(source: MountOptions["source"]): ScoreFileSource | null {
+  if (source === undefined) return null;
+  const kind: unknown = (source as { readonly kind?: unknown }).kind;
+  if (kind === "generated") return null;
+  if (kind !== "scoreFile") {
+    throw new TypeError('@neta-art/score-editor: source.kind must be "generated" or "scoreFile".');
+  }
+  const file = source as ScoreFileSource;
+  if (
+    typeof file.name !== "string" ||
+    file.name.trim() === "" ||
+    typeof file.version !== "string" ||
+    typeof file.save !== "function" ||
+    typeof file.read !== "function"
+  ) {
+    throw new TypeError(
+      "@neta-art/score-editor: a scoreFile source needs a name, a version, save(text, expected) and read().",
+    );
+  }
+  return file;
+}
+
+/** The fields a score file does not carry start empty; they belong to this handoff only. */
+function scoreFileProject(project: MountOptions["project"]): MountOptions["project"] {
+  return { ...project, style: "", seed: null, lyricLines: [] };
+}
 
 let instanceCount = 0;
 
@@ -48,6 +89,13 @@ export class Editor implements MountedEditor {
   private readonly abort = new AbortController();
   private readonly session: EditingSession;
   private readonly drafts: DraftBinding;
+  private readonly toolbar: ToolbarPart;
+  private readonly live: LiveRegion;
+  private scoreSource: ScoreFileSource | null;
+  private scoreFile: ScoreFileKeeper | null = null;
+  private saveControl: ViewPart | null = null;
+  private saveConflict: ViewPart | null = null;
+  private scoreRestore: ViewPart | null = null;
   /** The chrome above the body: toolbar, conflict strip, cut sentence and stale notice, bounded by the music's floor. */
   private readonly chrome: HTMLElement;
   private readonly scroller: HTMLElement;
@@ -86,20 +134,22 @@ export class Editor implements MountedEditor {
     private readonly onDestroy: () => void,
   ) {
     this.options = { ...options };
+    this.scoreSource = scoreFileOf(options.source);
+    const openedProject = this.scoreSource === null ? options.project : scoreFileProject(options.project);
     this.doc = host.ownerDocument;
     const doc = this.doc;
     const n = ++instanceCount;
 
     this.releaseStyles = acquireStyles(host);
     this.session = createEditingSession({
-      project: options.project,
+      project: openedProject,
       dialects: options.dialects,
       language: options.language,
       editable: options.editable !== false,
     });
     // A keeper opening keeps the session read-only until it is ready, so no edit can start before the restore has run.
     this.drafts = createDraftBinding(this.session, (notice) => this.options.notify?.(notice));
-    this.drafts.follow(this.draftStore(), options.project);
+    this.drafts.follow(this.draftStore(), openedProject);
     this.applyEditable();
     this.reading = this.session.reading;
     this.language = this.session.view.language;
@@ -110,30 +160,21 @@ export class Editor implements MountedEditor {
     this.root = create(doc, "div", "sce-root sce-editor");
     host.appendChild(this.root);
     this.chrome = create(doc, "div", "sce-chrome", this.root);
+    this.live = createLiveRegion(this.root);
 
     const hintId = `sce-hint-${n}`;
     const onRefused = (diagnostics: ReadonlyArray<Diagnostic>) => this.refused(diagnostics);
-    this.parts.push(
-      mountToolbar(this.chrome, this.session, {
-        hintId,
-        onRefused,
-        viewSwitch: true,
-        tempoKey: true,
-        projectPanel: true,
-        draftKeeper: this.drafts,
-      }),
-    );
-    const toolbar = this.root.querySelector<HTMLElement>(".sce-toolbar");
-    if (toolbar !== null) {
-      this.handoff = mountHandoffControl(
-        toolbar,
-        this.session,
-        this.drafts,
-        () => this.handoffSource(),
-        toolbar.querySelector(".sce-part-restore") ?? toolbar.querySelector(".sce-spacer"),
-      );
-      this.parts.push(this.handoff);
-    }
+    this.toolbar = mountToolbar(this.chrome, this.session, {
+      hintId,
+      onRefused,
+      viewSwitch: true,
+      tempoKey: true,
+      projectPanel: true,
+      draftKeeper: this.drafts,
+    });
+    this.parts.push(this.toolbar);
+    this.syncScoreSourceParts();
+    this.mountHandoff();
     this.draftAnchor = doc.createComment("draft conflict");
     this.chrome.appendChild(this.draftAnchor);
     this.syncDraftParts();
@@ -161,9 +202,8 @@ export class Editor implements MountedEditor {
     installZoomGestures(this.root, this.session, this.abort.signal, { wheel: false });
     installZoomGestures(this.scroller, this.session, this.abort.signal, { wheel: true });
     // Keys pressed with the focus on the scroller, outside every part, are heard here, so the frame says their refusals.
-    const live = createLiveRegion(this.root);
     installEditKeys(this.root, this.session, this.abort.signal, {
-      onRefused: sayRefusals(live, this.session, onRefused),
+      onRefused: sayRefusals(this.live, this.session, onRefused),
     });
 
     this.applyLanguage();
@@ -190,19 +230,34 @@ export class Editor implements MountedEditor {
   update(patch: Partial<MountOptions>): void {
     if (this.destroyed) return;
     const before = this.options;
+    const nextSource = patch.source === undefined ? this.scoreSource : scoreFileOf(patch.source);
+    const sourceChanged = nextSource !== this.scoreSource;
     this.options = { ...before, ...patch };
+    this.scoreSource = nextSource;
     if (patch.language !== undefined) this.session.setView({ language: patch.language });
     if (this.options.editable !== before.editable) this.applyEditable();
     if (patch.dialects !== undefined) this.session.replaceDialects(patch.dialects);
+    const project = this.scoreSource === null ? this.options.project : scoreFileProject(this.options.project);
     const store = this.draftStore();
-    this.drafts.follow(store, this.options.project, (sameOriginal) => {
+    this.drafts.follow(store, project, (sameOriginal) => {
       if (patch.project === undefined) return;
       // While drafts are kept, the original the user is editing stays in the session; the host's other fields come in as commands.
       if (store !== null && sameOriginal) this.carry(hostChanges(before.project, patch.project));
-      else this.session.replaceProject(patch.project);
+      else this.session.replaceProject(project);
     });
+    if (sourceChanged) {
+      if (patch.project === undefined) this.session.replaceProject(project);
+      this.syncScoreSourceParts();
+      this.mountHandoff();
+    } else if (this.scoreSource === null && patch.onSaveAs !== undefined) {
+      this.syncScoreSourceParts();
+    }
     this.syncDraftParts();
     this.handoff?.refresh();
+  }
+
+  hasUnsavedChanges(): boolean {
+    return this.scoreFile?.unsaved ?? false;
   }
 
   destroy(): void {
@@ -212,6 +267,10 @@ export class Editor implements MountedEditor {
     for (const stop of this.unsubscribe) stop();
     for (const part of [...this.parts, ...this.tracks]) part.destroy();
     this.lyricTrack?.destroy();
+    this.scoreFile?.destroy();
+    this.saveControl?.destroy();
+    this.saveConflict?.destroy();
+    this.scoreRestore?.destroy();
     this.root.remove();
     this.releaseStyles();
     this.drafts.destroy();
@@ -222,17 +281,131 @@ export class Editor implements MountedEditor {
     return this.options.editable !== false;
   }
 
+  /** Mounts the handoff control on the toolbar row, before Restore original when the source has one. */
+  private mountHandoff(): void {
+    const row = this.root.querySelector<HTMLElement>(".sce-toolbar");
+    if (row === null) return;
+    if (this.handoff !== null) {
+      this.handoff.destroy();
+      const at = this.parts.indexOf(this.handoff);
+      if (at >= 0) this.parts.splice(at, 1);
+      this.handoff = null;
+    }
+    this.handoff = mountHandoffControl(
+      row,
+      this.session,
+      this.handoffKeeper(),
+      () => this.handoffSource(),
+      row.querySelector(".sce-part-restore") ?? row.querySelector(".sce-spacer"),
+    );
+    this.parts.push(this.handoff);
+  }
+
+  /** The keeper whose state the handoff trigger follows: the draft keeper or the score file's. */
+  private handoffKeeper(): HandoffKeeper {
+    const file = this.scoreFile;
+    if (file !== null) {
+      return {
+        get status() {
+          return file.status === "destroyed" ? "destroyed" : file.status === "conflict" ? "conflict" : "ready";
+        },
+        subscribe: (listener) => file.subscribe(() => listener()),
+      };
+    }
+    const drafts = this.drafts;
+    return {
+      get status() {
+        return drafts.status;
+      },
+      subscribe: (listener) => drafts.subscribe(() => listener()),
+    };
+  }
+
+  /** The model inputs the host says are required and that the project does not have yet. */
+  private missingRequired(): ReadonlyArray<ProjectField> {
+    const required = this.options.requiredInputs ?? [];
+    if (required.length === 0) return [];
+    const project = this.session.project;
+    const reading = this.session.reading;
+    const lyrics =
+      reading.kind === "score" ? joinLyrics(reading.score, lyricLinesOf(project, reading.score)) : project.lyrics;
+    return [...new Set(required)].filter((field) => {
+      if (field === "style") return project.style.trim() === "";
+      if (field === "seed") return project.seed === null;
+      if (field === "scoreMode") return project.scoreMode !== "full" && project.scoreMode !== "melody";
+      return lyrics.trim() === "";
+    });
+  }
+
   /** What the handoff control reads: nothing while the editor cannot edit or the host gave no callback. */
   private handoffSource(): HandoffSource | null {
     const onHandoff = this.options.onHandoff;
-    if (onHandoff === undefined || this.drafts.status === "opening") return null;
+    if (onHandoff === undefined) return null;
+    const file = this.scoreFile;
+    if (file === null && this.drafts.status === "opening") return null;
+    if (file !== null && file.status === "destroyed") return null;
+    const title = file === null ? this.options.title : this.scoreSource?.name;
     return {
-      original: this.options.project,
+      original: file?.savedProject ?? this.options.project,
       dialects: this.options.dialects,
       onHandoff,
-      ...(this.options.title === undefined ? {} : { title: this.options.title }),
+      save: () => {
+        if (file === null) return this.drafts.handoff();
+        return file.handoff().then((result) => (result === "saved" ? "written" : result));
+      },
+      missingRequired: () => this.missingRequired(),
+      openProject: (field) => this.toolbar.openProject(field),
+      ...(title === undefined ? {} : { title }),
       ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
     };
+  }
+
+  /** Rebuilds the score-file controls and the save-as entry for the source in force. */
+  private syncScoreSourceParts(): void {
+    this.scoreFile?.destroy();
+    this.scoreFile = null;
+    this.saveControl?.destroy();
+    this.saveControl = null;
+    this.saveConflict?.destroy();
+    this.saveConflict = null;
+    this.scoreRestore?.destroy();
+    this.scoreRestore = null;
+
+    const row = this.root.querySelector<HTMLElement>(".sce-toolbar");
+    if (row === null) return;
+    if (this.scoreSource !== null) {
+      const source = this.scoreSource;
+      const file = createScoreFileKeeper({
+        session: this.session,
+        original: this.session.project,
+        source,
+        ...(this.options.notify === undefined ? {} : { notify: (notice) => this.options.notify?.(notice) }),
+        onUnsavedChange: (unsaved) => this.options.onUnsavedChange?.(unsaved),
+      });
+      this.scoreFile = file;
+      this.saveConflict = mountSaveConflict(this.chrome, this.session, file);
+      this.scoreRestore = mountRestoreControl(
+        row,
+        this.session,
+        {
+          get status() {
+            return file.status;
+          },
+          subscribe: (listener) => file.subscribe(() => listener()),
+          restoreOriginal: () => file.restoreOriginal(),
+        },
+        (words) => this.live.say(words),
+        row.querySelector(".sce-spacer"),
+        true,
+      );
+    }
+    const end = row.querySelector<HTMLElement>(".sce-toolbar-end") ?? row;
+    this.saveControl = mountScoreSourceControl(end, this.session, {
+      keeper: this.scoreFile,
+      saveAs: () => this.options.onSaveAs,
+      scope: this.root,
+      before: end.firstChild,
+    });
   }
 
   private applyLanguage(): void {
@@ -245,6 +418,7 @@ export class Editor implements MountedEditor {
 
   /** The store the keeper is made for: the host's, while the editor is editable; none otherwise. */
   private draftStore(): DraftStore | null {
+    if (this.scoreSource !== null) return null;
     return this.options.drafts !== undefined && this.editable ? this.options.drafts : null;
   }
 

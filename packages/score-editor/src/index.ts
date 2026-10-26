@@ -76,6 +76,14 @@ export {
   unalignedLyricLines,
 } from "./lyrics";
 export { mount } from "./mount";
+export type {
+  ScoreFileHandoffResult,
+  ScoreFileKeeper,
+  ScoreFileKeeperChange,
+  ScoreFileKeeperOptions,
+  ScoreFileKeeperStatus,
+} from "./score-source";
+export { createScoreFileKeeper } from "./score-source";
 // The synth preview.
 export type { PreviewNoteOptions } from "./preview-note";
 export { previewNote } from "./preview-note";
@@ -141,7 +149,7 @@ export type {
   ToolText,
 } from "./tool";
 export { applyCommandList, createToolRegistry, previewTool, validateToolParameters } from "./tool";
-export type { ToolbarOptions } from "./toolbar";
+export type { ToolbarOptions, ToolbarPart } from "./toolbar";
 export { mountToolbar } from "./toolbar";
 export type {
   AxisPartOptions,
@@ -158,6 +166,13 @@ export type {
   MountOptions,
   Notice,
   NoticeCode,
+  ProjectField,
+  RequiredInput,
+  ScoreFileEntry,
+  ScoreFileSaveResult,
+  ScoreFileSource,
+  ScoreSource,
+  GeneratedScoreSource,
   ViewPart,
 } from "./types";
 export { NOTICE_CODES } from "./types";

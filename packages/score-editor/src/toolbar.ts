@@ -11,17 +11,22 @@ import { mountGridControl } from "./grid-control";
 import { messagesFor, viewName } from "./i18n";
 import { lineIcon } from "./icons";
 import { createLiveRegion, sayRefusals } from "./live-region";
-import { mountProjectControl } from "./project-control";
+import { mountProjectControl, type ProjectControl } from "./project-control";
 import { mountProjectNoticeStrip } from "./project-notice-strip";
 import { mountSelectionMenu } from "./selection-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import { mountSynthControl } from "./synth-preview";
 import { mountTempoKeyControls } from "./tempo-key";
-import type { EditingPartOptions, Language, ViewPart } from "./types";
+import type { EditingPartOptions, Language, ProjectField, ViewPart } from "./types";
 import { arrangementShown } from "./view-rules";
 import { mountViewSwitch } from "./view-switch";
 import { mountZoomControl } from "./zoom-control";
+
+/** The toolbar part, and the way the frame asks its Project control to open on a missing field. */
+export interface ToolbarPart extends ViewPart {
+  openProject(field?: ProjectField): void;
+}
 
 export interface ToolbarOptions extends EditingPartOptions {
   /**
@@ -69,7 +74,7 @@ const BIN = ["2.5,4.5 13.5,4.5", "6,4.5 6,2.5 10,2.5 10,4.5", "4,4.5 4.8,13.5 11
  * hint. The controls are in that order in the row and in the tab order, the Filter button last. It follows the session's
  * language.
  */
-export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ViewPart {
+export function mountToolbar(el: HTMLElement, session: EditingSession, options: ToolbarOptions = {}): ToolbarPart {
   requireDom("mountToolbar");
   const doc = el.ownerDocument;
   const releaseStyles = acquireStyles(el);
@@ -119,14 +124,28 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
         showNotices: (notices) => noticeStrip.show(notices),
       })
     : null;
-  const projectControl = options.projectPanel ? mountProjectControl(row, root, session, live, options.onRefused) : null;
+  const projectControl: ProjectControl | null = options.projectPanel
+    ? mountProjectControl(row, root, session, live, options.onRefused)
+    : null;
   let restore: ViewPart | null = null;
   /** The restore control is built only while the binding has a keeper, so a host without a store gets no draft DOM. */
   function syncRestore(): void {
     const keeper = options.draftKeeper;
     if (keeper !== undefined && keeper.status !== "destroyed") {
       if (restore === null) {
-        restore = mountRestoreControl(row, session, keeper, (words) => live.say(words), spacer);
+        restore = mountRestoreControl(
+          row,
+          session,
+          {
+            get status() {
+              return keeper.status;
+            },
+            subscribe: (listener) => keeper.subscribe(() => listener()),
+            restoreOriginal: () => keeper.restoreOriginal(),
+          },
+          (words) => live.say(words),
+          spacer,
+        );
       }
     } else if (restore !== null) {
       restore.destroy();
@@ -210,6 +229,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
   const unsubscribeKeeper = options.draftKeeper?.subscribe(draw);
   let destroyed = false;
   return {
+    openProject(field) {
+      projectControl?.open(field);
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;

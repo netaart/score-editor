@@ -91,6 +91,29 @@ export interface Messages {
   /** Draft keeper notices: the source changed under a draft, and a write or removal did not reach the host store. */
   draftSourceChanged: string;
   draftSaveFailed: string;
+  /** Score-file keeper notices: a save or a load of the other writer's version did not reach the host. */
+  scoreSaveFailed: string;
+  scoreLoadFailed: string;
+  /** The score-file controls: Save, Save as, the unsaved state and the failed state. */
+  save: string;
+  saveAs: string;
+  saveAsScoreFile: string;
+  saving: string;
+  unsaved: string;
+  saveFailed: string;
+  /** The score-file conflict strip, with the same two choices as the draft conflict. */
+  saveConflict: string;
+  saveConflictText: string;
+  saveOverwrite: string;
+  saveOverwriteNote: string;
+  saveLoadTheirs: string;
+  saveLoadTheirsNote: string;
+  /** The Restore control while the source is a score file: the last saved version, and no draft. */
+  restoreSavedQuestion: string;
+  restoreSavedWarning: string;
+  restoreSavedDone: string;
+  /** The handoff trigger while a required input is missing; it opens the Project panel on that field. */
+  handoffMissing: string;
   /** The tempo, key and transpose controls of the toolbar: the group's name, the field's name and what is said aloud. */
   songControls: string;
   tempo: string;
@@ -368,6 +391,25 @@ const en: Messages = {
   previewBlocked: "Blocked by the browser. Press Preview again.",
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
+  scoreSaveFailed: "The score file was not saved. Your changes are still here; try Save again.",
+  scoreLoadFailed: "The other version of the score file could not be read. The conflict is still open.",
+  save: "Save",
+  saveAs: "Save as…",
+  saveAsScoreFile: "Save as score file",
+  saving: "Saving…",
+  unsaved: "Unsaved",
+  saveFailed: "Save failed",
+  saveConflict: "Score file conflict",
+  saveConflictText:
+    "This score file was changed somewhere else after you opened it. Your changes are not saved until you choose.",
+  saveOverwrite: "Overwrite with my version",
+  saveOverwriteNote: "The other version is replaced by yours.",
+  saveLoadTheirs: "Load the other version",
+  saveLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
+  restoreSavedQuestion: "Go back to the last saved version?",
+  restoreSavedWarning: "Every change since the last save is discarded. You can't undo this.",
+  restoreSavedDone: "The last saved version is back",
+  handoffMissing: "Complete required inputs…",
   songControls: "Tempo, key and transpose",
   tempo: "Tempo (BPM)",
   tempoSet: (bpm) => `Tempo set to ${bpm} BPM`,
@@ -603,6 +645,24 @@ const zh: Messages = {
   previewBlocked: "浏览器没有允许发声，请再按一次试听",
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
+  scoreSaveFailed: "乐谱文件没有保存成功，你的修改还在，再按保存试一次。",
+  scoreLoadFailed: "读不到乐谱文件的对方版本，冲突还没有解决。",
+  save: "保存",
+  saveAs: "另存为…",
+  saveAsScoreFile: "另存为乐谱文件",
+  saving: "保存中…",
+  unsaved: "未保存",
+  saveFailed: "保存失败",
+  saveConflict: "乐谱文件冲突",
+  saveConflictText: "这份乐谱文件在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
+  saveOverwrite: "用我的版本覆盖",
+  saveOverwriteNote: "对方的版本会被你的版本替换。",
+  saveLoadTheirs: "载入对方的版本",
+  saveLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
+  restoreSavedQuestion: "回到上次保存的版本？",
+  restoreSavedWarning: "上次保存之后的修改都会丢掉，无法撤销。",
+  restoreSavedDone: "已回到上次保存的版本",
+  handoffMissing: "先补上必填项…",
   songControls: "速度、调和移调",
   tempo: "速度（BPM）",
   tempoSet: (bpm) => `速度已设为 ${bpm} BPM`,

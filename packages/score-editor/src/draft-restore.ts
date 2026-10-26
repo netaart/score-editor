@@ -2,23 +2,32 @@
 // ABOUTME: It is there only while a draft keeper is ready and the session is editable; the keeper does the restoring and clears the draft.
 
 import { create } from "./dom";
-import type { DraftKeeper } from "./draft-keeper";
+import type { DraftKeeperStatus } from "./draft-keeper";
 import { messagesFor } from "./i18n";
 import { anchorOf, keepInside, placeUnder } from "./popover-menu";
 import type { EditingSession } from "./session";
 import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
 
+/** What the Restore control needs: the state it waits for, its changes, and the restore action. */
+export interface RestoreKeeper {
+  readonly status: DraftKeeperStatus | "clean" | "dirty" | "saving";
+  subscribe(listener: () => void): () => void;
+  restoreOriginal(): Promise<boolean>;
+}
+
 /**
  * Mounts the Restore original button and its question on `el`, before `before` when given; `say` is how the toolbar
- * tells a screen reader the outcome. The design is in DESIGN.md, "Restore original".
+ * tells a screen reader the outcome. `savedVersion` is the score-file wording, where there is no draft and the target
+ * is the last saved version. The design is in DESIGN.md, "Restore original".
  */
 export function mountRestoreControl(
   el: HTMLElement,
   session: EditingSession,
-  keeper: DraftKeeper,
+  keeper: RestoreKeeper,
   say: (words: string) => void,
   before?: ChildNode | null,
+  savedVersion = false,
 ): ViewPart {
   const doc = el.ownerDocument;
   const abort = new AbortController();
@@ -71,7 +80,7 @@ export function mountRestoreControl(
       void keeper.restoreOriginal().then((cleared) => {
         if (destroyed) return;
         const t = messagesFor(session.view.language);
-        say(cleared ? t.restoreDone : t.restoreNotCleared);
+        say(cleared ? (savedVersion ? t.restoreSavedDone : t.restoreDone) : t.restoreNotCleared);
       });
     },
     { signal },
@@ -83,10 +92,11 @@ export function mountRestoreControl(
     const t = messagesFor(language);
     root.lang = language;
     button.textContent = t.restoreOriginal;
-    popover.setAttribute("aria-label", t.restoreQuestion);
-    popover.setAttribute("aria-description", t.restoreWarning);
-    question.textContent = t.restoreQuestion;
-    warning.textContent = t.restoreWarning;
+    const asked = savedVersion ? t.restoreSavedQuestion : t.restoreQuestion;
+    popover.setAttribute("aria-label", asked);
+    popover.setAttribute("aria-description", savedVersion ? t.restoreSavedWarning : t.restoreWarning);
+    question.textContent = asked;
+    warning.textContent = savedVersion ? t.restoreSavedWarning : t.restoreWarning;
     cancel.textContent = t.restoreCancel;
     confirm.textContent = t.restoreOriginal;
   }
@@ -94,7 +104,9 @@ export function mountRestoreControl(
   function draw(): void {
     if (session.view.language !== language) applyLanguage();
     const { status } = keeper;
-    const present = session.view.editable && (status === "ready" || status === "conflict");
+    const present =
+      session.view.editable &&
+      (savedVersion ? status !== "opening" && status !== "destroyed" : status === "ready" || status === "conflict");
     root.hidden = !present;
     if (!present && popover.matches(":popover-open")) popover.hidePopover();
   }

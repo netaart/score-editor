@@ -7,7 +7,12 @@ import { anchorOf, keepInside, placeUnder } from "./popover-menu";
 import { carriedNotices } from "./project-notices";
 import { drawProjectPanel } from "./project-panel";
 import type { EditingSession } from "./session";
-import type { EditingPartOptions, Language, ViewPart } from "./types";
+import type { EditingPartOptions, Language, ProjectField, ViewPart } from "./types";
+
+/** The Project control: its part, and the way the handoff asks it to open on a missing field. */
+export interface ProjectControl extends ViewPart {
+  open(field?: ProjectField): void;
+}
 
 /**
  * Adds the Project button to `row` and the popover it opens as the last child of `root`. The popover sits under the button,
@@ -21,7 +26,7 @@ export function mountProjectControl(
   session: EditingSession,
   live: LiveRegion,
   onRefused: EditingPartOptions["onRefused"],
-): ViewPart {
+): ProjectControl {
   const doc = row.ownerDocument;
   const abort = new AbortController();
   const { signal } = abort;
@@ -50,6 +55,9 @@ export function mountProjectControl(
       maxHeight: Math.max((view?.innerHeight ?? 0) - anchor.bottom - 12, 0),
     });
   }
+  /** The field to focus once the popover has opened; its toggle event runs after the call that opened it. */
+  let pendingFocus: ProjectField | "panel" | null = null;
+
   /** The toolbar wraps again when its controls come and go or the window changes, which moves the button the popover hangs from. */
   function follow(): void {
     if (!popover.matches(":popover-open")) return;
@@ -72,7 +80,10 @@ export function mountProjectControl(
       button.setAttribute("aria-expanded", String(open));
       if (!open) return;
       keepInside(popover, anchorOf(button), { narrow: popover.hasAttribute("data-narrow") });
-      panel.element.focus({ preventScroll: true });
+      const wanted = pendingFocus;
+      pendingFocus = null;
+      if (wanted === null || wanted === "panel") panel.element.focus({ preventScroll: true });
+      else panel.focus(wanted);
     },
     { signal },
   );
@@ -111,6 +122,16 @@ export function mountProjectControl(
   const unsubscribe = session.subscribe(draw);
   let destroyed = false;
   return {
+    open(field) {
+      if (destroyed || button.hidden) return;
+      if (popover.matches(":popover-open")) {
+        if (field !== undefined) panel.focus(field);
+        else panel.element.focus({ preventScroll: true });
+        return;
+      }
+      pendingFocus = field ?? "panel";
+      popover.showPopover();
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;
