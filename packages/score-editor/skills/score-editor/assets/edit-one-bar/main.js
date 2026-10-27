@@ -1,12 +1,12 @@
 // ABOUTME: The shipped edit-one-bar example page: it loads the hand-written score and runs the headless helper once.
 // ABOUTME: The page shows the changed line, the notice that came with it, and the written score the helper returned.
-import { song2Dialect } from "https://esm.sh/@neta-art/score-dialect-song2@0.4.1?bundle&target=es2022";
+import { song2Dialect } from "https://esm.sh/@neta-art/score-dialect-song2@0.4.2?bundle&target=es2022";
 import {
   applyProjectCommand,
   formatDiagnostic,
   isNoticeDiagnostic,
   noteId,
-} from "https://esm.sh/@neta-art/score-editor@0.4.1?bundle&target=es2022";
+} from "https://esm.sh/@neta-art/score-editor@0.4.2?bundle&target=es2022";
 import { editOneBar } from "./edit-one-bar.js";
 
 const app = document.querySelector("#app");
