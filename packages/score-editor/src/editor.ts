@@ -432,6 +432,7 @@ export class Editor implements MountedEditor {
     if (strip === null) return;
     this.sourceLabel = mountSourceLabel(strip, this.session, {
       source: () => this.options.source,
+      readOnly: () => this.options.editable === false,
       before: strip.firstChild,
       say: (words) => this.toolbar.say(words),
     });

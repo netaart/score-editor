@@ -153,6 +153,7 @@ export interface Messages {
   /** The source label in the toolbar: where the edits go. */
   sourceLabelGenerated: string;
   sourceLabelScoreFile: string;
+  sourceLabelScoreFileReadOnly: string;
   /** The Restore control while the source is a score file: the last saved version, and no draft. */
   restoreSavedQuestion: string;
   restoreSavedWarning: string;
@@ -525,6 +526,7 @@ const en: Messages = {
   saveLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
   sourceLabelGenerated: "Generated score (original kept)",
   sourceLabelScoreFile: "Score file (saves to the file)",
+  sourceLabelScoreFileReadOnly: "Score file (read only)",
   restoreSavedQuestion: "Go back to the last saved version?",
   restoreSavedWarning: "Every change since the last save is discarded. You can't undo this.",
   restoreSavedDone: "The last saved version is back",
@@ -849,6 +851,7 @@ const zh: Messages = {
   saveLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
   sourceLabelGenerated: "生成的乐谱（原版保留）",
   sourceLabelScoreFile: "乐谱文件（存回原文件）",
+  sourceLabelScoreFileReadOnly: "乐谱文件（只读）",
   restoreSavedQuestion: "回到上次保存的版本？",
   restoreSavedWarning: "上次保存之后的修改都会丢掉，无法撤销。",
   restoreSavedDone: "已回到上次保存的版本",

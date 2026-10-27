@@ -596,6 +596,19 @@ test.describe("a score file another writer changed", () => {
   });
 });
 
+test.describe("a read-only score file", () => {
+  test("is labelled a score file, not a generated score", async ({ page, harness }) => {
+    for (const language of ["en", "zh"] as const) {
+      await openFile(harness, { language, editable: false });
+      await expect(page.locator(".sce-source-label")).toHaveText(
+        language === "zh" ? "乐谱文件（只读）" : "Score file (read only)",
+      );
+      await expect(page.locator(".sce-part-save")).toBeHidden();
+      await harness.destroy();
+    }
+  });
+});
+
 test.describe("Restore original for a score file", () => {
   test("goes back to the last saved version, not the opened one, with no host write", async ({
     page,
