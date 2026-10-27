@@ -64,6 +64,7 @@ class FakeFile implements ScoreFileSource {
   failSaves = 0;
   noAccessSaves = 0;
   failReads = 0;
+  missing = false;
   private next = 1;
 
   async save(text: string, expected: string): Promise<ScoreFileSaveResult> {
@@ -76,6 +77,12 @@ class FakeFile implements ScoreFileSource {
       this.failSaves -= 1;
       return { ok: false, reason: "failed" };
     }
+    if (this.missing) {
+      this.missing = false;
+      const version = `save-${this.next++}`;
+      this.file = { text, version };
+      return { ok: true, version };
+    }
     if (expected !== this.file.version) return { ok: false, reason: "conflict" };
     const version = `save-${this.next++}`;
     this.file = { text, version };
@@ -84,6 +91,7 @@ class FakeFile implements ScoreFileSource {
 
   async read() {
     this.reads.push(this.file.version);
+    if (this.missing) return { ok: false as const, reason: "missing" as const };
     if (this.failReads > 0) {
       this.failReads -= 1;
       throw new Error("the file could not be read");
@@ -232,6 +240,29 @@ describe("handoff and restore", () => {
     expect(keeper.unsaved).toBe(false);
     expect(await keeper.handoff()).toBe("unchanged");
     expect(file.saves).toHaveLength(1);
+  });
+
+  it("keeps the project, stays unsaved and clears the conflict when the file is gone", async () => {
+    const { keeper, notices, session } = openKeeper();
+    deleteD(session);
+    file.external(THEIR_SCORE);
+    expect(await keeper.save()).toEqual({ ok: false, reason: "conflict" });
+    expect(keeper.status).toBe("conflict");
+    file.missing = true;
+
+    await keeper.loadTheirs();
+
+    expect(session.project.score).toBe(SCORE_WITHOUT_D);
+    expect(keeper.status).toBe("dirty");
+    expect(keeper.unsaved).toBe(true);
+    expect(keeper.accessLost).toBe(false);
+    // The missing read is not a load failure: nothing failed to load, there was simply nothing to load.
+    expect(notices).toEqual([]);
+
+    const saved = await keeper.save();
+    expect(saved.ok).toBe(true);
+    expect(file.file.text).toBe(SCORE_WITHOUT_D);
+    expect(keeper.status).toBe("clean");
   });
 
   it("says a save was refused for access and keeps it until a save works", async () => {

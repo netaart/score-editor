@@ -3,7 +3,7 @@
 import { messagesFor } from "./i18n";
 import type { SongProject } from "./score";
 import type { EditingSession } from "./session";
-import type { Notice, NoticeCode, ScoreFileSaveResult, ScoreFileSource } from "./types";
+import type { Notice, NoticeCode, ScoreFileReadFailure, ScoreFileSaveResult, ScoreFileSource } from "./types";
 
 /** Where the keeper is: the file matches the session, there are changes, a save is in flight, or a conflict stands. */
 export type ScoreFileKeeperStatus = "clean" | "dirty" | "saving" | "conflict" | "destroyed";
@@ -143,12 +143,25 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
     return result;
   }
 
-  async function read(): Promise<{ text: string; version: string } | null> {
+  type ReadOutcome =
+    | { readonly kind: "entry"; readonly text: string; readonly version: string }
+    | { readonly kind: "missing" }
+    | { readonly kind: "failed" };
+
+  function readFailure(value: ScoreFileReadFailure): ReadOutcome {
+    return value.reason === "missing" ? { kind: "missing" } : { kind: "failed" };
+  }
+
+  async function read(): Promise<ReadOutcome> {
+    let entry: Awaited<ReturnType<ScoreFileSource["read"]>>;
     try {
-      return await source.read();
+      entry = await source.read();
     } catch {
-      return null;
+      return { kind: "failed" };
     }
+    if (entry === null) return { kind: "missing" };
+    if ("ok" in entry) return readFailure(entry);
+    return { kind: "entry", text: entry.text, version: entry.version };
   }
 
   const unsubscribe = session.subscribe((change) => {
@@ -208,7 +221,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       try {
         const entry = await read();
         if (finished) return;
-        if (entry === null) {
+        if (entry.kind !== "entry") {
           failed = true;
           sendNotice("score-save-failed");
           setStatus("conflict");
@@ -228,7 +241,13 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       try {
         const entry = await read();
         if (finished) return;
-        if (entry === null) {
+        if (entry.kind === "missing") {
+          // There is no other version to load: keep the person's project, stay unsaved and clear the conflict, so
+          // the next Save writes the file anew.
+          setStatus(unsaved() ? "dirty" : "clean");
+          return;
+        }
+        if (entry.kind === "failed") {
           failed = true;
           sendNotice("score-load-failed");
           setStatus("conflict");

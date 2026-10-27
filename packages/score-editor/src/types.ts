@@ -110,7 +110,7 @@ export interface ScoreFileSource {
   /** Writes `text` over the file, if it is still at `expected`; answers as a `DraftStore` write does. */
   save(text: string, expected: string): Promise<ScoreFileSaveResult>;
   /** The file's text and version now, or null when it is gone. */
-  read(): Promise<ScoreFileEntry | null>;
+  read(): Promise<ScoreFileEntry | ScoreFileReadFailure | null>;
 }
 
 /** Where the score came from: a generated score or a score file. */
@@ -119,7 +119,18 @@ export type ScoreSource = GeneratedScoreSource | ScoreFileSource;
 /** A score file's text and version; the same shape a draft store entry has, for the same reason. */
 export type ScoreFileEntry = DraftStoreEntry;
 
-/** The answer to a versioned save: success with the new version, a conflict, or a failure; the draft write's shape. */
+/**
+ * A host's answer when it cannot read the score file: `missing` says the file is gone, `failed` says the read broke.
+ * `null` from `read` still means missing, so a host written for an earlier version keeps working.
+ */
+export type ScoreFileReadFailure =
+  | { readonly ok: false; readonly reason: "missing" }
+  | { readonly ok: false; readonly reason: "failed" };
+
+/**
+ * The answer to a versioned save: success with the new version, a conflict, or a failure; the draft write's shape.
+ * `no-access` is a score-file host saying access to the file was removed, so retrying cannot work until it is back.
+ */
 export type ScoreFileSaveResult = DraftWriteResult;
 
 export interface MountOptions {

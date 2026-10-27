@@ -190,6 +190,7 @@ interface PageHarness {
     calls(): Array<Record<string, unknown>>;
     external(text: string): string;
     failNext(method: "save" | "read", count?: number, reason?: "failed" | "no-access"): void;
+    remove(): void;
     holdSave(): void;
     releaseSave(): void;
   };
@@ -509,6 +510,11 @@ export class Harness {
         window.harness.scoreFile?.failNext(kind as "save" | "read", times as number, why as "failed" | "no-access"),
       [method, count, reason] as const,
     );
+  }
+
+  /** Deletes the score file, so the next read says it is missing. */
+  removeScoreFile() {
+    return this.page.evaluate(() => window.harness.scoreFile?.remove());
   }
 
   /** Makes the next score-file save wait until `releaseScoreSave`. */

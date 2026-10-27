@@ -554,6 +554,29 @@ test.describe("a score file another writer changed", () => {
     expect((await harness.scoreFile())?.file).toEqual({ text: WITHOUT_D, version: "save-2" });
   });
 
+  test("Load the other version with the file gone keeps the work unsaved and clears the conflict", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await conflict(page, harness, press);
+    await harness.removeScoreFile();
+
+    await press(chooseButton(page));
+    await press(loadTheirsButton(page));
+
+    await expect(conflictStrip(page)).toBeHidden();
+    await expect.poll(async () => harness.hasUnsavedChanges()).toBe(true);
+    // The project the person had is still here; there was no other version to open.
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    await expect(page.locator(".sce-part-save")).toContainText(/Unsaved|•/);
+
+    // The next Save writes the missing file anew.
+    await press(saveButton(page));
+    await expect(unsavedPill(page)).toBeHidden();
+    expect((await harness.scoreFile())?.file.text).toBe(WITHOUT_D);
+  });
+
   test("Load the other version opens their text, makes it the saved version and writes nothing", async ({
     page,
     harness,

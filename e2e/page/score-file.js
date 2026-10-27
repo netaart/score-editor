@@ -11,6 +11,7 @@ export function createFakeScoreFile({ name = "tune.abc", text = "", version = "f
   const failures = { save: 0, read: 0 };
   const reasons = { save: "failed", read: "failed" };
   let file = { text, version };
+  let missing = false;
   let next = 1;
   let gate = null;
 
@@ -35,6 +36,13 @@ export function createFakeScoreFile({ name = "tune.abc", text = "", version = "f
         call.result = reasons.save;
         return { ok: false, reason: reasons.save };
       }
+      if (missing) {
+        missing = false;
+        const nextVersion = newVersion();
+        file = { text, version: nextVersion };
+        call.result = nextVersion;
+        return { ok: true, version: nextVersion };
+      }
       if (file.version !== expected) {
         call.result = "conflict";
         return { ok: false, reason: "conflict" };
@@ -47,6 +55,10 @@ export function createFakeScoreFile({ name = "tune.abc", text = "", version = "f
     async read() {
       const call = record({ method: "read" });
       await wait();
+      if (missing) {
+        call.result = "missing";
+        return { ok: false, reason: "missing" };
+      }
       if (failures.read > 0) {
         failures.read -= 1;
         call.result = reasons.read;
@@ -74,6 +86,9 @@ export function createFakeScoreFile({ name = "tune.abc", text = "", version = "f
     failNext(method, count = 1, reason = "failed") {
       failures[method] = count;
       reasons[method] = reason;
+    },
+    remove() {
+      missing = true;
     },
     holdSave() {
       let release = () => {};
