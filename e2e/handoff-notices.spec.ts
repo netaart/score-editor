@@ -100,6 +100,8 @@ async function mountProject(
     language?: "en" | "zh";
     lyrics?: string;
     lyricLines?: ReadonlyArray<{ text: string; phrase: { firstBar: number; barCount: number } }>;
+    /** Leave `lyricLines` off the project, so the legacy `lyrics` text is laid out by the editor. */
+    legacyLyrics?: boolean;
     scoreMode?: "full" | "melody";
     scoreFile?: boolean;
     saveAs?: boolean;
@@ -112,7 +114,7 @@ async function mountProject(
     project: {
       style: "pop",
       lyrics: options.lyrics ?? "[verse]\nla la la la\nla",
-      lyricLines: options.lyricLines ?? CLEAN_LINES,
+      ...(options.legacyLyrics === true ? {} : { lyricLines: options.lyricLines ?? CLEAN_LINES }),
       scoreMode: options.scoreMode ?? "full",
       seed: 7,
     },
@@ -191,7 +193,7 @@ test.describe("the pre-handoff notices in the review", () => {
   test("shows lines in the unaligned area with their first words, in both languages", async ({ page, harness }) => {
     const lyrics = "[Missing]\noh it is a long way\nlost";
     for (const language of ["en", "zh"] as const) {
-      await mountProject(harness, CLEAN, { language, lyrics, lyricLines: [] });
+      await mountProject(harness, CLEAN, { language, lyrics, legacyLyrics: true });
       await handoffButton(page, language).click();
       await expect(noticeLines(page, language)).toHaveText([
         language === "zh"
