@@ -2,6 +2,65 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## 0.4.2
+
+No export of 0.4.1 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
+`@neta-art/score-dialect-song2`, and all 145 type exports of the core are still exported. `tests/entries.test.ts` checks
+every runtime name with `in` (a removal or rename fails `pnpm test`) and lists every 0.4.1 type in tuples the type-check
+compiles (a removal or rename fails `pnpm typecheck`); both lists are taken from the `v0.4.1` tag. The one new export is
+`ScoreFileReadFailure` (type). A 0.4.1 `ScoreFileSource.read` that returns an entry or `null` still type-checks, a save
+that answers `"failed"` still does, and the new `SourceLabelOptions.readOnly` is optional. Two unions gained members:
+`DraftWriteResult.reason` (and so `ScoreFileSaveResult`) gained `"no-access"`, and `NoticeCode` / `NOTICE_CODES` gained
+`prehandoff-lyrics-unaligned`; an exhaustive `switch` over either must add the new case. `ScoreFileKeeper` and
+`ScoreFileKeeperChange` gained the required `accessLost` member: a host that reads a keeper needs no change, while one
+that implements or mocks either interface must add it.
+
+### Added in `@neta-art/score-editor`
+
+- **The read-failure answer of a score file.** `ScoreFileReadFailure` is `{ ok: false, reason: "missing" | "failed" }`;
+  `ScoreFileSource.read` may return it, while `null` still means the file is gone. This is the only new package-entry
+  export; there are no new runtime exports. (`a0507e7`)
+
+The public exports this adds, by the module they come from:
+
+- `types`: `ScoreFileReadFailure` (type).
+
+### Added in `@neta-art/score-dialect-song2`
+
+No new exports and no new dialect API.
+
+### Changed
+
+- **`DraftWriteResult` and `ScoreFileSaveResult` gained `no-access`.** A host that answers `"failed"` still works; one
+  that switches on the reason must add `"no-access"`. A score-file save refused because access was removed now says so,
+  and its notice hides Save again because a retry cannot work until access returns. (`61d1328`)
+- **`ScoreFileSource.read` can answer a `ScoreFileReadFailure`.** `null` keeps meaning missing, and a read written for
+  0.4.1 still type-checks; a new `missing` or `failed` answer lets the editor distinguish a deleted file from a broken
+  read. (`a0507e7`)
+- **`ScoreFileKeeper` and `ScoreFileKeeperChange` gained `accessLost`.** It is true after a save was refused for access
+  and clears on the next save, load or restore; a host that implements the keeper or builds a change object must add the
+  field, while a host that only reads the values gets it. (`61d1328`)
+- **`SourceLabelOptions` gained the optional `readOnly` getter.** A score file in a read-only editor now says **Score file
+  (read only)** instead of claiming it saves to the file. (`bd060ba`)
+- **`NoticeCode` and `NOTICE_CODES` gained `prehandoff-lyrics-unaligned`.** The pre-handoff review now carries five
+  notices; an exhaustive switch must add the code, and a host that toasts every notice may skip the `prehandoff-*` ones
+  because the review shows them. (`2f6c1b5`)
+- **The desktop toolbar strip wraps instead of scrolling.** On a fine pointer the strip shows every control on wrapped
+  lines rather than a sideways scroll, and Save keeps its words in a narrow desktop window; the phone's two-row layout is
+  unchanged. (`f51327e`, `5d2f06d`)
+
+### Fixed
+
+- **Load-theirs on a deleted file** keeps the person's project, clears the conflict and lets the next Save write the file
+  anew, instead of replacing the project or leaving the conflict standing. (`a0507e7`)
+- **Lyric labels** match sections without regard to case or surrounding spaces, so `[Verse]` against `% verse` joins the
+  lyrics instead of coming out empty, and “quiet” counts as two syllables. (`e704c7f`)
+- **The pre-handoff review** names the lines left in the unaligned area, up to four opening words each, and says the
+  joined lyrics leave them out. (`2f6c1b5`)
+- **A read-only score file** is labelled read only in the toolbar. (`bd060ba`)
+- **A short score's lane ground** reaches the stage's right edge, while its bars and bar numbers still stop at the last
+  bar. (`2a2a574`)
+
 ## 0.4.1
 
 No export of 0.4.0 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
