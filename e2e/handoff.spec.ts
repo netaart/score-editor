@@ -151,7 +151,10 @@ const handoffButton = (page: Page, language: "en" | "zh" = "en") =>
   page.getByRole("button", { name: language === "zh" ? "交给 agent…" : "Hand to agent…", exact: true });
 
 const dialog = (page: Page, language: "en" | "zh" = "en") =>
-  page.getByRole("dialog", { name: language === "zh" ? "交给 agent 前核对" : "Check before you hand to agent", exact: true });
+  page.getByRole("dialog", {
+    name: language === "zh" ? "交给 agent 前核对" : "Check before you hand to agent",
+    exact: true,
+  });
 
 const changeList = (page: Page, language: "en" | "zh" = "en") =>
   dialog(page, language).getByRole("list", { name: language === "zh" ? "改动记录" : "Changes", exact: true });
