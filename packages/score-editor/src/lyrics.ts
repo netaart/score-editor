@@ -117,7 +117,11 @@ export function layoutLyrics(score: Score, lyrics: string): LyricLine[] {
   if (preamble.lines.length > 0 && score.sections[0] !== undefined) place(0, preamble);
 
   for (const group of groups.slice(1)) {
-    const index = score.sections.findIndex((section, candidate) => !used.has(candidate) && section.name === group.name);
+    const label = (group.name as string).trim().toLowerCase();
+    const index = score.sections.findIndex(
+      (section, candidate) =>
+        !used.has(candidate) && section.name !== null && section.name.trim().toLowerCase() === label,
+    );
     if (index < 0) {
       unaligned.push(...group.lines.map((text) => ({ text, phrase: null })));
       continue;
@@ -198,6 +202,8 @@ function isVowelAt(word: ReadonlyArray<string>, index: number): boolean {
 
 /** Splits one Latin word into estimated syllables by vowel groups; a word with no vowel group is one syllable. */
 function latinSyllables(word: string): string[] {
+  // The written vowel run in "quiet" reads as one group, but it is sung qui-et.
+  if (word.toLowerCase() === "quiet") return ["qui", "et"];
   const chars = Array.from(word);
   const groups: Array<{ start: number; end: number }> = [];
   for (let index = 0; index < chars.length; index += 1) {
