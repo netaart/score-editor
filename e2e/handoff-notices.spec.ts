@@ -31,6 +31,13 @@ K:C
 V: Vocal
 b4b4b4b4|b16|`;
 
+/** Five notes at C3 (48), below the singable range. */
+const LOW = `${HEADER}
+K:C
+% verse
+V: Vocal
+C,4C,4C,4C,4|C,16|`;
+
 /** A chord on a melody project's first note. */
 const CHORD = `${HEADER}
 K:C
@@ -119,6 +126,16 @@ async function mountProject(
 const prehandoffCodes = async (harness: Harness) =>
   (await harness.notices()).map((notice) => notice.code).filter((code) => code.startsWith("prehandoff-"));
 
+const noticeLead = (page: Page, language: "en" | "zh" = "en") =>
+  dialog(page, language).locator(".sce-handoff-notices-lead");
+
+const markedLegend = (page: Page, language: "en" | "zh" = "en") =>
+  dialog(page, language).locator(".sce-handoff-marked");
+
+const sourceLine = (page: Page, language: "en" | "zh" = "en") => dialog(page, language).locator(".sce-handoff-source");
+
+const toolbarLive = (page: Page) => page.locator(".sce-part-toolbar .sce-sr-only[role=status]");
+
 test.describe("the pre-handoff notices in the review", () => {
   test("shows one line for each notice, in sight, in English and Chinese", async ({ page, harness }) => {
     const cases = [
@@ -127,32 +144,32 @@ test.describe("the pre-handoff notices in the review", () => {
         lines: CLEAN_LINES,
         mode: "full" as const,
         code: "prehandoff-no-sections",
-        en: "This score has no sections, so the agent gets no section names.",
-        zh: "这份乐谱没有段落，交给 agent 时也就没有段落名。",
+        en: "This score has no sections, so the new song has no section names. Click the “Unnamed” bar above the notes and choose “Name this section”.",
+        zh: "这份乐谱没有段落，新歌就没有段落名。点乐谱上方的“未命名”段落条，选“给这段命名”。",
       },
       {
         score: CLEAN,
         lines: FEW_LINES,
         mode: "full" as const,
         code: "prehandoff-syllables-far",
-        en: "The whole song has 1 syllable and 5 note onsets, 4 apart.",
-        zh: "整首有 1 个音节和 5 个音符起点，相差 4 个。",
+        en: "The lyrics have 1 syllable, but the melody has 5 notes. Check that each lyric line fits its notes.",
+        zh: "歌词有 1 个音节，旋律有 5 个音。请检查每行歌词是否对上它的音符。",
       },
       {
         score: HIGH,
         lines: CLEAN_LINES,
         mode: "full" as const,
         code: "prehandoff-vocal-range",
-        en: "Vocal's median pitch is 83, outside the singable range 60–82.",
-        zh: "人声的中位音是 83，不在可唱区间 60–82 内。",
+        en: "The vocal's middle note is B5, above its singable range (C4 to A#5). Lower it with the Voice octave tool.",
+        zh: "人声的中间音是 B5，高于可唱范围（C4 至 A#5）。可用人声移八度工具降下来。",
       },
       {
         score: CHORD,
         lines: CLEAN_LINES,
         mode: "melody" as const,
         code: "prehandoff-melody-chords",
-        en: "Melody mode cannot carry chords; delete all chords or switch to full.",
-        zh: "melody 模式不能带和弦；可以删掉所有和弦，或改回 full。",
+        en: "The score mode is Melody, but the score has chords. Delete the chords, or change Score mode to Full.",
+        zh: "乐谱模式是旋律，但乐谱里有和弦。删掉和弦，或把乐谱模式改为完整。",
       },
     ];
     for (const language of ["en", "zh"] as const) {
@@ -177,14 +194,35 @@ test.describe("the pre-handoff notices in the review", () => {
     await expect(noticeLines(page)).toHaveCount(4);
     const lines = await noticeLines(page).allTextContents();
     expect(lines).toEqual([
-      "This score has no sections, so the agent gets no section names.",
-      "The whole song has 1 syllable and 5 note onsets, 4 apart.",
-      "Vocal's median pitch is 83, outside the singable range 60–82.",
-      "Melody mode cannot carry chords; delete all chords or switch to full.",
+      "This score has no sections, so the new song has no section names. Click the “Unnamed” bar above the notes and choose “Name this section”.",
+      "The lyrics have 1 syllable, but the melody has 5 notes. Check that each lyric line fits its notes.",
+      "The vocal's middle note is B5, above its singable range (C4 to A#5). Lower it with the Voice octave tool.",
+      "The score mode is Melody, but the score has chords. Delete the chords, or change Score mode to Full.",
     ]);
+    await expect(noticeLead(page)).toHaveText("4 things to check before you regenerate");
     for (const line of await noticeLines(page).all()) {
       expect(await inSight(page, line, dialog(page))).toBe(true);
     }
+    const order = await dialog(page).evaluate((el) =>
+      [...el.querySelectorAll(".sce-handoff-notices, .sce-handoff-log-label, .sce-handoff-changes")].map(
+        (child) => child.className,
+      ),
+    );
+    expect(order[0]).toContain("sce-handoff-notices");
+    const [noticeColour, textColour] = await Promise.all([
+      noticeLines(page)
+        .first()
+        .evaluate((el) => getComputedStyle(el).color),
+      noticeLines(page)
+        .first()
+        .evaluate((el) => getComputedStyle(el.closest(".sce-handoff-popover") as Element).color),
+    ]);
+    expect(noticeColour).toBe(textColour);
+    expect(
+      await noticeLines(page)
+        .first()
+        .evaluate((el) => getComputedStyle(el).textWrap),
+    ).toBe("pretty");
     expect(await prehandoffCodes(harness)).toEqual([
       "prehandoff-no-sections",
       "prehandoff-syllables-far",
@@ -199,11 +237,11 @@ test.describe("the pre-handoff notices in the review", () => {
       await handoffButton(page, language).click();
       await expect(noticeLines(page, language)).toHaveText([
         language === "zh"
-          ? "整首有 0 个音节和 25 个音符起点，相差 25 个。"
-          : "The whole song has 0 syllables and 25 note onsets, 25 apart.",
+          ? "歌词有 0 个音节，旋律有 25 个音。请检查每行歌词是否对上它的音符。"
+          : "The lyrics have 0 syllables, but the melody has 25 notes. Check that each lyric line fits its notes.",
         language === "zh"
-          ? "人声的中位音是 83，不在可唱区间 60–82 内。"
-          : "Vocal's median pitch is 83, outside the singable range 60–82.",
+          ? "人声的中间音是 B5，高于可唱范围（C4 至 A#5）。可用人声移八度工具降下来。"
+          : "The vocal's middle note is B5, above its singable range (C4 to A#5). Lower it with the Voice octave tool.",
       ]);
       for (const line of await noticeLines(page, language).all()) {
         expect(await inSight(page, line, dialog(page, language))).toBe(true);
@@ -213,10 +251,36 @@ test.describe("the pre-handoff notices in the review", () => {
     }
   });
 
+  test("names the vocal's middle note below the range, in both languages", async ({ page, harness }) => {
+    for (const language of ["en", "zh"] as const) {
+      await mountProject(harness, LOW, { language });
+      await handoffButton(page, language).click();
+      await expect(noticeLines(page, language)).toHaveText([
+        language === "zh"
+          ? "人声的中间音是 C3，低于可唱范围（C4 至 A#5）。可用人声移八度工具升上去。"
+          : "The vocal's middle note is C3, below its singable range (C4 to A#5). Raise it with the Voice octave tool.",
+      ]);
+      await page.keyboard.press("Escape");
+    }
+  });
+
+  test("leads with the count in both languages, and the Chinese melody line has no English", async ({
+    page,
+    harness,
+  }) => {
+    await mountProject(harness, ALL_FOUR, { language: "zh", lyricLines: FEW_LINES, scoreMode: "melody" });
+    await handoffButton(page, "zh").click();
+    await expect(noticeLead(page, "zh")).toHaveText("重新生成前有 4 处要看");
+    const melody = noticeLines(page, "zh").last();
+    await expect(melody).toHaveText("乐谱模式是旋律，但乐谱里有和弦。删掉和弦，或把乐谱模式改为完整。");
+    expect(await melody.textContent()).not.toMatch(/[A-Za-z]/);
+  });
+
   test("shows no line and sends no notice for a clean project", async ({ page, harness }) => {
     await mountProject(harness, CLEAN);
     await handoffButton(page).click();
     await expect(noticeLines(page)).toHaveCount(0);
+    await expect(markedLegend(page)).toBeHidden();
     expect(await prehandoffCodes(harness)).toEqual([]);
   });
 
@@ -224,16 +288,56 @@ test.describe("the pre-handoff notices in the review", () => {
     await mountProject(harness, CLEAN);
     await handoffButton(page).click();
     await expect(noticeLines(page)).toHaveCount(0);
+    await expect(markedLegend(page)).toBeHidden();
     expect(await prehandoffCodes(harness)).toEqual([]);
 
     await harness.update({ score: { text: HIGH } });
-    await expect(noticeLines(page)).toHaveText(["Vocal's median pitch is 83, outside the singable range 60–82."]);
+    await expect(noticeLines(page)).toHaveText([
+      "The vocal's middle note is B5, above its singable range (C4 to A#5). Lower it with the Voice octave tool.",
+    ]);
     expect(await prehandoffCodes(harness)).toEqual([]);
 
     await page.keyboard.press("Escape");
     await handoffButton(page).click();
     await expect(noticeLines(page)).toHaveCount(1);
     expect(await prehandoffCodes(harness)).toEqual(["prehandoff-vocal-range"]);
+  });
+});
+
+test.describe("the review's announcements and actions", () => {
+  test("describes itself with the notices and the change list, and says the lead once on opening", async ({
+    page,
+    harness,
+  }) => {
+    await mountProject(harness, ALL_FOUR, { lyricLines: FEW_LINES, scoreMode: "melody" });
+    await handoffButton(page).click();
+    const described = (await dialog(page).getAttribute("aria-describedby"))?.split(" ") ?? [];
+    const noticeId = await dialog(page).locator(".sce-handoff-notices").getAttribute("id");
+    const emptyId = await dialog(page).locator(".sce-handoff-empty").getAttribute("id");
+    expect(described).toContain(noticeId);
+    expect(described).toContain(emptyId);
+    await expect(toolbarLive(page)).toHaveText("4 things to check before you regenerate");
+
+    await harness.update({ score: { text: CLEAN } });
+    await expect(noticeLines(page)).toHaveCount(1);
+    await expect(toolbarLive(page)).toHaveText("4 things to check before you regenerate");
+  });
+
+  test("shares one row at 320 and gives both actions the coarse-pointer height", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "the 320 phone row and the coarse pointer are the phone project's");
+    await page.setViewportSize({ width: 320, height: 720 });
+    await mountProject(harness, ALL_FOUR, { lyricLines: FEW_LINES, scoreMode: "melody" });
+    await handoffButton(page).click();
+    const cancel = dialog(page).getByRole("button", { name: "Cancel", exact: true });
+    const confirm = dialog(page).getByRole("button", { name: "Regenerate with this version", exact: true });
+    const [cancelBox, confirmBox] = await Promise.all([box(cancel), box(confirm)]);
+    expect(Math.abs(cancelBox.y - confirmBox.y)).toBeLessThanOrEqual(2);
+    expect(cancelBox.height).toBeGreaterThanOrEqual(36);
+    expect(confirmBox.height).toBeGreaterThanOrEqual(36);
   });
 });
 
@@ -249,6 +353,28 @@ test.describe("the rewritten bars in the change log", () => {
     const entry = dialog(page).locator(".sce-handoff-changes li[data-rewritten]");
     await expect(entry).toHaveText(["The notes of bar 1 changed."]);
     expect(await inSight(page, entry, dialog(page))).toBe(true);
+    const style = await entry.evaluate((el) => {
+      const own = getComputedStyle(el);
+      const dot = getComputedStyle(el, "::before");
+      return {
+        weight: own.fontWeight,
+        border: own.borderInlineStartWidth,
+        background: own.backgroundColor,
+        image: own.backgroundImage,
+        listStyle: own.listStyleType,
+        dotWidth: dot.width,
+        dotColour: dot.backgroundColor,
+        textColour: own.color,
+      };
+    });
+    expect(style.weight).toBe("600");
+    expect(style.border).toBe("0px");
+    expect(style.background).toBe("rgba(0, 0, 0, 0)");
+    expect(style.image).toBe("none");
+    expect(style.listStyle).toBe("none");
+    expect(style.dotWidth).toBe("6px");
+    expect(style.dotColour).toBe(style.textColour);
+    await expect(markedLegend(page)).toHaveText("Marked: changed by your last step.");
   });
 
   test("highlights both bars a tied edit rewrote, in English and Chinese", async ({ page, harness }) => {
@@ -263,6 +389,9 @@ test.describe("the rewritten bars in the change log", () => {
         language === "zh" ? "第 1–2 小节的音符有改动。" : "The notes of bars 1–2 changed.",
       ]);
       expect(await inSight(page, entry, dialog(page, language))).toBe(true);
+      await expect(markedLegend(page, language)).toHaveText(
+        language === "zh" ? "带标记的条目是你上一步改动的。" : "Marked: changed by your last step.",
+      );
       await page.keyboard.press("Escape");
     }
   });
@@ -284,6 +413,19 @@ test.describe("the source label", () => {
         await mountProject(harness, CLEAN, { language, scoreFile: kind === "file" });
         await expect(label(page)).toHaveText(text);
         expect(await inSight(page, label(page), strip(page))).toBe(true);
+        const labelStyle = await label(page).evaluate((el) => {
+          const own = getComputedStyle(el);
+          return {
+            border: own.borderTopWidth,
+            radius: own.borderTopLeftRadius,
+            height: el.getBoundingClientRect().height,
+            line: Number.parseFloat(own.lineHeight),
+          };
+        });
+        expect(labelStyle.border).toBe("0px");
+        expect(labelStyle.radius).toBe("0px");
+        if (width <= 480) expect(labelStyle.height).toBeGreaterThanOrEqual(labelStyle.line * 1.7);
+        else expect(labelStyle.height).toBeLessThanOrEqual(labelStyle.line * 1.5);
         const toolbar = await box(page.locator(".sce-toolbar"));
         if (width === 1280) {
           // One row: the bar shares the strip's line.
@@ -299,6 +441,36 @@ test.describe("the source label", () => {
     }
   });
 
+  test("names the three source states on the review's first line, in both languages", async ({ page, harness }) => {
+    for (const language of ["en", "zh"] as const) {
+      await mountProject(harness, CLEAN, { language });
+      await handoffButton(page, language).click();
+      await expect(sourceLine(page, language)).toHaveText(
+        language === "zh"
+          ? "原版会保留。这会发送你改过的版本。"
+          : "Your original is kept. This sends your edited version.",
+      );
+      await expect(sourceLine(page, language)).toBeInViewport();
+      await page.keyboard.press("Escape");
+
+      await mountProject(harness, CLEAN, { language, scoreFile: true });
+      await handoffButton(page, language).click();
+      await expect(sourceLine(page, language)).toHaveText(
+        language === "zh" ? "tune.abc 已保存。这会发送歌曲。" : "tune.abc is saved. This sends the song.",
+      );
+      await page.keyboard.press("Escape");
+
+      await mountProject(harness, CLEAN, { language, scoreFile: true });
+      await page.getByRole("list", { name: "Vocal" }).getByRole("listitem", { name: /F4/ }).click();
+      await page.keyboard.press("Delete");
+      await handoffButton(page, language).click();
+      await expect(sourceLine(page, language)).toHaveText(
+        language === "zh" ? "先保存 tune.abc，再发送歌曲。" : "Saves tune.abc first, then sends the song.",
+      );
+      await page.keyboard.press("Escape");
+    }
+  });
+
   test("follows the language switch and a source that changes after Save as", async ({ page, harness }) => {
     await page.setViewportSize({ width: 412, height: 720 });
     await mountProject(harness, CLEAN, { saveAs: true });
@@ -307,5 +479,6 @@ test.describe("the source label", () => {
     await expect(label(page)).toHaveText("生成的乐谱（原版保留）");
     await harness.update({ scoreFile: { name: "tune.abc" }, project: { style: "pop" } });
     await expect(label(page)).toHaveText("乐谱文件（存回原文件）");
+    await expect(toolbarLive(page)).toHaveText("乐谱文件（存回原文件）");
   });
 });

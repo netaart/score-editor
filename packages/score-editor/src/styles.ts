@@ -305,16 +305,22 @@ const css = `
   display: inline-flex;
   visibility: hidden;
 }
-/* The source label: where the edits go. It rides first in the strip, so a swipe never hides what it says before the title. */
+/* The source label: where the edits go. Plain text, first in the strip; two lines on a phone at the opening bracket. */
 .sce-root .sce-source-label {
   flex: none;
-  padding: 2px 8px;
-  border: 1px solid var(--sce-_line-strong);
-  border-radius: 999px;
   color: var(--sce-_text);
   font-size: 0.92em;
   font-weight: 600;
   white-space: nowrap;
+}
+.sce-root .sce-source-label-main,
+.sce-root .sce-source-label-rest {
+  display: inline;
+}
+@media (max-width: 30em) {
+  .sce-root .sce-source-label-rest {
+    display: block;
+  }
 }
 .sce-root .sce-badge {
   flex: none;

@@ -413,6 +413,7 @@ export class Editor implements MountedEditor {
         if (file === null) return this.drafts.handoff();
         return file.handoff().then((result) => (result === "saved" ? "written" : result));
       },
+      sourceKind: () => (file === null ? "generated" : "scoreFile"),
       missingRequired: () => this.missingRequired(),
       openProject: (field) => this.openRequired(field),
       savesFirst: () => (file?.unsaved ? (this.scoreSource?.name ?? null) : null),
@@ -431,6 +432,7 @@ export class Editor implements MountedEditor {
     this.sourceLabel = mountSourceLabel(strip, this.session, {
       source: () => this.options.source,
       before: strip.firstChild,
+      say: (words) => this.toolbar.say(words),
     });
     this.parts.push(this.sourceLabel);
   }
@@ -463,7 +465,11 @@ export class Editor implements MountedEditor {
       });
       this.scoreFile = file;
       this.saveConflict = mountSaveConflict(this.chrome, this.session, file);
-      this.saveNotice = mountSaveNotice(this.chrome, this.session, file);
+      this.saveNotice = mountSaveNotice(this.chrome, this.session, file, {
+        save: () => {
+          void this.saveControl?.save();
+        },
+      });
       this.scoreRestore = mountRestoreControl(
         strip,
         this.session,

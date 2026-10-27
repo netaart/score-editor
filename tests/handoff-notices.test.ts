@@ -130,18 +130,43 @@ describe("the pre-handoff notices", () => {
       "zh",
     );
     expect(en.map((notice) => notice.message)).toEqual([
-      "This score has no sections, so the agent gets no section names.",
-      "The whole song has 1 syllable and 5 note onsets, 4 apart.",
-      "Vocal's median pitch is 83, outside the singable range 60–82.",
-      "Melody mode cannot carry chords; delete all chords or switch to full.",
+      "This score has no sections, so the new song has no section names. Click the “Unnamed” bar above the notes and choose “Name this section”.",
+      "The lyrics have 1 syllable, but the melody has 5 notes. Check that each lyric line fits its notes.",
+      "The vocal's middle note is B5, above its singable range (C4 to A#5). Lower it with the Voice octave tool.",
+      "The score mode is Melody, but the score has chords. Delete the chords, or change Score mode to Full.",
     ]);
     expect(zh.map((notice) => notice.message)).toEqual([
-      "这份乐谱没有段落，交给 agent 时也就没有段落名。",
-      "整首有 1 个音节和 5 个音符起点，相差 4 个。",
-      "人声的中位音是 83，不在可唱区间 60–82 内。",
-      "melody 模式不能带和弦；可以删掉所有和弦，或改回 full。",
+      "这份乐谱没有段落，新歌就没有段落名。点乐谱上方的“未命名”段落条，选“给这段命名”。",
+      "歌词有 1 个音节，旋律有 5 个音。请检查每行歌词是否对上它的音符。",
+      "人声的中间音是 B5，高于可唱范围（C4 至 A#5）。可用人声移八度工具降下来。",
+      "乐谱模式是旋律，但乐谱里有和弦。删掉和弦，或把乐谱模式改为完整。",
     ]);
     expect([...en, ...zh].every((notice) => notice.level === "warning")).toBe(true);
+    // The Chinese sentences are Chinese apart from the note names B5, C4 and A#5.
+    expect(zh.every((notice) => !/[A-Za-z]/.test(notice.message.replace(/[A-G]#?\d/g, "")))).toBe(true);
+  });
+
+  it("names the vocal's middle note and the range for a high and a low case", () => {
+    const high = preHandoffNotices(song2Dialect, project({ score: HIGH_SCORE }), "en")[0]?.message;
+    expect(high).toBe(
+      "The vocal's middle note is B5, above its singable range (C4 to A#5). Lower it with the Voice octave tool.",
+    );
+    const low = preHandoffNotices(song2Dialect, project({ score: LOW_SCORE }), "en")[0]?.message;
+    expect(low).toBe(
+      "The vocal's middle note is C3, below its singable range (C4 to A#5). Raise it with the Voice octave tool.",
+    );
+    const zhHigh = preHandoffNotices(song2Dialect, project({ score: HIGH_SCORE }), "zh")[0]?.message;
+    expect(zhHigh).toBe("人声的中间音是 B5，高于可唱范围（C4 至 A#5）。可用人声移八度工具降下来。");
+    const zhLow = preHandoffNotices(song2Dialect, project({ score: LOW_SCORE }), "zh")[0]?.message;
+    expect(zhLow).toBe("人声的中间音是 C3，低于可唱范围（C4 至 A#5）。可用人声移八度工具升上去。");
+  });
+
+  it("leaves no English mode word in the Chinese melody notice", () => {
+    const melody = preHandoffNotices(song2Dialect, project({ score: CHORD_SCORE, scoreMode: "melody" }), "zh").find(
+      (notice) => notice.code === "prehandoff-melody-chords",
+    );
+    expect(melody?.message).toBe("乐谱模式是旋律，但乐谱里有和弦。删掉和弦，或把乐谱模式改为完整。");
+    expect(melody?.message).not.toMatch(/[A-Za-z]/);
   });
 
   it("does not report a difference of one syllable per line", () => {

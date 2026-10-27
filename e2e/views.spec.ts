@@ -186,7 +186,9 @@ test.describe("the text view", () => {
     await textBox(page).fill(QUARTERS_WITH_CHORD);
     await textBox(page).blur();
 
-    await expect(textNotice(page)).toHaveText("Melody mode cannot carry chords; delete all chords or switch to full.");
+    await expect(textNotice(page)).toHaveText(
+      "The score mode is Melody, but the score has chords. Delete the chords, or change Score mode to Full.",
+    );
     await expect(textBox(page)).toHaveAttribute("aria-describedby", /sce-text-notice-\d+/);
     await expect(textBox(page)).not.toHaveAttribute("aria-invalid", "true");
     await expect(problems(page)).toHaveCount(0);

@@ -211,7 +211,7 @@ test.describe("the change log in the mounted editor", () => {
       "和弦有改动。",
       "歌词有改动。",
       "风格描述有改动。",
-      "乐谱模式从 完整（full） 改为 旋律（melody）。",
+      "乐谱模式从 完整 改为 旋律。",
       "种子从 7 改为 9。",
     ]);
   });
@@ -396,8 +396,9 @@ test.describe("the review", () => {
     await handoffButton(page).click();
     const list = changeList(page);
     await expect(list).toBeVisible();
-    const described = await dialog(page).getAttribute("aria-describedby");
-    expect(described).toBe(await list.getAttribute("id"));
+    const described = (await dialog(page).getAttribute("aria-describedby"))?.split(" ") ?? [];
+    expect(described).toContain(await list.getAttribute("id"));
+    expect(described).toContain(await dialog(page).locator(".sce-handoff-notices").getAttribute("id"));
     expect(await list.evaluate((el) => getComputedStyle(el).display)).not.toBe("flex");
     expect(await list.evaluate((el) => getComputedStyle(el).overflowWrap)).toBe("anywhere");
     expect(await list.evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain("lining-nums");
@@ -420,7 +421,9 @@ test.describe("the review", () => {
     await handoffButton(page).click();
     const empty = dialog(page).locator(".sce-handoff-empty");
     await expect(empty).toBeVisible();
-    expect(await dialog(page).getAttribute("aria-describedby")).toBe(await empty.getAttribute("id"));
+    const describedEmpty = (await dialog(page).getAttribute("aria-describedby"))?.split(" ") ?? [];
+    expect(describedEmpty).toContain(await empty.getAttribute("id"));
+    expect(describedEmpty).toContain(await dialog(page).locator(".sce-handoff-notices").getAttribute("id"));
     expect(
       await dialog(page)
         .locator(".sce-handoff-changes")

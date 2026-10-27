@@ -837,11 +837,11 @@ function chineseStyleNoBpm(): string {
 }
 
 function englishMelodyWithChords(): string {
-  return "Melody mode cannot carry chords; delete all chords or switch to full.";
+  return "The score mode is Melody, but the score has chords. Delete the chords, or change Score mode to Full.";
 }
 
 function chineseMelodyWithChords(): string {
-  return "melody 模式不能带和弦；可以删掉所有和弦，或改回 full。";
+  return "乐谱模式是旋律，但乐谱里有和弦。删掉和弦，或把乐谱模式改为完整。";
 }
 
 function englishLyricsUnaligned(params: DiagnosticParams): string {

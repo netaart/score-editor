@@ -40,25 +40,44 @@ export const handoffCss = `
 .sce-root .sce-handoff-changes li + li {
   margin-block-start: 4px;
 }
-/* The entries that name a bar the last edit rewrote: the bars stand out, the sentence stays as the change log writes it. */
+/* The entries that name a bar the last edit rewrote: weight and a text-colour dot, never the accent meant for focus. */
 .sce-root .sce-handoff-changes li[data-rewritten] {
-  margin-inline: -4px;
-  padding-inline: 4px;
-  border-inline-start: 2px solid var(--sce-_accent);
-  background: color-mix(in srgb, var(--sce-_accent) 10%, transparent);
+  position: relative;
+  list-style: none;
+  font-weight: 600;
+}
+.sce-root .sce-handoff-changes li[data-rewritten]::before {
+  position: absolute;
+  inset-block-start: 0.52em;
+  inset-inline-start: -10px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sce-_text);
+  content: "";
 }
 .sce-root .sce-handoff-notices {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .sce-root .sce-handoff-notices[hidden] {
   display: none;
 }
+.sce-root .sce-handoff-notices-lead {
+  margin: 0;
+  font-weight: 600;
+}
 .sce-root .sce-handoff-notice {
+  margin: 0;
   padding-inline-start: 8px;
-  border-inline-start: 2px solid var(--sce-_line-strong);
+  border-inline-start: 3px solid var(--sce-_text);
   color: var(--sce-_text);
+  text-wrap: pretty;
+}
+.sce-root .sce-handoff-marked {
+  margin: 0;
+  color: var(--sce-_muted);
 }
 .sce-root .sce-handoff-empty,
 .sce-root .sce-handoff-note {
@@ -71,6 +90,15 @@ export const handoffCss = `
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+@media (max-width: 30em) {
+  .sce-root .sce-handoff-actions {
+    flex-wrap: nowrap;
+  }
+  .sce-root .sce-handoff-actions .sce-button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 }
 .sce-root .sce-handoff-confirm {
   font-weight: 600;
