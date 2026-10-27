@@ -34,6 +34,8 @@ export interface HandoffSource {
   readonly sourceKind?: () => "generated" | "scoreFile";
   /** The file name while a dirty score file is saved before the handoff; null when no line is needed. */
   readonly savesFirst?: () => string | null;
+  /** The score's file for the instruction when the host's handoff travels as text; null keeps the attachment wording. */
+  readonly scorePath?: () => string | null;
 }
 
 /** What the control needs from the keeper whose state it follows: the opening badge and the state changes. */
@@ -285,6 +287,7 @@ export function mountHandoffControl(
 
   function payloadOf(config: HandoffSource): HandoffPayload {
     const dialect = config.dialects.find(session.project.modelId) ?? config.dialects.find(config.original.modelId);
+    const scorePath = config.scorePath?.() ?? null;
     return {
       attachment: { name: "score.abc", mediaType: "text/plain", text: session.project.score },
       instruction: handoffInstruction({
@@ -293,6 +296,7 @@ export function mountHandoffControl(
         language: session.view.language,
         ...(config.title === undefined ? {} : { title: config.title }),
         ...(dialect === undefined ? {} : { dialect }),
+        ...(scorePath === null ? {} : { scorePath }),
       }),
       project: session.project,
     };

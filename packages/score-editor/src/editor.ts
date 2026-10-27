@@ -418,6 +418,7 @@ export class Editor implements MountedEditor {
       openProject: (field) => this.openRequired(field),
       savesFirst: () => (file?.unsaved ? (this.scoreSource?.name ?? null) : null),
       ...(title === undefined ? {} : { title }),
+      ...(this.options.handoffScorePath === undefined ? {} : { scorePath: this.options.handoffScorePath }),
       ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
       say: (words) => this.toolbar.say(words),
       notSent: (kind) => this.saveNotice?.notSent(kind),

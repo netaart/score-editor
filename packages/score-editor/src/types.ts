@@ -76,7 +76,10 @@ export interface HandoffPayload {
     readonly mediaType: "text/plain";
     readonly text: string;
   };
-  /** The instruction the host prefills: title, the song2 command, the final fields and the change log. */
+  /**
+   * The instruction the host prefills: title, the song2 command, the final fields and the change log. It names the
+   * `score.abc` attachment, or the file `handoffScorePath` answered when the host gave one.
+   */
   readonly instruction: string;
   /** The project as it stands, including the lyric lines and the fields the instruction states. */
   readonly project: SongProject;
@@ -163,6 +166,12 @@ export interface MountOptions {
   tools?: ReadonlyArray<ScoreTool>;
   /** The work's title for the handoff instruction; the project's source key when absent or blank. */
   title?: string;
+  /**
+   * Answers the path of the score file the host puts in its message, or null when the host attaches the score instead.
+   * The editor calls it when it builds the handoff payload; a non-blank path makes the instruction name that file, and
+   * the `score.abc` attachment stays in the payload either way.
+   */
+  handoffScorePath?: () => string | null;
   /**
    * Receives what the editor hands to the host's agent when the user presses the handoff button: the score as
    * `score.abc`, the prefilled instruction and the final project. Without this callback there is no button. The editor

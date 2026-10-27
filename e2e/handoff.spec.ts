@@ -290,6 +290,38 @@ test.describe("handing off", () => {
     expect(handoff.payload.instruction).toContain("- 第 1 小节的音符有改动。");
   });
 
+  test("names the score file's path the host gives, and keeps the attachment", async ({ page, harness }) => {
+    const path = "Space/songs/tune.abc";
+    await openEditor(harness, storedDraft(), { handoffScorePath: path });
+    await handoffButton(page).click();
+    await confirmButton(page).click();
+    await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
+    const handoff = (await harness.handoffs())[0];
+    if (handoff === undefined) throw new Error("the host callback did not run");
+    expect(handoff.payload.instruction.split("\n")[2]).toBe(
+      `Regenerate with song2. Use the score in the file \`${path}\`, passed with --text.`,
+    );
+    expect(handoff.payload.instruction).not.toContain("attached");
+    expect(handoff.payload.instruction).not.toContain("score.abc");
+    expect(handoff.payload.attachment).toEqual({ name: "score.abc", mediaType: "text/plain", text: SCORE });
+  });
+
+  test("keeps the 0.4.0 instruction when the host answers no path, and keeps the attachment", async ({
+    page,
+    harness,
+  }) => {
+    await openEditor(harness, storedDraft(), { handoffScorePath: null });
+    await handoffButton(page).click();
+    await confirmButton(page).click();
+    await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
+    const handoff = (await harness.handoffs())[0];
+    if (handoff === undefined) throw new Error("the host callback did not run");
+    expect(handoff.payload.instruction.split("\n")[2]).toBe(
+      "Regenerate with song2. Use the score in the attached score.abc, passed with --text.",
+    );
+    expect(handoff.payload.attachment).toEqual({ name: "score.abc", mediaType: "text/plain", text: SCORE });
+  });
+
   test("hands off an unchanged original without writing a draft", async ({ page, harness }) => {
     await harness.mount({
       score: { text: SCORE },

@@ -351,17 +351,27 @@ export interface HandoffInstructionOptions extends ChangeLogOptions {
   readonly current: SongProject;
   /** The work's title; the original's source key when absent or blank. */
   readonly title?: string;
+  /**
+   * The file the host's agent should read the score from, when the handoff travels as text without an attachment. A
+   * non-blank path makes the intro name that file; absent or blank keeps the attached-score sentence of 0.4.0.
+   */
+  readonly scorePath?: string;
 }
 
 /** The instruction a host prefills with the attachment and the final project, in the chosen language. */
 export function handoffInstruction(options: HandoffInstructionOptions): string {
   const t = messagesFor(options.language);
   const title = options.title?.trim() ? options.title : options.original.sourceKey;
+  const scorePath = options.scorePath;
+  const intro =
+    scorePath !== undefined && scorePath.trim() !== ""
+      ? t.handoffInstructionIntroPath(scorePath)
+      : t.handoffInstructionIntro;
   const changes = changeLog(options.original, options.current, options);
   const lines = [
     `${t.handoffInstructionTitle}: ${title}`,
     "",
-    t.handoffInstructionIntro,
+    intro,
     "",
     t.handoffInstructionFinal,
     `${t.handoffInstructionStyle}:`,

@@ -41,6 +41,14 @@ const changed = (patch: Partial<SongProject> = {}): SongProject => ({ ...project
 const log = (current: SongProject, language: "en" | "zh" = "en") =>
   changeLog(project, current, { language, dialect: song2Dialect });
 
+/** The intro is the third line of every instruction: the title, a blank line, then the request. */
+const introOf = (text: string): string => text.split("\n")[2] ?? "";
+
+const INTRO_040 = {
+  en: "Regenerate with song2. Use the score in the attached score.abc, passed with --text.",
+  zh: "用 song2 重新生成，乐谱用附件里的 score.abc，用 --text 传。",
+} as const;
+
 describe("the structured change log", () => {
   it("keeps the sentences and names the bars a note entry reports", () => {
     const current = changed({ score: SCORE.replace("C4D4E4F4", "C4E4E4F4") });
@@ -207,5 +215,38 @@ describe("the prefilled handoff instruction", () => {
   it("uses the source key as the title when none is given", () => {
     const text = handoffInstruction({ original: project, current, language: "en", dialect: song2Dialect });
     expect(text).toContain("Title: change-log-test");
+  });
+
+  it("names the score's file instead of the attachment when scorePath is given", () => {
+    const path = "songs/My Song.abc";
+    for (const language of ["en", "zh"] as const) {
+      const text = handoffInstruction({
+        original: project,
+        current,
+        title: "My Song",
+        language,
+        dialect: song2Dialect,
+        scorePath: path,
+      });
+      expect(introOf(text)).toBe(
+        language === "en"
+          ? `Regenerate with song2. Use the score in the file \`${path}\`, passed with --text.`
+          : `用 song2 重新生成，乐谱用文件 \`${path}\`，用 --text 传。`,
+      );
+      expect(text).not.toContain("attached");
+      expect(text).not.toContain("附件");
+      expect(text).not.toContain("score.abc");
+    }
+  });
+
+  it("keeps the 0.4.0 intro when scorePath is absent or blank", () => {
+    for (const language of ["en", "zh"] as const) {
+      const base = { original: project, current, title: "My Song", language, dialect: song2Dialect };
+      const absent = handoffInstruction(base);
+      const blank = handoffInstruction({ ...base, scorePath: "   " });
+      expect(introOf(absent)).toBe(INTRO_040[language]);
+      expect(introOf(blank)).toBe(INTRO_040[language]);
+      expect(blank).toBe(absent);
+    }
   });
 });

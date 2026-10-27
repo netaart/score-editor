@@ -2,6 +2,15 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## Unreleased
+
+### Added in `@neta-art/score-editor`
+
+- **A handoff instruction can name the score's file.** `handoffInstruction({ …, scorePath })` writes the file into its
+  intro instead of pointing at the attached `score.abc`, in both languages; `mount`'s `handoffScorePath` callback supplies
+  that path when the review builds the payload. The `score.abc` attachment stays in `HandoffPayload`, and without a path,
+  or with a blank one, the instruction is exactly what 0.4.0 wrote.
+
 ## 0.4.0
 
 No export of 0.3.0 was removed or renamed: all 76 runtime exports of `@neta-art/score-editor`, all 3 of

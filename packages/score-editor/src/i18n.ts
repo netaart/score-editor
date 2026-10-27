@@ -338,6 +338,8 @@ export interface Messages {
   /** The prefilled instruction: its labels and its fixed sentences. */
   handoffInstructionTitle: string;
   handoffInstructionIntro: string;
+  /** The same request when the score is a file the host names, since there is no attachment to point at. */
+  handoffInstructionIntroPath(path: string): string;
   handoffInstructionFinal: string;
   handoffInstructionStyle: string;
   handoffInstructionLyrics: string;
@@ -691,6 +693,8 @@ const en: Messages = {
   handoffSaving: "Saving…",
   handoffInstructionTitle: "Title",
   handoffInstructionIntro: "Regenerate with song2. Use the score in the attached score.abc, passed with --text.",
+  handoffInstructionIntroPath: (path) =>
+    `Regenerate with song2. Use the score in the file \`${path}\`, passed with --text.`,
   handoffInstructionFinal:
     "The style description and joined lyrics below are final and already synced by the editor; do not change them.",
   handoffInstructionStyle: "Style description",
@@ -1008,6 +1012,7 @@ const zh: Messages = {
   handoffSaving: "保存中…",
   handoffInstructionTitle: "标题",
   handoffInstructionIntro: "用 song2 重新生成，乐谱用附件里的 score.abc，用 --text 传。",
+  handoffInstructionIntroPath: (path) => `用 song2 重新生成，乐谱用文件 \`${path}\`，用 --text 传。`,
   handoffInstructionFinal: "下面的风格描述和拼回的歌词是最终版，编辑器已经同步好，不要再改。",
   handoffInstructionStyle: "风格描述",
   handoffInstructionLyrics: "拼回的歌词",
