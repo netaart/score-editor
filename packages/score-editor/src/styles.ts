@@ -251,6 +251,22 @@ const css = `
   flex: 1 1 10em;
   min-width: 0;
 }
+@media (pointer: fine) and (max-width: 30em) {
+  /* A narrow desktop with Save's words gives the preview its own line and the row a 4px gap, so every state,
+     including Save failed, keeps one bar height. */
+  .sce-root .sce-bar {
+    column-gap: 4px;
+  }
+  .sce-root .sce-bar .sce-synth {
+    flex-basis: 100%;
+  }
+  /* At 320 the widest words ("Save again" and "Save failed") leave three pixels too few for the view switch, so the
+     two controls give back four pixels each and every state keeps the bar's one height. */
+  .sce-root .sce-part-save .sce-save-button,
+  .sce-root .sce-part-save .sce-save-state {
+    padding-inline: 6px;
+  }
+}
 @media (pointer: fine) and (min-width: 30.01em) {
   .sce-root .sce-toolbar[data-bar] .sce-tools {
     flex: 1 1 100%;

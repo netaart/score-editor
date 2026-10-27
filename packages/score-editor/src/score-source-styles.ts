@@ -13,6 +13,9 @@ export const scoreSourceCss = `
   border-radius: 999px;
   color: var(--sce-_muted);
   font-size: 0.92em;
+  /* The pill never sets the bar's height: its line box plus padding stays under the button's own box, so the words
+     appearing in a state cannot grow the toolbar by a fraction of a pixel at a large host font. */
+  line-height: 1.2;
   white-space: nowrap;
 }
 .sce-root .sce-save-state[data-state="dirty"] {

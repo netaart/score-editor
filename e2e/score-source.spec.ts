@@ -406,6 +406,34 @@ test.describe("the save state at every width", () => {
   });
 });
 
+test("shows Save as text and the status word on a narrow desktop, at 390 and 320", async ({
+  page,
+  harness,
+  press,
+  isMobile,
+}) => {
+  test.skip(isMobile, "the narrow desktop is the fine-pointer project");
+  test.setTimeout(180_000);
+  for (const width of [390, 320]) {
+    for (const language of ["en", "zh"] as const) {
+      await page.setViewportSize({ width, height: 720 });
+      await openFile(harness, { language });
+      await deleteD(page, press, language);
+      const dirty = await saveLooks(page);
+      expect(dirty.form, `${width} ${language}: words, not the icon`).toBe("false");
+      expect(dirty.action, `${width} ${language}: Save`).toBe(words[language].save);
+      expect(dirty.pill, `${width} ${language}: Unsaved`).toBe(words[language].unsaved);
+
+      await harness.failScoreNext("save");
+      await press(page.locator(".sce-save-button"));
+      const failed = await saveLooks(page);
+      expect(failed.action, `${width} ${language}: Save again`).toBe(words[language].again);
+      expect(failed.pill, `${width} ${language}: Save failed`).toBe(words[language].failed);
+      await harness.destroy();
+    }
+  }
+});
+
 test("reveals the whole strip in the chrome without a swipe", async ({ page, harness, press, isMobile }) => {
   const widths = isMobile ? [412, 320] : [1280];
   for (const width of widths) {
