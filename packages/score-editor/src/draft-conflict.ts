@@ -10,7 +10,12 @@ import { acquireStyles } from "./styles";
 import type { Language, ViewPart } from "./types";
 
 /** Mounts the conflict banner on `el`, bound to `keeper`; see DESIGN.md, "Draft conflict banner". */
-export function mountDraftConflict(el: HTMLElement, session: EditingSession, keeper: DraftKeeper): ViewPart {
+export function mountDraftConflict(
+  el: HTMLElement,
+  session: EditingSession,
+  keeper: DraftKeeper,
+  options: { say?: (words: string) => void } = {},
+): ViewPart {
   requireDom("mountDraftConflict");
   const releaseStyles = acquireStyles(el);
   const abort = new AbortController();
@@ -28,9 +33,13 @@ export function mountDraftConflict(el: HTMLElement, session: EditingSession, kee
           { label: t.draftOverwrite, note: t.draftOverwriteNote },
           { label: t.draftLoadTheirs, note: t.draftLoadTheirsNote },
         ],
+        cancel: t.draftConflictCancel,
+        outcomes: [t.draftConflictOverwritten, t.draftConflictLoaded],
       };
     },
     actions: [() => keeper.overwrite(), () => keeper.loadTheirs()],
+    ...(options.say === undefined ? {} : { say: options.say }),
+    succeeded: () => keeper.status !== "conflict",
   });
 
   function draw(): void {

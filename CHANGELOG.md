@@ -2,6 +2,21 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## Unreleased
+
+### Changed
+
+- **The conflict banner says what a choice did.** After loading theirs the editor's live region says **Loaded the other
+  version. Your changes in this window were replaced.** ("已载入对方的版本，这个窗口里的修改已被替换。"), and after
+  overwriting it says **Saved your version over the other one.** ("已用你的版本覆盖。"). The Chinese button that opens
+  the choices is now **选择版本**, so it no longer shares its name with the toolbar's Select.
+
+### Fixed
+
+- **The conflict dialog opens on Cancel.** Its visible Cancel button takes the focus when the dialog opens, so Enter
+  pressed by habit closes it and writes nothing; Cancel, Escape and light dismiss return the focus to Choose. Both
+  conflict kinds share the banner.
+
 ## 0.4.4
 
 No export of 0.4.3 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of

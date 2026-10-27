@@ -466,7 +466,9 @@ export class Editor implements MountedEditor {
         onUnsavedChange: (unsaved) => this.options.onUnsavedChange?.(unsaved),
       });
       this.scoreFile = file;
-      this.saveConflict = mountSaveConflict(this.chrome, this.session, file);
+      this.saveConflict = mountSaveConflict(this.chrome, this.session, file, {
+        say: (words) => this.toolbar.say(words),
+      });
       this.saveNotice = mountSaveNotice(this.chrome, this.session, file, {
         save: () => {
           void this.saveControl?.save();
@@ -520,7 +522,9 @@ export class Editor implements MountedEditor {
   private syncDraftParts(): void {
     if (this.draftStore() !== null) {
       if (this.conflict === null) {
-        const part = mountDraftConflict(this.chrome, this.session, this.drafts);
+        const part = mountDraftConflict(this.chrome, this.session, this.drafts, {
+          say: (words) => this.toolbar.say(words),
+        });
         const node = this.chrome.lastElementChild;
         if (node !== null) this.chrome.insertBefore(node, this.draftAnchor);
         this.conflict = part;

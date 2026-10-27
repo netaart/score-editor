@@ -441,13 +441,13 @@ test.describe("C2: the conflict banner and its choices", () => {
     await harness.update({ language: "zh" });
     await harness.stageHeight(288);
     const chineseBanner = page.getByRole("group", { name: "草稿冲突", exact: true });
-    await press(chineseBanner.getByRole("button", { name: "选择", exact: true }));
+    await press(chineseBanner.getByRole("button", { name: "选择版本", exact: true }));
     const dialog = page.getByRole("dialog", { name: "草稿冲突", exact: true });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "用我的版本覆盖", exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "载入对方的版本", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(chineseBanner.getByRole("button", { name: "选择", exact: true })).toBeFocused();
+    await expect(chineseBanner.getByRole("button", { name: "选择版本", exact: true })).toBeFocused();
   });
 
   test("the score file's banner uses the same Choose and dialog", async ({ page, harness, press, isMobile }) => {

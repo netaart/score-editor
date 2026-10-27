@@ -199,3 +199,85 @@ test("the banner sentence keeps a readable measure and the choices wrap prettily
     );
   expect(wraps, "both lines of each choice wrap prettily").toEqual(["pretty", "pretty", "pretty", "pretty"]);
 });
+
+const cancelButton = (page: Page, language: "en" | "zh") =>
+  page.getByRole("button", { name: language === "zh" ? "取消" : "Cancel", exact: true });
+
+const choiceButton = (page: Page, language: "en" | "zh", choice: "overwrite" | "load") =>
+  page.getByRole("button", {
+    name:
+      choice === "overwrite"
+        ? language === "zh"
+          ? "用我的版本覆盖"
+          : "Overwrite with my version"
+        : language === "zh"
+          ? "载入对方的版本"
+          : "Load the other version",
+    exact: true,
+  });
+
+const statusWith = (page: Page, text: string) => page.getByRole("status").filter({ hasText: text });
+
+test("the keyboard opens the choices on Cancel, and Enter there writes nothing", async ({ page, harness, press }) => {
+  await harness.mount({ score: { text: QUARTERS }, drafts: true });
+  await makeDraftConflict(page, press, QUARTERS);
+  const before = await writes(page);
+
+  await chooseButton(page).focus();
+  await page.keyboard.press("Enter");
+  await expect(cancelButton(page, "en")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(chooseButton(page)).toBeFocused();
+  expect(await writes(page), "Enter on Cancel wrote nothing").toBe(before);
+
+  await chooseButton(page).focus();
+  await page.keyboard.press("Enter");
+  await press(cancelButton(page, "en"));
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(chooseButton(page)).toBeFocused();
+});
+
+test("the Choose button reads 选择版本 in Chinese", async ({ page, harness, press }) => {
+  await harness.mount({ score: { text: QUARTERS }, drafts: true, language: "zh" });
+  await makeDraftConflict(page, press, QUARTERS);
+  await expect(page.getByRole("button", { name: "选择版本", exact: true })).toBeVisible();
+  await press(page.getByRole("button", { name: "选择版本", exact: true }));
+  await expect(cancelButton(page, "zh")).toBeVisible();
+});
+
+test("after loading a draft theirs, the live region says what was replaced", async ({ page, harness, press }) => {
+  await harness.mount({ score: { text: QUARTERS }, drafts: true });
+  await makeDraftConflict(page, press, QUARTERS);
+  await press(chooseButton(page));
+  await press(choiceButton(page, "en", "load"));
+  await expect(statusWith(page, "Loaded the other version. Your changes in this window were replaced.")).toHaveCount(1);
+});
+
+test("after overwriting a draft theirs, the live region says so in Chinese", async ({ page, harness, press }) => {
+  await harness.mount({ score: { text: QUARTERS }, drafts: true, language: "zh" });
+  await makeDraftConflict(page, press, QUARTERS);
+  await press(chooseButton(page));
+  await press(choiceButton(page, "zh", "overwrite"));
+  await expect(statusWith(page, "已用你的版本覆盖。")).toHaveCount(1);
+});
+
+test("after overwriting a score file's other version, the live region says so", async ({ page, harness, press }) => {
+  await harness.mount({ score: { text: QUARTERS }, scoreFile: { name: "tune.abc" } });
+  await makeScoreFileConflict(page, harness, press);
+  await press(chooseButton(page));
+  await press(choiceButton(page, "en", "overwrite"));
+  await expect(statusWith(page, "Saved your version over the other one.")).toHaveCount(1);
+});
+
+test("after loading a score file's other version, the live region says so in Chinese", async ({
+  page,
+  harness,
+  press,
+}) => {
+  await harness.mount({ score: { text: QUARTERS }, scoreFile: { name: "tune.abc" }, language: "zh" });
+  await makeScoreFileConflict(page, harness, press);
+  await press(chooseButton(page));
+  await press(choiceButton(page, "zh", "load"));
+  await expect(statusWith(page, "已载入对方的版本，这个窗口里的修改已被替换。")).toHaveCount(1);
+});
