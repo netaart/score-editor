@@ -2,7 +2,16 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
-## Unreleased
+## 0.4.4
+
+No export of 0.4.3 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
+`@neta-art/score-dialect-song2`, and all 146 type exports of the core are still exported. `tests/entries.test.ts` checks
+every runtime name with `in` (a removal or rename fails `pnpm test`) and lists every 0.4.3 type in tuples the type-check
+compiles (a removal or rename fails `pnpm typecheck`); both lists are taken from the `v0.4.3` tag. No export or type shape
+changed this round, so a `Score`, `SongProject`, `MountOptions`, `HandoffInstructionOptions` or `ScoreCommand` written for
+0.4.3 still type-checks. The one behaviour a host can notice is the instruction text for a project whose style or lyrics
+are blank: a host that asserts the old text for such a project must update its expectation. With both fields present the
+instruction is unchanged byte for byte.
 
 ### Fixed
 
