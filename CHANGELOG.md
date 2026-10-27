@@ -2,6 +2,32 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## 0.4.3
+
+No export of 0.4.2 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
+`@neta-art/score-dialect-song2`, and all 146 type exports of the core are still exported. `tests/entries.test.ts` checks
+every runtime name with `in` (a removal or rename fails `pnpm test`) and lists every 0.4.2 type in tuples the type-check
+compiles (a removal or rename fails `pnpm typecheck`); both lists are taken from the `v0.4.2` tag. No export or type shape
+changed this round, so a `Score`, `SongProject`, `MountOptions`, `ScoreCommand` or `NoticeCode` written for 0.4.2 still
+type-checks and no exhaustive `switch` needs a new case. Two behaviours a host can notice are listed under Changed and
+Fixed: the handoff's new words, and the cut rules note commands now enforce.
+
+### Changed
+
+- **The handoff is called “Hand to agent”.** The trigger reads **Hand to agent…** (`交给 agent…`), the review **Check
+  before you hand to agent** (`交给 agent 前核对`), the primary action **Hand to agent** (`交给 agent`), the notices lead
+  “before you hand to agent” (`交给 agent 前…`), and the not-sent lines end “then hand to agent” (`再交给 agent`). The
+  source line now says the edited version or the song goes into the chat box and the person sends it. A host that matches
+  the old **Regenerate…** / **重新生成…** label in tests, walks or docs must update it; the instruction text addressed to
+  the agent did not change. (`276f53c`)
+
+### Fixed
+
+- **Note commands follow the gate's cut rules.** A move, add, paste, duplicate, copy, note-tool run, `toRests` tie chain
+  or section split that would rewrite a cut score's cut measure, or leave a short or missing final `Ins` block non-final,
+  is now refused with `write-mismatch`; a legal edit near the cut is written. The song2 writer keeps those pieces. A host
+  that already shows the diagnostic needs no new code; the code itself is unchanged. (`a0ce468`, `aa9fdf6`)
+
 ## 0.4.2
 
 No export of 0.4.1 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
