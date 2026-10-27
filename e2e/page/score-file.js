@@ -9,7 +9,9 @@
 export function createFakeScoreFile({ name = "tune.abc", text = "", version = "file-1" } = {}) {
   const calls = [];
   const failures = { save: 0, read: 0 };
+  const reasons = { save: "failed", read: "failed" };
   let file = { text, version };
+  let missing = false;
   let next = 1;
   let gate = null;
 
@@ -31,8 +33,15 @@ export function createFakeScoreFile({ name = "tune.abc", text = "", version = "f
       await wait();
       if (failures.save > 0) {
         failures.save -= 1;
-        call.result = "failed";
-        return { ok: false, reason: "failed" };
+        call.result = reasons.save;
+        return { ok: false, reason: reasons.save };
+      }
+      if (missing) {
+        missing = false;
+        const nextVersion = newVersion();
+        file = { text, version: nextVersion };
+        call.result = nextVersion;
+        return { ok: true, version: nextVersion };
       }
       if (file.version !== expected) {
         call.result = "conflict";
@@ -46,10 +55,15 @@ export function createFakeScoreFile({ name = "tune.abc", text = "", version = "f
     async read() {
       const call = record({ method: "read" });
       await wait();
+      if (missing) {
+        call.result = "missing";
+        return { ok: false, reason: "missing" };
+      }
       if (failures.read > 0) {
         failures.read -= 1;
-        call.result = "failed";
-        throw new Error("the file could not be read");
+        call.result = reasons.read;
+        if (reasons.read === "failed") throw new Error("the file could not be read");
+        return { ok: false, reason: reasons.read };
       }
       call.result = file.version;
       return { text: file.text, version: file.version };
@@ -69,8 +83,12 @@ export function createFakeScoreFile({ name = "tune.abc", text = "", version = "f
       file = { text: nextText, version: `other-${next++}` };
       return file.version;
     },
-    failNext(method, count = 1) {
+    failNext(method, count = 1, reason = "failed") {
       failures[method] = count;
+      reasons[method] = reason;
+    },
+    remove() {
+      missing = true;
     },
     holdSave() {
       let release = () => {};

@@ -18,7 +18,12 @@ interface ScoreFileSource {
   name: string;      // the handoff instruction's title
   version: string;   // the version the file was opened at
   save(text: string, expected: string): Promise<ScoreFileSaveResult>;
-  read(): Promise<ScoreFileEntry | null>;
+  read(): Promise<ScoreFileEntry | ScoreFileReadFailure | null>;
+}
+
+interface ScoreFileReadFailure {
+  ok: false;
+  reason: "missing" | "failed";
 }
 ```
 
@@ -34,9 +39,12 @@ interface ScoreFileSource {
 
 `version` is an opaque string the host owns, exactly as a `DraftStore` version is. A successful `save` answers
 `{ ok: true, version }`; a version mismatch answers `{ ok: false, reason: "conflict" }`; any other failure answers
-`{ ok: false, reason: "failed" }`. `ScoreFileSaveResult` is the same union as `DraftWriteResult`, and `ScoreFileEntry`
-the same `{ text, version }` as `DraftStoreEntry`: one rule for host-owned versions, not two. `read()` is how "load the
-other version" gets the version and text the other writer left.
+`{ ok: false, reason: "failed" }`. A host that has lost access reports `{ ok: false, reason: "no-access" }`; that is
+the same retryless state as a failed save, not a second channel. `ScoreFileSaveResult` is the same union as
+`DraftWriteResult`, and `ScoreFileEntry` the same `{ text, version }` as `DraftStoreEntry`: one rule for host-owned
+versions, not two. `read()` is how "load the other version" gets the version and text the other writer left. It answers
+`{ ok: false, reason: "missing" }` when the file is gone, `{ ok: false, reason: "failed" }` when the read broke, or
+`null` (still missing, for a host written before the reason).
 
 A score file carries score text only. `mount` starts its style description, seed and lyric-line alignment empty; the
 host passes the file's score in `project.score`, and lyrics may come from the score itself. Those fields can be filled
@@ -70,18 +78,26 @@ editor.hasUnsavedChanges(); // false for a generated score
   change, never when the state changes. While those words fit in the bar's height without the control, the state is
   in words: `Unsaved`, `Saving…` in the button, `Save failed` in the pill with `Save again` on the button, and `Unsaved`
   in a conflict. Where they would add a row, every state uses the icon and one mark (`•`, `!`, `?`, `…` while saving).
-  The pill is `aria-hidden`; the button's description carries the state and, after a failure, the recovery sentence. The
+  The desktop bar takes its own full line under the wrapped strip, so the words fit at 1440, 1280, 1024 and 768; a
+  narrow desktop at 390 or 320 gives the preview its own line and keeps them too. The pill is `aria-hidden`; the
+  button's description carries the state and, after a failure, the recovery sentence. The
   toolbar's live region says `Saved` or the recovery sentence. Save is `aria-disabled` while there is nothing to write,
   or while a save is in flight or a conflict stands. Ctrl/Cmd+S saves while the focus is inside the editor; outside it
   the browser's and the host's own shortcuts are untouched.
 - A failed save leaves the changes in place and Save again retries with the same version; the host gets
   `score-save-failed`. The editor also draws a one-action notice in the chrome: the recovery sentence as an alert with
   **Save again**, which saves; it stands until the next successful save or the conflict's answer and takes no focus.
+- A save refused with `{ ok: false, reason: "no-access" }` is the failed state without a retry: the notice says
+  `scoreSaveNoAccess` and draws no **Save again**, because a retry cannot restore the access. The bar's Save stays
+  usable, the keeper's `accessLost` is true until a save, load or restore starts, and the next successful save clears
+  the state and the notice. `handoff()` answers `failed`, not `no-access`.
 - A conflict shows the same banner, Choose button and two two-line choices as the draft conflict: **Overwrite with my
   version** reads the other writer's version and writes ours over it, **Load the other version** puts their text in the
   session as a new document. Choose's dialog opens under the banner when both choices fit there and from the top of the
   editor when the room below is short, so neither choice is cut; the chrome scrolls to the banner and back. The editor
-  never overwrites by itself.
+  never overwrites by itself. When "Load the other version" finds the file gone, it keeps the project, leaves its
+  changes unsaved and clears the conflict; the next Save writes the file anew. A read that fails keeps the conflict and
+  says `score-load-failed`.
 - Restore original for a file asks about the last saved version; it is muted while the file is clean, its answer is
   `Go back to last save`, it replaces the project, and it resets the history (Undo cannot bring the changes back)
   without reading or writing the host's file.
@@ -115,9 +131,9 @@ keeper.destroy();
 ```
 
 `ScoreFileKeeper` has `status` (`ScoreFileKeeperStatus`: `"clean" | "dirty" | "saving" | "conflict" | "destroyed"`),
-`unsaved`, `failed`, `savedProject` (the change log's original and Restore's target), `version`, `save`, `overwrite`,
-`loadTheirs`, `restoreOriginal`, `handoff`, `subscribe` and `destroy`. `ScoreFileKeeperChange` is `{ status, unsaved,
-failed }`; `ScoreFileKeeperOptions` is `{ session, original, source, notify?, onUnsavedChange? }`. A save captures the
+`unsaved`, `failed`, `accessLost`, `savedProject` (the change log's original and Restore's target), `version`, `save`,
+`overwrite`, `loadTheirs`, `restoreOriginal`, `handoff`, `subscribe` and `destroy`. `ScoreFileKeeperChange` is `{ status,
+unsaved, failed, accessLost }`; `ScoreFileKeeperOptions` is `{ session, original, source, notify?, onUnsavedChange? }`. A save captures the
 project when it starts, so an edit made while the host is slow stays unsaved when the write returns.
 
 ## Required inputs and the handoff
@@ -135,4 +151,4 @@ score, the draft is saved first as [handoff.md](handoff.md) describes.
 
 The public pieces are `createScoreFileKeeper`; `ScoreFileKeeper`, `ScoreFileKeeperOptions`, `ScoreFileKeeperChange`,
 `ScoreFileKeeperStatus` and `ScoreFileHandoffResult`; and on `mount`, `ScoreSource`, `GeneratedScoreSource`,
-`ScoreFileSource`, `ScoreFileEntry`, `ScoreFileSaveResult`, `ProjectField` and `RequiredInput`.
+`ScoreFileSource`, `ScoreFileEntry`, `ScoreFileReadFailure`, `ScoreFileSaveResult`, `ProjectField` and `RequiredInput`.

@@ -38,6 +38,24 @@ test.describe("the arrangement of a song2 score", () => {
     await expect(page.getByRole("list", { name: "Ins" })).toBeVisible();
   });
 
+  test("a short score carries its lane stripes to the stage's right edge, and its bars stop at its end", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the pixels are read on the desktop project at a device scale of 1");
+    await page.setViewportSize({ width: 1440, height: 760 });
+    await harness.mount({ score: { text: vocalOnly("C16|C16|") } });
+    const lane = await box(page.getByRole("list", { name: "Vocal" }));
+    const lastNumber = await box(page.getByRole("list", { name: "Bars" }).getByRole("listitem").last());
+    expect(lastNumber.x + lastNumber.width, "the last bar number stays at the score's end").toBeLessThanOrEqual(
+      lane.x + lane.width + 1,
+    );
+    const [brightnessAtRight] = await brightness(page, 1430, lane.y + 10, 1);
+    // The stage's ground is white in the default theme; the lane's stripes are the surface mix, never white.
+    expect(brightnessAtRight, "the right of the short score is the lane's ground, not white").toBeLessThan(250);
+  });
+
   test("a Vocal-only score gets one track", async ({ page, harness }) => {
     await harness.mount({ score: { sample: "vocal-only-melody" } });
     await expect(page.getByRole("list", { name: "Bars" }).getByRole("listitem").last()).toHaveText("235");

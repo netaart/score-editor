@@ -10,6 +10,8 @@ import type { ScoreSource, ViewPart } from "./types";
 export interface SourceLabelOptions {
   /** The host's source; absent or `{ kind: "generated" }` means a generated score. */
   readonly source: () => ScoreSource | undefined;
+  /** Whether the editor is read only; a score file then says it is read only. */
+  readonly readOnly?: () => boolean;
   /** Where in `el` the label goes; the default editor puts it first in the toolbar's scrolling strip. */
   readonly before?: ChildNode | null;
   /** Says the new label once when the source changes after Save as. */
@@ -38,7 +40,7 @@ export function mountSourceLabel(
   const rest = create(doc, "span", "sce-source-label-rest", label);
   el.insertBefore(label, options.before ?? null);
   let language = session.view.language;
-  let kind: "generated" | "scoreFile" | null = null;
+  let kind: "generated" | "scoreFile" | "scoreFileReadOnly" | null = null;
 
   function applyLanguage(): void {
     if (session.view.language === language && kind !== null) return;
@@ -56,11 +58,17 @@ export function mountSourceLabel(
   function draw(): void {
     const t = messagesFor(language);
     const source = options.source();
-    const next = source?.kind === "scoreFile" ? "scoreFile" : "generated";
+    const next =
+      source?.kind === "scoreFile" ? (options.readOnly?.() === true ? "scoreFileReadOnly" : "scoreFile") : "generated";
     if (next === kind) return;
     const previous = kind;
     kind = next;
-    const words = next === "scoreFile" ? t.sourceLabelScoreFile : t.sourceLabelGenerated;
+    const words =
+      next === "scoreFileReadOnly"
+        ? t.sourceLabelScoreFileReadOnly
+        : next === "scoreFile"
+          ? t.sourceLabelScoreFile
+          : t.sourceLabelGenerated;
     label.dataset.kind = next;
     const parts = wordsOf(words);
     main.textContent = parts.main;

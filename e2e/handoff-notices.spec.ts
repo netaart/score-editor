@@ -427,13 +427,23 @@ test.describe("the source label", () => {
         if (width <= 480) expect(labelStyle.height).toBeGreaterThanOrEqual(labelStyle.line * 1.7);
         else expect(labelStyle.height).toBeLessThanOrEqual(labelStyle.line * 1.5);
         const toolbar = await box(page.locator(".sce-toolbar"));
+        const stripBox = await box(strip(page));
+        const barBox = await box(bar(page));
         if (width === 1280) {
-          // One row: the bar shares the strip's line.
-          expect(toolbar.height).toBeLessThanOrEqual(45);
+          // Wrapped desktop: the label is first in a strip that shows every control, and the bar is its own line under it.
+          expect(
+            await strip(page).evaluate((el) => el.firstElementChild?.classList.contains("sce-source-label")),
+            "the source label is the strip's first item",
+          ).toBe(true);
+          expect(
+            await strip(page).evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+            "the wrapped strip does not scroll",
+          ).toBe(true);
+          expect(barBox.y).toBeGreaterThanOrEqual(stripBox.y + stripBox.height - 1);
+          expect(toolbar.height).toBeGreaterThan(45);
+          expect(toolbar.height).toBeLessThanOrEqual(stripBox.height + barBox.height + 4);
         } else {
           // Two rows: the bar sits on its own line under the strip, and the whole toolbar stays within its budget.
-          const stripBox = await box(strip(page));
-          const barBox = await box(bar(page));
           expect(barBox.y).toBeGreaterThanOrEqual(stripBox.y + stripBox.height - 1);
           expect(toolbar.height).toBeLessThanOrEqual(width === 320 ? 96 : 89);
         }

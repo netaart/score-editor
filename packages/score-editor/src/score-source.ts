@@ -3,7 +3,7 @@
 import { messagesFor } from "./i18n";
 import type { SongProject } from "./score";
 import type { EditingSession } from "./session";
-import type { Notice, NoticeCode, ScoreFileSaveResult, ScoreFileSource } from "./types";
+import type { Notice, NoticeCode, ScoreFileReadFailure, ScoreFileSaveResult, ScoreFileSource } from "./types";
 
 /** Where the keeper is: the file matches the session, there are changes, a save is in flight, or a conflict stands. */
 export type ScoreFileKeeperStatus = "clean" | "dirty" | "saving" | "conflict" | "destroyed";
@@ -17,6 +17,8 @@ export interface ScoreFileKeeperChange {
   readonly unsaved: boolean;
   /** True after a failed save or read, until the next save, load or restore starts. */
   readonly failed: boolean;
+  /** True after a save was refused because access was removed; the notice offers no Save again. */
+  readonly accessLost: boolean;
 }
 
 export interface ScoreFileKeeperOptions {
@@ -38,6 +40,8 @@ export interface ScoreFileKeeper {
   readonly unsaved: boolean;
   /** True after a failed save or read, until the next save, load or restore starts. */
   readonly failed: boolean;
+  /** True after a save was refused because access was removed; the notice offers no Save again. */
+  readonly accessLost: boolean;
   /** The project at the last save or load of their version; the change log's original and Restore's target. */
   readonly savedProject: SongProject;
   /** The version the file is known to be at: opened, last saved, or loaded from the other writer. */
@@ -66,6 +70,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
   let version = source.version;
   let busy = false;
   let failed = false;
+  let accessLost = false;
   let finished = false;
   let announced: ScoreFileKeeperChange | null = null;
   let announcedUnsaved = false;
@@ -85,8 +90,15 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
   }
 
   function announce(): void {
-    if (announced?.status === status && announced.unsaved === unsaved() && announced.failed === failed) return;
-    const change: ScoreFileKeeperChange = { status, unsaved: unsaved(), failed };
+    if (
+      announced?.status === status &&
+      announced.unsaved === unsaved() &&
+      announced.failed === failed &&
+      announced.accessLost === accessLost
+    ) {
+      return;
+    }
+    const change: ScoreFileKeeperChange = { status, unsaved: unsaved(), failed, accessLost };
     announced = change;
     for (const listener of [...listeners]) listener(change);
     const now = change.unsaved;
@@ -125,17 +137,31 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       return result;
     }
     failed = true;
+    accessLost = result.reason === "no-access";
     sendNotice("score-save-failed");
     setStatus(fromConflict ? "conflict" : "dirty");
     return result;
   }
 
-  async function read(): Promise<{ text: string; version: string } | null> {
+  type ReadOutcome =
+    | { readonly kind: "entry"; readonly text: string; readonly version: string }
+    | { readonly kind: "missing" }
+    | { readonly kind: "failed" };
+
+  function readFailure(value: ScoreFileReadFailure): ReadOutcome {
+    return value.reason === "missing" ? { kind: "missing" } : { kind: "failed" };
+  }
+
+  async function read(): Promise<ReadOutcome> {
+    let entry: Awaited<ReturnType<ScoreFileSource["read"]>>;
     try {
-      return await source.read();
+      entry = await source.read();
     } catch {
-      return null;
+      return { kind: "failed" };
     }
+    if (entry === null) return { kind: "missing" };
+    if ("ok" in entry) return readFailure(entry);
+    return { kind: "entry", text: entry.text, version: entry.version };
   }
 
   const unsubscribe = session.subscribe((change) => {
@@ -151,6 +177,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
     if (!unsaved()) return unchanged();
     busy = true;
     failed = false;
+    accessLost = false;
     setStatus("saving");
     try {
       return await write(version, false);
@@ -169,6 +196,9 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
     get failed() {
       return failed;
     },
+    get accessLost() {
+      return accessLost;
+    },
     get savedProject() {
       return savedProject;
     },
@@ -186,11 +216,12 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       if (finished || status !== "conflict" || busy) return;
       busy = true;
       failed = false;
+      accessLost = false;
       setStatus("saving");
       try {
         const entry = await read();
         if (finished) return;
-        if (entry === null) {
+        if (entry.kind !== "entry") {
           failed = true;
           sendNotice("score-save-failed");
           setStatus("conflict");
@@ -205,11 +236,18 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       if (finished || status !== "conflict" || busy) return;
       busy = true;
       failed = false;
+      accessLost = false;
       setStatus("saving");
       try {
         const entry = await read();
         if (finished) return;
-        if (entry === null) {
+        if (entry.kind === "missing") {
+          // There is no other version to load: keep the person's project, stay unsaved and clear the conflict, so
+          // the next Save writes the file anew.
+          setStatus(unsaved() ? "dirty" : "clean");
+          return;
+        }
+        if (entry.kind === "failed") {
           failed = true;
           sendNotice("score-load-failed");
           setStatus("conflict");
@@ -228,6 +266,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
     async restoreOriginal() {
       if (finished) return false;
       failed = false;
+      accessLost = false;
       const target = savedProject;
       session.replaceProject(target);
       if (finished) return false;
@@ -239,7 +278,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       if (!unsaved()) return "unchanged";
       const result = await saveNow();
       if (result.ok) return "saved";
-      return result.reason;
+      return result.reason === "no-access" ? "failed" : result.reason;
     },
     destroy() {
       if (finished) return;

@@ -188,6 +188,7 @@ export type {
   ProjectField,
   RequiredInput,
   ScoreFileEntry,
+  ScoreFileReadFailure,
   ScoreFileSaveResult,
   ScoreFileSource,
   ScoreSource,

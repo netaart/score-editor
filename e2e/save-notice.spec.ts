@@ -27,6 +27,10 @@ const notSent = {
   en: "Not sent: the score file was not saved. Try again, then regenerate.",
   zh: "未发送：乐谱文件没有保存成功。再试一次，然后重新生成。",
 } as const;
+const noAccess = {
+  en: "The score file was not saved because access was removed. Ask for access, then save again.",
+  zh: "访问权限已被移除，乐谱文件没有保存成功。请先申请访问权限，再保存。",
+} as const;
 
 async function deleteD(page: Page, press: (target: Locator) => Promise<void>): Promise<void> {
   await press(noteNamed(page, D4));
@@ -97,6 +101,35 @@ for (const language of ["en", "zh"] as const) {
       await expect.poll(async () => (await harness.scoreCalls()).length).toBe(2);
       await expect(notice(page)).toBeHidden();
       await expect(page.locator(".sce-save-button")).toHaveAttribute("aria-label", language === "zh" ? "保存" : "Save");
+      await expect(page.locator(".sce-part-toolbar .sce-sr-only[role=status]")).toHaveText(
+        language === "zh" ? "已保存" : "Saved",
+      );
+    }
+  });
+
+  test(`a save refused for access, ${language}: it says so and offers no Save again`, async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.setTimeout(180_000);
+    const widths = isMobile ? [412, 320] : [1280];
+    for (const width of widths) {
+      await page.goto("/");
+      await page.setViewportSize({ width, height: isMobile ? 839 : 720 });
+      await harness.stageHeight(420);
+      await openFile(harness, language);
+      await deleteD(page, press);
+      await harness.failScoreNext("save", 1, "no-access");
+      await press(page.locator(".sce-save-button"));
+      await expect(notice(page).getByRole("alert")).toHaveText(noAccess[language]);
+      await expect(notice(page).getByRole("button")).toHaveCount(0);
+      await assertSentenceInChrome(page, `no access ${language} ${width}`);
+      // The bar's Save stays usable; getting access back and saving again clears the strip.
+      await expect(page.locator(".sce-save-button")).toHaveAttribute("aria-disabled", "false");
+      await press(page.locator(".sce-save-button"));
+      await expect(notice(page)).toBeHidden();
       await expect(page.locator(".sce-part-toolbar .sce-sr-only[role=status]")).toHaveText(
         language === "zh" ? "已保存" : "Saved",
       );

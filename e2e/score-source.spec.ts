@@ -406,6 +406,34 @@ test.describe("the save state at every width", () => {
   });
 });
 
+test("shows Save as text and the status word on a narrow desktop, at 390 and 320", async ({
+  page,
+  harness,
+  press,
+  isMobile,
+}) => {
+  test.skip(isMobile, "the narrow desktop is the fine-pointer project");
+  test.setTimeout(180_000);
+  for (const width of [390, 320]) {
+    for (const language of ["en", "zh"] as const) {
+      await page.setViewportSize({ width, height: 720 });
+      await openFile(harness, { language });
+      await deleteD(page, press, language);
+      const dirty = await saveLooks(page);
+      expect(dirty.form, `${width} ${language}: words, not the icon`).toBe("false");
+      expect(dirty.action, `${width} ${language}: Save`).toBe(words[language].save);
+      expect(dirty.pill, `${width} ${language}: Unsaved`).toBe(words[language].unsaved);
+
+      await harness.failScoreNext("save");
+      await press(page.locator(".sce-save-button"));
+      const failed = await saveLooks(page);
+      expect(failed.action, `${width} ${language}: Save again`).toBe(words[language].again);
+      expect(failed.pill, `${width} ${language}: Save failed`).toBe(words[language].failed);
+      await harness.destroy();
+    }
+  }
+});
+
 test("reveals the whole strip in the chrome without a swipe", async ({ page, harness, press, isMobile }) => {
   const widths = isMobile ? [412, 320] : [1280];
   for (const width of widths) {
@@ -526,6 +554,29 @@ test.describe("a score file another writer changed", () => {
     expect((await harness.scoreFile())?.file).toEqual({ text: WITHOUT_D, version: "save-2" });
   });
 
+  test("Load the other version with the file gone keeps the work unsaved and clears the conflict", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    await conflict(page, harness, press);
+    await harness.removeScoreFile();
+
+    await press(chooseButton(page));
+    await press(loadTheirsButton(page));
+
+    await expect(conflictStrip(page)).toBeHidden();
+    await expect.poll(async () => harness.hasUnsavedChanges()).toBe(true);
+    // The project the person had is still here; there was no other version to open.
+    await expect(noteNamed(page, D4)).toHaveCount(0);
+    await expect(page.locator(".sce-part-save")).toContainText(/Unsaved|•/);
+
+    // The next Save writes the missing file anew.
+    await press(saveButton(page));
+    await expect(unsavedPill(page)).toBeHidden();
+    expect((await harness.scoreFile())?.file.text).toBe(WITHOUT_D);
+  });
+
   test("Load the other version opens their text, makes it the saved version and writes nothing", async ({
     page,
     harness,
@@ -542,6 +593,19 @@ test.describe("a score file another writer changed", () => {
     await expect(unsavedPill(page)).toBeHidden();
     expect(await harness.scoreCalls()).toEqual([...before, { method: "read", result: "other-1" }]);
     expect((await harness.scoreFile())?.file).toEqual({ text: THEIR_SCORE, version: "other-1" });
+  });
+});
+
+test.describe("a read-only score file", () => {
+  test("is labelled a score file, not a generated score", async ({ page, harness }) => {
+    for (const language of ["en", "zh"] as const) {
+      await openFile(harness, { language, editable: false });
+      await expect(page.locator(".sce-source-label")).toHaveText(
+        language === "zh" ? "乐谱文件（只读）" : "Score file (read only)",
+      );
+      await expect(page.locator(".sce-part-save")).toBeHidden();
+      await harness.destroy();
+    }
   });
 });
 

@@ -132,6 +132,7 @@ export interface Messages {
   draftSaveFailed: string;
   /** Score-file keeper notices: a save or a load of the other writer's version did not reach the host. */
   scoreSaveFailed: string;
+  scoreSaveNoAccess: string;
   scoreLoadFailed: string;
   /** The score-file controls: Save, Save as, the unsaved state and the failed state. */
   save: string;
@@ -152,6 +153,7 @@ export interface Messages {
   /** The source label in the toolbar: where the edits go. */
   sourceLabelGenerated: string;
   sourceLabelScoreFile: string;
+  sourceLabelScoreFileReadOnly: string;
   /** The Restore control while the source is a score file: the last saved version, and no draft. */
   restoreSavedQuestion: string;
   restoreSavedWarning: string;
@@ -505,6 +507,7 @@ const en: Messages = {
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
   scoreSaveFailed: "The score file was not saved. Your changes are still here; try Save again.",
+  scoreSaveNoAccess: "The score file was not saved because access was removed. Ask for access, then save again.",
   scoreLoadFailed: "The other version of the score file could not be read. The conflict is still open.",
   save: "Save",
   saveAs: "Save as…",
@@ -523,6 +526,7 @@ const en: Messages = {
   saveLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
   sourceLabelGenerated: "Generated score (original kept)",
   sourceLabelScoreFile: "Score file (saves to the file)",
+  sourceLabelScoreFileReadOnly: "Score file (read only)",
   restoreSavedQuestion: "Go back to the last saved version?",
   restoreSavedWarning: "Every change since the last save is discarded. You can't undo this.",
   restoreSavedDone: "The last saved version is back",
@@ -829,6 +833,7 @@ const zh: Messages = {
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
   scoreSaveFailed: "乐谱文件没有保存成功，你的修改还在，再按保存试一次。",
+  scoreSaveNoAccess: "访问权限已被移除，乐谱文件没有保存成功。请先申请访问权限，再保存。",
   scoreLoadFailed: "读不到乐谱文件的对方版本，冲突还没有解决。",
   save: "保存",
   saveAs: "另存为…",
@@ -846,6 +851,7 @@ const zh: Messages = {
   saveLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
   sourceLabelGenerated: "生成的乐谱（原版保留）",
   sourceLabelScoreFile: "乐谱文件（存回原文件）",
+  sourceLabelScoreFileReadOnly: "乐谱文件（只读）",
   restoreSavedQuestion: "回到上次保存的版本？",
   restoreSavedWarning: "上次保存之后的修改都会丢掉，无法撤销。",
   restoreSavedDone: "已回到上次保存的版本",
