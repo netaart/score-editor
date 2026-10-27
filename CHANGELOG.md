@@ -2,14 +2,55 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
-## Unreleased
+## 0.4.1
+
+No export of 0.4.0 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
+`@neta-art/score-dialect-song2`, and all 145 type exports of the core are still exported. `tests/entries.test.ts` checks
+every runtime name with `in` (a removal or rename fails `pnpm test`) and lists every 0.4.0 type in tuples the type-check
+compiles (a removal or rename fails `pnpm typecheck`); both lists are taken from the `v0.4.0` tag. The only shape changes
+are optional fields — `HandoffInstructionOptions.scorePath`, `MountOptions.handoffScorePath` and
+`SourceLabelOptions.say` — so a `MountOptions`, `HandoffInstructionOptions` or `SourceLabelOptions` written for 0.4.0
+still type-checks and opens. No union gained a member, so no exhaustive `switch` needs a new case.
 
 ### Added in `@neta-art/score-editor`
 
 - **A handoff instruction can name the score's file.** `handoffInstruction({ …, scorePath })` writes the file into its
   intro instead of pointing at the attached `score.abc`, in both languages; `mount`'s `handoffScorePath` callback supplies
   that path when the review builds the payload. The `score.abc` attachment stays in `HandoffPayload`, and without a path,
-  or with a blank one, the instruction is exactly what 0.4.0 wrote.
+  or with a blank one, the instruction is exactly what 0.4.0 wrote. (`102c212`)
+- **The App-05 review round's options.** `SourceLabelOptions.say` lets a host say the new source label once when Save as
+  changes it, and the default editor's save notice takes `SaveNoticeOptions.save`, so its Save again runs the editor's one
+  save path. Both are optional. (`17d7362`)
+- **No new package-entry exports.** `python -I .port/changelog-exports.py /work v0.4.0 packages/score-editor` and the
+  same for the dialect print no bullets: every name exported at 0.4.1 was already exported at 0.4.0.
+
+### Added in `@neta-art/score-dialect-song2`
+
+No new exports and no new dialect API.
+
+### Changed
+
+- **The handoff review's notices.** They come first under a count lead (`2 things to check before you regenerate` /
+  `重新生成前有 2 处要看`), each is ordinary text behind a 3 px text-colour rule rather than a muted quote, and the four
+  sentences name the next control: the “Unnamed” section bar and “Name this section”, the lyric and note counts, the
+  middle note against the singable range with the Voice octave tool, and Score mode with the chords. The notices are part
+  of the dialog's description and the lead is said once. (`17d7362`)
+- **The source label and the review's first line.** The label is plain text with no pill or border, first in the strip;
+  on a phone the bracketed half takes a second line. It says its new words once when Save as changes the source
+  (`SourceLabelOptions.say`), and the handoff review opens with the same source sentence. (`17d7362`)
+- **Save again** on the failed-save notice now calls the Save control's one save path, so a successful retry says Saved
+  and updates the same state as Save and Ctrl/Cmd+S, instead of writing through the keeper alone. (`17d7362`)
+- **The Chinese project mode names** are 完整 and 旋律, without the half-English `（full）`/`（melody）`, in the Project
+  panel, the change log, the score-mode diagnostics and the handoff review. (`17d7362`)
+
+### Fixed
+
+- **The marked change-log entries** now use 600 weight and a text-colour dot with a one-line legend
+  (`Marked: changed by your last step.`), not the accent line and tint that read as focus. (`17d7362`)
+- **The melody-with-chords diagnostic** now says the score mode is Melody but the score has chords, and names the two
+  ways out — delete the chords, or change Score mode to Full — in both languages. (`17d7362`)
+- **The handoff review's actions** stay on one row at 320 px, each button sharing the width, so neither Cancel nor
+  Regenerate… is cut or stacked. (`17d7362`)
 
 ## 0.4.0
 
