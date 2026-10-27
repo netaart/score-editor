@@ -17,7 +17,7 @@ import {
   spansOf,
   splitAtKeyChanges,
 } from "./commands-notes";
-import { effectiveKeyAt, noteAt, orderNotes } from "./commands-shared";
+import { cutEditRefusal, effectiveKeyAt, endsAtX5Tail, noteAt, orderNotes } from "./commands-shared";
 import { keyPitchClasses } from "./key-scale";
 import type { Note, Score } from "./score";
 import type { DialectConstraints } from "./types";
@@ -227,6 +227,9 @@ function placeSpans(
   removed: ReadonlyArray<NoteSpan>,
 ): ScoreCommandResult {
   if (placements.length === 0) return { ok: true, score };
+  const first = removed[0]?.notes?.[0];
+  const cut = cutEditRefusal(score, removed, placements, first === undefined ? {} : noteAt(score, first.id));
+  if (cut !== null) return cut;
   const removedKeys = new Set(removed.map(spanKeyOf));
   const affected = new Set<string>();
   for (const span of removed) for (const member of span.notes ?? []) affected.add(member.id);
@@ -241,7 +244,22 @@ function placeSpans(
     // starts with it, as the note commands' placement rule says.
     const wins: NoteSpan[] = [];
     for (const placement of placed) {
-      const span: NoteSpan = { voice, start: placement.start, end: placement.end, midi: placement.midi, notes: null };
+      const source = removed.find(
+        (span) =>
+          span.voice === voice &&
+          span.end === placement.end &&
+          span.notes !== null &&
+          span.notes[span.notes.length - 1]?.tie === true,
+      );
+      const tie = source !== undefined && endsAtX5Tail(score, voice, placement.end);
+      const span: NoteSpan = {
+        voice,
+        start: placement.start,
+        end: placement.end,
+        midi: placement.midi,
+        notes: null,
+        tie,
+      };
       for (;;) {
         const previous = wins[wins.length - 1];
         if (previous === undefined || previous.end <= span.start) break;
@@ -580,18 +598,13 @@ function fitRange(
   );
 }
 
-/** Applies one note tool command to a model. Every result is on the command's grid and has one note at a time in each voice. */
-export function runNoteToolCommand(
+function applyTool(
   score: Score,
   command: NoteToolCommand,
+  targets: Target[],
+  grid: GridStep,
   constraints: DialectConstraints,
 ): ScoreCommandResult {
-  const grid = gridOf(score, command, constraints);
-  if (!grid.ok) return grid.result;
-  const targets = targetsOf(score, command.noteIds);
-  if (!targets.ok) return targets.result;
-  if (targets.targets.length === 0) return { ok: true, score };
-
   switch (command.type) {
     case "splitNotes": {
       if (command.at === null) return { ok: true, score };
@@ -599,11 +612,11 @@ export function runNoteToolCommand(
         const first = command.noteIds[0];
         return commandRefusal("offset-not-integer", { field: "time" }, first === undefined ? {} : noteAt(score, first));
       }
-      const cut = snap(command.at, grid.grid.step);
+      const cut = snap(command.at, grid.step);
       const placements: Placement[] = [];
       const removed: NoteSpan[] = [];
-      for (const target of targets.targets) {
-        const whole = fittedSpan(target.span, grid.grid);
+      for (const target of targets) {
+        const whole = fittedSpan(target.span, grid);
         if (whole === null) return refusalFor(score, target, "note-too-short");
         if (cut <= whole.start || cut >= whole.end) continue;
         placements.push(
@@ -624,25 +637,49 @@ export function runNoteToolCommand(
         );
         removed.push(target.span);
       }
-      return placeSpans(score, placements, grid.grid, constraints, removed);
+      return placeSpans(score, placements, grid, constraints, removed);
     }
     case "chopNotes":
-      return chop(score, targets.targets, grid.grid, constraints);
+      return chop(score, targets, grid, constraints);
     case "joinNotes":
-      return join(score, targets.targets, grid.grid, constraints);
+      return join(score, targets, grid, constraints);
     case "legatoNotes":
-      return legato(score, targets.targets, grid.grid, constraints);
+      return legato(score, targets, grid, constraints);
     case "reverseNotes":
-      return reverse(score, targets.targets, grid.grid, constraints);
+      return reverse(score, targets, grid, constraints);
     case "flipNotes":
-      return flip(score, targets.targets, grid.grid, constraints);
+      return flip(score, targets, grid, constraints);
     case "snapNotesToKey":
-      return snapToKey(score, targets.targets, grid.grid, constraints);
+      return snapToKey(score, targets, grid, constraints);
     case "scaleNoteLengths":
-      return scaleLengths(score, command, targets.targets, grid.grid, constraints);
+      return scaleLengths(score, command, targets, grid, constraints);
     case "setNoteLength":
-      return setLength(score, command, targets.targets, grid.grid, constraints);
+      return setLength(score, command, targets, grid, constraints);
     case "fitNotesToRange":
-      return fitRange(score, command, targets.targets, grid.grid, constraints);
+      return fitRange(score, command, targets, grid, constraints);
   }
+}
+
+/** Applies one note tool command to a model. Every result is on the command's grid and has one note at a time in each voice. */
+export function runNoteToolCommand(
+  score: Score,
+  command: NoteToolCommand,
+  constraints: DialectConstraints,
+): ScoreCommandResult {
+  const grid = gridOf(score, command, constraints);
+  if (!grid.ok) return grid.result;
+  const targets = targetsOf(score, command.noteIds);
+  if (!targets.ok) return targets.result;
+  if (targets.targets.length === 0) return { ok: true, score };
+
+  const result = applyTool(score, command, targets.targets, grid.grid, constraints);
+  if (!result.ok) return result;
+  const first = targets.targets[0];
+  const cut = cutEditRefusal(
+    score,
+    targets.targets.map((target) => target.span),
+    [],
+    first === undefined ? {} : noteAt(score, first.namedId),
+  );
+  return cut ?? result;
 }

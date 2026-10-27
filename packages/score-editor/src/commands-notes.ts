@@ -2,7 +2,7 @@
 // ABOUTME: One voice holds one note at a time: a placed note removes a note it covers and shortens one it starts inside.
 import { commandRefusal } from "./command-refusal";
 import type { ScoreCommandResult } from "./commands";
-import { noteAt, orderNotes, splitLength, tieChain } from "./commands-shared";
+import { cutEditRefusal, endsAtX5Tail, noteAt, orderNotes, splitLength, tieChain } from "./commands-shared";
 import { type Chord, type Note, noteId, type Score, TICKS_PER_QUARTER } from "./score";
 import type { DialectConstraints, DurationSet } from "./types";
 
@@ -48,6 +48,8 @@ export interface NoteSpan {
   readonly midi: number | null;
   /** The read notes, while the span is untouched; null once it has to be written again from its interval. */
   readonly notes: ReadonlyArray<Note> | null;
+  /** Keep the tie into an X5 tail: the placed span still ends where the tied span ended. */
+  readonly tie?: boolean;
 }
 
 /** One note span and the place it is being put, with the id the command named for it. */
@@ -179,7 +181,7 @@ export function piecesFor(score: Score, span: NoteSpan, unitTicks: number, durat
   }
   return pieces.map((piece, index) => ({
     ...piece,
-    tie: piece.midi !== null && index < pieces.length - 1,
+    tie: piece.midi !== null && (index < pieces.length - 1 || span.tie === true),
   }));
 }
 
@@ -270,6 +272,7 @@ export function repairTies(score: Score, notes: Note[], affected: ReadonlySet<st
         if (!affected.has(beforeNext.id)) continue;
       }
       const next = voiceNotes[index + 1];
+      if (next === undefined && note.tie && endsAtX5Tail(score, note.voice, note.start + note.duration)) continue;
       if (next === undefined || next.midi !== note.midi || next.start !== note.start + note.duration) {
         cleared.add(note.id);
       }
@@ -498,6 +501,7 @@ export function runNoteCommand(
   const last = score.bars[score.bars.length - 1];
   const scoreEnd = last === undefined ? 0 : last.start + last.length;
   const placements: Placement[] = [];
+  let rangeFailure: ScoreCommandResult | null = null;
   for (const { span, namedId, order } of chosen) {
     const { start, end, midi } = landing(
       { start: span.start, end: span.end, midi: span.midi as number },
@@ -505,18 +509,27 @@ export function runNoteCommand(
       step,
     );
     const at = noteAt(score, namedId);
-    if (start < 0) return commandRefusal("note-before-start", {}, at);
-    if (end > scoreEnd) return commandRefusal("note-past-end", {}, at);
-    if (command.type === "resizeNotes" && end - start < step) {
-      return commandRefusal(
+    placements.push({ span, voice: span.voice, namedId, start, end, midi, order });
+    if (rangeFailure !== null) continue;
+    if (start < 0) rangeFailure = commandRefusal("note-before-start", {}, at);
+    else if (end > scoreEnd) rangeFailure = commandRefusal("note-past-end", {}, at);
+    else if (command.type === "resizeNotes" && end - start < step) {
+      rangeFailure = commandRefusal(
         "note-too-short",
         { grid: gridLabel(command.grid), dotted: command.grid.dotted === true },
         at,
       );
-    }
-    if (midi < 0 || midi > 127) return commandRefusal("pitch-out-of-range", { midi }, at);
-    placements.push({ span, voice: span.voice, namedId, start, end, midi, order });
+    } else if (midi < 0 || midi > 127) rangeFailure = commandRefusal("pitch-out-of-range", { midi }, at);
   }
+
+  const cut = cutEditRefusal(
+    score,
+    chosen.map(({ span }) => span),
+    placements,
+    firstId === undefined ? {} : noteAt(score, firstId),
+  );
+  if (cut !== null) return cut;
+  if (rangeFailure !== null) return rangeFailure;
 
   const changed = placements.some(
     (placement) =>
@@ -535,9 +548,14 @@ export function runNoteCommand(
 
   const ordered = [...placements].sort((left, right) => left.start - right.start || left.order - right.order);
   for (const placement of ordered) {
+    const lastNote = placement.span.notes?.[placement.span.notes.length - 1];
+    const tie =
+      lastNote?.tie === true &&
+      placement.end === placement.span.end &&
+      endsAtX5Tail(score, placement.voice, placement.end);
     placeOverlap(
       byVoice,
-      { voice: placement.voice, start: placement.start, end: placement.end, midi: placement.midi, notes: null },
+      { voice: placement.voice, start: placement.start, end: placement.end, midi: placement.midi, notes: null, tie },
       affected,
     );
   }

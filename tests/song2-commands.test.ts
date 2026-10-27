@@ -631,3 +631,172 @@ C4D4E4F4|G8`;
     expect(formatDiagnostic(diagnostic, "zh")).toMatch(/第 9 行/);
   });
 });
+
+describe("a note command does not rewrite a cut", () => {
+  const TWO_VOICE_HEADER = `X:1
+T:
+M:4/4
+L:1/16
+Q:1/4=120
+V: Vocal clef=treble name="Vocal Melody" snm="Vocal"
+V: Ins clef=treble name="Ins Melody" snm="Inst."`;
+
+  const PARTIAL = `${TWO_VOICE_HEADER}
+K:C
+V: Vocal
+C16|C4D4`;
+
+  const SHORT_INS = `${TWO_VOICE_HEADER}
+K:C
+V: Vocal
+C16|D16|
+V: Ins
+Z|`;
+
+  const commands: ReadonlyArray<{
+    readonly name: string;
+    readonly command: import("@neta-art/score-editor").ScoreCommand;
+  }> = [
+    { name: "toRests", command: { type: "toRests", noteIds: ["Vocal:1024"] } },
+    {
+      name: "moveNotes",
+      command: { type: "moveNotes", noteIds: ["Vocal:1024"], timeTicks: 0, semitones: 1, grid: { value: 16 } },
+    },
+    {
+      name: "resizeNotes",
+      command: { type: "resizeNotes", noteIds: ["Vocal:1024"], edge: "end", timeTicks: 0, grid: { value: 16 } },
+    },
+    { name: "addNote", command: { type: "addNote", voice: "Vocal", start: 1024, midi: 62, grid: { value: 16 } } },
+    {
+      name: "pasteNotes",
+      command: {
+        type: "pasteNotes",
+        notes: [{ voice: "Vocal", start: 1024, duration: 128, midi: 62 }],
+        at: 1024,
+        grid: { value: 16 },
+      },
+    },
+    { name: "duplicateNotes", command: { type: "duplicateNotes", noteIds: ["Vocal:1024"], grid: { value: 16 } } },
+    {
+      name: "copyNotes",
+      command: { type: "copyNotes", noteIds: ["Vocal:1024"], timeTicks: 0, semitones: 1, grid: { value: 16 } },
+    },
+    { name: "splitNotes", command: { type: "splitNotes", noteIds: ["Vocal:1024"], at: 1152, grid: { value: 16 } } },
+    { name: "chopNotes", command: { type: "chopNotes", noteIds: ["Vocal:1024"], grid: { value: 16 } } },
+    { name: "joinNotes", command: { type: "joinNotes", noteIds: ["Vocal:1024"], grid: { value: 16 } } },
+    { name: "legatoNotes", command: { type: "legatoNotes", noteIds: ["Vocal:1024"], grid: { value: 16 } } },
+    { name: "reverseNotes", command: { type: "reverseNotes", noteIds: ["Vocal:1024"], grid: { value: 16 } } },
+    { name: "flipNotes", command: { type: "flipNotes", noteIds: ["Vocal:1024"], grid: { value: 16 } } },
+    { name: "snapNotesToKey", command: { type: "snapNotesToKey", noteIds: ["Vocal:1024"], grid: { value: 16 } } },
+    {
+      name: "scaleNoteLengths",
+      command: { type: "scaleNoteLengths", noteIds: ["Vocal:1024"], factor: 0.5, grid: { value: 16 } },
+    },
+    {
+      name: "setNoteLength",
+      command: { type: "setNoteLength", noteIds: ["Vocal:1024"], lengthTicks: 256, grid: { value: 16 } },
+    },
+    {
+      name: "fitNotesToRange",
+      command: { type: "fitNotesToRange", noteIds: ["Vocal:1024"], fromBar: 0, toBar: 1, grid: { value: 16 } },
+    },
+  ];
+
+  for (const [label, text] of [
+    ["a partial measure", PARTIAL],
+    ["a short Ins block", SHORT_INS],
+  ] as const) {
+    it(`refuses every note command on ${label} with the truncation code`, () => {
+      const input = parse(text);
+      expect(input.truncation).not.toBeNull();
+      for (const { name, command } of commands) {
+        const result = applyScoreCommand(song2Dialect, text, command);
+        expect(result.ok, `${name} changed ${label}`).toBe(false);
+        if (result.ok) continue;
+        // command_rules.py's cut_refusal accepts the truncation code, a placement past the end, or an
+        // unwritable result; a command's own earlier refusal is checked before the cut rule.
+        expect(
+          ["truncated-tail", "note-past-end", "write-mismatch"],
+          `${name} gave ${result.diagnostic.code}`,
+        ).toContain(result.diagnostic.code);
+      }
+    });
+  }
+});
+
+describe("a note command keeps the cut when its X5 tie is lost", () => {
+  const text = `${HEADER}
+K:C
+V: Vocal
+C16-|B`;
+  const commands: ReadonlyArray<{
+    readonly name: string;
+    readonly command: import("@neta-art/score-editor").ScoreCommand;
+  }> = [
+    {
+      name: "moveNotes",
+      command: { type: "moveNotes", noteIds: ["Vocal:0"], timeTicks: 0, semitones: 7, grid: { value: 8 } },
+    },
+    {
+      name: "resizeNotes",
+      command: {
+        type: "resizeNotes",
+        noteIds: ["Vocal:0"],
+        edge: "end",
+        timeTicks: 0,
+        grid: { value: 8, dotted: true },
+      },
+    },
+    {
+      name: "addNote",
+      command: { type: "addNote", voice: "Vocal", start: 0, midi: 60, grid: { value: 8, dotted: true } },
+    },
+    {
+      name: "pasteNotes",
+      command: {
+        type: "pasteNotes",
+        notes: [{ voice: "Vocal", start: 0, duration: 128, midi: 60 }],
+        at: 0,
+        grid: { value: 8 },
+      },
+    },
+    {
+      name: "copyNotes",
+      command: {
+        type: "copyNotes",
+        noteIds: ["Vocal:0"],
+        timeTicks: 0,
+        semitones: 1,
+        grid: { value: 8, dotted: true },
+      },
+    },
+    { name: "splitNotes", command: { type: "splitNotes", noteIds: ["Vocal:0"], at: 128, grid: { value: 8 } } },
+    { name: "chopNotes", command: { type: "chopNotes", noteIds: ["Vocal:0"], grid: { value: 8 } } },
+    {
+      name: "scaleNoteLengths",
+      command: { type: "scaleNoteLengths", noteIds: ["Vocal:0"], factor: 0.5, grid: { value: 16 } },
+    },
+    {
+      name: "setNoteLength",
+      command: { type: "setNoteLength", noteIds: ["Vocal:0"], lengthTicks: 256, grid: { value: 4 } },
+    },
+    {
+      name: "fitNotesToRange",
+      command: { type: "fitNotesToRange", noteIds: ["Vocal:0"], fromBar: 0, toBar: 0, grid: { value: 8 } },
+    },
+    { name: "flipNotes", command: { type: "flipNotes", noteIds: ["Vocal:0"], grid: { value: 8 } } },
+    { name: "snapNotesToKey", command: { type: "snapNotesToKey", noteIds: ["Vocal:0"], grid: { value: 8 } } },
+  ];
+
+  it("writes every command and keeps the same cut measure", () => {
+    const input = parse(text);
+    for (const { name, command } of commands) {
+      const result = applyScoreCommand(song2Dialect, text, command);
+      expect(result.ok, `${name} was refused`).toBe(true);
+      if (!result.ok) continue;
+      const output = parse(result.text);
+      expect(output.truncation, `${name} moved the cut`).toEqual(input.truncation);
+      expect(song2Dialect.check(output), `${name} did not round-trip`).toEqual([]);
+    }
+  });
+});

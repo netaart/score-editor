@@ -65,6 +65,23 @@ function sectionHasCut(score: Score, section: Section): boolean {
   return truncation.bar === end && end === score.bars.length;
 }
 
+/**
+ * RULES.md V2 and W16: a split puts a new section boundary before the short final Ins block, leaving a
+ * non-final group incomplete. The cut voice's own cut bar is the count of its complete bars; for the
+ * other voice the last bar it has a note or rest in is the last bar it covers.
+ */
+function insGroupIsIncomplete(score: Score): boolean {
+  const truncation = score.truncation;
+  if (truncation === null || !score.voices.includes("Ins")) return false;
+  let insBars = truncation.voice === "Ins" ? truncation.bar : 0;
+  if (truncation.voice !== "Ins") {
+    for (const note of score.notes) {
+      if (note.voice === "Ins" && note.bar + 1 > insBars) insBars = note.bar + 1;
+    }
+  }
+  return insBars < score.bars.length;
+}
+
 function nameFailure(name: string): CommandDiagnosticCode | null {
   if (name === "") return "section-name-empty";
   if (/^[ \t]+$/.test(name)) return "section-name-blank";
@@ -369,6 +386,7 @@ function nameSection(score: Score, bar: number, name: string): ScoreCommandResul
   if (first === bar) {
     blocks[index] = { name, bars: block.bars };
   } else {
+    if (insGroupIsIncomplete(score)) return commandRefusal("write-mismatch", { field: "bars" }, at);
     const offset = block.bars.indexOf(bar);
     blocks.splice(
       index,

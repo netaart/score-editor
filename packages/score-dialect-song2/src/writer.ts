@@ -14,7 +14,7 @@ import {
   signatureOf,
 } from "./parser";
 import { stripTrailingWhitespace } from "./text";
-import { serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
+import { cutBarHasEvent, serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
 import { keepsCutTail } from "./write-chords";
 import { sectionsMatchSource } from "./write-sections";
 
@@ -255,19 +255,6 @@ function lastNoteOf(score: Score, voice: string): Note | undefined {
   return notes[notes.length - 1];
 }
 
-function sourceLastNote(source: Song2Source, voice: string): BarContent["notes"][number] | undefined {
-  let last: BarContent["notes"][number] | undefined;
-  for (const line of source.musicLines) {
-    if (line.voice !== voice) continue;
-    for (const segment of line.segments) {
-      for (const bar of segment.bars) {
-        for (const note of bar.content.notes) if (last === undefined || note.start >= last.start) last = note;
-      }
-    }
-  }
-  return last;
-}
-
 function keyAt(score: Score, at: number): string {
   let key = score.keys[0]?.key ?? "C";
   for (const change of score.keys) {
@@ -429,15 +416,16 @@ export function serializeSong2(score: Score): string {
     // tie is gone it would read as a finished note.
     const keepTail = keepsCutTail(score, tail, last?.tie ?? false);
     const dropTail = tail !== null && !keepTail;
-    const oldLast = sourceLastNote(source, musicLine.voice);
     const tailText =
       tail !== null &&
       keepTail &&
       tail.kind === "x5" &&
       last !== undefined &&
-      (oldLast?.midi !== last.midi || !tailStillUnfinished(score, tail.raw, last))
+      !tailStillUnfinished(score, tail.raw, last)
         ? x5TailText(score, last)
         : (tail?.raw ?? "");
+    const fallbackTail = tail?.kind === "x5" && !keepTail && !cutBarHasEvent(score, musicLine.voice) ? "^" : "";
+    const tailChanged = tailText !== (tail?.raw ?? "") || fallbackTail !== "";
     const lastSegment = musicLine.segments.length - 1;
     let changed = false;
     const pieces = musicLine.segments.map((segment, index) => {
@@ -458,12 +446,15 @@ export function serializeSong2(score: Score): string {
           ? sameContent(bar.content, model)
           : sameContent(trim(bar.content, keys), trim(model, keys));
       };
-      const unchanged = !forced && segment.bars.every(matches);
+      const unchanged = !forced && !(partial && tailChanged) && segment.bars.every(matches);
       if (unchanged) return segment.raw;
       changed = true;
       const rendered = segment.bars.map((bar) => writeBar(score, bar, source.unitDenominator, keySetAt(bar))).join("|");
-      // A rewritten partial measure keeps its finished tokens and its cut remainder at their end.
-      return partial && keepTail && tail !== null ? `${rendered}${tailText}` : rendered;
+      // A rewritten partial measure keeps its finished tokens and its cut remainder at their end. When
+      // an X5 tie is lost and no finished token is left to state the cut, a lone accidental marks it.
+      if (!partial) return rendered;
+      if (keepTail && tail !== null) return `${rendered}${tailText}`;
+      return `${rendered}${fallbackTail}`;
     });
     if (!changed) continue;
     const rendered = `${pieces.join("|")}${musicLine.endsWithBarline ? "|" : ""}`;

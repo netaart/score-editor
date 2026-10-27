@@ -1,6 +1,8 @@
 // ABOUTME: Small model helpers shared by the command files: note places, tie chains, ticks, ordering, sections and keys.
 // ABOUTME: Keeping them here means insert, meter, note and truncation commands read and order notes the same way.
 import { positionOf } from "./arrangement";
+import { commandRefusal } from "./command-refusal";
+import type { ScoreCommandResult } from "./commands";
 import type { DiagnosticAt } from "./diagnostics";
 import type { Chord, KeyChange, Meter, Note, Score, Truncation } from "./score";
 import { TICKS_PER_QUARTER } from "./score";
@@ -49,6 +51,85 @@ export function writableCut(score: Pick<Score, "voices" | "notes">, truncation: 
   for (const note of score.notes) if (note.voice === "Ins" && note.bar + 1 > end) end = note.bar + 1;
   if (end !== truncation.bar - 1) return truncation;
   return { voice: "Ins", bar: end, short: false };
+}
+
+/** The last cut tail the source carries, when the dialect keeps one; only W18 needs its kind. */
+function sourceCutTail(score: Pick<Score, "source">): { readonly kind?: string } | null {
+  const source = score.source as
+    | { readonly musicLines?: ReadonlyArray<{ readonly cutTail?: { readonly kind?: string } | null }> }
+    | null
+    | undefined;
+  const lines = source?.musicLines ?? [];
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const tail = lines[index]?.cutTail;
+    if (tail !== null && tail !== undefined) return tail;
+  }
+  return null;
+}
+
+/** True when the source's cut ends in an X5 tie continuation (RULES.md X5 and W18). */
+export function hasX5Tail(score: Pick<Score, "source">): boolean {
+  return sourceCutTail(score)?.kind === "x5";
+}
+
+/** True when a note ending at `end` in `voice` is the last note before an X5 tail the writer may keep. */
+export function endsAtX5Tail(score: Score, voice: string, end: number): boolean {
+  const truncation = score.truncation;
+  if (truncation === null || !truncation.short || truncation.voice !== voice) return false;
+  const cutBar = score.bars[truncation.bar];
+  return cutBar !== undefined && cutBar.start === end && hasX5Tail(score);
+}
+
+/**
+ * The first tick a note may not touch: the cut measure, or the first measure after a voice that stopped
+ * before the shared grid (a short or missing final `Ins` block). A span that ends exactly there is still
+ * before the cut.
+ */
+export function noteSafeEnd(score: Score): number {
+  const last = score.bars[score.bars.length - 1];
+  let end = last === undefined ? 0 : last.start + last.length;
+  const cutBar = score.truncation === null ? undefined : score.bars[score.truncation.bar];
+  if (score.truncation?.short === true && cutBar !== undefined) end = Math.min(end, cutBar.start);
+  for (const voice of score.voices) {
+    const truncation = score.truncation;
+    let count = 0;
+    if (truncation !== null && truncation.voice === voice) {
+      count = truncation.bar;
+    } else {
+      for (const note of score.notes) {
+        if (note.voice === voice && note.bar + 1 > count) count = note.bar + 1;
+      }
+    }
+    const next = count > 0 && count < score.bars.length ? score.bars[count] : undefined;
+    if (next !== undefined) end = Math.min(end, next.start);
+  }
+  return end;
+}
+
+/**
+ * RULES.md W14 and W16: a note command may not rewrite the cut's finished tokens, or a group whose final
+ * Ins block stopped short. The cut starts at the measure it falls in; a span that ends exactly there is
+ * still before it.
+ */
+export function editTouchesCut(
+  score: Score,
+  spans: ReadonlyArray<{ readonly start: number; readonly end: number }>,
+  placements: ReadonlyArray<{ readonly start: number; readonly end: number }> = [],
+): boolean {
+  if (score.truncation === null) return false;
+  const safe = noteSafeEnd(score);
+  return [...spans, ...placements].some((span) => span.start >= safe || span.end > safe);
+}
+
+/** A note command that would rewrite the cut returns this refusal instead of a score. */
+export function cutEditRefusal(
+  score: Score,
+  spans: ReadonlyArray<{ readonly start: number; readonly end: number }>,
+  placements: ReadonlyArray<{ readonly start: number; readonly end: number }> = [],
+  at: DiagnosticAt = {},
+): ScoreCommandResult | null {
+  if (!editTouchesCut(score, spans, placements)) return null;
+  return commandRefusal("write-mismatch", { field: "bars" }, at);
 }
 
 /** True when the cut still carries an X4 remainder other than an unfinished chord string. */

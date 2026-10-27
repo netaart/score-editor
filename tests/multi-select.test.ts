@@ -113,7 +113,8 @@ C4D4E4F4|G16-|B`;
       expect(session.selection).toEqual(before.selection);
       expect(session.canUndo).toBe(false);
       expect(changes).toEqual([]);
-      expect(calls.check).toBe(1);
+      // W14/W16 refuse the cut rewrite before the score is written or checked.
+      expect(calls.check).toBe(0);
     });
 
     it("points at the first of the selected notes in the score, whatever order they were selected in", () => {

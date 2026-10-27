@@ -263,7 +263,18 @@ function exerciseSample(file: string): void {
   const allPitched = input.notes.filter((note) => note.midi !== null).sort((left, right) => left.start - right.start);
   const middleId = allPitched[Math.floor(allPitched.length / 2)]?.id;
   const lastId = allPitched[allPitched.length - 1]?.id;
-  const ids = [...new Set([...firstIds, middleId, lastId].filter((id): id is string => id !== undefined))];
+  // RULES.md W14/W16: a note command may not land in the cut measure or after a voice that stopped early.
+  const cutStart = input.truncation === null ? scoreEnd : (input.bars[input.truncation.bar]?.start ?? scoreEnd);
+  const safeEnd = input.voices.reduce((end, voice) => {
+    let count = input.truncation?.voice === voice ? input.truncation.bar : 0;
+    if (input.truncation?.voice !== voice) {
+      for (const note of input.notes) if (note.voice === voice && note.bar + 1 > count) count = note.bar + 1;
+    }
+    return count > 0 && count < input.bars.length ? Math.min(end, (input.bars[count] as { start: number }).start) : end;
+  }, cutStart);
+  const ids = [...new Set([...firstIds, middleId, lastId].filter((id): id is string => id !== undefined))].filter(
+    (id) => (input.notes.find((note) => note.id === id)?.start ?? Infinity) < safeEnd,
+  );
 
   const sourceOf = (voice: string) => {
     const source = pitched(input, voice)[0] as ScoreNote;
