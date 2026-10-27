@@ -251,6 +251,21 @@ const css = `
   flex: 1 1 10em;
   min-width: 0;
 }
+@media (pointer: fine) and (min-width: 30.01em) {
+  .sce-root .sce-toolbar[data-bar] .sce-tools {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    min-width: 0;
+    row-gap: 4px;
+    overflow-x: visible;
+  }
+  .sce-root .sce-toolbar[data-bar] .sce-bar {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+}
+
 /* A narrow box gives the bar the whole line, so the caption keeps its room when the switch and button leave little. */
 @media (max-width: 30em) {
   .sce-root .sce-bar {

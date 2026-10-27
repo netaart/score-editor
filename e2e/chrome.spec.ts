@@ -310,12 +310,17 @@ test.describe("C11: the existing guards", () => {
         const staff = tabs.getByRole("button", { name: names.staff, exact: true });
         await press(tabs.getByRole("button", { name: names.text, exact: true }));
         const before = await box(staff);
+        const barBefore = await box(page.locator(".sce-bar"));
 
         await page.getByRole("textbox").fill(QUARTERS);
         await page.getByRole("textbox").blur();
         await expect(page.locator(".sce-history")).toBeVisible();
 
-        expect(await box(staff)).toEqual(before);
+        // The strip wraps on a fine pointer, so gaining the editing controls can add a row above the bar. The switch
+        // stays where it is in the bar: same place along the row, same size, and the same offset from the bar's top.
+        const after = await box(staff);
+        expect({ ...after, y: before.y }).toEqual(before);
+        expect(after.y - (await box(page.locator(".sce-bar"))).y).toBeCloseTo(before.y - barBefore.y, 0);
       });
     }
   }
@@ -489,19 +494,59 @@ test.describe("C3: the toolbar budget", () => {
     });
   }
 
-  test("is one row on the desktop, and two at 1024 and 800", async ({ page, harness, isMobile }) => {
+  test("shows every strip control at 1440, 1280, 1024 and 768 on a desktop, without scrolling", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(isMobile, "the desktop pointer is the one these widths are for");
+    for (const width of [1440, 1280, 1024, 768]) {
+      await page.setViewportSize({ width, height: 760 });
+      await harness.mount({ score: { text: QUARTERS }, drafts: true, language: "en" });
+      const strip = page.locator(".sce-tools");
+      const toolbar = await box(page.locator(".sce-toolbar"));
+      expect(
+        await strip.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+        `${width}: the strip does not scroll`,
+      ).toBe(true);
+      const boxes = await strip.evaluate((el) =>
+        [...el.children]
+          .filter((child) => child.getBoundingClientRect().width > 0)
+          .map((child) => {
+            const rect = child.getBoundingClientRect();
+            return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+          }),
+      );
+      for (const control of boxes) {
+        expect(control.left, `${width}: a control starts inside the toolbar`).toBeGreaterThanOrEqual(toolbar.x - 0.5);
+        expect(control.right, `${width}: a control ends inside the toolbar`).toBeLessThanOrEqual(
+          toolbar.x + toolbar.width + 0.5,
+        );
+        expect(control.top, `${width}: a control starts inside the toolbar`).toBeGreaterThanOrEqual(toolbar.y - 0.5);
+        expect(control.bottom, `${width}: a control ends inside the toolbar`).toBeLessThanOrEqual(
+          toolbar.y + toolbar.height + 0.5,
+        );
+      }
+      await harness.destroy();
+    }
+  });
+
+  test("puts the bar on its own line under the wrapped strip on the desktop", async ({ page, harness, isMobile }) => {
     test.skip(isMobile, "the widths are set on the desktop project");
     for (const width of [1280, 1024, 800]) {
       await page.setViewportSize({ width, height: 700 });
       for (const language of ["en", "zh"] as const) {
         await harness.mount({ score: { text: QUARTERS }, drafts: true, language });
         await expect(page.locator(".sce-undo")).toBeVisible();
-        expect(await controlRows(page), `${width} ${language}: rows of controls`).toBeLessThanOrEqual(
-          width === 1280 ? 1 : 2,
-        );
         const strip = await box(page.locator(".sce-tools"));
         const bar = await box(page.locator(".sce-bar"));
-        if (width === 1280) expect(strip.y).toBeCloseTo(bar.y, 0);
+        expect(bar.y, `${width} ${language}: the bar starts under the strip`).toBeGreaterThanOrEqual(
+          strip.y + strip.height - 1,
+        );
+        expect(
+          await page.locator(".sce-tools").evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+          `${width} ${language}: the strip does not scroll`,
+        ).toBe(true);
         await harness.destroy();
       }
     }
@@ -648,12 +693,7 @@ test.describe("C9: the Tab order", () => {
 });
 
 test.describe("C10: the desktop banner", () => {
-  test("keeps the sentence and Choose on one line, and the toolbar one row", async ({
-    page,
-    harness,
-    press,
-    isMobile,
-  }) => {
+  test("keeps the sentence and Choose on one line, and the bar one row", async ({ page, harness, press, isMobile }) => {
     test.skip(isMobile, "the desktop width is the one measured");
     await page.setViewportSize({ width: 1280, height: 700 });
     await harness.stageHeight(420);
@@ -665,7 +705,7 @@ test.describe("C10: the desktop banner", () => {
     const chooseAt = await box(choose(page));
     expect(Math.abs(sentence.y + sentence.height / 2 - (chooseAt.y + chooseAt.height / 2))).toBeLessThan(6);
     expect(sentence.x + sentence.width).toBeLessThanOrEqual(chooseAt.x + 1);
-    expect(await controlRows(page)).toBe(1);
+    expect(await controlRows(page, ".sce-bar")).toBe(1);
     expect((await box(banner)).height).toBeLessThanOrEqual((await box(choose(page))).height * 2);
   });
 });
