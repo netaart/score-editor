@@ -759,7 +759,7 @@ test.describe("restoring the original", () => {
 
 test.describe("a new song inherits the lyric lines of the draft it was regenerated from", () => {
   const LYRICS = "[a]\nla la";
-  const LINES = [{ text: "la la", phrase: { firstBar: 0, barCount: 2 } }];
+  const LINES = [{ text: "la la", phrase: { firstBar: 0, barCount: 1 } }];
   const newSong = { lyrics: LYRICS, sourceKey: "new-song" };
 
   test("the draft whose handoff hash is this song's hash gives its lines, saved under the new key", async ({

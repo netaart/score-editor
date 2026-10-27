@@ -56,8 +56,8 @@ const ORIGINAL: SongProject = {
   sourceKey: "song-1",
 };
 
-/** Lines that join to ORIGINAL.lyrics ("la la"), so the old song's line arrangement belongs to the new song. */
-const INHERITED_LINES = [{ text: "la la", phrase: { firstBar: 0, barCount: 2 } }] as const;
+/** The old song's one-bar line, which joins to ORIGINAL.lyrics ("la la"), so its arrangement belongs to the new song. */
+const INHERITED_LINES = [{ text: "la la", phrase: { firstBar: 0, barCount: 1 } }] as const;
 
 let clock = 1_000;
 

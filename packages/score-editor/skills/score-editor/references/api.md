@@ -28,7 +28,7 @@ change. The tests in the repository check that the list stays complete.
 | `applyCommandList` | core | Applies a list of score and project commands as one unit; returns `CommandListResult`, all applied or the untouched project. |
 | `checkProject` | core | Reports the song-project notices of a project as it stands, without changing it. |
 | `lyricLinesOf` | core | The stored lyric lines, or the layout computed from a legacy `lyrics` text. |
-| `layoutLyrics` | core | Lays a legacy `lyrics` text onto a score, one line per bar, with the unaligned area. |
+| `layoutLyrics` | core | Lays a legacy `lyrics` text onto a score, spreading each section's lines over its bars by syllable and onset counts, with the unaligned area. |
 | `joinLyrics` | core | Writes the joined `lyrics` text from a score and its lyric lines; unaligned lines are left out. |
 | `alignedLyricLines` | core | The lines bound to a phrase that fits the score; pass the score to leave a stale phrase out. |
 | `unalignedLyricLines` | core | The lines in the unaligned area: no phrase, or one that no longer fits the score. |

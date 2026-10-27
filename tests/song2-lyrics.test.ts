@@ -127,6 +127,76 @@ C16|D16|
 V: Vocal
 E8`;
 
+/** Eight bars in one section, pairing into phrases of 2, 3, 4 and 5 onsets (bars 0-1, 2-3, 4-5, 6-7). */
+const PHRASE_PAIRED_SCORE = `${HEADER}
+K:C
+% verse
+V: Vocal
+C16|D16|E16|C8D8|
+V: Ins
+Z4|
+V: Vocal
+C8D8|C8D8|C8D8|C4D4E4z4|
+V: Ins
+Z4|`;
+
+/** Eight bars in one section with two onsets in every bar. */
+const PHRASE_EVEN_SCORE = `${HEADER}
+K:C
+% verse
+V: Vocal
+C8D8|C8D8|C8D8|C8D8|
+V: Ins
+Z4|
+V: Vocal
+C8D8|C8D8|C8D8|C8D8|
+V: Ins
+Z4|`;
+
+/** Eight bars whose onsets are four, none, four, none, four, none, four, none. */
+const PHRASE_TIE_SCORE = `${HEADER}
+K:C
+% verse
+V: Vocal
+C4D4E4F4|z16|C4D4E4F4|z16|
+V: Ins
+Z4|
+V: Vocal
+C4D4E4F4|z16|C4D4E4F4|z16|
+V: Ins
+Z4|`;
+
+/** The two-bar section of the "more lines than bars" case. */
+const PHRASE_TWO_BARS = `${HEADER}
+K:C
+% verse
+V: Vocal
+C16|D16|
+V: Ins
+Z2|`;
+
+/** The Morning Walk shape: two labelled sections of eight bars, four lines each, two onsets in every bar. */
+const PHRASE_MORNING_SCORE = `${HEADER}
+K:C
+% verse
+V: Vocal
+C8D8|C8D8|C8D8|C8D8|
+V: Ins
+Z4|
+V: Vocal
+C8D8|C8D8|C8D8|C8D8|
+V: Ins
+Z4|
+% chorus
+V: Vocal
+C8D8|C8D8|C8D8|C8D8|
+V: Ins
+Z4|
+V: Vocal
+C8D8|C8D8|C8D8|C8D8|
+V: Ins
+Z4|`;
+
 function parse(text: string): Score {
   const { score, diagnostics } = song2Dialect.parse(text);
   expect(diagnostics).toEqual([]);
@@ -252,7 +322,7 @@ describe("note onsets and alignment", () => {
 });
 
 describe("the legacy layout", () => {
-  it("puts one line per bar into the matching section and the rest in the unaligned area", () => {
+  it("keeps one bar per line when the group fills its section and spreads a shorter group", () => {
     const score = parse(SCORE);
     const lines = layoutLyrics(score, "[Verse]\nv1\nv2\nv3\nv4\nv5\n[Chorus]\nc1\n[Missing]\nm1\nm2");
 
@@ -261,7 +331,7 @@ describe("the legacy layout", () => {
       { text: "v2", phrase: { firstBar: 3, barCount: 1 } },
       { text: "v3", phrase: { firstBar: 4, barCount: 1 } },
       { text: "v4", phrase: { firstBar: 5, barCount: 1 } },
-      { text: "c1", phrase: { firstBar: 6, barCount: 1 } },
+      { text: "c1", phrase: { firstBar: 6, barCount: 2 } },
     ]);
     expect(unalignedLyricLines(lines, score).map((line) => line.text)).toEqual(["v5", "m1", "m2"]);
     expect(lines.filter((line) => line.phrase?.firstBar === 0 || line.phrase?.firstBar === 1)).toEqual([]);
@@ -305,9 +375,9 @@ V: Ins
 Z2|`;
     const lines = layoutLyrics(parse(text), "[Verse]\na\n[ verse ]\nb\n[VERSE]\nc");
     expect(lines).toEqual([
-      { text: "a", phrase: { firstBar: 0, barCount: 1 } },
-      { text: "b", phrase: { firstBar: 2, barCount: 1 } },
-      { text: "c", phrase: { firstBar: 4, barCount: 1 } },
+      { text: "a", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "b", phrase: { firstBar: 2, barCount: 2 } },
+      { text: "c", phrase: { firstBar: 4, barCount: 2 } },
     ]);
   });
 
@@ -315,17 +385,17 @@ Z2|`;
     const lines = layoutLyrics(parse(UNNAMED_SCORE), "pre\n[Verse]\n\nv1\nv2");
 
     expect(lines).toEqual([
-      { text: "pre", phrase: { firstBar: 0, barCount: 1 } },
-      { text: "v1", phrase: { firstBar: 2, barCount: 1 } },
-      { text: "v2", phrase: { firstBar: 3, barCount: 1 } },
+      { text: "pre", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "v1", phrase: { firstBar: 2, barCount: 2 } },
+      { text: "v2", phrase: { firstBar: 4, barCount: 2 } },
     ]);
   });
 
   it("puts lines before the first label in the first section when there is no unnamed opening section", () => {
     const lines = layoutLyrics(parse(SCORE), "pre\n[Verse]\nv1");
     expect(lines).toEqual([
-      { text: "pre", phrase: { firstBar: 0, barCount: 1 } },
-      { text: "v1", phrase: { firstBar: 2, barCount: 1 } },
+      { text: "pre", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "v1", phrase: { firstBar: 2, barCount: 4 } },
     ]);
   });
 
@@ -344,8 +414,8 @@ V: Ins
 Z2|`;
     const lines = layoutLyrics(parse(text), "[Verse]\na\n[Verse]\nb");
     expect(lines).toEqual([
-      { text: "a", phrase: { firstBar: 0, barCount: 1 } },
-      { text: "b", phrase: { firstBar: 2, barCount: 1 } },
+      { text: "a", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "b", phrase: { firstBar: 2, barCount: 2 } },
     ]);
   });
 
@@ -353,9 +423,108 @@ Z2|`;
     const input = project({ lyrics: "[Verse]\nv1" });
     const before = JSON.stringify(input);
     const lines = lyricLinesOf(input, parse(input.score));
-    expect(lines).toEqual([{ text: "v1", phrase: { firstBar: 2, barCount: 1 } }]);
+    expect(lines).toEqual([{ text: "v1", phrase: { firstBar: 2, barCount: 4 } }]);
     expect(JSON.stringify(input)).toBe(before);
     expect("lyricLines" in input).toBe(false);
+  });
+});
+
+describe("the phrase layout of a legacy text", () => {
+  it("puts four lines over the four paired phrases whose onsets equal their syllables", () => {
+    const score = parse(PHRASE_PAIRED_SCORE);
+    const lines = layoutLyrics(score, "一二\n一二三\n一二三四\n一二三四五");
+
+    expect(lines).toEqual([
+      { text: "一二", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "一二三", phrase: { firstBar: 2, barCount: 2 } },
+      { text: "一二三四", phrase: { firstBar: 4, barCount: 2 } },
+      { text: "一二三四五", phrase: { firstBar: 6, barCount: 2 } },
+    ]);
+    expect(lines.map((line) => alignLyricLine(score, line).onsets.length)).toEqual([2, 3, 4, 5]);
+    expect(lines.every((line) => alignLyricLine(score, line).equal)).toBe(true);
+  });
+
+  it("follows the syllable counts into uneven phrases of one, three, two and two bars", () => {
+    const score = parse(PHRASE_EVEN_SCORE);
+    const lines = layoutLyrics(score, "一二\n一二三四五六\n一二三四\n一二三四");
+
+    expect(lines).toEqual([
+      { text: "一二", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "一二三四五六", phrase: { firstBar: 1, barCount: 3 } },
+      { text: "一二三四", phrase: { firstBar: 4, barCount: 2 } },
+      { text: "一二三四", phrase: { firstBar: 6, barCount: 2 } },
+    ]);
+    expect(lines.every((line) => alignLyricLine(score, line).equal)).toBe(true);
+  });
+
+  it("breaks an equal-count tie with the even split", () => {
+    const score = parse(PHRASE_TIE_SCORE);
+    const lines = layoutLyrics(score, "一二三四\n一二三四\n一二三四\n一二三四");
+
+    expect(lines).toEqual([
+      { text: "一二三四", phrase: { firstBar: 0, barCount: 2 } },
+      { text: "一二三四", phrase: { firstBar: 2, barCount: 2 } },
+      { text: "一二三四", phrase: { firstBar: 4, barCount: 2 } },
+      { text: "一二三四", phrase: { firstBar: 6, barCount: 2 } },
+    ]);
+    expect(lines.every((line) => alignLyricLine(score, line).equal)).toBe(true);
+  });
+
+  it("gives one line the whole section", () => {
+    const lines = layoutLyrics(parse(PHRASE_PAIRED_SCORE), "一二三");
+
+    expect(lines).toEqual([{ text: "一二三", phrase: { firstBar: 0, barCount: 8 } }]);
+  });
+
+  it("keeps the first bars for the lines and sends the rest to the unaligned area when lines outnumber bars", () => {
+    const lines = layoutLyrics(parse(PHRASE_TWO_BARS), "a\nb\nc\nd");
+
+    expect(lines).toEqual([
+      { text: "a", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "b", phrase: { firstBar: 1, barCount: 1 } },
+      { text: "c", phrase: null },
+      { text: "d", phrase: null },
+    ]);
+  });
+
+  it("lays out the Morning Walk shape over both halves of each eight-bar section", () => {
+    const score = parse(PHRASE_MORNING_SCORE);
+    const lines = layoutLyrics(
+      score,
+      `[Verse]
+la la la la
+la la la la
+la la la la
+la la la la
+[Chorus]
+la la la la
+la la la la
+la la la la
+la la la la`,
+    );
+
+    expect(lines.map((line) => line.phrase)).toEqual([
+      { firstBar: 0, barCount: 2 },
+      { firstBar: 2, barCount: 2 },
+      { firstBar: 4, barCount: 2 },
+      { firstBar: 6, barCount: 2 },
+      { firstBar: 8, barCount: 2 },
+      { firstBar: 10, barCount: 2 },
+      { firstBar: 12, barCount: 2 },
+      { firstBar: 14, barCount: 2 },
+    ]);
+    expect(unalignedLyricLines(lines, score)).toEqual([]);
+    expect(lines.every((line) => alignLyricLine(score, line).equal)).toBe(true);
+  });
+
+  it("leaves lyric lines a project already stores exactly as they are", () => {
+    const stored: ReadonlyArray<LyricLine> = [
+      { text: "old", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "words", phrase: { firstBar: 1, barCount: 1 } },
+    ];
+    const input = project({ lyrics: "[Verse]\nnew words", lyricLines: stored });
+
+    expect(lyricLinesOf(input, parse(input.score))).toEqual(stored);
   });
 });
 
@@ -581,7 +750,7 @@ describe("a project without stored lyric lines", () => {
   it("deletes a section's old-song lines with it", () => {
     const result = apply(legacy(), { type: "deleteSection", section: 1 });
     expect(result.lyricLines).toEqual([
-      { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "intro line", phrase: { firstBar: 0, barCount: 2 } },
       { text: "c1", phrase: { firstBar: 2, barCount: 1 } },
       { text: "c2", phrase: { firstBar: 3, barCount: 1 } },
     ]);
@@ -595,7 +764,7 @@ c2`);
   it("copies a section's old-song lines onto the copy's bars", () => {
     const result = apply(legacy(), { type: "duplicateSection", section: 1 });
     expect(result.lyricLines).toEqual([
-      { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "intro line", phrase: { firstBar: 0, barCount: 2 } },
       { text: "v1", phrase: { firstBar: 2, barCount: 1 } },
       { text: "v2", phrase: { firstBar: 3, barCount: 1 } },
       { text: "v3", phrase: { firstBar: 4, barCount: 1 } },
@@ -627,7 +796,7 @@ c2`);
   it("moves a section's old-song lines with it", () => {
     const result = apply(legacy(), { type: "moveSection", section: 1, direction: "later" });
     expect(result.lyricLines).toEqual([
-      { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "intro line", phrase: { firstBar: 0, barCount: 2 } },
       { text: "c1", phrase: { firstBar: 2, barCount: 1 } },
       { text: "c2", phrase: { firstBar: 3, barCount: 1 } },
       { text: "v1", phrase: { firstBar: 4, barCount: 1 } },
@@ -650,7 +819,7 @@ v4`);
   it("shifts old-song lines after an inserted bar", () => {
     const result = apply(legacy(), { type: "insertBar", bar: 3 });
     expect(result.lyricLines).toEqual([
-      { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "intro line", phrase: { firstBar: 0, barCount: 2 } },
       { text: "v1", phrase: { firstBar: 2, barCount: 1 } },
       { text: "v2", phrase: { firstBar: 4, barCount: 1 } },
       { text: "v3", phrase: { firstBar: 5, barCount: 1 } },
@@ -664,7 +833,7 @@ v4`);
   it("drops an old-song line whose bar is deleted and shifts the rest", () => {
     const result = apply(legacy(), { type: "deleteBars", from: 3, count: 1 });
     expect(result.lyricLines).toEqual([
-      { text: "intro line", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "intro line", phrase: { firstBar: 0, barCount: 2 } },
       { text: "v1", phrase: { firstBar: 2, barCount: 1 } },
       { text: "v3", phrase: { firstBar: 3, barCount: 1 } },
       { text: "v4", phrase: { firstBar: 4, barCount: 1 } },

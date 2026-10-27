@@ -45,13 +45,13 @@ ${CHORUS}`;
 
 const LYRICS = "[verse]\nla la\n[chorus]\nha ha";
 const LINES = [
-  { text: "la la", phrase: { firstBar: 0, barCount: 1 } },
-  { text: "ha ha", phrase: { firstBar: 2, barCount: 1 } },
+  { text: "la la", phrase: { firstBar: 0, barCount: 2 } },
+  { text: "ha ha", phrase: { firstBar: 2, barCount: 2 } },
 ];
 const CHANGED_LYRICS = "[verse]\nnew words\n[chorus]\nha ha";
 const CHANGED_LINES = [
-  { text: "new words", phrase: { firstBar: 0, barCount: 1 } },
-  { text: "ha ha", phrase: { firstBar: 2, barCount: 1 } },
+  { text: "new words", phrase: { firstBar: 0, barCount: 2 } },
+  { text: "ha ha", phrase: { firstBar: 2, barCount: 2 } },
 ];
 
 const KEY = "test-page";
