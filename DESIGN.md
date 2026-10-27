@@ -38,6 +38,7 @@ rounded:
   glyph: "1px"
 spacing:
   toolbar-gap: "8px"
+  toolbar-strip-gap: "4px"
   toolbar-padding-x: "12px"
   button-padding-x: "10px"
   flag-padding-x: "5px"
