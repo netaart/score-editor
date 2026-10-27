@@ -2,6 +2,16 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## Unreleased
+
+### Fixed
+
+- **A blank style and wordless lyrics are not called final.** `handoffInstruction` now leaves out a style that is empty or
+  whitespace, and joined lyrics with no syllable (empty, or only section labels and blank lines). One sentence says
+  which field the score does not carry, tells the agent to take it from the person's message or the conversation, and to
+  ask the person before generating if neither has it. A field with content keeps the final sentence and its label and
+  value; with both fields blank the one sentence names both.
+
 ## 0.4.3
 
 No export of 0.4.2 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of

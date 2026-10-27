@@ -43,7 +43,11 @@ options are `{ original, current, title?, language, dialect?, scorePath? }`. It 
   file's name;
 - the request to regenerate with song2 and pass the score in the attached `score.abc` through `--text`, or in the file
   `scorePath` names when it is given and not blank;
-- the final style description and joined lyrics, already synced by the editor and not to be changed by the agent;
+- the fields the score carries: a style with text and joined lyrics with at least one syllable are called final,
+  already synced by the editor and not to be changed by the agent, and each is followed by its label and value. A blank
+  or whitespace style, and joined lyrics with no syllable (empty, or only section labels and blank lines), are left
+  out; one sentence names the missing field, says to take it from the person's message or the conversation, and to ask
+  the person first if neither has it. Both blank gets one sentence naming both;
 - the score mode, and the seed when there is one;
 - the change log.
 

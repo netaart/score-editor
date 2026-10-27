@@ -344,6 +344,11 @@ export interface Messages {
   /** The same request when the score is a file the host names, since there is no attachment to point at. */
   handoffInstructionIntroPath(path: string): string;
   handoffInstructionFinal: string;
+  handoffInstructionFinalStyle: string;
+  handoffInstructionFinalLyrics: string;
+  handoffInstructionNoStyle: string;
+  handoffInstructionNoLyrics: string;
+  handoffInstructionNoStyleOrLyrics: string;
   handoffInstructionStyle: string;
   handoffInstructionLyrics: string;
   handoffInstructionMode: string;
@@ -704,6 +709,16 @@ const en: Messages = {
     `Regenerate with song2. Use the score in the file \`${path}\`, passed with --text.`,
   handoffInstructionFinal:
     "The style description and joined lyrics below are final and already synced by the editor; do not change them.",
+  handoffInstructionFinalStyle:
+    "The style description below is final and already synced by the editor; do not change it.",
+  handoffInstructionFinalLyrics:
+    "The joined lyrics below are final and already synced by the editor; do not change them.",
+  handoffInstructionNoStyle:
+    "This score carries no style description: take it from the person's message or this conversation; if neither has it, ask the person before generating.",
+  handoffInstructionNoLyrics:
+    "This score carries no lyrics: take them from the person's message or this conversation; if neither has them, ask the person before generating.",
+  handoffInstructionNoStyleOrLyrics:
+    "This score carries no style description and no lyrics: take them from the person's message or this conversation; if neither has them, ask the person before generating.",
   handoffInstructionStyle: "Style description",
   handoffInstructionLyrics: "Joined lyrics",
   handoffInstructionMode: "Score mode",
@@ -1025,6 +1040,12 @@ const zh: Messages = {
   handoffInstructionIntro: "用 song2 重新生成，乐谱用附件里的 score.abc，用 --text 传。",
   handoffInstructionIntroPath: (path) => `用 song2 重新生成，乐谱用文件 \`${path}\`，用 --text 传。`,
   handoffInstructionFinal: "下面的风格描述和拼回的歌词是最终版，编辑器已经同步好，不要再改。",
+  handoffInstructionFinalStyle: "下面的风格描述是最终版，编辑器已经同步好，不要再改。",
+  handoffInstructionFinalLyrics: "下面拼回的歌词是最终版，编辑器已经同步好，不要再改。",
+  handoffInstructionNoStyle: "这份乐谱没有风格描述：从用户的消息或这段对话里取，都没有就先问用户，再生成。",
+  handoffInstructionNoLyrics: "这份乐谱没有歌词：从用户的消息或这段对话里取，都没有就先问用户，再生成。",
+  handoffInstructionNoStyleOrLyrics:
+    "这份乐谱没有风格描述和歌词：从用户的消息或这段对话里取，都没有就先问用户，再生成。",
   handoffInstructionStyle: "风格描述",
   handoffInstructionLyrics: "拼回的歌词",
   handoffInstructionMode: "乐谱模式",
