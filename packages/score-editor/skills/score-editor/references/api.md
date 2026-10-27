@@ -76,7 +76,7 @@ change. The tests in the repository check that the list stays complete.
 | `preHandoffNotices` | core | The four pre-handoff notices a project carries: no sections, syllables far from the notes, Vocal outside 60–82, a melody project with chords; each a host `Notice` in the chosen language. The default editor's review shows them first, under a count lead. |
 | `vocalRange` | core | Vocal's tie-chain lower median pitch and whether it is inside the singable range 60–82, as `VocalRange`. |
 | `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`; `scorePath` names a file instead of the attached `score.abc`. |
-| `mountSourceLabel` | core | Mounts the source label view part: "Generated score (original kept)" or "Score file (saves to the file)", following the session's language and a source read through its getter; takes `SourceLabelOptions` and returns `SourceLabelPart`. |
+| `mountSourceLabel` | core | Mounts the source label view part: "Generated score (original kept)", "Score file (saves to the file)" or, while read-only, "Score file (read only)", following the session's language, the source read through its getter and `readOnly`; takes `SourceLabelOptions` and returns `SourceLabelPart`. |
 
 ## Constants and values
 
@@ -103,13 +103,13 @@ change. The tests in the repository check that the list stays complete.
 | --- | --- |
 | `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, source, onSaveAs, onUnsavedChange, requiredInputs, drafts, tools, title, handoffScorePath, onHandoff. |
 | `MountedEditor` | `{ update(options), hasUnsavedChanges(), save(), destroy() }`; `save()` returns the score-file keeper's `ScoreFileHandoffResult` (`saved`, `unchanged`, `conflict`, `failed`) and writes nothing for a generated score or read-only/destroyed editor. |
-| `ScoreSource`, `GeneratedScoreSource`, `ScoreFileSource`, `ScoreFileEntry`, `ScoreFileSaveResult` | Where the score came from, the host's versioned file save/read, and the shapes a version uses; see [score-files.md](score-files.md). |
+| `ScoreSource`, `GeneratedScoreSource`, `ScoreFileSource`, `ScoreFileEntry`, `ScoreFileReadFailure`, `ScoreFileSaveResult` | Where the score came from, the host's versioned file save/read, the `{ ok: false, reason: "missing" \| "failed" }` read answer, and the shapes a version uses; see [score-files.md](score-files.md). |
 | `ProjectField`, `RequiredInput` | A project field the host may mark required for a handoff: `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`. |
 | `Language` | `"zh" \| "en"`. |
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
 | `ChangeLogEntry` | One `changeLogEntries` sentence and the 1-based `bars` it names. |
 | `VocalRange` | `{ medianMidi, singable }`, the register measure `vocalRange` and the pre-handoff notice read. |
-| `SourceLabelOptions`, `SourceLabelPart` | What `mountSourceLabel` reads (`{ source, before?, say? }`) and returns (`refresh()` and `destroy()`); `say` gets the new label once when the source changes. |
+| `SourceLabelOptions`, `SourceLabelPart` | What `mountSourceLabel` reads (`{ source, readOnly?, before?, say? }`) and returns (`refresh()` and `destroy()`); `readOnly` adds "Score file (read only)", and `say` gets the new label once when it changes. |
 | `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
 | `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, the last edit's rewritten bars, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
@@ -234,7 +234,7 @@ change. The tests in the repository check that the list stays complete.
 | `DraftProject` | The project fields a draft keeps: style, joined `lyrics`, `lyricLines`, score text, score mode and seed. |
 | `DraftStore` | The host's storage: `read`, versioned `write`, versioned `remove`, `list`. |
 | `DraftStoreEntry` | `{ text, version }`; the version is opaque and only handed back. |
-| `DraftWriteResult` | `{ ok: true, version }` or `{ ok: false, reason: "conflict" \| "failed" }`. |
+| `DraftWriteResult` | `{ ok: true, version }` or `{ ok: false, reason: "conflict" \| "failed" \| "no-access" }`; `no-access` is a score-file host's removed access, and a draft host may report the same thing as `failed`. |
 | `DraftKeeper` | `status`, `ready`, `subscribe`, `overwrite`, `loadTheirs`, `restoreOriginal`, `handoff`, `destroy`. |
 | `DraftKeeperOptions` | `{ session, store, original, notify?, now?, debounceMs? }`. |
 | `DraftKeeperChange` | `{ status }`, announced after a keeper status change. |
@@ -245,9 +245,9 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `ScoreFileKeeper` | `status`, `unsaved`, `failed`, `savedProject`, `version`, `save`, `overwrite`, `loadTheirs`, `restoreOriginal`, `handoff`, `subscribe`, `destroy`. |
+| `ScoreFileKeeper` | `status`, `unsaved`, `failed`, `accessLost`, `savedProject`, `version`, `save`, `overwrite`, `loadTheirs`, `restoreOriginal`, `handoff`, `subscribe`, `destroy`. `accessLost` says a save was refused for removed access and no retry is offered. |
 | `ScoreFileKeeperOptions` | `{ session, original, source, notify?, onUnsavedChange? }`. |
-| `ScoreFileKeeperChange` | `{ status, unsaved, failed }`, announced after a change. |
+| `ScoreFileKeeperChange` | `{ status, unsaved, failed, accessLost }`, announced after a change. |
 | `ScoreFileKeeperStatus` | `"clean" \| "dirty" \| "saving" \| "conflict" \| "destroyed"`. |
 | `ScoreFileHandoffResult` | `"saved" \| "unchanged" \| "conflict" \| "failed"`. |
 

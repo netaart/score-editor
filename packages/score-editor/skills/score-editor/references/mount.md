@@ -44,7 +44,8 @@ function mount(el: HTMLElement, options: MountOptions): MountedEditor;
 
 An element holds at most one editor: destroy the first before mounting again. `ScoreSource` is either a
 `GeneratedScoreSource` with `kind: "generated"`, or a `ScoreFileSource` with `kind: "scoreFile"`, `name`, `version`,
-`save` and `read`. Its `save` answers a `ScoreFileSaveResult`, and its `read` answers a `ScoreFileEntry` or null. For
+`save` and `read`. Its `save` answers a `ScoreFileSaveResult`, and its `read` answers a `ScoreFileEntry`, a
+`ScoreFileReadFailure` (`{ ok: false, reason: "missing" | "failed" }`) or null. For
 the source option, the save button, the unsaved state, the conflict and save-as, see
 [score-files.md](score-files.md).
 
