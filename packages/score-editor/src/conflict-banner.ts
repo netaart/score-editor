@@ -1,8 +1,8 @@
 // ABOUTME: The shared conflict banner and its choices popover, used by the draft conflict and the score-file conflict.
 // ABOUTME: One sentence and one Choose button; the two two-line ways out live in a dialog anchored under the banner.
+import { placeConflictChoices } from "./conflict-placement";
 import { create } from "./dom";
-import { anchorOf, keepInside, placeUnder } from "./popover-menu";
-import { revealConflictInChrome } from "./reveal-conflict";
+import { restoreConflictInChrome, revealConflictInChrome } from "./reveal-conflict";
 
 /** The words of one conflict, in the session's language. */
 export interface ConflictCopy {
@@ -104,21 +104,11 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
     }
   }
 
-  const anchor = () => anchorOf(strip);
-  /** The room left under the banner inside the editor's own box, so the choices do not run past the music it keeps. */
-  const room = (): number | undefined => {
-    const view = doc.defaultView;
-    if (view === null) return undefined;
-    const editor = strip.closest<HTMLElement>(".sce-editor")?.getBoundingClientRect();
-    const bottom = Math.min(view.innerHeight, editor?.bottom ?? view.innerHeight);
-    return Math.max(1, bottom - 8 - (anchor().bottom + 4));
-  };
   popover.addEventListener(
     "beforetoggle",
     (event) => {
       if ((event as ToggleEvent).newState !== "open") return;
-      const height = room();
-      placeUnder(anchor(), popover, height === undefined ? {} : { maxHeight: height });
+      placeConflictChoices(popover, strip);
     },
     { signal },
   );
@@ -131,8 +121,7 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
         if (!strip.hidden) choose.focus();
         return;
       }
-      const height = room();
-      keepInside(popover, anchor(), height === undefined ? {} : { maxHeight: height });
+      placeConflictChoices(popover, strip);
       parts[0].button.focus();
     },
     { signal },
@@ -155,9 +144,15 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
 
   let visible = false;
   function show(next: boolean): void {
-    strip.hidden = !next;
-    if (!next && popover.matches(":popover-open")) popover.hidePopover();
-    if (next && !visible) revealConflictInChrome(strip);
+    if (next) {
+      strip.hidden = false;
+      if (!visible) revealConflictInChrome(strip);
+    } else {
+      // Put the chrome back while the banner still holds its height; hiding it first would let the scroll clamp.
+      restoreConflictInChrome(strip);
+      if (popover.matches(":popover-open")) popover.hidePopover();
+      strip.hidden = true;
+    }
     visible = next;
   }
 

@@ -61,4 +61,8 @@ export const scoreSourceCss = `
 .sce-root .sce-save-conflict {
   border-bottom-color: var(--sce-_line-strong);
 }
+/* The one-action notice a failed save and a refused handoff draw; the sentence keeps the shared banner's measure. */
+.sce-root .sce-save-notice .sce-save-again {
+  flex: none;
+}
 `;

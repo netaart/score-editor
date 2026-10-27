@@ -100,7 +100,9 @@ in that review.
 
 With a score-file source the same trigger saves the file first when it is dirty (the review says `Saves <file> first,
 then sends the song.`), uses the last saved project as the change log's original, and does not call the host on a
-conflict or a failed save. Those send a `handoff-not-sent` notice and the same sentence in the toolbar's live region; the
-instruction's title is the file name. See [score-files.md](score-files.md).
+conflict or a failed save. A conflict is answered by the conflict banner; a failed save draws a one-action notice in the
+chrome with the `handoffNotSentFailed` sentence and **Save again**, which saves, until the next successful save. Both
+also send a `handoff-not-sent` notice and the same sentence in the toolbar's live region. The instruction's title is the
+file name. See [score-files.md](score-files.md).
 
 See [the package README](../../../README.md#change-log-and-handoff) for the same contract next to the draft rules.

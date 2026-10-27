@@ -12,6 +12,7 @@ export const draftCss = `
 .sce-root .sce-draft-conflict-text {
   flex: 0 1 auto;
   min-width: 0;
+  max-width: 70ch;
   margin: 0;
   font-weight: 600;
 }
@@ -39,6 +40,10 @@ export const draftCss = `
   padding: 4px 10px;
   text-align: start;
   white-space: normal;
+}
+.sce-root .sce-draft-label,
+.sce-root .sce-draft-note {
+  text-wrap: pretty;
 }
 .sce-root .sce-draft-note {
   color: var(--sce-_muted);

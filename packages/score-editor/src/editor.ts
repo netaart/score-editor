@@ -22,6 +22,7 @@ import { lyricLinesOf } from "./lyrics";
 import { mountProblemView } from "./problem-view";
 import { mountSaveConflict } from "./save-conflict";
 import { mountScoreSourceControl, type ScoreSourceControl } from "./save-control";
+import { mountSaveNotice, type SaveNotice } from "./save-notice";
 import { createScoreFileKeeper, type ScoreFileHandoffResult, type ScoreFileKeeper } from "./score-source";
 import { watchScrollCue } from "./scroll-cue";
 import {
@@ -104,6 +105,7 @@ export class Editor implements MountedEditor {
   private scoreFile: ScoreFileKeeper | null = null;
   private saveControl: ScoreSourceControl | null = null;
   private saveConflict: ViewPart | null = null;
+  private saveNotice: SaveNotice | null = null;
   private scoreRestore: ViewPart | null = null;
   private sourceLabel: SourceLabelPart | null = null;
   /** The chrome above the body: toolbar, conflict strip, cut sentence and stale notice, bounded by the music's floor. */
@@ -299,6 +301,7 @@ export class Editor implements MountedEditor {
     this.scoreFile?.destroy();
     this.saveControl?.destroy();
     this.saveConflict?.destroy();
+    this.saveNotice?.destroy();
     this.scoreRestore?.destroy();
     this.root.remove();
     this.releaseStyles();
@@ -416,6 +419,7 @@ export class Editor implements MountedEditor {
       ...(title === undefined ? {} : { title }),
       ...(this.options.notify === undefined ? {} : { notify: this.options.notify }),
       say: (words) => this.toolbar.say(words),
+      notSent: (kind) => this.saveNotice?.notSent(kind),
     };
   }
 
@@ -439,6 +443,8 @@ export class Editor implements MountedEditor {
     this.saveControl = null;
     this.saveConflict?.destroy();
     this.saveConflict = null;
+    this.saveNotice?.destroy();
+    this.saveNotice = null;
     this.scoreRestore?.destroy();
     this.scoreRestore = null;
 
@@ -457,6 +463,7 @@ export class Editor implements MountedEditor {
       });
       this.scoreFile = file;
       this.saveConflict = mountSaveConflict(this.chrome, this.session, file);
+      this.saveNotice = mountSaveNotice(this.chrome, this.session, file);
       this.scoreRestore = mountRestoreControl(
         strip,
         this.session,

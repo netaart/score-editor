@@ -723,3 +723,130 @@ test.describe("the edge cues", () => {
     expect(await cue()).toBe("left");
   });
 });
+
+test.describe("the strip's controls keep their content", () => {
+  test("a control in the scrolling strip never shrinks, in every source and language", async ({
+    page,
+    harness,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "the phone widths are the ones measured");
+    const sources: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+      ["no source", {}],
+      ["a file", { scoreFile: { name: "tune.abc" } }],
+      ["a generated score with Save as", { saveAs: true }],
+    ];
+    for (const [source, options] of sources) {
+      for (const language of ["en", "zh"] as const) {
+        for (const width of [412, 360, 320]) {
+          await page.setViewportSize({ width, height: 800 });
+          await harness.stageHeight(420);
+          await harness.destroy();
+          await harness.mount({ score: { text: QUARTERS }, language, ...options });
+          const where = `${source}, ${language}, ${width}`;
+
+          const strip = page.locator(".sce-tools");
+          await strip.evaluate((el) => {
+            el.scrollLeft = el.scrollWidth;
+          });
+          await harness.frames(1);
+
+          const controls = await strip.evaluate((el) => {
+            const found = [...el.querySelectorAll<HTMLElement>("button, input")].filter((control) => {
+              const frame = control.getBoundingClientRect();
+              return frame.width > 0 && frame.height > 0 && getComputedStyle(control).visibility !== "hidden";
+            });
+            return found.map((control) => {
+              const frame = control.getBoundingClientRect();
+              return {
+                name: control.getAttribute("aria-label") ?? control.textContent?.trim() ?? control.tagName,
+                width: frame.width,
+                height: frame.height,
+                scrollWidth: control.scrollWidth,
+                clientWidth: control.clientWidth,
+              };
+            });
+          });
+          expect(controls.length, `${where}: the strip holds controls`).toBeGreaterThan(0);
+          for (const control of controls) {
+            expect(control.width, `${where}: ${control.name} keeps its content width`).toBeGreaterThanOrEqual(36);
+            expect(control.height, `${where}: ${control.name} keeps its touch height`).toBeGreaterThanOrEqual(36);
+            expect(control.scrollWidth, `${where}: ${control.name} is not cut`).toBeLessThanOrEqual(
+              control.clientWidth + 1,
+            );
+          }
+
+          // The last control, Save as on a generated score, is wholly in view at the end of the strip.
+          const end = page.locator(".sce-part-save .sce-save-button");
+          if (await end.isVisible()) {
+            const endBox = await box(end);
+            const stripBox = await box(strip);
+            expect(endBox.x, `${where}: Save as starts inside the strip`).toBeGreaterThanOrEqual(stripBox.x - 0.5);
+            expect(endBox.x + endBox.width, `${where}: Save as ends inside the strip`).toBeLessThanOrEqual(
+              stripBox.x + stripBox.width + 0.5,
+            );
+            const label = end.locator(".sce-save-label");
+            const labelShown = await label.evaluate((el) => el.getBoundingClientRect().width > 0);
+            if (!labelShown) {
+              const icon = await box(end.locator("svg"));
+              expect(icon.x, `${where}: Save as shows its whole icon`).toBeGreaterThanOrEqual(endBox.x - 0.5);
+              expect(icon.x + icon.width, `${where}: Save as shows its whole icon`).toBeLessThanOrEqual(
+                endBox.x + endBox.width + 0.5,
+              );
+            }
+          }
+        }
+      }
+    }
+  });
+});
+
+test.describe("the chrome returns after a banner", () => {
+  test("answering a conflict puts the chrome back where the reveal found it", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.skip(!isMobile, "the phone's short root is the one where the chrome scrolls");
+    const TALL = CUT.replace("V: Vocal\nC4D4E4F4|G16|", 'V: Vocal\n"C"C4D4E4F4|G16|');
+    await page.setViewportSize({ width: 320, height: 839 });
+    await harness.stageHeight(288);
+    await harness.mount({
+      score: { text: TALL },
+      drafts: true,
+      project: { style: "no tempo written here" },
+    });
+
+    await makeConflict(page, press, TALL);
+    // A notice and a stale sentence keep the chrome taller than its box after the conflict banner goes.
+    const tempo = page.getByRole("spinbutton", { name: "Tempo (BPM)" });
+    await tempo.fill("130");
+    await tempo.press("Enter");
+    await expect(page.getByRole("note").filter({ hasText: "no BPM" })).toHaveCount(1);
+    await press(page.getByRole("button", { name: "Score text", exact: true }));
+    await page.getByRole("textbox", { name: "Score text", exact: true }).fill(TALL.replace("C4D4E4F4|", "C5D4E4F4|"));
+    await expect(page.locator(".sce-text-problem-item")).toHaveCount(1);
+    await press(page.getByRole("button", { name: "Arrangement", exact: true }));
+    await expect(page.locator(".sce-stale-notice")).toBeVisible();
+
+    const chrome = page.locator(".sce-chrome");
+    const before = await chrome.evaluate((el) => ({
+      top: el.scrollTop,
+      height: el.scrollHeight,
+      client: el.clientHeight,
+    }));
+    expect(before.height, "the chrome scrolls while the banner stands").toBeGreaterThan(before.client);
+
+    await press(page.getByRole("button", { name: "Choose", exact: true }));
+    await press(page.getByRole("button", { name: "Overwrite with my version", exact: true }));
+    await harness.frames(2);
+    const after = await chrome.evaluate((el) => ({
+      top: el.scrollTop,
+      height: el.scrollHeight,
+      client: el.clientHeight,
+    }));
+    expect(after.height, "the chrome still has more than its box without the banner").toBeGreaterThan(after.client);
+    expect(after.top, "the chrome is back at the top the reveal found").toBe(0);
+  });
+});

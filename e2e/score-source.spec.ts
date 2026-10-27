@@ -301,7 +301,8 @@ async function saveStates(
   await harness.failScoreNext("save");
   await press(page.getByRole("button", { name: t.save, exact: true }));
   states.failed = await saveLooks(page);
-  await press(page.getByRole("button", { name: t.again, exact: true }));
+  // The notice banner offers the same word; this is the save control's own action.
+  await press(page.locator(".sce-part-save").getByRole("button", { name: t.again, exact: true }));
   await expect.poll(async () => (await harness.scoreCalls()).length).toBe(3);
   await expect(page.getByRole("button", { name: t.save, exact: true })).toBeVisible();
 
@@ -789,6 +790,22 @@ test.describe("the handoff with a score file", () => {
         area.y + area.height <= scroller.bottom + 0.5;
       expect(inside(inputBox), `${where}: the input is inside the scroller`).toBe(true);
       expect(inside(addBox), `${where}: the Add button is inside the scroller`).toBe(true);
+      // The field has the focus, so its 2px ring and its 2px offset must fit inside the scroller too.
+      const ring = 4;
+      expect(inputBox.x - ring, `${where}: the focus ring's left is in the scroller`).toBeGreaterThanOrEqual(
+        scroller.left - 0.5,
+      );
+      expect(inputBox.y - ring, `${where}: the focus ring's top is in the scroller`).toBeGreaterThanOrEqual(
+        scroller.top - 0.5,
+      );
+      expect(
+        inputBox.x + inputBox.width + ring,
+        `${where}: the focus ring's right is in the scroller`,
+      ).toBeLessThanOrEqual(scroller.right + 0.5);
+      expect(
+        inputBox.y + inputBox.height + ring,
+        `${where}: the focus ring's bottom is in the scroller`,
+      ).toBeLessThanOrEqual(scroller.bottom + 0.5);
       expect(inputBox.y, `${where}: the input is below the pinned head`).toBeGreaterThanOrEqual(
         head.y + head.height - 0.5,
       );
