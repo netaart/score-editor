@@ -130,6 +130,11 @@ const handoffs = [];
 /** The options of `mount` and `update`, with the page's store and callback standing in for the host's. */
 function hostOptions(options) {
   const { handoff, ...rest } = options;
+  // The page cannot pass a function through `evaluate`; a string (or null) stands for the host's path getter.
+  if (typeof rest.handoffScorePath === "string" || rest.handoffScorePath === null) {
+    const path = rest.handoffScorePath;
+    rest.handoffScorePath = () => (path === null ? null : String(path));
+  }
   const withStore =
     rest.drafts === true ? { ...rest, drafts } : rest.drafts === false ? { ...rest, drafts: undefined } : rest;
   if (handoff === true) {

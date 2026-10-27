@@ -21,6 +21,7 @@ const editor = mount(element, {
   onUnsavedChange: (unsaved) => guardClose(unsaved), // optional: a score file's unsaved state
   requiredInputs: ["style"], // optional: blocks the handoff until these project fields are filled
   title: "My Song", // optional: the work's title in the handoff instruction
+  handoffScorePath: () => scorePath, // optional: the score file a plain-text handoff names instead of the attachment
   onHandoff: (handoff) => openChatInput(handoff), // optional: adds the handoff button (see Change log and handoff)
 
   notify: (notice) => showToast(notice.message), // already in the current language; `notice.code` is one of `NOTICE_CODES`
@@ -412,7 +413,7 @@ const instruction = handoffInstruction({
 
 `changeLogEntries` is the structured form: the same sentences in order, each with the 1-based bars it names. The review uses it to mark the entries that name a bar the last edit rewrote, with the accent line and tint; `changeLog` stays the string list.
 
-`handoffInstruction` writes the prefilled text: the title, the request to regenerate with song2 and pass the attached score through `--text`, the final style description and joined lyrics (already synced, not to be changed), the score mode and the seed when there is one, and the change log. The joined lyrics come from the current score and lyric lines, not from the stored `lyrics` field alone.
+`handoffInstruction` writes the prefilled text: the title, the request to regenerate with song2 and pass the score through `--text`, the final style description and joined lyrics (already synced, not to be changed), the score mode and the seed when there is one, and the change log. By default the request points at the attached `score.abc`; `scorePath` names a file instead, for a host whose input is plain text with no attachment. The joined lyrics come from the current score and lyric lines, not from the stored `lyrics` field alone.
 
 `preHandoffNotices(dialect, project, language)` returns the four notices a project carries before a handoff: no section markers, the whole song's syllable count far from its note count (more than one syllable per lyric line away), Vocal's lower median outside the singable range 60-82, and a melody project with chords. The review shows one line for each above its actions, and follows edits while it stays open. The editor also sends each through `notify` once each time the review opens, with the codes `prehandoff-no-sections`, `prehandoff-syllables-far`, `prehandoff-vocal-range` and `prehandoff-melody-chords`, so a host that toasts every notice may skip these: the review already shows them. A project with none shows no line and sends nothing.
 
@@ -421,6 +422,8 @@ With `onHandoff`, and while the editor is editable, the toolbar has a **Regenera
 - `attachment`: `{ name: "score.abc", mediaType: "text/plain", text }`, where `text` is the current score;
 - `instruction`: the prefilled instruction in the interface language;
 - `project`: the final song project.
+
+`handoffScorePath` answers the path the host will put in its own message, or null when it attaches the score instead. The editor calls it when it builds the payload: a non-blank path makes the instruction name that file, and the `score.abc` attachment stays in the payload either way, so a host that attaches files loses nothing. A host that gives no path, or answers null or a blank string, gets the instruction 0.4.0 wrote.
 
 The payload is taken before the save is awaited, from the project the review showed, so an edit made while a slow save is pending does not reach the attachment, instruction or project. While the save runs the trigger reads **Saving…** with `aria-busy="true"` and cannot open the review; afterwards it reads as before. The editor never calls a generation API and never sends anything itself. When the keeper answers `"written"` or `"unchanged"` the host is called; `"conflict"` leaves the draft conflict banner to answer, and `"failed"` leaves the `draft-save-failed` notice to answer, so neither calls the host. A host with no draft store still gets the handoff, without a draft to save. Without `onHandoff`, or while read-only, the button is not there. While the text view holds text the project did not take, the popover says that the last readable score is what is handed off; it is not disabled. The review is bounded by the room under the trigger and scrolls its change list in a short window. The control adds no fixed height to the toolbar: it is a word button in the scrolling strip, 28px high (36px on a coarse pointer), and the strip scrolls to it rather than wrapping it onto another row.
 

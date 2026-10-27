@@ -35,11 +35,12 @@ When the dialect is omitted, only project fields and the raw text can be compare
 ## The instruction
 
 `handoffInstruction(options: HandoffInstructionOptions)` writes the prefilled text the host puts in its chat input; the
-options are `{ original, current, title?, language, dialect? }`. It states:
+options are `{ original, current, title?, language, dialect?, scorePath? }`. It states:
 
 - the work's title (`title`, or the original's `sourceKey` when absent or blank); with a score-file source it is the
   file's name;
-- the request to regenerate with song2 and pass the score in the attached `score.abc` through `--text`;
+- the request to regenerate with song2 and pass the score in the attached `score.abc` through `--text`, or in the file
+  `scorePath` names when it is given and not blank;
 - the final style description and joined lyrics, already synced by the editor and not to be changed by the agent;
 - the score mode, and the seed when there is one;
 - the change log.
@@ -64,7 +65,9 @@ count by that much, more than that per line means the lyrics were written for an
 
 ## The handoff in `mount`
 
-`MountOptions.title` and `MountOptions.onHandoff` add the handoff. `onHandoff` receives a `HandoffPayload`:
+`MountOptions.title` and `MountOptions.onHandoff` add the handoff. `MountOptions.handoffScorePath`, a function that
+answers a path or `null`, names the score's file in the instruction when the host's input is plain text; the
+`score.abc` attachment stays in the payload. `onHandoff` receives a `HandoffPayload`:
 
 ```ts
 const editor = mount(el, {

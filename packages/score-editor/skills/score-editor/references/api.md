@@ -75,7 +75,7 @@ change. The tests in the repository check that the list stays complete.
 | `changeLogEntries` | core | The same sentences as `changeLog`, each with the 1-based `bars` it names (empty when it names none), for a review that highlights the bars the last edit rewrote. |
 | `preHandoffNotices` | core | The four pre-handoff notices a project carries: no sections, syllables far from the notes, Vocal outside 60–82, a melody project with chords; each a host `Notice` in the chosen language. |
 | `vocalRange` | core | Vocal's tie-chain lower median pitch and whether it is inside the singable range 60–82, as `VocalRange`. |
-| `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`. |
+| `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`; `scorePath` names a file instead of the attached `score.abc`. |
 | `mountSourceLabel` | core | Mounts the source label view part: "Generated score (original kept)" or "Score file (saves to the file)", following the session's language and a source read through its getter; takes `SourceLabelOptions` and returns `SourceLabelPart`. |
 
 ## Constants and values
@@ -101,7 +101,7 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, source, onSaveAs, onUnsavedChange, requiredInputs, drafts, tools, title, onHandoff. |
+| `MountOptions` | `mount`'s options: project, dialects, language, editable, notify, source, onSaveAs, onUnsavedChange, requiredInputs, drafts, tools, title, handoffScorePath, onHandoff. |
 | `MountedEditor` | `{ update(options), hasUnsavedChanges(), save(), destroy() }`; `save()` returns the score-file keeper's `ScoreFileHandoffResult` (`saved`, `unchanged`, `conflict`, `failed`) and writes nothing for a generated score or read-only/destroyed editor. |
 | `ScoreSource`, `GeneratedScoreSource`, `ScoreFileSource`, `ScoreFileEntry`, `ScoreFileSaveResult` | Where the score came from, the host's versioned file save/read, and the shapes a version uses; see [score-files.md](score-files.md). |
 | `ProjectField`, `RequiredInput` | A project field the host may mark required for a handoff: `"style"`, `"scoreMode"`, `"seed"` or `"lyrics"`. |
@@ -134,8 +134,8 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ChangeLogOptions` | `{ language, dialect? }`: the language of the sentences and the dialect that reads both scores. |
-| `HandoffInstructionOptions` | `{ original, current, title?, language, dialect? }` for `handoffInstruction`. |
-| `HandoffPayload` | The attachment (`score.abc`, `text/plain`), the prefilled instruction and the final project handed to the host. |
+| `HandoffInstructionOptions` | `{ original, current, title?, language, dialect?, scorePath? }` for `handoffInstruction`; a non-blank `scorePath` names that file instead of the attached `score.abc`. |
+| `HandoffPayload` | The attachment (`score.abc`, `text/plain`), the prefilled instruction and the final project handed to the host; the attachment stays when the instruction names a `handoffScorePath`. |
 
 ## Score model types
 
