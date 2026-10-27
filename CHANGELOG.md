@@ -16,6 +16,9 @@ Both packages share one version. The README's [Publish](README.md#publish) secti
 - **The conflict dialog opens on Cancel.** Its visible Cancel button takes the focus when the dialog opens, so Enter
   pressed by habit closes it and writes nothing; Cancel, Escape and light dismiss return the focus to Choose. Both
   conflict kinds share the banner.
+- **A regenerated song inherits the draft it was handed off from when the score comes back without its last line break.**
+  The handoff hash now ignores trailing whitespace in the joined lyrics and the score, as song2 returns them, and the
+  inheritance check compares the same way. A draft whose handoff hash is the old raw source hash is still accepted.
 
 ## 0.4.4
 
