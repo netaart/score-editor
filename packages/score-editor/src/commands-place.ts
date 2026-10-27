@@ -12,6 +12,7 @@ import {
   snap,
   spansOf,
 } from "./commands-notes";
+import { cutEditRefusal, endsAtX5Tail } from "./commands-shared";
 import type { Note, Score } from "./score";
 import type { DialectConstraints } from "./types";
 
@@ -125,9 +126,12 @@ function plannedSpans(
       if (command.timeTicks === 0 && command.semitones === 0) return { ok: true, spans: [], unitTicks };
       for (const span of selected) {
         const start = snap(span.start + command.timeTicks, step);
+        const end = start + (span.end - span.start);
         const midi = (span.midi as number) + command.semitones;
         if (midi < 0 || midi > 127) return { ok: false, result: commandRefusal("pitch-out-of-range", { midi }) };
-        wanted.push({ voice: span.voice, start, end: start + (span.end - span.start), midi, notes: null });
+        const lastNote = span.notes?.[span.notes.length - 1];
+        const tie = lastNote?.tie === true && end === span.end && endsAtX5Tail(score, span.voice, end);
+        wanted.push({ voice: span.voice, start, end, midi, notes: null, tie });
       }
     } else {
       const first = Math.min(...selected.map((span) => span.start));
@@ -136,7 +140,9 @@ function plannedSpans(
       for (const span of selected) {
         const start = snap(span.start + offset, step);
         const end = Math.max(start + step, snap(span.end + offset, step));
-        wanted.push({ voice: span.voice, start, end, midi: span.midi as number, notes: null });
+        const lastNote = span.notes?.[span.notes.length - 1];
+        const tie = lastNote?.tie === true && end === span.end && endsAtX5Tail(score, span.voice, end);
+        wanted.push({ voice: span.voice, start, end, midi: span.midi as number, notes: null, tie });
       }
     }
   } else if (command.type === "addNote") {
@@ -178,6 +184,10 @@ function plannedSpans(
     if (span.start < 0) return { ok: false, result: commandRefusal("note-before-start", {}) };
     if (span.end > scoreEnd) return { ok: false, result: commandRefusal("note-past-end", {}) };
   }
+  const first = wanted[0];
+  const at = first === undefined ? {} : { voice: first.voice, noteId: `${first.voice}:${first.start}` };
+  const cut = cutEditRefusal(score, [], wanted, at);
+  if (cut !== null) return { ok: false, result: cut };
   return { ok: true, spans: wanted, unitTicks };
 }
 

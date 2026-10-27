@@ -826,6 +826,18 @@ Z2|`);
     refuse(KEY_METER_SCORE, { type: "nameSection", bar: 2, name: "" }, "section-name-empty");
   });
 
+  it("refuses to split a group whose Ins block stopped short", () => {
+    const shortIns = `${HEADER}
+K:C
+V: Vocal
+C16|D16|
+V: Ins
+Z|`;
+    const input = parse(shortIns);
+    expect(input.truncation).toEqual({ voice: "Ins", bar: 1, short: false });
+    refuse(shortIns, { type: "nameSection", bar: 1, name: "bridge" }, "write-mismatch");
+  });
+
   it("refuses a bar outside the score for naming", () => {
     refuse(KEY_METER_SCORE, { type: "nameSection", bar: 5, name: "outro" }, "bar-out-of-range");
   });

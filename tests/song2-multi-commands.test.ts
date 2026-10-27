@@ -204,7 +204,8 @@ describe("toRests writes once and checks once", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(calls).toEqual({ parse: 1, serialize: 1, check: 1 });
+    // W14/W16 refuse a command that would rewrite the cut before it writes anything.
+    expect(calls).toEqual({ parse: 1, serialize: 0, check: 0 });
   });
 });
 
@@ -341,7 +342,9 @@ function exerciseSet(
   const command = { type: "toRests", noteIds: ids } as const;
   const result = textOnly(text, command);
 
-  if (SMALL_SETS.has(name))
+  // A cut in any named chain refuses the whole command, while the single commands would have
+  // changed the earlier chains first (RULES.md W14/W16 and the gate's all-ids-first rule).
+  if (result.ok && SMALL_SETS.has(name))
     expect(result, `${label}: against the single commands one by one`).toEqual(oneByOne(text, ids, input));
 
   if (!result.ok) {

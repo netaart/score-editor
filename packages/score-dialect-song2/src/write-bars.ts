@@ -256,6 +256,18 @@ function coveredAt(coverage: Map<string, Set<number>>, voice: string, index: num
   return coverage.get(voice)?.has(index) ?? false;
 }
 
+/** True when a voice has a finished note, rest or chord in the measure the cut falls in. */
+export function cutBarHasEvent(score: Score, voice: string): boolean {
+  const cut = score.truncation;
+  if (cut === null || !cut.short || cut.voice !== voice) return false;
+  const bar = score.bars[cut.bar];
+  if (bar === undefined) return false;
+  return (
+    score.notes.some((note) => note.voice === voice && note.bar === cut.bar) ||
+    score.chords.some((chord) => chord.start >= bar.start && chord.start < bar.start + bar.length)
+  );
+}
+
 function cutTailAt(score: Score, facts: SourceFacts, voice: string, index: number): string {
   if (score.truncation === null || score.truncation.voice !== voice || score.truncation.bar !== index) return "";
   for (const line of facts.musicLines) {
@@ -263,7 +275,8 @@ function cutTailAt(score: Score, facts: SourceFacts, voice: string, index: numbe
     const voiceNotes = score.notes
       .filter((note) => note.voice === voice)
       .sort((left, right) => left.start - right.start);
-    return keepsCutTail(score, line.cutTail, voiceNotes[voiceNotes.length - 1]?.tie === true) ? line.cutTail.raw : "";
+    if (keepsCutTail(score, line.cutTail, voiceNotes[voiceNotes.length - 1]?.tie === true)) return line.cutTail.raw;
+    return cutBarHasEvent(score, voice) ? "" : "^";
   }
   return "";
 }

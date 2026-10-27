@@ -261,6 +261,23 @@ describe("moveNotes on a hand-worked score", () => {
   });
 });
 
+describe("an X5 tail and the tie into it", () => {
+  it("keeps the X5 tail when moving the tied note only changes its pitch", () => {
+    const text = `${HEADER}
+K:C
+V: Vocal
+C16-|B`;
+    const result = textOnly(text, move(["Vocal:0"], 0, 7, 16));
+    expect(result).toEqual({
+      ok: true,
+      text: `${HEADER}
+K:C
+V: Vocal
+G16-|B`,
+    });
+  });
+});
+
 describe("resizeNotes on a hand-worked score", () => {
   it("moves the end edge and leaves the start edge where it is", () => {
     const text = scoreOf("C4z4D4E4|G16|");

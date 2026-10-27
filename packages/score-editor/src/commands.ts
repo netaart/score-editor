@@ -13,7 +13,7 @@ import {
   runPlaceCommand,
 } from "./commands-place";
 import { runSectionCommand } from "./commands-sections";
-import { noteAt, tieChain } from "./commands-shared";
+import { cutEditRefusal, endsAtX5Tail, noteAt, tieChain } from "./commands-shared";
 import { type NoteToolCommand, runNoteToolCommand } from "./commands-tools";
 import { runTruncationCommand } from "./commands-truncation";
 import { type CommandReport, runVoiceCommand, type VoiceCommand } from "./commands-voice";
@@ -84,7 +84,7 @@ function commandFailure(code: "note-not-found" | "not-a-note", score: Score, not
  * Turns the tie chain of every named note into rests. Every id is checked before anything changes, so a refusal names the
  * first id that is not a pitched note and leaves the whole score as it was.
  */
-function toRests(score: Score, noteIds: ReadonlyArray<string>): ScoreCommandResult {
+function toRests(score: Score, noteIds: ReadonlyArray<string>, guardCut = false): ScoreCommandResult {
   const targets: ScoreNote[] = [];
   for (const noteId of noteIds) {
     const target = score.notes.find((note) => note.id === noteId);
@@ -94,9 +94,27 @@ function toRests(score: Score, noteIds: ReadonlyArray<string>): ScoreCommandResu
   }
 
   const chains = new Set<string>();
+  const spans: { start: number; end: number }[] = [];
   for (const target of targets) {
     if (chains.has(target.id)) continue;
-    for (const member of tieChain(score.notes, target)) chains.add(member.id);
+    const chain = tieChain(score.notes, target);
+    const first = chain[0];
+    const last = chain[chain.length - 1];
+    if (first !== undefined && last !== undefined) {
+      spans.push({ start: first.start, end: last.start + last.duration });
+      // RULES.md W14 and the gate's toRest rule: a tie into an empty X5 tail cannot become rests
+      // and keep the cut, and the writer must not invent another remainder for it.
+      if (last.tie && endsAtX5Tail(score, last.voice, last.start + last.duration)) {
+        const first = targets[0] ?? target;
+        return commandRefusal("write-mismatch", { field: "bars" }, noteAt(score, first.id));
+      }
+    }
+    for (const member of chain) chains.add(member.id);
+  }
+  if (guardCut) {
+    const first = targets[0];
+    const cut = cutEditRefusal(score, spans, [], first === undefined ? {} : noteAt(score, first.id));
+    if (cut !== null) return cut;
   }
   const notes = score.notes.map((note) => (chains.has(note.id) ? { ...note, midi: null, tie: false } : note));
   return { ok: true, score: { ...score, notes } };
@@ -119,7 +137,7 @@ function runCommand(score: Score, command: ScoreCommand, constraints: DialectCon
     case "toRest":
       return toRests(score, [command.noteId]);
     case "toRests":
-      return toRests(score, command.noteIds);
+      return toRests(score, command.noteIds, true);
     case "setChord":
       return setChord(score, command.noteId, command.name, constraints);
     case "insertBar":
