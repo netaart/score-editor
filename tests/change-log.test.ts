@@ -175,6 +175,98 @@ describe("the prefilled handoff instruction", () => {
     seed: 9,
   });
 
+  const blankBoth = {
+    en: "This score carries no style description and no lyrics: take them from the person's message or this conversation; if neither has them, ask the person before generating.",
+    zh: "这份乐谱没有风格描述和歌词：从用户的消息或这段对话里取，都没有就先问用户，再生成。",
+  } as const;
+  const blankStyle = {
+    en: "This score carries no style description: take it from the person's message or this conversation; if neither has it, ask the person before generating.",
+    zh: "这份乐谱没有风格描述：从用户的消息或这段对话里取，都没有就先问用户，再生成。",
+  } as const;
+  const blankLyrics = {
+    en: "This score carries no lyrics: take them from the person's message or this conversation; if neither has them, ask the person before generating.",
+    zh: "这份乐谱没有歌词：从用户的消息或这段对话里取，都没有就先问用户，再生成。",
+  } as const;
+  const finalStyle = {
+    en: "The style description below is final and already synced by the editor; do not change it.",
+    zh: "下面的风格描述是最终版，编辑器已经同步好，不要再改。",
+  } as const;
+  const finalLyrics = {
+    en: "The joined lyrics below are final and already synced by the editor; do not change them.",
+    zh: "下面拼回的歌词是最终版，编辑器已经同步好，不要再改。",
+  } as const;
+  const absentStyle = { en: "Style description:", zh: "风格描述:" } as const;
+  const absentLyrics = { en: "Joined lyrics:", zh: "拼回的歌词:" } as const;
+
+  it("does not call a blank style or wordless lyrics final", () => {
+    for (const language of ["en", "zh"] as const) {
+      const text = handoffInstruction({
+        original: project,
+        current: changed({ style: "  ", lyrics: "[verse]\n\n[chorus]\n" }),
+        title: "My Song",
+        language,
+        dialect: song2Dialect,
+      });
+      expect(text).toContain(blankBoth[language]);
+      expect(text).not.toContain(absentStyle[language]);
+      expect(text).not.toContain(absentLyrics[language]);
+      expect(text).not.toContain(
+        language === "en"
+          ? "The style description and joined lyrics below are final"
+          : "下面的风格描述和拼回的歌词是最终版",
+      );
+    }
+  });
+
+  it("calls only the field with content final, and names the blank style", () => {
+    for (const language of ["en", "zh"] as const) {
+      const text = handoffInstruction({
+        original: project,
+        current: changed({ style: "   ", lyrics: "[verse]\nla\n[chorus]\nha" }),
+        title: "My Song",
+        language,
+        dialect: song2Dialect,
+      });
+      expect(text).toContain(blankStyle[language]);
+      expect(text).toContain(finalLyrics[language]);
+      expect(text).not.toContain(absentStyle[language]);
+      expect(text).toContain(`${absentLyrics[language]}\n[verse]\nla\n[chorus]\nha`);
+    }
+  });
+
+  it("leaves out section labels with no words and names the missing lyrics", () => {
+    for (const language of ["en", "zh"] as const) {
+      const text = handoffInstruction({
+        original: project,
+        current: changed({ style: "rock", lyrics: "[verse]\n\n[chorus]\n" }),
+        title: "My Song",
+        language,
+        dialect: song2Dialect,
+      });
+      expect(text).toContain(blankLyrics[language]);
+      expect(text).toContain(finalStyle[language]);
+      expect(text).toContain(`${absentStyle[language]}\nrock`);
+      expect(text).not.toContain(absentLyrics[language]);
+    }
+  });
+
+  it("keeps the text of a project with both fields exactly as before", () => {
+    const expected = {
+      en: `Title: My Song\n\n${INTRO_040.en}\n\nThe style description and joined lyrics below are final and already synced by the editor; do not change them.\nStyle description:\npop\nJoined lyrics:\n[verse]\nla la\n[chorus]\nha ha\n\nScore mode: full\nSeed: 7\n\nChanges:\nNo changes from the original.\n`,
+      zh: `标题: 我的歌\n\n${INTRO_040.zh}\n\n下面的风格描述和拼回的歌词是最终版，编辑器已经同步好，不要再改。\n风格描述:\npop\n拼回的歌词:\n[verse]\nla la\n[chorus]\nha ha\n\n乐谱模式: full\nSeed: 7\n\n改动记录:\n和原版相比没有改动。\n`,
+    } as const;
+    for (const language of ["en", "zh"] as const) {
+      const text = handoffInstruction({
+        original: project,
+        current: project,
+        title: language === "en" ? "My Song" : "我的歌",
+        language,
+        dialect: song2Dialect,
+      });
+      expect(text).toBe(expected[language]);
+    }
+  });
+
   it("states the title, the song2 command, the final fields and the change log", () => {
     const text = handoffInstruction({
       original: project,

@@ -75,7 +75,7 @@ change. The tests in the repository check that the list stays complete.
 | `changeLogEntries` | core | The same sentences as `changeLog`, each with the 1-based `bars` it names (empty when it names none), for a review that highlights the bars the last edit rewrote. |
 | `preHandoffNotices` | core | The five pre-handoff notices a project carries: no sections, syllables far from the notes, Vocal outside 60–82, a melody project with chords, and lines in the unaligned area (their number and the first words of each); each a host `Notice` in the chosen language. The default editor's review shows them first, under a count lead. |
 | `vocalRange` | core | Vocal's tie-chain lower median pitch and whether it is inside the singable range 60–82, as `VocalRange`. |
-| `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`; `scorePath` names a file instead of the attached `score.abc`. |
+| `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the fields the score carries, score mode, seed and change log. A blank style or wordless lyrics are left out and one sentence says where to get them. Takes `HandoffInstructionOptions`; `scorePath` names a file instead of the attached `score.abc`. |
 | `mountSourceLabel` | core | Mounts the source label view part: "Generated score (original kept)", "Score file (saves to the file)" or, while read-only, "Score file (read only)", following the session's language, the source read through its getter and `readOnly`; takes `SourceLabelOptions` and returns `SourceLabelPart`. |
 
 ## Constants and values

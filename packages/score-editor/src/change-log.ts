@@ -2,7 +2,7 @@
 // ABOUTME: Pure and headless: it reads both score texts with the same dialect and returns one sentence per kind of change.
 import type { ScoreDialect } from "./dialect";
 import { type Messages, messagesFor } from "./i18n";
-import { joinLyrics, lyricLinesOf } from "./lyrics";
+import { joinLyrics, lyricLinesOf, lyricSyllables } from "./lyrics";
 import type { LyricLine, Score, Section, SongProject } from "./score";
 import type { Language } from "./types";
 
@@ -338,11 +338,30 @@ export function changeLogEntries(
   return entries;
 }
 
-/** The joined lyrics the handoff states: what the score and the current lyric lines make, not the stored field alone. */
-function handoffLyrics(current: SongProject, dialect: ScoreDialect | undefined): string {
+/** A line of a lyrics text with no words left: blank, or a section label on a line of its own. */
+const SECTION_LABEL_ONLY = /^\[[^\]]*\]$/u;
+
+/** The syllable count of a lyrics text the dialect did not read, with section labels left out. */
+function rawLyricSyllables(text: string): number {
+  return text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !SECTION_LABEL_ONLY.test(line))
+    .reduce((total, line) => total + lyricSyllables(line).length, 0);
+}
+
+/** The joined lyrics the handoff states, and the syllable count the review uses to say they have no words. */
+function handoffLyrics(
+  current: SongProject,
+  dialect: ScoreDialect | undefined,
+): { readonly text: string; readonly syllables: number } {
   const after = scoreOf(current, dialect);
-  if (after === null) return current.lyrics;
-  return joinLyrics(after, lyricLinesOf(current, after));
+  if (after === null) return { text: current.lyrics, syllables: rawLyricSyllables(current.lyrics) };
+  const lines = lyricLinesOf(current, after);
+  return {
+    text: joinLyrics(after, lines),
+    syllables: lines.reduce((total, line) => total + lyricSyllables(line.text).length, 0),
+  };
 }
 
 /** What the prefilled instruction says for a project and its original. See the package README, "Change log and handoff". */
@@ -368,19 +387,36 @@ export function handoffInstruction(options: HandoffInstructionOptions): string {
       ? t.handoffInstructionIntroPath(scorePath)
       : t.handoffInstructionIntro;
   const changes = changeLog(options.original, options.current, options);
-  const lines = [
-    `${t.handoffInstructionTitle}: ${title}`,
-    "",
-    intro,
-    "",
-    t.handoffInstructionFinal,
-    `${t.handoffInstructionStyle}:`,
-    options.current.style,
-    `${t.handoffInstructionLyrics}:`,
-    handoffLyrics(options.current, options.dialect),
-    "",
-    `${t.handoffInstructionMode}: ${options.current.scoreMode}`,
-  ];
+  const style = options.current.style;
+  const hasStyle = style.trim() !== "";
+  const lyrics = handoffLyrics(options.current, options.dialect);
+  const hasLyrics = lyrics.syllables > 0;
+  const final =
+    hasStyle && hasLyrics
+      ? t.handoffInstructionFinal
+      : hasStyle
+        ? t.handoffInstructionFinalStyle
+        : hasLyrics
+          ? t.handoffInstructionFinalLyrics
+          : null;
+  const missing =
+    !hasStyle && !hasLyrics
+      ? t.handoffInstructionNoStyleOrLyrics
+      : !hasStyle
+        ? t.handoffInstructionNoStyle
+        : !hasLyrics
+          ? t.handoffInstructionNoLyrics
+          : null;
+  const lines = [`${t.handoffInstructionTitle}: ${title}`, "", intro, ""];
+  if (final !== null) lines.push(final);
+  if (missing !== null) {
+    if (final !== null) lines.push("");
+    lines.push(missing);
+    if (hasStyle || hasLyrics) lines.push("");
+  }
+  if (hasStyle) lines.push(`${t.handoffInstructionStyle}:`, style);
+  if (hasLyrics) lines.push(`${t.handoffInstructionLyrics}:`, lyrics.text);
+  lines.push("", `${t.handoffInstructionMode}: ${options.current.scoreMode}`);
   if (options.current.seed !== null) lines.push(`${t.handoffInstructionSeed}: ${options.current.seed}`);
   lines.push("", `${t.handoffInstructionChanges}:`);
   if (changes.length === 0) lines.push(t.changeLogNone);
