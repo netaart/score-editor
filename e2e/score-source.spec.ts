@@ -381,6 +381,50 @@ test.describe("the save state at every width", () => {
     }
   });
 
+  test("keeps Save, its state and Restore original still when the first edit shows unsaved", async ({
+    page,
+    harness,
+    press,
+    isMobile,
+  }) => {
+    test.setTimeout(120_000);
+    const widths = isMobile ? ([390] as const) : ([1440, 1280, 1024] as const);
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: isMobile ? 839 : 900 });
+      await openFile(harness);
+      await expect(restore(page)).toBeVisible();
+      const before = {
+        save: await box(page.locator(".sce-save-button")),
+        restore: await box(restore(page)),
+      };
+
+      await deleteD(page, press);
+      await expect(page.locator(".sce-part-save")).toContainText(/Unsaved|•/);
+      const after = {
+        save: await box(page.locator(".sce-save-button")),
+        restore: await box(restore(page)),
+      };
+
+      // A state that appears must not move the controls already there.
+      expect(after.save, `${width}: Save keeps its box`).toEqual(before.save);
+      expect(after.restore, `${width}: Restore original keeps its box`).toEqual(before.restore);
+      expect(
+        await restore(page).evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+        `${width}: Restore original is not cut`,
+      ).toBe(true);
+
+      if (!isMobile) {
+        const state = page.locator(".sce-save-state");
+        await expect(state, `${width}: the unsaved word is shown`).toBeVisible();
+        const pill = await box(state);
+        const bar = await box(page.locator(".sce-bar"));
+        expect(pill.x, `${width}: the pill follows Save`).toBeGreaterThanOrEqual(after.save.x + after.save.width - 0.5);
+        expect(pill.x + pill.width, `${width}: the pill stays in the bar`).toBeLessThanOrEqual(bar.x + bar.width + 0.5);
+      }
+      await harness.destroy();
+    }
+  });
+
   test("chooses one form for the box, wide and narrow", async ({ page, harness, press, isMobile }) => {
     test.skip(isMobile, "the toolbar's box is narrowed on the desktop project");
     test.setTimeout(120_000);
