@@ -62,11 +62,16 @@ class FakeFile implements ScoreFileSource {
   readonly reads: string[] = [];
   file = { text: SCORE, version: "open-version" };
   failSaves = 0;
+  noAccessSaves = 0;
   failReads = 0;
   private next = 1;
 
   async save(text: string, expected: string): Promise<ScoreFileSaveResult> {
     this.saves.push({ text, expected });
+    if (this.noAccessSaves > 0) {
+      this.noAccessSaves -= 1;
+      return { ok: false, reason: "no-access" };
+    }
     if (this.failSaves > 0) {
       this.failSaves -= 1;
       return { ok: false, reason: "failed" };
@@ -227,6 +232,22 @@ describe("handoff and restore", () => {
     expect(keeper.unsaved).toBe(false);
     expect(await keeper.handoff()).toBe("unchanged");
     expect(file.saves).toHaveLength(1);
+  });
+
+  it("says a save was refused for access and keeps it until a save works", async () => {
+    const { keeper, session } = openKeeper();
+    deleteD(session);
+    file.noAccessSaves = 1;
+    expect(await keeper.save()).toEqual({ ok: false, reason: "no-access" });
+    expect(keeper.failed).toBe(true);
+    expect(keeper.accessLost).toBe(true);
+    expect(keeper.status).toBe("dirty");
+
+    const retry = await keeper.save();
+    expect(retry.ok).toBe(true);
+    expect(keeper.failed).toBe(false);
+    expect(keeper.accessLost).toBe(false);
+    expect(keeper.status).toBe("clean");
   });
 
   it("does not hand off when the save conflicts", async () => {

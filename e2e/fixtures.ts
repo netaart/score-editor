@@ -189,7 +189,7 @@ interface PageHarness {
     file(): { text: string; version: string };
     calls(): Array<Record<string, unknown>>;
     external(text: string): string;
-    failNext(method: "save" | "read", count?: number): void;
+    failNext(method: "save" | "read", count?: number, reason?: "failed" | "no-access"): void;
     holdSave(): void;
     releaseSave(): void;
   };
@@ -503,10 +503,11 @@ export class Harness {
   }
 
   /** Makes the next score-file calls of one kind fail. */
-  failScoreNext(method: "save" | "read", count = 1) {
+  failScoreNext(method: "save" | "read", count = 1, reason: "failed" | "no-access" = "failed") {
     return this.page.evaluate(
-      ([kind, times]) => window.harness.scoreFile?.failNext(kind as "save" | "read", times as number),
-      [method, count] as const,
+      ([kind, times, why]) =>
+        window.harness.scoreFile?.failNext(kind as "save" | "read", times as number, why as "failed" | "no-access"),
+      [method, count, reason] as const,
     );
   }
 

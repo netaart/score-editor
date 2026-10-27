@@ -17,6 +17,8 @@ export interface ScoreFileKeeperChange {
   readonly unsaved: boolean;
   /** True after a failed save or read, until the next save, load or restore starts. */
   readonly failed: boolean;
+  /** True after a save was refused because access was removed; the notice offers no Save again. */
+  readonly accessLost: boolean;
 }
 
 export interface ScoreFileKeeperOptions {
@@ -38,6 +40,8 @@ export interface ScoreFileKeeper {
   readonly unsaved: boolean;
   /** True after a failed save or read, until the next save, load or restore starts. */
   readonly failed: boolean;
+  /** True after a save was refused because access was removed; the notice offers no Save again. */
+  readonly accessLost: boolean;
   /** The project at the last save or load of their version; the change log's original and Restore's target. */
   readonly savedProject: SongProject;
   /** The version the file is known to be at: opened, last saved, or loaded from the other writer. */
@@ -66,6 +70,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
   let version = source.version;
   let busy = false;
   let failed = false;
+  let accessLost = false;
   let finished = false;
   let announced: ScoreFileKeeperChange | null = null;
   let announcedUnsaved = false;
@@ -85,8 +90,15 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
   }
 
   function announce(): void {
-    if (announced?.status === status && announced.unsaved === unsaved() && announced.failed === failed) return;
-    const change: ScoreFileKeeperChange = { status, unsaved: unsaved(), failed };
+    if (
+      announced?.status === status &&
+      announced.unsaved === unsaved() &&
+      announced.failed === failed &&
+      announced.accessLost === accessLost
+    ) {
+      return;
+    }
+    const change: ScoreFileKeeperChange = { status, unsaved: unsaved(), failed, accessLost };
     announced = change;
     for (const listener of [...listeners]) listener(change);
     const now = change.unsaved;
@@ -125,6 +137,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       return result;
     }
     failed = true;
+    accessLost = result.reason === "no-access";
     sendNotice("score-save-failed");
     setStatus(fromConflict ? "conflict" : "dirty");
     return result;
@@ -151,6 +164,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
     if (!unsaved()) return unchanged();
     busy = true;
     failed = false;
+    accessLost = false;
     setStatus("saving");
     try {
       return await write(version, false);
@@ -169,6 +183,9 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
     get failed() {
       return failed;
     },
+    get accessLost() {
+      return accessLost;
+    },
     get savedProject() {
       return savedProject;
     },
@@ -186,6 +203,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       if (finished || status !== "conflict" || busy) return;
       busy = true;
       failed = false;
+      accessLost = false;
       setStatus("saving");
       try {
         const entry = await read();
@@ -205,6 +223,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       if (finished || status !== "conflict" || busy) return;
       busy = true;
       failed = false;
+      accessLost = false;
       setStatus("saving");
       try {
         const entry = await read();
@@ -228,6 +247,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
     async restoreOriginal() {
       if (finished) return false;
       failed = false;
+      accessLost = false;
       const target = savedProject;
       session.replaceProject(target);
       if (finished) return false;
@@ -239,7 +259,7 @@ export function createScoreFileKeeper(options: ScoreFileKeeperOptions): ScoreFil
       if (!unsaved()) return "unchanged";
       const result = await saveNow();
       if (result.ok) return "saved";
-      return result.reason;
+      return result.reason === "no-access" ? "failed" : result.reason;
     },
     destroy() {
       if (finished) return;

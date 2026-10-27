@@ -132,6 +132,7 @@ export interface Messages {
   draftSaveFailed: string;
   /** Score-file keeper notices: a save or a load of the other writer's version did not reach the host. */
   scoreSaveFailed: string;
+  scoreSaveNoAccess: string;
   scoreLoadFailed: string;
   /** The score-file controls: Save, Save as, the unsaved state and the failed state. */
   save: string;
@@ -505,6 +506,7 @@ const en: Messages = {
   draftSourceChanged: "The original has changed since this draft was saved, so the draft was discarded.",
   draftSaveFailed: "The draft was not saved or cleared. The next change tries again.",
   scoreSaveFailed: "The score file was not saved. Your changes are still here; try Save again.",
+  scoreSaveNoAccess: "The score file was not saved because access was removed. Ask for access, then save again.",
   scoreLoadFailed: "The other version of the score file could not be read. The conflict is still open.",
   save: "Save",
   saveAs: "Save as…",
@@ -829,6 +831,7 @@ const zh: Messages = {
   draftSourceChanged: "原版在这份草稿保存之后变过，草稿已经丢弃。",
   draftSaveFailed: "草稿没有保存或清除成功，下一次改动会再试。",
   scoreSaveFailed: "乐谱文件没有保存成功，你的修改还在，再按保存试一次。",
+  scoreSaveNoAccess: "访问权限已被移除，乐谱文件没有保存成功。请先申请访问权限，再保存。",
   scoreLoadFailed: "读不到乐谱文件的对方版本，冲突还没有解决。",
   save: "保存",
   saveAs: "另存为…",

@@ -83,7 +83,7 @@ export function mountScoreSourceControl(
     if (!keeper.unsaved) return "unchanged";
     awaitingSave = true;
     const result = await keeper.save();
-    return result.ok ? "saved" : result.reason;
+    return result.ok ? "saved" : result.reason === "no-access" ? "failed" : result.reason;
   }
 
   /** Saves the file, or hands the current text to the host's save-as callback. */

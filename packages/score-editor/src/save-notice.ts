@@ -58,9 +58,15 @@ export function mountSaveNotice(
   function apply(): void {
     const t = messagesFor(session.view.language);
     root.lang = session.view.language;
-    sentence.textContent = notSent === "failed" ? t.handoffNotSentFailed : t.scoreSaveFailed;
+    const access = keeper.accessLost;
+    sentence.textContent = access
+      ? t.scoreSaveNoAccess
+      : notSent === "failed"
+        ? t.handoffNotSentFailed
+        : t.scoreSaveFailed;
     again.textContent = t.saveAgain;
-    drawn = `${session.view.language}:${notSent === "failed" ? "failed" : "save"}`;
+    again.hidden = access;
+    drawn = `${session.view.language}:${access ? "access" : notSent === "failed" ? "failed" : "save"}`;
   }
 
   /** Shows or hides the banner, revealing it in the chrome and putting the chrome back when it leaves. */
@@ -80,7 +86,7 @@ export function mountSaveNotice(
     if (keeper.status === "clean" && !keeper.failed) notSent = null;
     // A conflict has its own banner, and its answer is what clears the handoff's sentence; this one never stands over it.
     if (notSent === "conflict" && keeper.status !== "conflict") notSent = null;
-    const key = `${session.view.language}:${notSent === "failed" ? "failed" : "save"}`;
+    const key = `${session.view.language}:${keeper.accessLost ? "access" : notSent === "failed" ? "failed" : "save"}`;
     if (key !== drawn) apply();
     present(keeper.status !== "conflict" && (keeper.failed || notSent === "failed"));
     again.setAttribute("aria-disabled", String(keeper.status === "saving"));

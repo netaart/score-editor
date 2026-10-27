@@ -260,11 +260,12 @@ export interface DraftStoreEntry {
 
 /**
  * The answer to a versioned write or remove. A success carries the new version; a conflict says someone else
- * wrote the key since `expected`; a failure is any other reason the host could not store it.
+ * wrote the key since `expected`; a failure is any other reason the host could not store it. `no-access` is the
+ * score-file host's reason for access that was removed; a draft host may report the same thing as `failed`.
  */
 export type DraftWriteResult =
   | { readonly ok: true; readonly version: string }
-  | { readonly ok: false; readonly reason: "conflict" | "failed" };
+  | { readonly ok: false; readonly reason: "conflict" | "failed" | "no-access" };
 
 /**
  * The host's storage for drafts. The package passes source keys and text; where a key maps (a file, a path, a
