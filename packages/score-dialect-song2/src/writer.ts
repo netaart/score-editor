@@ -266,12 +266,14 @@ function keyAt(score: Score, at: number): string {
 
 /** True when the bytes still read as an X5 tail under the key and signature now in force. */
 function tailStillUnfinished(score: Score, raw: string, last: Note): boolean {
-  const match = /^(\^\^|\^|__|_|=)?([A-G])([',]*)/.exec(raw);
+  const match = /^(\^\^|\^|__|_|=)?([A-Ga-g])([',]*)/.exec(raw);
   if (match === null || last.midi === null) return false;
   const marks = match[3] ?? "";
-  const letter = (match[2] as string).toUpperCase() as Letter;
+  const writtenLetter = match[2] as string;
+  const letter = writtenLetter.toUpperCase() as Letter;
+  const octave = writtenLetter === letter ? 0 : 12;
   const written =
-    60 + LETTER_SEMITONES[letter] + 12 * ((marks.match(/'/g)?.length ?? 0) - (marks.match(/,/g)?.length ?? 0));
+    60 + LETTER_SEMITONES[letter] + octave + 12 * ((marks.match(/'/g)?.length ?? 0) - (marks.match(/,/g)?.length ?? 0));
   const accidental =
     match[1] === "^"
       ? 1

@@ -669,6 +669,19 @@ describe("set tempo", () => {
     }
   });
 
+  it("changes only the Q line when the cut ends in a lowercase X5 tail", () => {
+    const input = `${ONE_VOICE}
+K:C
+V: Vocal
+C16-|c`;
+    const output = apply(input, { type: "setTempo", bpm: 200 });
+
+    expect(output).toBe(`${ONE_VOICE.replace("Q:1/4=120", "Q:1/4=200")}
+K:C
+V: Vocal
+C16-|c`);
+  });
+
   it("refuses a tempo outside the dialect's range", () => {
     for (const bpm of [19, 401, 120.5]) {
       const result = applyScoreCommand(song2Dialect, SIMPLE, { type: "setTempo", bpm });
