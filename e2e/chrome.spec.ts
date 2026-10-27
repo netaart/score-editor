@@ -494,13 +494,13 @@ test.describe("C3: the toolbar budget", () => {
     });
   }
 
-  test("shows every strip control at 1440, 1280, 1024 and 768 on a desktop, without scrolling", async ({
+  test("shows every strip control at 1440, 1280, 1024, 768, 390 and 320 on a desktop, without scrolling", async ({
     page,
     harness,
     isMobile,
   }) => {
     test.skip(isMobile, "the desktop pointer is the one these widths are for");
-    for (const width of [1440, 1280, 1024, 768]) {
+    for (const width of [1440, 1280, 1024, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 760 });
       await harness.mount({ score: { text: QUARTERS }, drafts: true, language: "en" });
       const strip = page.locator(".sce-tools");

@@ -253,9 +253,10 @@ const css = `
 }
 
 /*
- * Outside the phone layout the strip wraps instead of scrolling: a desktop host at 1440, 1024 or 768 must show every
- * control, and a label cut at the edge is not a control. The phone layout (a coarse pointer) keeps its two rows and
- * sideways strip. The bar takes its own full-width line so the wrapped strip is not squeezed beside it.
+ * Outside the phone layout the strip wraps instead of scrolling: a fine pointer at 1440, 1024, 768 or a narrow
+ * desktop window must show every control, and a label cut at the edge is not a control. The phone layout (a coarse
+ * pointer) keeps its two rows and sideways strip. The bar takes its own full-width line so the wrapped strip is not
+ * squeezed beside it.
  */
 @media (pointer: fine) and (max-width: 30em) {
   /* A narrow desktop with Save's words gives the preview its own line and the row a 4px gap, so every state,
@@ -273,7 +274,7 @@ const css = `
     padding-inline: 6px;
   }
 }
-@media (pointer: fine) and (min-width: 30.01em) {
+@media (pointer: fine) {
   .sce-root .sce-toolbar[data-bar] .sce-tools {
     flex: 1 1 100%;
     flex-wrap: wrap;
