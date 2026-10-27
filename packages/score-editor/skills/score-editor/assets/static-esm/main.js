@@ -1,7 +1,7 @@
 // ABOUTME: The static-page skill example: imports both packages from esm.sh, mounts parts on one session, and runs a custom tool.
 // ABOUTME: It also reads the score with the dialect and writes one command back through applyScoreCommand, with no mount().
 
-import { song2Dialect } from "https://esm.sh/@neta-art/score-dialect-song2@0.4.4?bundle&target=es2022";
+import { song2Dialect } from "https://esm.sh/@neta-art/score-dialect-song2@0.4.5?bundle&target=es2022";
 import {
   applyScoreCommand,
   createDialectRegistry,
@@ -14,7 +14,7 @@ import {
   mountTimeRuler,
   mountToolbar,
   mountVoiceTrack,
-} from "https://esm.sh/@neta-art/score-editor@0.4.4?bundle&target=es2022";
+} from "https://esm.sh/@neta-art/score-editor@0.4.5?bundle&target=es2022";
 
 // Hand-written: two voices, four bars, a verse and a chorus.
 const SCORE = `X:1
