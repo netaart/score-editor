@@ -108,6 +108,7 @@ async function mountProject(
     scoreMode?: "full" | "melody";
     scoreFile?: boolean;
     saveAs?: boolean;
+    editable?: boolean;
   } = {},
 ) {
   await harness.destroy();
@@ -123,6 +124,7 @@ async function mountProject(
     },
     handoff: true,
     drafts: false,
+    ...(options.editable === false ? { editable: false } : {}),
     ...(options.scoreFile === true ? { scoreFile: { name: "tune.abc" } } : {}),
     ...(options.saveAs === true ? { saveAs: true } : {}),
   });
@@ -470,6 +472,43 @@ test.describe("the source label", () => {
         }
       }
     }
+  });
+
+  test("keeps a score file's label plain text when clean, dirty and read only", async ({ page, harness, press }) => {
+    const paint = () =>
+      label(page).evaluate((el) => {
+        const own = getComputedStyle(el);
+        return {
+          border: own.borderTopWidth,
+          radius: own.borderTopLeftRadius,
+          padding: own.paddingInlineStart,
+          background: own.backgroundColor,
+          image: own.backgroundImage,
+          shadow: own.boxShadow,
+        };
+      });
+    const plain = {
+      border: "0px",
+      radius: "0px",
+      padding: "0px",
+      background: "rgba(0, 0, 0, 0)",
+      image: "none",
+      shadow: "none",
+    };
+
+    await mountProject(harness, CLEAN, { scoreFile: true });
+    await expect(label(page)).toHaveText("Score file (saves to the file)");
+    expect(await paint(), "clean score file: plain text").toEqual(plain);
+
+    await press(page.getByRole("list", { name: "Vocal" }).getByRole("listitem", { name: /F4/ }));
+    await page.keyboard.press("Delete");
+    await expect(page.locator(".sce-part-save")).toContainText(/Unsaved|•/);
+    expect(await paint(), "dirty score file: still plain text").toEqual(plain);
+
+    await harness.destroy();
+    await mountProject(harness, CLEAN, { scoreFile: true, editable: false });
+    await expect(label(page)).toHaveText("Score file (read only)");
+    expect(await paint(), "read-only score file: still plain text").toEqual(plain);
   });
 
   test("names the three source states on the review's first line, in both languages", async ({ page, harness }) => {
