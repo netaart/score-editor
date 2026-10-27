@@ -69,7 +69,7 @@ export interface AxisPartOptions extends EditingPartOptions {
 }
 
 /**
- * The three things the editor hands to a host when the user asks to regenerate with this version: the score as the
+ * The three things the editor hands to a host when the user asks to hand this version to the agent: the score as the
  * `score.abc` attachment, the prefilled instruction in the interface language, and the final song project.
  */
 export interface HandoffPayload {

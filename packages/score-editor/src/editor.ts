@@ -316,7 +316,7 @@ export class Editor implements MountedEditor {
   /** The comment in the strip between Restore original and the song controls: Restore and Regenerate keep that order. */
   private restoreAnchor(strip: HTMLElement): ChildNode | null {
     for (const node of strip.childNodes) {
-      if (node.nodeType === Node.COMMENT_NODE && node.nodeValue === "restore original and regenerate") return node;
+      if (node.nodeType === Node.COMMENT_NODE && node.nodeValue === "restore original and hand off") return node;
     }
     return null;
   }

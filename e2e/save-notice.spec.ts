@@ -12,10 +12,10 @@ const notice = (page: Page) => page.locator(".sce-save-notice");
 const action = (page: Page, language: "en" | "zh") =>
   notice(page).getByRole("button", { name: language === "zh" ? "重新保存" : "Save again", exact: true });
 const handoffTrigger = (page: Page, language: "en" | "zh") =>
-  page.getByRole("button", { name: language === "zh" ? "重新生成…" : "Regenerate…", exact: true });
+  page.getByRole("button", { name: language === "zh" ? "交给 agent…" : "Hand to agent…", exact: true });
 const handoffConfirm = (page: Page, language: "en" | "zh") =>
   page.getByRole("button", {
-    name: language === "zh" ? "用这版重新生成" : "Regenerate with this version",
+    name: language === "zh" ? "交给 agent" : "Hand to agent",
     exact: true,
   });
 
@@ -24,8 +24,8 @@ const recovery = {
   zh: "乐谱文件没有保存成功，你的修改还在，再按保存试一次。",
 } as const;
 const notSent = {
-  en: "Not sent: the score file was not saved. Try again, then regenerate.",
-  zh: "未发送：乐谱文件没有保存成功。再试一次，然后重新生成。",
+  en: "Not sent: the score file was not saved. Try again, then hand to agent.",
+  zh: "未发送：乐谱文件没有保存成功。再试一次，然后交给 agent。",
 } as const;
 const noAccess = {
   en: "The score file was not saved because access was removed. Ask for access, then save again.",

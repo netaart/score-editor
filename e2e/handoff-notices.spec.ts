@@ -68,10 +68,13 @@ const CLEAN_LINES = [
 const FEW_LINES = [{ text: "la", phrase: { firstBar: 0, barCount: 1 } }];
 
 const handoffButton = (page: Page, language: "en" | "zh" = "en") =>
-  page.getByRole("button", { name: language === "zh" ? "重新生成…" : "Regenerate…", exact: true });
+  page.getByRole("button", { name: language === "zh" ? "交给 agent…" : "Hand to agent…", exact: true });
 
 const dialog = (page: Page, language: "en" | "zh" = "en") =>
-  page.getByRole("dialog", { name: language === "zh" ? "重新生成前核对" : "Check before regenerating", exact: true });
+  page.getByRole("dialog", {
+    name: language === "zh" ? "交给 agent 前核对" : "Check before you hand to agent",
+    exact: true,
+  });
 
 const noticeLines = (page: Page, language: "en" | "zh" = "en") => dialog(page, language).locator(".sce-handoff-notice");
 
@@ -105,6 +108,7 @@ async function mountProject(
     scoreMode?: "full" | "melody";
     scoreFile?: boolean;
     saveAs?: boolean;
+    editable?: boolean;
   } = {},
 ) {
   await harness.destroy();
@@ -120,6 +124,7 @@ async function mountProject(
     },
     handoff: true,
     drafts: false,
+    ...(options.editable === false ? { editable: false } : {}),
     ...(options.scoreFile === true ? { scoreFile: { name: "tune.abc" } } : {}),
     ...(options.saveAs === true ? { saveAs: true } : {}),
   });
@@ -217,7 +222,7 @@ test.describe("the pre-handoff notices in the review", () => {
       "The vocal's middle note is B5, above its singable range (C4 to A#5). Lower it with the Voice octave tool.",
       "The score mode is Melody, but the score has chords. Delete the chords, or change Score mode to Full.",
     ]);
-    await expect(noticeLead(page)).toHaveText("4 things to check before you regenerate");
+    await expect(noticeLead(page)).toHaveText("4 things to check before you hand to agent");
     for (const line of await noticeLines(page).all()) {
       expect(await inSight(page, line, dialog(page))).toBe(true);
     }
@@ -288,7 +293,7 @@ test.describe("the pre-handoff notices in the review", () => {
   }) => {
     await mountProject(harness, ALL_FOUR, { language: "zh", lyricLines: FEW_LINES, scoreMode: "melody" });
     await handoffButton(page, "zh").click();
-    await expect(noticeLead(page, "zh")).toHaveText("重新生成前有 4 处要看");
+    await expect(noticeLead(page, "zh")).toHaveText("交给 agent 前有 4 处要看");
     const melody = noticeLines(page, "zh").last();
     await expect(melody).toHaveText("乐谱模式是旋律，但乐谱里有和弦。删掉和弦，或把乐谱模式改为完整。");
     expect(await melody.textContent()).not.toMatch(/[A-Za-z]/);
@@ -334,11 +339,11 @@ test.describe("the review's announcements and actions", () => {
     const emptyId = await dialog(page).locator(".sce-handoff-empty").getAttribute("id");
     expect(described).toContain(noticeId);
     expect(described).toContain(emptyId);
-    await expect(toolbarLive(page)).toHaveText("4 things to check before you regenerate");
+    await expect(toolbarLive(page)).toHaveText("4 things to check before you hand to agent");
 
     await harness.update({ score: { text: CLEAN } });
     await expect(noticeLines(page)).toHaveCount(1);
-    await expect(toolbarLive(page)).toHaveText("4 things to check before you regenerate");
+    await expect(toolbarLive(page)).toHaveText("4 things to check before you hand to agent");
   });
 
   test("shares one row at 320 and gives both actions the coarse-pointer height", async ({
@@ -351,7 +356,7 @@ test.describe("the review's announcements and actions", () => {
     await mountProject(harness, ALL_FOUR, { lyricLines: FEW_LINES, scoreMode: "melody" });
     await handoffButton(page).click();
     const cancel = dialog(page).getByRole("button", { name: "Cancel", exact: true });
-    const confirm = dialog(page).getByRole("button", { name: "Regenerate with this version", exact: true });
+    const confirm = dialog(page).getByRole("button", { name: "Hand to agent", exact: true });
     const [cancelBox, confirmBox] = await Promise.all([box(cancel), box(confirm)]);
     expect(Math.abs(cancelBox.y - confirmBox.y)).toBeLessThanOrEqual(2);
     expect(cancelBox.height).toBeGreaterThanOrEqual(36);
@@ -469,14 +474,51 @@ test.describe("the source label", () => {
     }
   });
 
+  test("keeps a score file's label plain text when clean, dirty and read only", async ({ page, harness, press }) => {
+    const paint = () =>
+      label(page).evaluate((el) => {
+        const own = getComputedStyle(el);
+        return {
+          border: own.borderTopWidth,
+          radius: own.borderTopLeftRadius,
+          padding: own.paddingInlineStart,
+          background: own.backgroundColor,
+          image: own.backgroundImage,
+          shadow: own.boxShadow,
+        };
+      });
+    const plain = {
+      border: "0px",
+      radius: "0px",
+      padding: "0px",
+      background: "rgba(0, 0, 0, 0)",
+      image: "none",
+      shadow: "none",
+    };
+
+    await mountProject(harness, CLEAN, { scoreFile: true });
+    await expect(label(page)).toHaveText("Score file (saves to the file)");
+    expect(await paint(), "clean score file: plain text").toEqual(plain);
+
+    await press(page.getByRole("list", { name: "Vocal" }).getByRole("listitem", { name: /F4/ }));
+    await page.keyboard.press("Delete");
+    await expect(page.locator(".sce-part-save")).toContainText(/Unsaved|•/);
+    expect(await paint(), "dirty score file: still plain text").toEqual(plain);
+
+    await harness.destroy();
+    await mountProject(harness, CLEAN, { scoreFile: true, editable: false });
+    await expect(label(page)).toHaveText("Score file (read only)");
+    expect(await paint(), "read-only score file: still plain text").toEqual(plain);
+  });
+
   test("names the three source states on the review's first line, in both languages", async ({ page, harness }) => {
     for (const language of ["en", "zh"] as const) {
       await mountProject(harness, CLEAN, { language });
       await handoffButton(page, language).click();
       await expect(sourceLine(page, language)).toHaveText(
         language === "zh"
-          ? "原版会保留。这会发送你改过的版本。"
-          : "Your original is kept. This sends your edited version.",
+          ? "原版会保留。改过的版本会放进聊天输入框，由你发出。"
+          : "Your original is kept. Your edited version goes into the chat box; you send it.",
       );
       await expect(sourceLine(page, language)).toBeInViewport();
       await page.keyboard.press("Escape");
@@ -484,7 +526,9 @@ test.describe("the source label", () => {
       await mountProject(harness, CLEAN, { language, scoreFile: true });
       await handoffButton(page, language).click();
       await expect(sourceLine(page, language)).toHaveText(
-        language === "zh" ? "tune.abc 已保存。这会发送歌曲。" : "tune.abc is saved. This sends the song.",
+        language === "zh"
+          ? "tune.abc 已保存。歌曲会放进聊天输入框，由你发出。"
+          : "tune.abc is saved. The song goes into the chat box; you send it.",
       );
       await page.keyboard.press("Escape");
 
@@ -493,7 +537,9 @@ test.describe("the source label", () => {
       await page.keyboard.press("Delete");
       await handoffButton(page, language).click();
       await expect(sourceLine(page, language)).toHaveText(
-        language === "zh" ? "先保存 tune.abc，再发送歌曲。" : "Saves tune.abc first, then sends the song.",
+        language === "zh"
+          ? "先保存 tune.abc，再把歌曲放进聊天输入框。"
+          : "Saves tune.abc first, then puts the song in the chat box.",
       );
       await page.keyboard.press("Escape");
     }
