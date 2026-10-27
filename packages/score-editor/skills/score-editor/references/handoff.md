@@ -19,6 +19,10 @@ The list is recomputed from the two projects every time; it never reads a stored
 music is reported as the music it changed. A section move is named as a move, and its moved bars are not also called a
 note change.
 
+`changeLogEntries` returns the same sentences as a `ChangeLogEntry[]`, each with the 1-based `bars` it names (empty when
+it names none). The review uses that structured form to highlight the entries that name a bar in
+`session.rewrittenBars`, the bars the last edit reported; `changeLog` stays the string form.
+
 ```ts
 import { changeLog } from "@neta-art/score-editor";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
@@ -47,6 +51,16 @@ trigger names it (`Add style first…` or `Add 2 required inputs…`) instead of
 seed open the Project panel on that field, while lyrics show the arrangement and open the lyric track's new-line editor.
 A required empty field's hint starts `Required to regenerate.` The trigger comes back when the field is filled. The
 editor reads no model declaration.
+
+## Before a handoff
+
+`preHandoffNotices(dialect, project, language)` returns the four notices a project carries: no sections, the whole song's
+syllable count far from its note count, Vocal outside the singable range 60-82, and a melody project with chords. The
+default editor's review already shows them above its actions, and a host that toasts every `mount` notice may skip the
+four `prehandoff-*` codes, since the review repeats them. The edge is `notice.code`: the editor sends each pre-handoff
+notice through `MountOptions.notify` once each time the review opens, not on every redraw, and shows no line and sends
+nothing when none applies. The "far from" edge is one syllable per lyric line: a melisma or a held note may move the
+count by that much, more than that per line means the lyrics were written for another melody.
 
 ## The handoff in `mount`
 

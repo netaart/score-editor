@@ -17,6 +17,10 @@ export type Language = "zh" | "en";
  * `score-save-failed`: a score file write did not reach the host, and the changes are still unsaved.
  * `score-load-failed`: the other writer's version of a score file could not be read, so the conflict is still open.
  * `handoff-not-sent`: the handoff could not send the song because its save conflicted or failed.
+ * `prehandoff-no-sections`: the score has no section markers.
+ * `prehandoff-syllables-far`: the whole song's syllable count is far from its note count.
+ * `prehandoff-vocal-range`: Vocal's median pitch is outside the singable range 60-82.
+ * `prehandoff-melody-chords`: a melody project carries chords.
  */
 export const NOTICE_CODES = [
   "command-refused",
@@ -25,6 +29,10 @@ export const NOTICE_CODES = [
   "score-save-failed",
   "score-load-failed",
   "handoff-not-sent",
+  "prehandoff-no-sections",
+  "prehandoff-syllables-far",
+  "prehandoff-vocal-range",
+  "prehandoff-melody-chords",
 ] as const;
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */

@@ -677,11 +677,20 @@ window.harness = {
       ...hostOptions(options),
     });
   },
-  async update({ score, project: fields, tools, ...options } = {}) {
+  async update({ score, project: fields, tools, scoreFile: fileOptions, saveAs: wantsSaveAs, ...options } = {}) {
     if (score !== undefined || fields !== undefined) {
       project = await projectFrom(project, score, fields);
       options.project = project;
     }
+    if (fileOptions !== undefined) {
+      scoreFile = createFakeScoreFile({
+        name: fileOptions.name ?? "tune.abc",
+        text: project.score,
+        version: fileOptions.version ?? "file-1",
+      });
+      options.source = scoreFile.source;
+    }
+    if (wantsSaveAs) options.onSaveAs = (text) => saveAs.push(text);
     editor.update({ ...(tools === undefined ? {} : { tools: TOOL_SETS[tools] }), ...hostOptions(options) });
   },
   hasUnsavedChanges() {

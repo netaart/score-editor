@@ -9,6 +9,7 @@ import type {
   AxisPartOptions,
   Bar,
   BooleanToolParameter,
+  ChangeLogEntry,
   ChoiceToolParameter,
   Chord,
   ChordChoices,
@@ -92,6 +93,8 @@ import type {
   SessionListener,
   SessionOptions,
   SongProject,
+  SourceLabelOptions,
+  SourceLabelPart,
   StaffViewPart,
   Tempo,
   TextToolParameter,
@@ -108,6 +111,7 @@ import type {
   ViewName,
   ViewPart,
   ViewState,
+  VocalRange,
   VoiceTrackOptions,
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
@@ -252,6 +256,10 @@ describe("package entries in a node environment", () => {
       "mountViewSwitch",
       "mountVoiceTrack",
       "mountZoomControl",
+      "mountSourceLabel",
+      "changeLogEntries",
+      "preHandoffNotices",
+      "vocalRange",
       "createDraftKeeper",
       "contentHash",
       "draftText",
@@ -275,12 +283,21 @@ describe("package entries in a node environment", () => {
       "score-save-failed",
       "score-load-failed",
       "handoff-not-sent",
+      "prehandoff-no-sections",
+      "prehandoff-syllables-far",
+      "prehandoff-vocal-range",
+      "prehandoff-melody-chords",
     ]);
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });
 
   it("keeps every type export of 0.2.0", () => {
     const kept: V020EditorTypes | null = null;
+    expect(kept).toBeNull();
+  });
+
+  it("exports the App-05 types", () => {
+    const kept: [ChangeLogEntry, SourceLabelOptions, SourceLabelPart, VocalRange] | null = null;
     expect(kept).toBeNull();
   });
 

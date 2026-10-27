@@ -200,7 +200,8 @@ const css = `
   flex: 1 1 0;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 8px;
+  /* The source label takes the first slot, so the strip keeps its controls before the bar with a tighter gap than the row. */
+  gap: 4px;
   /* Below half the row the bar takes its own line rather than squeezing the title to nothing. */
   min-width: 50%;
   max-width: 100%;
@@ -299,6 +300,17 @@ const css = `
 .sce-root .sce-toolbar[data-views] .sce-synth[hidden] {
   display: inline-flex;
   visibility: hidden;
+}
+/* The source label: where the edits go. It rides first in the strip, so a swipe never hides what it says before the title. */
+.sce-root .sce-source-label {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--sce-_line-strong);
+  border-radius: 999px;
+  color: var(--sce-_text);
+  font-size: 0.92em;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .sce-root .sce-badge {
   flex: none;

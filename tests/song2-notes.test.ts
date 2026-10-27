@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  type ApplyScoreResult,
   applyProjectCommand,
   applyScoreCommand,
   type GridValue,
@@ -14,6 +15,12 @@ import {
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 import { chainAround, parse, pitched, SAMPLE_SWEEP_TIMEOUT, splitBars, spread } from "./song2-support";
+
+/** The result without the additive `rewrittenBars` field; tests/rewritten-bars.test.ts asserts that field. */
+function textOnly(text: string, command: ScoreCommand): ApplyScoreResult {
+  const result = applyScoreCommand(song2Dialect, text, command);
+  return result.ok ? { ok: true, text: result.text } : result;
+}
 
 const HEADER = `X:1
 T:
@@ -66,7 +73,7 @@ function refusedCode(result: ReturnType<typeof applyScoreCommand>): string | nul
 }
 
 function expectUnchanged(text: string, command: ScoreCommand): void {
-  const result = applyScoreCommand(song2Dialect, text, command);
+  const result = textOnly(text, command);
   expect(result.ok).toBe(false);
   expect(result).not.toEqual({ ok: true, text: expect.anything() });
   const project: SongProject = {
@@ -84,14 +91,14 @@ function expectUnchanged(text: string, command: ScoreCommand): void {
 describe("moveNotes on a hand-worked score", () => {
   it("moves a note into a rest by whole grid steps and leaves its length alone", () => {
     const text = scoreOf("C4D4z4F4|G16|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:256"], 256, 0, 4))).toEqual({
+    expect(textOnly(text, move(["Vocal:256"], 256, 0, 4))).toEqual({
       ok: true,
       text: scoreOf("C4z4D4F4|G16|"),
     });
   });
 
   it("moves time and pitch together: a semitone is a semitone and the length is kept", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, move(["Vocal:256"], 256, 1, 4))).toEqual({
+    expect(textOnly(SCORE, move(["Vocal:256"], 256, 1, 4))).toEqual({
       ok: true,
       text: scoreOf("C4z4^D4F4|G16|"),
     });
@@ -99,7 +106,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("removes a note whose start the placed note covers, and fills its old time with a rest", () => {
     // C moves from 0 to a quarter note later: it covers D's start at 256, so D goes; nothing moves up.
-    expect(applyScoreCommand(song2Dialect, SCORE, move(["Vocal:0"], 256, 0, 4))).toEqual({
+    expect(textOnly(SCORE, move(["Vocal:0"], 256, 0, 4))).toEqual({
       ok: true,
       text: scoreOf("z4C4E4F4|G16|"),
     });
@@ -108,7 +115,7 @@ describe("moveNotes on a hand-worked score", () => {
   it("shortens a note the placed note starts inside, and leaves a rest where its tail was", () => {
     // C (0-256) moves to 384, inside D (256-768): D is cut at 384 and its tail becomes a rest.
     const text = scoreOf("C4D8F4|G4z12|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 384, 0, 8))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 384, 0, 8))).toEqual({
       ok: true,
       text: scoreOf("z4D2C4z2F4|G4z12|"),
     });
@@ -117,7 +124,7 @@ describe("moveNotes on a hand-worked score", () => {
   it("shortens a note whose end the placed note really covers", () => {
     // D (512-1024) moves to 256-768: C starts before the placed note and ends inside it, so C is cut at 256.
     const text = scoreOf("C8D8|G16|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:512"], -256, 0, 8))).toEqual({
+    expect(textOnly(text, move(["Vocal:512"], -256, 0, 8))).toEqual({
       ok: true,
       text: scoreOf("C4D8z4|G16|"),
     });
@@ -126,7 +133,7 @@ describe("moveNotes on a hand-worked score", () => {
   it("splits a note that crosses a bar line there and ties the pieces", () => {
     // C (0-256) moves to 896 and runs to 1152: it is C2 in bar 1 tied to C2 in bar 2. F is cut at 896.
     const text = scoreOf("C4D4E4F4|z4G4z8|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 896, 0, 8))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 896, 0, 8))).toEqual({
       ok: true,
       text: scoreOf("z4D4E4F2C2-|C2z2G4z8|"),
     });
@@ -134,7 +141,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("acts on a whole tie chain when the middle segment is the note it names", () => {
     const text = scoreOf("C8-C8|z16|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:512"], 256, 1, 4))).toEqual({
+    expect(textOnly(text, move(["Vocal:512"], 256, 1, 4))).toEqual({
       ok: true,
       text: scoreOf("z4^C12-|^C4z12|"),
     });
@@ -142,14 +149,14 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("acts on a three-piece tie chain when its middle segment is the note it names", () => {
     const text = scoreOf("C4-C4-C4z4|G16|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:256"], 128, 1, 8))).toEqual({
+    expect(textOnly(text, move(["Vocal:256"], 128, 1, 8))).toEqual({
       ok: true,
       text: scoreOf("z2^C12z2|G16|"),
     });
   });
 
   it("moves several notes as one command, keeping the order they had", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, move(["Vocal:0", "Vocal:512"], 256, 0, 4))).toEqual({
+    expect(textOnly(SCORE, move(["Vocal:0", "Vocal:512"], 256, 0, 4))).toEqual({
       ok: true,
       text: scoreOf("z4C4z4E4|G16|"),
     });
@@ -158,7 +165,7 @@ describe("moveNotes on a hand-worked score", () => {
   it("snaps an off-grid start to the nearest grid line rather than moving by whole steps from where it was", () => {
     // D starts at 64, off a quarter-note grid. A quarter-note move would put it at 320; the nearest line is 256.
     const text = scoreOf("C1D4E4F4z3|G16|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:64"], 256, 1, 4))).toEqual({
+    expect(textOnly(text, move(["Vocal:64"], 256, 1, 4))).toEqual({
       ok: true,
       text: scoreOf("Cz3^D4zF4z3|G16|"),
     });
@@ -166,7 +173,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("keeps an off-grid start when only the pitch moves", () => {
     const text = scoreOf("C1D4E4F4z3|G16|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:64"], 0, 1, 4))).toEqual({
+    expect(textOnly(text, move(["Vocal:64"], 0, 1, 4))).toEqual({
       ok: true,
       text: scoreOf("C^D4E4F4z3|G16|"),
     });
@@ -174,7 +181,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("keeps a length shorter than the grid when only the pitch moves", () => {
     const text = scoreOf("C1D4E4F4z3|G16|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 0, 1, 4))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 0, 1, 4))).toEqual({
       ok: true,
       text: scoreOf("^CD4E4F4z3|G16|"),
     });
@@ -182,7 +189,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("leaves an untouched dangling tie at the end of the score alone", () => {
     const text = scoreOf("C4D4E4F4|G16-|");
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 256, 0, 4))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 256, 0, 4))).toEqual({
       ok: true,
       text: scoreOf("z4C4E4F4|G16-|"),
     });
@@ -190,7 +197,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("accepts a dotted grid and lands on it", () => {
     // Dotted eighths are 192 ticks under L:1/16, three written units.
-    expect(applyScoreCommand(song2Dialect, SCORE, move(["Vocal:0"], 192, 0, 8, true))).toEqual({
+    expect(textOnly(SCORE, move(["Vocal:0"], 192, 0, 8, true))).toEqual({
       ok: true,
       text: scoreOf("z3C4zE4F4|G16|"),
     });
@@ -199,7 +206,7 @@ describe("moveNotes on a hand-worked score", () => {
   it("accepts a 1/32 grid when the written unit allows it", () => {
     const header = `${HEADER.replace("L:1/16", "L:1/32")}`;
     const text = scoreOf("C8D8E8F8|G32|", header);
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 32, 0, 32))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 32, 0, 32))).toEqual({
       ok: true,
       text: scoreOf("zC8zzzzzzzE8F8|G32|", header),
     });
@@ -209,7 +216,7 @@ describe("moveNotes on a hand-worked score", () => {
     const header = HEADER.replace("L:1/16", "L:1/64");
     const four = "C3D3E3F3";
     const text = scoreOf(`${four.repeat(5)}z4|G32-G32|`, header);
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 48, 0, 32, true))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 48, 0, 32, true))).toEqual({
       ok: true,
       text: scoreOf(`z3C3E3F3${"C3D3E3F3".repeat(4)}z4|G32-G32|`, header),
     });
@@ -217,7 +224,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("keeps a chord where it is when the Vocal note under it moves, and rebinds it to the event now there", () => {
     const text = scoreOf('"C"C4"D"D4E4F4|G16|');
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 256, 0, 4))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 256, 0, 4))).toEqual({
       ok: true,
       text: scoreOf('"C"z4"D"C4E4F4|G16|'),
     });
@@ -225,7 +232,7 @@ describe("moveNotes on a hand-worked score", () => {
 
   it("splits a note under a chord that stays where it is, so the chord keeps a token boundary", () => {
     const text = scoreOf('C8"D"D8|G16|');
-    expect(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 256, 0, 8))).toEqual({
+    expect(textOnly(text, move(["Vocal:0"], 256, 0, 8))).toEqual({
       ok: true,
       text: scoreOf('z4C4-"D"C4z4|G16|'),
     });
@@ -250,21 +257,21 @@ describe("moveNotes on a hand-worked score", () => {
   });
 
   it("returns the score as it was for an empty set of notes", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, move([], 256, 0, 4))).toEqual({ ok: true, text: SCORE });
+    expect(textOnly(SCORE, move([], 256, 0, 4))).toEqual({ ok: true, text: SCORE });
   });
 });
 
 describe("resizeNotes on a hand-worked score", () => {
   it("moves the end edge and leaves the start edge where it is", () => {
     const text = scoreOf("C4z4D4E4|G16|");
-    expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:0"], "end", 128, 8))).toEqual({
+    expect(textOnly(text, resize(["Vocal:0"], "end", 128, 8))).toEqual({
       ok: true,
       text: scoreOf("C6z2D4E4|G16|"),
     });
   });
 
   it("moves the start edge and leaves the end edge where it is", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, resize(["Vocal:0"], "start", 128, 8))).toEqual({
+    expect(textOnly(SCORE, resize(["Vocal:0"], "start", 128, 8))).toEqual({
       ok: true,
       text: scoreOf("z2C2D4E4F4|G16|"),
     });
@@ -272,14 +279,14 @@ describe("resizeNotes on a hand-worked score", () => {
 
   it("splits a resize of the end edge that crosses a bar line there and ties the pieces", () => {
     const text = scoreOf("C4D4E4F4|z4G4z8|");
-    expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:768"], "end", 256, 4))).toEqual({
+    expect(textOnly(text, resize(["Vocal:768"], "end", 256, 4))).toEqual({
       ok: true,
       text: scoreOf("C4D4E4F4-|F4G4z8|"),
     });
   });
 
   it("splits a resize of the start edge that crosses a bar line there and ties the pieces", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, resize(["Vocal:1024"], "start", -512, 4))).toEqual({
+    expect(textOnly(SCORE, resize(["Vocal:1024"], "start", -512, 4))).toEqual({
       ok: true,
       text: scoreOf("C4D4G8-|G16|"),
     });
@@ -288,7 +295,7 @@ describe("resizeNotes on a hand-worked score", () => {
   it("splits a note that now crosses a mid-bar key change there and ties the pieces", () => {
     // C runs from 0 to 768, over the inline [K:G] at 512: it is C8 in C tied to C4 in G. D's start is covered.
     const text = scoreOf("C8[K:G]D8|G8D8|");
-    expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:0"], "end", 256, 16))).toEqual({
+    expect(textOnly(text, resize(["Vocal:0"], "end", 256, 16))).toEqual({
       ok: true,
       text: scoreOf("C8-[K:G]C4z4|G8D8|"),
     });
@@ -296,7 +303,7 @@ describe("resizeNotes on a hand-worked score", () => {
 
   it("shortens a tie chain to a new end when the middle segment is named", () => {
     const text = scoreOf("C8-C8|z16|");
-    expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:512"], "end", -256, 4))).toEqual({
+    expect(textOnly(text, resize(["Vocal:512"], "end", -256, 4))).toEqual({
       ok: true,
       text: scoreOf("C12z4|z16|"),
     });
@@ -304,21 +311,21 @@ describe("resizeNotes on a hand-worked score", () => {
 
   it("resizes a three-piece tie chain when its middle segment is the note it names", () => {
     const text = scoreOf("C4-C4-C4z4|G16|");
-    expect(applyScoreCommand(song2Dialect, text, resize(["Vocal:256"], "end", -512, 4))).toEqual({
+    expect(textOnly(text, resize(["Vocal:256"], "end", -512, 4))).toEqual({
       ok: true,
       text: scoreOf("C4z8z4|G16|"),
     });
   });
 
   it("resizes several notes as one command, one note at a time in the voice", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, resize(["Vocal:0", "Vocal:512"], "end", 128, 8))).toEqual({
+    expect(textOnly(SCORE, resize(["Vocal:0", "Vocal:512"], "end", 128, 8))).toEqual({
       ok: true,
       text: scoreOf("C6z2E6z2|G16|"),
     });
   });
 
   it("returns the score as it was for a zero offset", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, resize(["Vocal:0"], "end", 0, 8))).toEqual({
+    expect(textOnly(SCORE, resize(["Vocal:0"], "end", 0, 8))).toEqual({
       ok: true,
       text: SCORE,
     });
@@ -328,7 +335,7 @@ describe("resizeNotes on a hand-worked score", () => {
 describe("the refusals of the note commands", () => {
   it("locates a refusal at the middle segment the command names, not at the chain's first one", () => {
     const text = scoreOf("C4-C4-C4z4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, move(["Vocal:256"], 0, -100));
+    const result = textOnly(text, move(["Vocal:256"], 0, -100));
     expect(result).toEqual({
       ok: false,
       diagnostic: {
@@ -342,7 +349,7 @@ describe("the refusals of the note commands", () => {
 
   it("refuses a pitch outside MIDI 0-127 and leaves the text as it was", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 0, -100));
+    const result = textOnly(text, move(["Vocal:0"], 0, -100));
     expect(result).toEqual({
       ok: false,
       diagnostic: {
@@ -356,14 +363,14 @@ describe("the refusals of the note commands", () => {
 
   it("refuses a note pushed before the start of the score", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, move(["Vocal:0"], -256, 0, 4));
+    const result = textOnly(text, move(["Vocal:0"], -256, 0, 4));
     expect(refusedCode(result)).toBe("note-before-start");
     expectUnchanged(text, move(["Vocal:0"], -256, 0, 4));
   });
 
   it("refuses a note pushed past the end of the score rather than clamping it", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, move(["Vocal:1024"], 256, 0, 4));
+    const result = textOnly(text, move(["Vocal:1024"], 256, 0, 4));
     expect(result).toEqual({
       ok: false,
       diagnostic: {
@@ -377,7 +384,7 @@ describe("the refusals of the note commands", () => {
 
   it("refuses a length shorter than one grid step and names an undotted grid as undotted", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, resize(["Vocal:0"], "end", -256, 4));
+    const result = textOnly(text, resize(["Vocal:0"], "end", -256, 4));
     expect(result).toEqual({
       ok: false,
       diagnostic: {
@@ -391,7 +398,7 @@ describe("the refusals of the note commands", () => {
 
   it("carries the dotted flag when a dotted grid makes a resize too short", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, resize(["Vocal:0"], "end", -192, 8, true));
+    const result = textOnly(text, resize(["Vocal:0"], "end", -192, 8, true));
     expect(result).toEqual({
       ok: false,
       diagnostic: {
@@ -424,7 +431,7 @@ describe("the refusals of the note commands", () => {
 
   it("refuses a grid the score's written unit cannot express", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 32, 0, 32));
+    const result = textOnly(text, move(["Vocal:0"], 32, 0, 32));
     expect(result).toEqual({
       ok: false,
       diagnostic: {
@@ -438,7 +445,7 @@ describe("the refusals of the note commands", () => {
 
   it("refuses a dotted grid the written unit cannot express", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    const result = applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 96, 0, 16, true));
+    const result = textOnly(text, move(["Vocal:0"], 96, 0, 16, true));
     expect(result).toEqual({
       ok: false,
       diagnostic: {
@@ -452,12 +459,12 @@ describe("the refusals of the note commands", () => {
 
   it("refuses an id that names no note, and an id that names a rest", () => {
     const text = scoreOf("C4z4E4F4|G16|");
-    const missing = applyScoreCommand(song2Dialect, text, move(["Vocal:0", "Vocal:999"], 0, 0));
+    const missing = textOnly(text, move(["Vocal:0", "Vocal:999"], 0, 0));
     expect(missing).toEqual({
       ok: false,
       diagnostic: { code: "note-not-found", params: { noteId: "Vocal:999" }, at: { noteId: "Vocal:999" } },
     });
-    const rest = applyScoreCommand(song2Dialect, text, move(["Vocal:256"], 0, 0));
+    const rest = textOnly(text, move(["Vocal:256"], 0, 0));
     expect(rest).toEqual({
       ok: false,
       diagnostic: {
@@ -488,8 +495,8 @@ describe("the refusals of the note commands", () => {
 
   it("refuses a non-integer time or pitch offset and changes nothing", () => {
     const text = scoreOf("C4D4E4F4|G16|");
-    expect(refusedCode(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 1.5, 0)))).toBe("offset-not-integer");
-    expect(refusedCode(applyScoreCommand(song2Dialect, text, move(["Vocal:0"], 0, 0.5)))).toBe("offset-not-integer");
+    expect(refusedCode(textOnly(text, move(["Vocal:0"], 1.5, 0)))).toBe("offset-not-integer");
+    expect(refusedCode(textOnly(text, move(["Vocal:0"], 0, 0.5)))).toBe("offset-not-integer");
     expectUnchanged(text, move(["Vocal:0"], 1.5, 0));
   });
 });
@@ -568,7 +575,7 @@ function exercise(
     end = newEnd;
   }
 
-  const result = applyScoreCommand(song2Dialect, text, command);
+  const result = textOnly(text, command);
   if (!result.ok) {
     expect(REFUSALS.has(result.diagnostic.code), `${label}: refusal ${result.diagnostic.code}`).toBe(true);
     expectUnchanged(text, command);
@@ -732,7 +739,7 @@ describe("move and resize on every sample: untouched bars, one note a time, targ
       expect(note, `${fact.file}: a pitched note`).toBeDefined();
       expect(grid, `${fact.file}: an offered grid`).not.toBeNull();
       if (note === undefined || grid === null) return;
-      const result = applyScoreCommand(song2Dialect, text, move([note.id], gridStep(grid.value, false), 1, grid.value));
+      const result = textOnly(text, move([note.id], gridStep(grid.value, false), 1, grid.value));
       expect(result.ok, `${fact.file}: ${result.ok ? "" : result.diagnostic.code}`).toBe(true);
       if (result.ok) parse(result.text);
     });
@@ -754,7 +761,7 @@ describe("move and resize on every accepted vector with notes", () => {
       const input = parse(text);
       const note = pitched(input, input.voices[0] as string)[0];
       if (note === undefined) continue;
-      const result = applyScoreCommand(song2Dialect, text, move([note.id], 32, 0, 32));
+      const result = textOnly(text, move([note.id], 32, 0, 32));
       expect(result.ok, `${fact.file}: 1/32`).toBe(false);
       if (!result.ok) expect(result.diagnostic.code, `${fact.file}: 1/32 code`).toBe("grid-not-allowed");
     }

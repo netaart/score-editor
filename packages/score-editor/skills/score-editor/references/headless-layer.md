@@ -87,6 +87,21 @@ reports those notices for a project as it stands, `isNoticeDiagnostic` tells a n
 the session does that for you (`dispatch` returns `ok: true` with the notices), and a host that calls this function itself
 should do the same.
 
+A successful result also carries `rewrittenBars`, the 1-based bars the command rewrote, sorted. It is absent when nothing
+was rewritten. A command that touches one bar names that bar; a tie change names the bars on both sides of the barline;
+`replaceScoreText` names the bars whose reading changed; a tempo change names none, since it rewrites only the header; a
+transpose or key change names every bar whose notes or chords changed. The same field is on `ScoreCommandResult`,
+`ApplyScoreResult`, `ApplyProjectResult`, `CommandListResult`, `DispatchResult`, `ToolResult` and the project command
+result, and `session.rewrittenBars` keeps the last edit's list, including after undo and redo.
+
+`preHandoffNotices(dialect, project, language)` returns the four notices a project carries before a handoff as host
+`Notice`s: `prehandoff-no-sections`, `prehandoff-syllables-far` (the whole song's syllables more than one per lyric line
+away from its Vocal tie chains), `prehandoff-vocal-range` (Vocal's lower median outside `SINGABLE_RANGE`, 60-82) and
+`prehandoff-melody-chords` (the same rule as `checkProject`). `vocalRange(score)` is the register measure as `VocalRange`
+(`{ medianMidi, singable }`); it and the voice octave report read `SINGABLE_RANGE`. A score the dialect cannot read
+carries no notice. `changeLogEntries` is the structured `ChangeLogEntry` form of the change log: one `text` and the
+`bars` it names.
+
 The placing commands are `AddNoteCommand` (`voice`, `start`, `midi`, `grid`, one grid step long), `PasteNotesCommand`
 (`notes: CopiedNote[]`, `at`, `grid`), `DuplicateNotesCommand` (`noteIds`, `grid`) and `CopyNotesCommand` (`noteIds`,
 `timeTicks`, `semitones`, `grid`, the Alt-drag). A `CopiedNote` is `{ voice, start, duration, midi }`, with a copied tie

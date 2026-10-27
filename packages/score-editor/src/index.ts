@@ -4,8 +4,8 @@
 
 export type { ApplyProjectResult, ApplyScoreResult } from "./apply";
 export { applyProjectCommand, applyScoreCommand } from "./apply";
-export type { ChangeLogOptions, HandoffInstructionOptions } from "./change-log";
-export { changeLog, handoffInstruction } from "./change-log";
+export type { ChangeLogEntry, ChangeLogOptions, HandoffInstructionOptions } from "./change-log";
+export { changeLog, changeLogEntries, handoffInstruction } from "./change-log";
 export type { ChordSlot } from "./chord-edit";
 export { chordSlots, nearestChordSlot } from "./chord-edit";
 export { mountChordTrack } from "./chord-track";
@@ -16,13 +16,16 @@ export type {
   CommandReport,
   InstrumentalReport,
   InstrumentalVersionCommand,
+  VocalRange,
   VoiceCommand,
   VoiceOctaveCommand,
   VoiceOctaveReport,
 } from "./commands-voice";
+export { SINGABLE_RANGE, vocalRange } from "./commands-voice";
 export type { Grid, GridValue, MoveNotesCommand, MoveResizeCommand, ResizeNotesCommand } from "./commands-notes";
 export type { ProjectCommand } from "./commands-project";
 export { checkProject } from "./commands-project";
+export { preHandoffNotices } from "./handoff-notices";
 export { mountCutNotice } from "./cut-notice";
 export type {
   CommandDiagnosticCode,
@@ -193,6 +196,8 @@ export type {
 } from "./types";
 export { NOTICE_CODES } from "./types";
 export { mountViewSwitch } from "./view-switch";
+export type { SourceLabelOptions, SourceLabelPart } from "./source-label";
+export { mountSourceLabel } from "./source-label";
 export type { VoiceTrackOptions } from "./voice-track";
 export { mountVoiceTrack } from "./voice-track";
 export { mountZoomControl } from "./zoom-control";

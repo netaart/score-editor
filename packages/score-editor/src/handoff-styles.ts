@@ -40,6 +40,26 @@ export const handoffCss = `
 .sce-root .sce-handoff-changes li + li {
   margin-block-start: 4px;
 }
+/* The entries that name a bar the last edit rewrote: the bars stand out, the sentence stays as the change log writes it. */
+.sce-root .sce-handoff-changes li[data-rewritten] {
+  margin-inline: -4px;
+  padding-inline: 4px;
+  border-inline-start: 2px solid var(--sce-_accent);
+  background: color-mix(in srgb, var(--sce-_accent) 10%, transparent);
+}
+.sce-root .sce-handoff-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sce-root .sce-handoff-notices[hidden] {
+  display: none;
+}
+.sce-root .sce-handoff-notice {
+  padding-inline-start: 8px;
+  border-inline-start: 2px solid var(--sce-_line-strong);
+  color: var(--sce-_text);
+}
 .sce-root .sce-handoff-empty,
 .sce-root .sce-handoff-note {
   margin: 0;

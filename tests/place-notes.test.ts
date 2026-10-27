@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  type ApplyScoreResult,
   applyProjectCommand,
   applyScoreCommand,
   type Score,
@@ -11,6 +12,12 @@ import {
 } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
 import { chainAround, parse, pitched, SAMPLE_SWEEP_TIMEOUT, splitBars } from "./song2-support";
+
+/** The result without the additive `rewrittenBars` field; tests/rewritten-bars.test.ts asserts that field. */
+function textOnly(text: string, command: ScoreCommand): ApplyScoreResult {
+  const result = applyScoreCommand(song2Dialect, text, command);
+  return result.ok ? { ok: true, text: result.text } : result;
+}
 
 const HEADER = `X:1
 T:
@@ -35,7 +42,7 @@ function add(voice: string, start: number, midi: number, value: 4 | 8 | 16 | 32 
 describe("addNote on a hand-worked score", () => {
   it("puts an empty lane cell's note on the grid with one grid step as its length", () => {
     const text = scoreOf("C4z4D4E4|G16|");
-    expect(applyScoreCommand(song2Dialect, text, add("Vocal", 256, 65, 4))).toEqual({
+    expect(textOnly(text, add("Vocal", 256, 65, 4))).toEqual({
       ok: true,
       text: scoreOf("C4F4D4E4|G16|"),
     });
@@ -43,7 +50,7 @@ describe("addNote on a hand-worked score", () => {
 
   it("removes a note whose start the new note covers and shortens one it starts inside", () => {
     // C (0-384) is cut at 256; D starts at 384 inside the new note, so it goes; 512-640 is a rest.
-    expect(applyScoreCommand(song2Dialect, scoreOf("C6D4E4z2|G16|"), add("Vocal", 256, 65, 4))).toEqual({
+    expect(textOnly(scoreOf("C6D4E4z2|G16|"), add("Vocal", 256, 65, 4))).toEqual({
       ok: true,
       text: scoreOf("C4F4z2E4z2|G16|"),
     });
@@ -65,7 +72,7 @@ function duplicate(noteIds: ReadonlyArray<string>, value: 4 | 8 | 16 | 32 = 4): 
 describe("duplicateNotes on a hand-worked score", () => {
   it("repeats the selection right after itself as one step", () => {
     const text = scoreOf("C4D4z8|z16|");
-    expect(applyScoreCommand(song2Dialect, text, duplicate(["Vocal:0", "Vocal:256"]))).toEqual({
+    expect(textOnly(text, duplicate(["Vocal:0", "Vocal:256"]))).toEqual({
       ok: true,
       text: scoreOf("C4D4C4D4|z16|"),
     });
@@ -83,7 +90,7 @@ function copy(
 
 describe("copyNotes, the Alt-drag", () => {
   it("puts copies where the drag lands and leaves the originals alone", () => {
-    expect(applyScoreCommand(song2Dialect, SCORE, copy(["Vocal:0"], 512, 1, 4))).toEqual({
+    expect(textOnly(SCORE, copy(["Vocal:0"], 512, 1, 4))).toEqual({
       ok: true,
       text: scoreOf("C4D4^C4F4|G16|"),
     });
@@ -97,7 +104,7 @@ describe("pasteNotes on a hand-worked score", () => {
       { voice: "Vocal", start: 0, duration: 256, midi: 60 },
       { voice: "Vocal", start: 256, duration: 256, midi: 62 },
     ];
-    expect(applyScoreCommand(song2Dialect, text, paste(notes, 1024, 4))).toEqual({
+    expect(textOnly(text, paste(notes, 1024, 4))).toEqual({
       ok: true,
       text: scoreOf("C4D4E4F4|C4D4z8|"),
     });
@@ -142,7 +149,7 @@ function exercisePlaced(
   expected: ReadonlyArray<{ voice: string; start: number; end: number; midi: number }>,
   step: number,
 ): void {
-  const result = applyScoreCommand(song2Dialect, text, command);
+  const result = textOnly(text, command);
   expect(result.ok, `${label}: ${result.ok ? "" : result.diagnostic.code}`).toBe(true);
   if (!result.ok) return;
   // applyScoreCommand already ran the dialect's check on the text it wrote.
@@ -387,7 +394,7 @@ function expectProjectRefused(label: string, text: string, command: ScoreCommand
 
 /** Applies a command that must be refused and holds the score and the project to their bytes. */
 function expectPlaceRefused(label: string, text: string, command: ScoreCommand, code: string): void {
-  const result = applyScoreCommand(song2Dialect, text, command);
+  const result = textOnly(text, command);
   expect(result.ok, label).toBe(false);
   if (!result.ok) expect(result.diagnostic.code, label).toBe(code);
   const project = projectWith(text);
