@@ -411,6 +411,109 @@ describe("inheriting lyric lines", () => {
     expect(session.project.lyricLines).toEqual(INHERITED_LINES);
   });
 
+  it("inherits a handoff whose score comes back without its final line break", async () => {
+    const oldOriginal: SongProject = { ...ORIGINAL, sourceKey: "old-song", score: `${SCORE}\n` };
+    const oldSession = openSession(oldOriginal);
+    const { keeper: oldKeeper } = openKeeper(oldSession, oldOriginal);
+    await oldKeeper.ready;
+    const oldLines = (() => {
+      const session = keeperSession(oldKeeper);
+      session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+      return projectLines(session.project);
+    })();
+    expect(await oldKeeper.handoff()).toBe("written");
+    oldKeeper.destroy();
+
+    const newOriginal: SongProject = { ...ORIGINAL, sourceKey: "new-song", score: SCORE_WITHOUT_D };
+    const session = openSession(newOriginal);
+    const { keeper } = openKeeper(session, newOriginal);
+    await keeper.ready;
+
+    expect(session.project.lyricLines).toEqual(oldLines);
+  });
+
+  it("inherits when the new song's lyrics lack the final line break the handoff had", async () => {
+    const oldOriginal: SongProject = {
+      ...ORIGINAL,
+      sourceKey: "old-song",
+      lyrics: "la la\n",
+      score: `${SCORE}\n`,
+      lyricLines: [{ text: "la la\n", phrase: { firstBar: 0, barCount: 2 } }],
+    };
+    const oldSession = openSession(oldOriginal);
+    const { keeper: oldKeeper } = openKeeper(oldSession, oldOriginal);
+    await oldKeeper.ready;
+    const session = keeperSession(oldKeeper);
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    expect(await oldKeeper.handoff()).toBe("written");
+    oldKeeper.destroy();
+
+    const newOriginal: SongProject = { ...ORIGINAL, sourceKey: "new-song", score: SCORE_WITHOUT_D, lyrics: "la la" };
+    const newSession = openSession(newOriginal);
+    const { keeper } = openKeeper(newSession, newOriginal);
+    await keeper.ready;
+
+    expect(newSession.project.lyricLines).toEqual([{ text: "la la\n", phrase: { firstBar: 0, barCount: 2 } }]);
+  });
+
+  it("keeps accepting a handoff recorded with the raw source hash", async () => {
+    const newOriginal: SongProject = { ...ORIGINAL, sourceKey: "new-song", score: SCORE };
+    const inherited = await makeDraft(
+      { ...ORIGINAL, sourceKey: "old-song" },
+      {
+        sourceKey: "old-song",
+        handoffHash: expectedHash("la la", SCORE),
+        project: { ...draftProject(ORIGINAL), lyricLines: INHERITED_LINES },
+      },
+    );
+    store.seed("old-song", JSON.stringify(inherited));
+    const session = openSession(newOriginal);
+
+    const { keeper } = openKeeper(session, newOriginal);
+    await keeper.ready;
+
+    expect(session.project.lyricLines).toEqual(INHERITED_LINES);
+  });
+
+  it("does not inherit when a note inside the score differs", async () => {
+    const oldOriginal: SongProject = { ...ORIGINAL, sourceKey: "old-song", score: `${SCORE}\n` };
+    const oldSession = openSession(oldOriginal);
+    const { keeper: oldKeeper } = openKeeper(oldSession, oldOriginal);
+    await oldKeeper.ready;
+    const session = keeperSession(oldKeeper);
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    expect(await oldKeeper.handoff()).toBe("written");
+    oldKeeper.destroy();
+    const writesBefore = store.writes().length;
+
+    const newOriginal: SongProject = { ...ORIGINAL, sourceKey: "new-song", score: SCORE_WITHOUT_F };
+    const newSession = openSession(newOriginal);
+    const { keeper } = openKeeper(newSession, newOriginal);
+    await keeper.ready;
+
+    expect(newSession.project).toBe(newOriginal);
+    expect(store.writes()).toHaveLength(writesBefore);
+  });
+
+  it("restores a song's own draft written with the old raw source hash", async () => {
+    // sha256(JSON.stringify(["la la", <SCORE with one trailing newline>])), the old raw formula.
+    const oldRawHash = "6e8181f2bbcbeba9128e4cea1ccdd39f35b0a353a824ba2244b624fdf47af090";
+    const ownOriginal: SongProject = { ...ORIGINAL, sourceKey: "own-song", score: `${SCORE}\n` };
+    const ownDraft = await makeDraft(ownOriginal, {
+      sourceKey: "own-song",
+      sourceHash: oldRawHash,
+      project: { ...draftProject(ownOriginal), score: `${SCORE_WITHOUT_D}\n` },
+    });
+    store.seed("own-song", JSON.stringify(ownDraft));
+    const session = openSession(ownOriginal);
+
+    const { keeper } = openKeeper(session, ownOriginal);
+    await keeper.ready;
+
+    expect(session.project.score).toBe(`${SCORE_WITHOUT_D}\n`);
+    expect(keeper.status).toBe("ready");
+  });
+
   it("inherits nothing when the lines join to other lyrics than the new song has", async () => {
     const inherited = await makeDraft(
       { ...ORIGINAL, sourceKey: "old-song" },
