@@ -251,6 +251,12 @@ const css = `
   flex: 1 1 10em;
   min-width: 0;
 }
+
+/*
+ * Outside the phone layout the strip wraps instead of scrolling: a desktop host at 1440, 1024 or 768 must show every
+ * control, and a label cut at the edge is not a control. The phone layout (a coarse pointer) keeps its two rows and
+ * sideways strip. The bar takes its own full-width line so the wrapped strip is not squeezed beside it.
+ */
 @media (pointer: fine) and (max-width: 30em) {
   /* A narrow desktop with Save's words gives the preview its own line and the row a 4px gap, so every state,
      including Save failed, keeps one bar height. */
@@ -631,6 +637,8 @@ const css = `
  */
 .sce-root .sce-canvas {
   width: calc(var(--sce-_keys) + var(--sce-ticks) * var(--sce-_beat) / ${TICKS_PER_QUARTER});
+  /* A short score's ground still reaches the stage's right edge; the bars and their numbers do not. */
+  min-width: 100%;
 }
 /* The editor's own content block: as tall as all the parts together, so the header can pin for the whole scroll. */
 .sce-root .sce-content {
@@ -639,6 +647,7 @@ const css = `
 
 .sce-root .sce-row {
   display: flex;
+  width: 100%;
   border-bottom: 1px solid var(--sce-_line);
   background: var(--sce-_surface);
 }
@@ -903,7 +912,20 @@ ${labelThinning()}
 }
 .sce-root .sce-track {
   display: flex;
+  width: 100%;
   border-bottom: 1px solid var(--sce-_line);
+}
+/* Past the last bar the row keeps its ground: the surface for a header row, the lane's octave stripes for a voice. */
+.sce-root .sce-row::after,
+.sce-root .sce-track::after {
+  flex: 1 1 auto;
+  min-width: 0;
+  content: "";
+  background: var(--sce-_surface);
+}
+.sce-root .sce-track:has(> .sce-lane)::after {
+  background-image: ${octaveStripes()};
+  background-size: 100% calc(12 * var(--sce-_row));
 }
 .sce-root .sce-keys {
   position: sticky;
