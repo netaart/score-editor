@@ -2,6 +2,91 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## 0.4.0
+
+No export of 0.3.0 was removed or renamed: all 76 runtime exports of `@neta-art/score-editor`, all 3 of
+`@neta-art/score-dialect-song2`, and all 135 type exports of the core are still exported. `tests/entries.test.ts` checks
+every runtime name with `in` (a removal or rename fails `pnpm test`) and lists every 0.3.0 type in tuples the type-check
+compiles (a removal or rename fails `pnpm typecheck`); both lists are taken from the `v0.3.0` tag. The fields added to
+existing shapes are optional, and the new members on the values a host receives (`MountedEditor.save()`,
+`EditingSession.rewrittenBars`) are additive, so a `Score`, `SongProject`, `MountOptions`, `DraftStore` or `ScoreTool`
+written for 0.3.0 still type-checks and opens, and a `ScoreCommand` written for it still type-checks. Two unions gained
+members: `ScoreCommand` (`voiceOctave`, `instrumentalVersion`) and `NoticeCode` (the four `prehandoff-*` codes). Every
+existing value is still valid and a host that handles a default needs no change, but an exhaustive `switch` must add the
+new cases; that edge is under Changed, and this release is not called drop-in for such a switch.
+
+### Added in `@neta-art/score-editor`
+
+A host can now move only the Vocal voice by whole octaves or turn a Vocal-only song into an instrumental, save a score
+file from its own code, and reach the same chrome at a phone's width with a review that names the bars an edit rewrote.
+The feature areas since 0.3.0:
+
+- **Voice octave and Instrumental version.** `vocalRange` and `SINGABLE_RANGE` report Vocal's median pitch against the
+  singable range 60–82; the `voiceOctave` and `instrumentalVersion` commands run as two built-in tools in the Tools panel,
+  one undo step each. Voice octave moves only Vocal — chords, the key and Ins stay — and refuses the whole move with the
+  `voice-octave-range` code when a note would leave MIDI 0–127. Instrumental version moves Vocal's notes to Ins, keeps
+  its rests and chords, cuts, splits or drops the Ins notes they overlap, and writes an Ins voice line into a Vocal-only
+  score. Each reports what it did through `CommandReport` on the tool result.
+- **A host-driven save.** `MountedEditor.save()` runs the Save button's one path and resolves with the keeper's own
+  `saved`, `unchanged`, `conflict` or `failed`; it writes nothing for a generated score, a read-only editor, a save in
+  flight, a standing conflict or a destroyed editor.
+- **The strip, the bar and the conflict banner.** The toolbar is a sideways-scrolling strip of editing and song controls
+  above an always-visible bar that holds Save, the view switch and the preview control, so a phone gets two rows of
+  controls instead of four and Save and the views stay in sight at every width. The music keeps its floor while the
+  chrome scrolls, a clipped edge fades, and a draft conflict and a score-file conflict share one banner with a Choose
+  button and one dialog.
+- **The pre-handoff review and the source label.** `preHandoffNotices` returns the four notices a project carries before
+  a handoff; the review shows them in place and sends each once through `notify`. `changeLogEntries` and
+  `session.rewrittenBars` let the review highlight the entries that name a bar the last edit rewrote, and
+  `mountSourceLabel` draws the generated-score or score-file pill first in the strip.
+- **The browser suite.** Every song2 sample sweep runs under one shared timeout and the placing sweep does less repeated
+  work, so `pnpm test:e2e` finishes reliably on a loaded machine. No host API changes.
+
+The public exports this adds, by the module they come from:
+
+- `change-log`: `changeLogEntries`, `ChangeLogEntry` (type).
+- `commands-voice`: `CommandReport` (type), `InstrumentalReport` (type), `InstrumentalVersionCommand` (type),
+  `SINGABLE_RANGE`, `vocalRange`, `VocalRange` (type), `VoiceCommand` (type), `VoiceOctaveCommand` (type),
+  `VoiceOctaveReport` (type).
+- `handoff-notices`: `preHandoffNotices`.
+- `source-label`: `mountSourceLabel`, `SourceLabelOptions` (type), `SourceLabelPart` (type).
+
+### Added in `@neta-art/score-dialect-song2`
+
+No new exports and no new dialect API. The writer changed as the Fixed list says.
+
+### Changed
+
+- **The phone toolbar is two rows, not four.** The controls split into a strip that scrolls sideways and a bar that stays
+  in view; Save moved into the bar before the view switch, and the source label takes the strip's first slot. A host that
+  mounts `mountToolbar` alone with `synthPreview: false` and no `viewSwitch` keeps the older single scrolling row; one
+  that uses the default editor, or passes either control, gets the strip and the bar, so CSS that reached into the row's
+  children should read the documented `.sce-tools` and `.sce-bar` structure. (`125d20a`, `a81dbfa`, `d07130a`)
+- **A failed save and a refused handoff are said in the chrome.** The notice says the sentence and offers Save again;
+  the handoff's conflict reason stays with the conflict banner. (`e333990`)
+- **The pre-handoff notices reach `notify`.** The editor sends each of the four `prehandoff-*` codes once each time the
+  review opens, not on every redraw; a host that toasts every notice may skip them because the review already shows them.
+  (`769aaae`)
+- **`ScoreCommand` and `NoticeCode` gained members.** The score command union adds `voiceOctave` and `instrumentalVersion`;
+  the notice code union and `NOTICE_CODES` add `prehandoff-no-sections`, `prehandoff-syllables-far`,
+  `prehandoff-vocal-range` and `prehandoff-melody-chords`. A host that switches exhaustively must add the new cases.
+  (`a5dfacc`, `769aaae`)
+- **Both conflict strips became one banner.** A draft conflict and a score-file conflict now show one sentence and a
+  Choose button that opens one shared dialog, instead of two choices on the strip, so neither costs a row of chrome and
+  both fit a short editor. (`8496b9f`, `d175233`)
+
+### Fixed
+
+- **song2 write-back** finds the key line by its `K:` prefix instead of counting header lines, and writes an Ins voice
+  line when an instrumental version adds the voice to a Vocal-only score. (`7c09342`, `d51287d`)
+- **The lyrics gate's field** scrolls into the editor's scroller with its Add button below the pinned head, and the page
+  itself does not scroll; the browser's own tap highlight is off for every control. (`3f232e4`)
+- **The conflict dialog** fits a short editor and the chrome returns to its earlier scroll when a banner goes; a control
+  in the toolbar strip keeps its content width; the lyrics gate's focus ring stays inside the scroller.
+  (`d175233`, `a81dbfa`, `eaeaa13`)
+- **The browser suite's sweeps** are bounded by one shared timeout and the placing sweep no longer repeats work.
+  (`4028577`, `41d6f73`)
+
 ## 0.3.0
 
 No export of 0.2.0 was removed or renamed: the 66 runtime exports of `@neta-art/score-editor` and the 3 of
