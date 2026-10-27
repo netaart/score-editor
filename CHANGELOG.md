@@ -2,6 +2,14 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## Unreleased
+
+### Fixed
+
+- **A regenerated song inherits the draft it was handed off from when the score comes back without its last line break.**
+  The handoff hash now ignores trailing whitespace in the joined lyrics and the score, as song2 returns them, and the
+  inheritance check compares the same way. A draft whose handoff hash is the old raw source hash still restores.
+
 ## 0.4.4
 
 No export of 0.4.3 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of

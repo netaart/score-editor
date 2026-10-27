@@ -186,6 +186,11 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
     return project.lyrics;
   }
 
+  /** The handoff identity is content without its trailing whitespace, so a returned score losing its last line break still matches. */
+  function handoffIdentity(lyrics: string, score: string): Promise<string> {
+    return contentHash(lyrics.trimEnd(), score.trimEnd());
+  }
+
   /** Runs a session replacement without treating its "project changed" announcement as a user edit to save. */
   function withoutKeep(action: () => void): void {
     suppressKeep += 1;
@@ -296,6 +301,8 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
     if (isDestroyed()) return;
     const reading = session.reading;
     if (reading.kind !== "score") return;
+    const handoffSourceHash = await handoffIdentity(original.lyrics, original.score);
+    if (isDestroyed()) return;
     const candidates = keys.filter((candidate) => candidate !== key).slice(0, INHERIT_MAX_DRAFTS);
     let best: { draft: ScoreDraft; version: string } | null = null;
     for (const other of candidates) {
@@ -303,9 +310,10 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       if (isDestroyed()) return;
       if (entry === null) continue;
       const draft = readDraft(entry.text);
-      if (draft === null || draft.sourceKey !== other || draft.handoffHash !== sourceHash) continue;
-      // The lines must join to the new song's own lyrics byte for byte; a draft for other words is not its draft.
-      if (joinLyrics(reading.score, draft.project.lyricLines) !== original.lyrics) continue;
+      if (draft === null || draft.sourceKey !== other) continue;
+      if (draft.handoffHash !== handoffSourceHash && draft.handoffHash !== sourceHash) continue;
+      // The lines must join to the new song's own lyrics without its trailing whitespace; a draft for other words is not its draft.
+      if (joinLyrics(reading.score, draft.project.lyricLines).trimEnd() !== original.lyrics.trimEnd()) continue;
       if (best === null || draft.updatedAt > best.draft.updatedAt) best = { draft, version: entry.version };
     }
     if (best === null) return;
@@ -421,7 +429,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
     async handoff() {
       if (isDestroyed()) return "failed";
       cancelTimer();
-      const hash = await contentHash(joinedLyrics(session.project), session.project.score);
+      const hash = await handoffIdentity(joinedLyrics(session.project), session.project.score);
       if (isDestroyed()) return "failed";
       if (sameAsOriginal(session.project)) {
         if (cursor.kind === "known") await removeDraft(cursor.version);
