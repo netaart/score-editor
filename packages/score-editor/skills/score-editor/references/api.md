@@ -73,7 +73,7 @@ change. The tests in the repository check that the list stays complete.
 | `mountLyricTrack` | core | Mounts the lyric track view part: phrase blocks with their syllable and note-start counts, syllables on their notes, the unaligned area, and while editable the edits of a line; takes `AxisPartOptions` and returns a `LyricTrackPart`. |
 | `changeLog` | core | Reads the original and current projects with a dialect and returns one sentence per kind of change, in the chosen language. |
 | `changeLogEntries` | core | The same sentences as `changeLog`, each with the 1-based `bars` it names (empty when it names none), for a review that highlights the bars the last edit rewrote. |
-| `preHandoffNotices` | core | The four pre-handoff notices a project carries: no sections, syllables far from the notes, Vocal outside 60–82, a melody project with chords; each a host `Notice` in the chosen language. |
+| `preHandoffNotices` | core | The four pre-handoff notices a project carries: no sections, syllables far from the notes, Vocal outside 60–82, a melody project with chords; each a host `Notice` in the chosen language. The default editor's review shows them first, under a count lead. |
 | `vocalRange` | core | Vocal's tie-chain lower median pitch and whether it is inside the singable range 60–82, as `VocalRange`. |
 | `handoffInstruction` | core | Writes the prefilled handoff instruction: title, the song2 request, the final style and joined lyrics, score mode, seed and change log. Takes `HandoffInstructionOptions`. |
 | `mountSourceLabel` | core | Mounts the source label view part: "Generated score (original kept)" or "Score file (saves to the file)", following the session's language and a source read through its getter; takes `SourceLabelOptions` and returns `SourceLabelPart`. |
@@ -109,7 +109,7 @@ change. The tests in the repository check that the list stays complete.
 | `Notice`, `NoticeCode` | A one-time host message and its machine-readable reason. |
 | `ChangeLogEntry` | One `changeLogEntries` sentence and the 1-based `bars` it names. |
 | `VocalRange` | `{ medianMidi, singable }`, the register measure `vocalRange` and the pre-handoff notice read. |
-| `SourceLabelOptions`, `SourceLabelPart` | What `mountSourceLabel` reads (`{ source, before? }`) and returns (`refresh()` and `destroy()`). |
+| `SourceLabelOptions`, `SourceLabelPart` | What `mountSourceLabel` reads (`{ source, before?, say? }`) and returns (`refresh()` and `destroy()`); `say` gets the new label once when the source changes. |
 | `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
 | `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, the last edit's rewritten bars, dispatch, tools, history, subscribe. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |

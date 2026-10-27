@@ -200,7 +200,7 @@ describe("the prefilled handoff instruction", () => {
     expect(text).not.toContain("Seed:");
     expect(text).toContain("改动记录:");
     expect(text).toContain("- 第 1 小节的音符有改动。");
-    expect(text).toContain("- 乐谱模式从 完整（full） 改为 旋律（melody）。");
+    expect(text).toContain("- 乐谱模式从 完整 改为 旋律。");
     expect(text).toContain("- 种子从 7 改为 无。");
   });
 

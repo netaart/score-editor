@@ -97,6 +97,9 @@ for (const language of ["en", "zh"] as const) {
       await expect.poll(async () => (await harness.scoreCalls()).length).toBe(2);
       await expect(notice(page)).toBeHidden();
       await expect(page.locator(".sce-save-button")).toHaveAttribute("aria-label", language === "zh" ? "保存" : "Save");
+      await expect(page.locator(".sce-part-toolbar .sce-sr-only[role=status]")).toHaveText(
+        language === "zh" ? "已保存" : "Saved",
+      );
     }
   });
 

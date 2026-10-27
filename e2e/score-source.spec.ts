@@ -854,12 +854,16 @@ test.describe("the handoff with a score file", () => {
     expect(await harness.handoffs()).toEqual([]);
   });
 
-  test("the review says a dirty file is saved first, and only then", async ({ page, harness, press }) => {
-    const line = page.locator(".sce-handoff-file");
+  test("the review's first line names the destination, and a dirty file is saved first", async ({
+    page,
+    harness,
+    press,
+  }) => {
+    const line = page.locator(".sce-handoff-source");
     await openFile(harness, { handoff: true });
     await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
     await expect(review(page)).toBeVisible();
-    await expect(line).toBeHidden();
+    await expect(line).toHaveText("tune.abc is saved. This sends the song.");
     await page.keyboard.press("Escape");
 
     await deleteD(page, press);
@@ -871,7 +875,7 @@ test.describe("the handoff with a score file", () => {
     await harness.destroy();
     await harness.mount({ score: { text: QUARTERS }, handoff: true });
     await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
-    await expect(line).toBeHidden();
+    await expect(line).toHaveText("Your original is kept. This sends your edited version.");
   });
 
   test("a failed save in a handoff says it was not sent", async ({ page, harness, press }) => {

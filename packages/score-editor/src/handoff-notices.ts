@@ -1,8 +1,9 @@
 // ABOUTME: The four notices a project carries before a handoff, computed from the project and its dialect with no DOM.
 // ABOUTME: Each rule is defined once: the melody-with-chords rule is checkProject's and the register is commands-voice's vocalRange.
+import { pitchName } from "./arrangement";
 import { spansOf } from "./commands-notes";
 import { checkProject } from "./commands-project";
-import { vocalRange } from "./commands-voice";
+import { SINGABLE_RANGE, vocalRange } from "./commands-voice";
 import { formatDiagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import { messagesFor } from "./i18n";
@@ -38,12 +39,11 @@ export function preHandoffNotices(
   const syllables = lyricLinesOf(project, score).reduce((total, line) => total + lyricSyllables(line.text).length, 0);
   const notes = spansOf(score, "Vocal").filter((span) => span.midi !== null).length;
   const lines = lyricLinesOf(project, score).length;
-  const difference = Math.abs(syllables - notes);
-  if (difference > SYLLABLE_GAP_PER_LINE * lines) {
+  if (Math.abs(syllables - notes) > SYLLABLE_GAP_PER_LINE * lines) {
     notices.push({
       code: "prehandoff-syllables-far",
       level: "warning",
-      message: t.prehandoffSyllablesFar(syllables, notes, difference),
+      message: t.prehandoffSyllablesFar(syllables, notes),
     });
   }
 
@@ -52,7 +52,7 @@ export function preHandoffNotices(
     notices.push({
       code: "prehandoff-vocal-range",
       level: "warning",
-      message: t.prehandoffVocalRange(range.medianMidi),
+      message: t.prehandoffVocalRange(pitchName(range.medianMidi), range.medianMidi > SINGABLE_RANGE.max),
     });
   }
 

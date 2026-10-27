@@ -11,6 +11,11 @@ import type { ViewPart } from "./types";
 /** What refused a handoff; a conflict already has the conflict banner, so only a failed save needs this one. */
 export type SaveNoticeKind = "conflict" | "failed";
 
+export interface SaveNoticeOptions {
+  /** The one save path the Save button and Ctrl/Cmd+S use, so a retry also says Saved. */
+  readonly save?: () => void;
+}
+
 export interface SaveNotice extends ViewPart {
   /** Shows the handoff's sentence on a failed save; a conflict is the conflict banner's to say. */
   notSent(kind: SaveNoticeKind): void;
@@ -20,7 +25,12 @@ export interface SaveNotice extends ViewPart {
  * Mounts the save notice on `el`, bound to the score file's keeper. It stands while the keeper says its last write failed,
  * and after a handoff was not sent for that failure, until the next save succeeds.
  */
-export function mountSaveNotice(el: HTMLElement, session: EditingSession, keeper: ScoreFileKeeper): SaveNotice {
+export function mountSaveNotice(
+  el: HTMLElement,
+  session: EditingSession,
+  keeper: ScoreFileKeeper,
+  options: SaveNoticeOptions = {},
+): SaveNotice {
   const doc = el.ownerDocument;
   const releaseStyles = acquireStyles(el);
   const abort = new AbortController();
@@ -36,7 +46,7 @@ export function mountSaveNotice(el: HTMLElement, session: EditingSession, keeper
     "click",
     () => {
       if (keeper.status === "saving") return;
-      void keeper.save();
+      options.save?.();
     },
     { signal },
   );

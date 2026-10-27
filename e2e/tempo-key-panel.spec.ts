@@ -538,7 +538,7 @@ test.describe("the song project panel's lyrics and notices", () => {
     const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
     await openSong(harness, withChords, { scoreMode: "melody" });
     await openPanel(page, press);
-    const notice = panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" });
+    const notice = panel(page).getByRole("note").filter({ hasText: "The score mode is Melody" });
     await expect(notice).toHaveCount(1);
 
     await press(notice.getByRole("button", { name: "Delete all chords" }));
@@ -558,7 +558,7 @@ test.describe("the song project panel's lyrics and notices", () => {
     const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
     await openSong(harness, withChords, { scoreMode: "melody" });
     await openPanel(page, press);
-    const notice = panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" });
+    const notice = panel(page).getByRole("note").filter({ hasText: "The score mode is Melody" });
 
     await press(notice.getByRole("button", { name: "Switch to full" }));
 
@@ -581,7 +581,7 @@ test.describe("the song project panel's lyrics and notices", () => {
     const withChords = vocalOnly('"C"C4D4E4F4|"G"G16|');
     await openSong(harness, withChords, { scoreMode: "melody" });
     await openPanel(page, press);
-    const notice = panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" });
+    const notice = panel(page).getByRole("note").filter({ hasText: "The score mode is Melody" });
     await expect(notice).toHaveCount(1);
     await page.keyboard.press("Escape");
 
@@ -631,7 +631,7 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     await expect(panel(page).getByRole("group", { name: "Seed" })).toHaveText("5");
     await expect(panel(page).getByText(`12 of ${LYRICS_MAX_CHARACTERS} characters`)).toBeVisible();
     expect(await lyricsRegion(page).evaluate((element) => element.textContent)).toBe("[a]\nla la la");
-    await expect(panel(page).getByRole("note").filter({ hasText: "Melody mode cannot carry chords" })).toHaveCount(1);
+    await expect(panel(page).getByRole("note").filter({ hasText: "The score mode is Melody" })).toHaveCount(1);
     for (const control of ["textbox", "radio", "spinbutton", "button"] as const) {
       await expect(panel(page).getByRole(control)).toHaveCount(0);
     }
@@ -655,7 +655,7 @@ test.describe("the song project panel, read-only and in Chinese", () => {
     const zh = page.getByRole("dialog", { name: "歌曲项目" });
     await expect(zh).toBeVisible();
     await expect(zh.getByRole("textbox", { name: "风格描述" })).toBeVisible();
-    await expect(zh.getByRole("radio", { name: "完整（full）" })).toBeChecked();
+    await expect(zh.getByRole("radio", { name: "完整", exact: true })).toBeChecked();
     await expect(zh.getByRole("spinbutton", { name: "种子" })).toBeVisible();
     await expect(zh.getByRole("region", { name: "歌词" })).toBeVisible();
     // The joined lyrics are the label of the score's one named section, "[a]": three characters.

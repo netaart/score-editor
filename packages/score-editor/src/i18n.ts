@@ -163,15 +163,22 @@ export interface Messages {
   requiredAddMany(count: number): string;
   requiredInputName(field: ProjectField): string;
   requiredHint: string;
+  /** The review's first line: where the edits go, for a generated score and for a saved score file. */
+  handoffSourceGenerated: string;
+  handoffSourceSaved(name: string): string;
   /** The review's line when a dirty score file is saved before the handoff. */
   handoffSavesFirst(name: string): string;
+  /** The line above the pre-handoff notices, with their count. */
+  handoffNoticesLead(count: number): string;
   /** A handoff that was not sent, once for a conflict and once for a failed save. */
   handoffNotSentConflict: string;
   handoffNotSentFailed: string;
   /** The four pre-handoff notices the review shows and the host is told once per opening. */
   prehandoffNoSections: string;
-  prehandoffSyllablesFar(syllables: number, notes: number, difference: number): string;
-  prehandoffVocalRange(medianMidi: number): string;
+  prehandoffSyllablesFar(syllables: number, notes: number): string;
+  prehandoffVocalRange(medianName: string, high: boolean): string;
+  /** The legend under the change log while an entry is marked by the last step. */
+  changeLogMarked: string;
   /** The tempo, key and transpose controls of the toolbar: the group's name, the field's name and what is said aloud. */
   songControls: string;
   tempo: string;
@@ -524,13 +531,19 @@ const en: Messages = {
   requiredInputName: (field) =>
     field === "style" ? "style" : field === "lyrics" ? "lyrics" : field === "seed" ? "seed" : "score mode",
   requiredHint: "Required to regenerate.",
+  handoffSourceGenerated: "Your original is kept. This sends your edited version.",
+  handoffSourceSaved: (name) => `${name} is saved. This sends the song.`,
   handoffSavesFirst: (name) => `Saves ${name} first, then sends the song.`,
+  handoffNoticesLead: (count) => `${count} ${count === 1 ? "thing" : "things"} to check before you regenerate`,
   handoffNotSentConflict: "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
   handoffNotSentFailed: "Not sent: the score file was not saved. Try again, then regenerate.",
-  prehandoffNoSections: "This score has no sections, so the agent gets no section names.",
-  prehandoffSyllablesFar: (syllables, notes, difference) =>
-    `The whole song has ${syllables} ${syllables === 1 ? "syllable" : "syllables"} and ${notes} note ${notes === 1 ? "onset" : "onsets"}, ${difference} apart.`,
-  prehandoffVocalRange: (medianMidi) => `Vocal's median pitch is ${medianMidi}, outside the singable range 60–82.`,
+  prehandoffNoSections:
+    "This score has no sections, so the new song has no section names. Click the “Unnamed” bar above the notes and choose “Name this section”.",
+  prehandoffSyllablesFar: (syllables, notes) =>
+    `The lyrics have ${syllables} ${syllables === 1 ? "syllable" : "syllables"}, but the melody has ${notes} ${notes === 1 ? "note" : "notes"}. Check that each lyric line fits its notes.`,
+  prehandoffVocalRange: (medianName, high) =>
+    `The vocal's middle note is ${medianName}, ${high ? "above" : "below"} its singable range (C4 to A#5). ${high ? "Lower" : "Raise"} it with the Voice octave tool.`,
+  changeLogMarked: "Marked: changed by your last step.",
   songControls: "Tempo, key and transpose",
   tempo: "Tempo (BPM)",
   tempoSet: (bpm) => `Tempo set to ${bpm} BPM`,
@@ -839,13 +852,18 @@ const zh: Messages = {
   requiredInputName: (field) =>
     field === "style" ? "风格描述" : field === "lyrics" ? "歌词" : field === "seed" ? "种子" : "乐谱模式",
   requiredHint: "重新生成前必填。",
+  handoffSourceGenerated: "原版会保留。这会发送你改过的版本。",
+  handoffSourceSaved: (name) => `${name} 已保存。这会发送歌曲。`,
   handoffSavesFirst: (name) => `先保存 ${name}，再发送歌曲。`,
+  handoffNoticesLead: (count) => `重新生成前有 ${count} 处要看`,
   handoffNotSentConflict: "未发送：这份乐谱文件在别处被改过。先选一个版本，再重新生成。",
   handoffNotSentFailed: "未发送：乐谱文件没有保存成功。再试一次，然后重新生成。",
-  prehandoffNoSections: "这份乐谱没有段落，交给 agent 时也就没有段落名。",
-  prehandoffSyllablesFar: (syllables, notes, difference) =>
-    `整首有 ${syllables} 个音节和 ${notes} 个音符起点，相差 ${difference} 个。`,
-  prehandoffVocalRange: (medianMidi) => `人声的中位音是 ${medianMidi}，不在可唱区间 60–82 内。`,
+  prehandoffNoSections: "这份乐谱没有段落，新歌就没有段落名。点乐谱上方的“未命名”段落条，选“给这段命名”。",
+  prehandoffSyllablesFar: (syllables, notes) =>
+    `歌词有 ${syllables} 个音节，旋律有 ${notes} 个音。请检查每行歌词是否对上它的音符。`,
+  prehandoffVocalRange: (medianName, high) =>
+    `人声的中间音是 ${medianName}，${high ? "高于" : "低于"}可唱范围（C4 至 A#5）。可用人声移八度工具${high ? "降下来" : "升上去"}。`,
+  changeLogMarked: "带标记的条目是你上一步改动的。",
   songControls: "速度、调和移调",
   tempo: "速度（BPM）",
   tempoSet: (bpm) => `速度已设为 ${bpm} BPM`,
@@ -863,9 +881,9 @@ const zh: Messages = {
   projectStyleHint: "这里写的 BPM 会跟着速度一起改。",
   projectStyleEmpty: "未设置。写下想要的风格。",
   projectMode: "谱面模式",
-  projectModeFull: "完整（full）",
+  projectModeFull: "完整",
   projectModeFullHint: "旋律和和弦",
-  projectModeMelody: "旋律（melody）",
+  projectModeMelody: "旋律",
   projectModeMelodyHint: "只有旋律，没有和弦",
   projectModeEmpty: "未设置。请选一个。",
   projectSeed: "种子",

@@ -30,6 +30,8 @@ export interface HandoffSource {
   readonly say?: (words: string) => void;
   /** Draws the refused handoff's sentence in the chrome; a conflict leaves it to the conflict banner. */
   readonly notSent?: (kind: "conflict" | "failed") => void;
+  /** Where the edits go, for the review's first line. */
+  readonly sourceKind?: () => "generated" | "scoreFile";
   /** The file name while a dirty score file is saved before the handoff; null when no line is needed. */
   readonly savesFirst?: () => string | null;
 }
@@ -74,17 +76,21 @@ export function mountHandoffControl(
   popover.setAttribute("aria-modal", "false");
   const heading = create(doc, "h2", "sce-handoff-heading", popover);
   heading.id = `sce-handoff-title-${++instanceCount}`;
+  const fileNote = create(doc, "p", "sce-handoff-note sce-handoff-source", popover);
+  const notices = create(doc, "div", "sce-handoff-notices", popover);
+  notices.id = `sce-handoff-notices-${instanceCount}`;
+  notices.hidden = true;
+  const noticeLead = create(doc, "p", "sce-handoff-notices-lead", notices);
   const logLabel = create(doc, "p", "sce-handoff-log-label", popover);
   logLabel.id = `sce-handoff-log-${instanceCount}`;
+  const marked = create(doc, "p", "sce-handoff-marked", popover);
+  marked.hidden = true;
   const changes = create(doc, "ul", "sce-handoff-changes", popover);
   changes.setAttribute("aria-labelledby", logLabel.id);
   changes.id = `sce-handoff-list-${instanceCount}`;
   const empty = create(doc, "p", "sce-handoff-empty", popover);
   empty.id = `sce-handoff-empty-${instanceCount}`;
-  const fileNote = create(doc, "p", "sce-handoff-note sce-handoff-file", popover);
-  fileNote.hidden = true;
   const rejected = create(doc, "p", "sce-handoff-note", popover);
-  const notices = create(doc, "div", "sce-handoff-notices", popover);
   const actions = create(doc, "div", "sce-handoff-actions", popover);
   const cancel = create(doc, "button", "sce-button", actions);
   cancel.type = "button";
@@ -151,37 +157,54 @@ export function mountHandoffControl(
       ...(dialect === undefined ? {} : { dialect }),
     });
     const rewritten = new Set(session.rewrittenBars);
+    let anyMarked = false;
     changes.replaceChildren(
       ...entries.map((entry) => {
         const item = create(doc, "li", "", changes);
         item.textContent = entry.text;
-        if (entry.bars.some((bar) => rewritten.has(bar))) item.dataset.rewritten = "";
+        if (entry.bars.some((bar) => rewritten.has(bar))) {
+          item.dataset.rewritten = "";
+          anyMarked = true;
+        }
         return item;
       }),
     );
     changes.hidden = entries.length === 0;
     empty.hidden = entries.length > 0;
     empty.textContent = t.changeLogNone;
+    marked.hidden = !anyMarked;
+    marked.textContent = t.changeLogMarked;
+    const found = noticesNow();
+    noticeLead.textContent = t.handoffNoticesLead(found.length);
     notices.replaceChildren(
-      ...noticesNow().map((notice) => {
-        const line = create(doc, "p", "sce-handoff-note sce-handoff-notice", notices);
+      noticeLead,
+      ...found.map((notice) => {
+        const line = create(doc, "p", "sce-handoff-notice", notices);
         line.textContent = notice.message;
         return line;
       }),
     );
-    notices.hidden = notices.childElementCount === 0;
+    notices.hidden = found.length === 0;
     const first = config.savesFirst?.() ?? null;
-    fileNote.hidden = first === null;
-    fileNote.textContent = first === null ? "" : t.handoffSavesFirst(first);
+    fileNote.textContent =
+      first !== null
+        ? t.handoffSavesFirst(first)
+        : (config.sourceKind?.() ?? "generated") === "scoreFile"
+          ? t.handoffSourceSaved(config.title ?? "")
+          : t.handoffSourceGenerated;
     rejected.hidden = session.rejectedText === null;
-    popover.setAttribute("aria-describedby", entries.length === 0 ? empty.id : changes.id);
+    const described = entries.length === 0 ? empty.id : changes.id;
+    popover.setAttribute("aria-describedby", found.length === 0 ? described : `${notices.id} ${described}`);
   }
 
   /** Sends each pre-handoff notice to the host once, when the review opens; redraws while it stays open send nothing. */
   function announceNotices(): void {
     const config = source();
     if (config === null) return;
-    for (const notice of noticesNow()) config.notify?.(notice);
+    const found = noticesNow();
+    if (found.length === 0) return;
+    config.say?.(messagesFor(session.view.language).handoffNoticesLead(found.length));
+    for (const notice of found) config.notify?.(notice);
   }
 
   /** The trigger's normal word, so a language change and the busy state do not fight the missing-input word. */
