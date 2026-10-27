@@ -302,6 +302,9 @@ export interface Messages {
   draftOverwriteNote: string;
   draftLoadTheirs: string;
   draftLoadTheirsNote: string;
+  draftConflictCancel: string;
+  draftConflictOverwritten: string;
+  draftConflictLoaded: string;
   /** Restore original: the button, the question it asks and what that costs, the two answers, and what is said once it is done. */
   restoreOriginal: string;
   restoreQuestion: string;
@@ -670,6 +673,9 @@ const en: Messages = {
   draftOverwriteNote: "The other version is replaced and can't be brought back.",
   draftLoadTheirs: "Load the other version",
   draftLoadTheirsNote: "It opens here, and your changes in this window are dropped.",
+  draftConflictCancel: "Cancel",
+  draftConflictOverwritten: "Saved your version over the other one.",
+  draftConflictLoaded: "Loaded the other version. Your changes in this window were replaced.",
   restoreOriginal: "Restore original",
   restoreQuestion: "Go back to the original score?",
   restoreWarning: "Every change you made is discarded and the saved draft is deleted. You can't undo this.",
@@ -999,11 +1005,14 @@ const zh: Messages = {
   draftOpening: "正在打开草稿…",
   draftConflict: "草稿冲突",
   draftConflictText: "这份草稿在你打开之后，在别处被改过。你选择之前，你的修改不会保存。",
-  draftChoose: "选择",
+  draftChoose: "选择版本",
   draftOverwrite: "用我的版本覆盖",
   draftOverwriteNote: "对方的版本会被你的版本替换，无法找回。",
   draftLoadTheirs: "载入对方的版本",
   draftLoadTheirsNote: "它会在这里打开，你在这个窗口里的修改会丢掉。",
+  draftConflictCancel: "取消",
+  draftConflictOverwritten: "已用你的版本覆盖。",
+  draftConflictLoaded: "已载入对方的版本，这个窗口里的修改已被替换。",
   restoreOriginal: "恢复原谱",
   restoreQuestion: "恢复到原来的乐谱？",
   restoreWarning: "你做过的所有修改都会丢弃，已保存的草稿也会删除，之后无法撤销。",

@@ -10,7 +10,11 @@ export interface ConflictCopy {
   name: string;
   sentence: string;
   choose: string;
+  /** The word that closes the dialog without choosing; Enter on it must change nothing. */
+  cancel: string;
   choices: readonly [ConflictChoiceCopy, ConflictChoiceCopy];
+  /** What the live region says after each choice, in the order of `choices`. */
+  outcomes: readonly [string, string];
 }
 
 /** One way out: what it is, and what it does, the second line spoken as the button's description. */
@@ -28,6 +32,10 @@ export interface ConflictBannerOptions {
   copy(): ConflictCopy;
   /** The two ways out, in the order of the copy's choices. */
   actions: readonly [() => Promise<void>, () => Promise<void>];
+  /** Says a completed choice's outcome in the editor's live region. */
+  say?: (words: string) => void;
+  /** Whether the action answered the conflict; false keeps the failed answer's own behaviour and says nothing. */
+  succeeded?: () => boolean;
 }
 
 /** The shared banner: the strip, its Choose button and the dialog that holds the two choices. */
@@ -44,7 +52,7 @@ export interface ConflictBanner {
 
 /**
  * Builds the conflict banner on `parent`. The strip takes no focus and the editor keeps editing under it; pressing
- * `Choose` opens the two ways out in a native dialog under the strip, with the first one focused.
+ * `Choose` opens the two ways out in a native dialog under the strip, with Cancel focused.
  */
 export function mountConflictBanner(parent: HTMLElement, options: ConflictBannerOptions): ConflictBanner {
   const doc = parent.ownerDocument;
@@ -71,7 +79,7 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
   choose.popoverTargetElement = popover;
   choose.popoverTargetAction = "toggle";
 
-  const parts = options.actions.map((act) => {
+  const parts = options.actions.map((act, index) => {
     const button = create(doc, "button", "sce-button sce-draft-choice", popover);
     button.type = "button";
     const label = create(doc, "span", "sce-draft-label", button);
@@ -81,7 +89,7 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
       "click",
       () => {
         if (busy) return;
-        void run(act);
+        void run(act, index);
       },
       { signal },
     );
@@ -91,13 +99,19 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
     { button: HTMLButtonElement; label: HTMLElement; note: HTMLElement },
   ];
 
+  const cancel = create(doc, "button", "sce-button sce-draft-cancel", popover);
+  cancel.type = "button";
+  cancel.addEventListener("click", () => popover.hidePopover(), { signal });
+
   /** One way out at a time: a second press while the first is being answered by the store does nothing. */
   let busy = false;
-  async function run(act: () => Promise<void>): Promise<void> {
+  async function run(act: () => Promise<void>, index: number): Promise<void> {
     busy = true;
     for (const { button } of parts) button.setAttribute("aria-disabled", "true");
     try {
       await act();
+      const outcome = options.copy().outcomes[index];
+      if (outcome !== undefined && options.succeeded?.() !== false) options.say?.(outcome);
     } finally {
       busy = false;
       for (const { button } of parts) button.setAttribute("aria-disabled", "false");
@@ -122,7 +136,7 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
         return;
       }
       placeConflictChoices(popover, strip);
-      parts[0].button.focus();
+      cancel.focus();
     },
     { signal },
   );
@@ -133,6 +147,7 @@ export function mountConflictBanner(parent: HTMLElement, options: ConflictBanner
     popover.setAttribute("aria-label", copy.name);
     sentence.textContent = copy.sentence;
     choose.textContent = copy.choose;
+    cancel.textContent = copy.cancel;
     for (const [index, part] of parts.entries()) {
       const choice = copy.choices[index];
       if (choice === undefined) continue;

@@ -4,8 +4,18 @@ Both packages share one version. The README's [Publish](README.md#publish) secti
 
 ## Unreleased
 
+### Changed
+
+- **The conflict banner says what a choice did.** After loading theirs the editor's live region says **Loaded the other
+  version. Your changes in this window were replaced.** ("已载入对方的版本，这个窗口里的修改已被替换。"), and after
+  overwriting it says **Saved your version over the other one.** ("已用你的版本覆盖。"). The Chinese button that opens
+  the choices is now **选择版本**, so it no longer shares its name with the toolbar's Select.
+
 ### Fixed
 
+- **The conflict dialog opens on Cancel.** Its visible Cancel button takes the focus when the dialog opens, so Enter
+  pressed by habit closes it and writes nothing; Cancel, Escape and light dismiss return the focus to Choose. Both
+  conflict kinds share the banner.
 - **A regenerated song inherits the draft it was handed off from when the score comes back without its last line break.**
   The handoff hash now ignores trailing whitespace in the joined lyrics and the score, as song2 returns them, and the
   inheritance check compares the same way. A draft whose handoff hash is the old raw source hash is still accepted.
