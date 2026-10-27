@@ -46,6 +46,12 @@ C4D4E4F4|G16|`;
 /** Five Vocal notes but one syllable in one line: the whole song's counts are four apart. */
 const FEW_SYLLABLE_LINES: ReadonlyArray<LyricLine> = [{ text: "la", phrase: { firstBar: 0, barCount: 1 } }];
 
+/** Seven syllables over two lines with no bar: only the unaligned notice applies, and the first line is excerpted. */
+const UNALIGNED_LINES: ReadonlyArray<LyricLine> = [
+  { text: "oh it is a long way", phrase: null },
+  { text: "lost", phrase: null },
+];
+
 /** Five notes at B5 (83), above the singable range's top of 82. */
 const HIGH_SCORE = `${HEADER}
 K:C
@@ -77,6 +83,18 @@ describe("the pre-handoff notices", () => {
 
   it("reports a whole song whose syllable count is far from its note count", () => {
     expect(noticeCodes({ lyricLines: FEW_SYLLABLE_LINES })).toEqual(["prehandoff-syllables-far"]);
+  });
+
+  it("reports lines in the unaligned area with their number and the first words of each", () => {
+    expect(noticeCodes({ lyricLines: UNALIGNED_LINES })).toEqual(["prehandoff-lyrics-unaligned"]);
+    const en = preHandoffNotices(song2Dialect, project({ lyricLines: UNALIGNED_LINES }), "en");
+    const zh = preHandoffNotices(song2Dialect, project({ lyricLines: UNALIGNED_LINES }), "zh");
+    expect(en.map((notice) => notice.message)).toEqual([
+      "2 lyric lines are not aligned to a bar: “oh it is a…”, “lost”. Put them on bars or delete them; the joined lyrics leave them out.",
+    ]);
+    expect(zh.map((notice) => notice.message)).toEqual([
+      "有 2 行歌词没有对上小节：“oh it is a…”、“lost”。请把它们放到小节上或删掉；拼回的歌词里没有这些行。",
+    ]);
   });
 
   it("reports a Vocal median above the singable range", () => {

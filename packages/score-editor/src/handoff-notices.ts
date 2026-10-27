@@ -1,4 +1,4 @@
-// ABOUTME: The four notices a project carries before a handoff, computed from the project and its dialect with no DOM.
+// ABOUTME: The five notices a project carries before a handoff, computed from the project and its dialect with no DOM.
 // ABOUTME: Each rule is defined once: the melody-with-chords rule is checkProject's and the register is commands-voice's vocalRange.
 import { pitchName } from "./arrangement";
 import { spansOf } from "./commands-notes";
@@ -7,7 +7,7 @@ import { SINGABLE_RANGE, vocalRange } from "./commands-voice";
 import { formatDiagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
 import { messagesFor } from "./i18n";
-import { lyricLinesOf, lyricSyllables } from "./lyrics";
+import { lyricLinesOf, lyricSyllables, unalignedLyricLines } from "./lyrics";
 import type { SongProject } from "./score";
 import type { Language, Notice } from "./types";
 
@@ -17,10 +17,18 @@ import type { Language, Notice } from "./types";
  */
 const SYLLABLE_GAP_PER_LINE = 1;
 
+/** How many of a line's opening words the unaligned notice shows, so a long line does not fill the review. */
+const EXCERPT_WORDS = 4;
+
+function firstWords(text: string): string {
+  const words = text.trim().split(/\s+/u);
+  return words.length > EXCERPT_WORDS ? `${words.slice(0, EXCERPT_WORDS).join(" ")}…` : words.join(" ");
+}
+
 /**
  * The notices a project carries before a handoff, in the ticket's order: no sections, syllables far from the notes,
- * Vocal outside the singable range, and a melody project with chords. A score the dialect cannot read carries none.
- * The `message` is in `language`.
+ * Vocal outside the singable range, a melody project with chords, and lines in the unaligned area. A score the dialect
+ * cannot read carries none. The `message` is in `language`.
  */
 export function preHandoffNotices(
   dialect: ScoreDialect,
@@ -36,10 +44,10 @@ export function preHandoffNotices(
     notices.push({ code: "prehandoff-no-sections", level: "warning", message: t.prehandoffNoSections });
   }
 
-  const syllables = lyricLinesOf(project, score).reduce((total, line) => total + lyricSyllables(line.text).length, 0);
+  const lines = lyricLinesOf(project, score);
+  const syllables = lines.reduce((total, line) => total + lyricSyllables(line.text).length, 0);
   const notes = spansOf(score, "Vocal").filter((span) => span.midi !== null).length;
-  const lines = lyricLinesOf(project, score).length;
-  if (Math.abs(syllables - notes) > SYLLABLE_GAP_PER_LINE * lines) {
+  if (Math.abs(syllables - notes) > SYLLABLE_GAP_PER_LINE * lines.length) {
     notices.push({
       code: "prehandoff-syllables-far",
       level: "warning",
@@ -61,6 +69,18 @@ export function preHandoffNotices(
       code: "prehandoff-melody-chords",
       level: "warning",
       message: formatDiagnostic({ code: "melody-with-chords", params: {}, at: {} }, language),
+    });
+  }
+
+  const unaligned = unalignedLyricLines(lines, score);
+  if (unaligned.length > 0) {
+    notices.push({
+      code: "prehandoff-lyrics-unaligned",
+      level: "warning",
+      message: t.prehandoffLyricsUnaligned(
+        unaligned.length,
+        unaligned.map((line) => firstWords(line.text)),
+      ),
     });
   }
 

@@ -57,11 +57,12 @@ editor reads no model declaration.
 
 ## Before a handoff
 
-`preHandoffNotices(dialect, project, language)` returns the four notices a project carries: no sections, the whole song's
-syllable count far from its note count, Vocal outside the singable range 60-82, and a melody project with chords. Each
-sentence names the next step in the editor's own words, including the Unnamed section bar, the lyric lines, the Voice
-octave tool and the Project panel's Score mode names. The default editor's review puts them first, under a 600-weight
-lead line with their count, and a host that toasts every `mount` notice may skip the four `prehandoff-*` codes, since the
+`preHandoffNotices(dialect, project, language)` returns the five notices a project carries: no sections, the whole song's
+syllable count far from its note count, Vocal outside the singable range 60-82, a melody project with chords, and lines
+in the unaligned area with their number and the first words of each. Each sentence names the next step in the editor's own
+words, including the Unnamed section bar, the lyric lines, the Voice octave tool, the Project panel's Score mode names and
+the bar or delete key for a line off the bars. The default editor's review puts them first, under a 600-weight
+lead line with their count, and a host that toasts every `mount` notice may skip the five `prehandoff-*` codes, since the
 review repeats them. The edge is `notice.code`: the editor sends each pre-handoff notice through `MountOptions.notify`
 once each time the review opens, not on every redraw, says the lead line once through the toolbar's live region, and
 shows no line and sends nothing when none applies. The review's first line says where the edits go: for a generated score

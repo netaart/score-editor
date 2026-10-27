@@ -188,6 +188,22 @@ test.describe("the pre-handoff notices in the review", () => {
     }
   });
 
+  test("shows lines in the unaligned area with their first words, in both languages", async ({ page, harness }) => {
+    const lyrics = "[Missing]\noh it is a long way\nlost";
+    for (const language of ["en", "zh"] as const) {
+      await mountProject(harness, CLEAN, { language, lyrics, lyricLines: [] });
+      await handoffButton(page, language).click();
+      await expect(noticeLines(page, language)).toHaveText([
+        language === "zh"
+          ? "有 2 行歌词没有对上小节：“oh it is a…”、“lost”。请把它们放到小节上或删掉；拼回的歌词里没有这些行。"
+          : "2 lyric lines are not aligned to a bar: “oh it is a…”, “lost”. Put them on bars or delete them; the joined lyrics leave them out.",
+      ]);
+      expect(await inSight(page, noticeLines(page, language).first(), dialog(page, language))).toBe(true);
+      expect(await prehandoffCodes(harness)).toEqual(["prehandoff-lyrics-unaligned"]);
+      await page.keyboard.press("Escape");
+    }
+  });
+
   test("shows all four lines and reports each code once", async ({ page, harness }) => {
     await mountProject(harness, ALL_FOUR, { lyricLines: FEW_LINES, scoreMode: "melody" });
     await handoffButton(page).click();

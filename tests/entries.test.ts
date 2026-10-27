@@ -615,6 +615,7 @@ describe("package entries in a node environment", () => {
       "prehandoff-syllables-far",
       "prehandoff-vocal-range",
       "prehandoff-melody-chords",
+      "prehandoff-lyrics-unaligned",
     ]);
     expect(Array.isArray(editor.COMMAND_DIAGNOSTIC_CODES)).toBe(true);
   });

@@ -94,10 +94,11 @@ transpose or key change names every bar whose notes or chords changed. The same 
 `ApplyScoreResult`, `ApplyProjectResult`, `CommandListResult`, `DispatchResult`, `ToolResult` and the project command
 result, and `session.rewrittenBars` keeps the last edit's list, including after undo and redo.
 
-`preHandoffNotices(dialect, project, language)` returns the four notices a project carries before a handoff as host
+`preHandoffNotices(dialect, project, language)` returns the five notices a project carries before a handoff as host
 `Notice`s: `prehandoff-no-sections`, `prehandoff-syllables-far` (the whole song's syllables more than one per lyric line
-away from its Vocal tie chains), `prehandoff-vocal-range` (Vocal's lower median outside `SINGABLE_RANGE`, 60-82) and
-`prehandoff-melody-chords` (the same rule as `checkProject`). `vocalRange(score)` is the register measure as `VocalRange`
+away from its Vocal tie chains), `prehandoff-vocal-range` (Vocal's lower median outside `SINGABLE_RANGE`, 60-82),
+`prehandoff-melody-chords` (the same rule as `checkProject`) and `prehandoff-lyrics-unaligned` (the number of lines with
+no bar and the first words of each). `vocalRange(score)` is the register measure as `VocalRange`
 (`{ medianMidi, singable }`); it and the voice octave report read `SINGABLE_RANGE`. A score the dialect cannot read
 carries no notice. `changeLogEntries` is the structured `ChangeLogEntry` form of the change log: one `text` and the
 `bars` it names.
