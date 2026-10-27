@@ -1,5 +1,6 @@
 // ABOUTME: Seam 1 for the change log: pairs of original and current projects in, readable changes out.
 // ABOUTME: Expected sentences are written by hand in both languages; the dialect is the real song2 reader.
+import { readFileSync } from "node:fs";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import { changeLog, changeLogEntries, handoffInstruction, type SongProject } from "@neta-art/score-editor";
 import { describe, expect, it } from "vitest";
@@ -25,6 +26,10 @@ A16|B16|`;
 const SCORE_WITH_TITLE = `${SCORE}\n`;
 
 const LYRICS = "[verse]\nla la\n[chorus]\nha ha";
+
+// The ticket's real request lyrics, whose `[Verse]` and `[Chorus]` labels differ from the score's lowercase sections.
+const MORNING_WALK_LYRICS = readFileSync(new URL("fixtures/request-lyrics.txt", import.meta.url), "utf8");
+const MORNING_WALK_SCORE = readFileSync(new URL("fixtures/morning-walk.abc", import.meta.url), "utf8");
 
 const project: SongProject = {
   style: "pop",
@@ -188,6 +193,35 @@ describe("the prefilled handoff instruction", () => {
     expect(text).toContain("Seed: 9");
     expect(text).toContain("Changes:");
     expect(text).toContain("- The notes of bar 1 changed.");
+  });
+
+  it("carries every requested line into the instruction for the real generation", () => {
+    const morningWalk = changed({
+      score: MORNING_WALK_SCORE,
+      lyrics: MORNING_WALK_LYRICS,
+      sourceKey: "morning-walk",
+    });
+    const text = handoffInstruction({
+      original: morningWalk,
+      current: morningWalk,
+      title: "Morning Walk",
+      language: "en",
+      dialect: song2Dialect,
+    });
+    const joined = text.split("Joined lyrics:\n")[1]?.split("\n\nScore mode:")[0];
+    expect(joined).toBe(`[intro]
+[verse]
+Morning light on the station
+I wait for the first train
+Coffee steam and a quiet song
+Carry me along
+[chorus]
+Run with me, run with me
+Into the open sky
+Run with me, run with me
+We will learn to fly
+[outro]`);
+    expect(joined).toContain("Run with me, run with me");
   });
 
   it("writes the same instruction in Chinese, without a seed line when there is none", () => {

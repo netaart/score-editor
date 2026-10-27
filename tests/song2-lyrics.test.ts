@@ -39,6 +39,10 @@ L:1/16
 Q:1/4=120
 V: Vocal clef=treble name="Vocal Melody" snm="Vocal"`;
 
+// The ticket's real generation and request lyrics: the score's sections are lowercase, the request's labels are not.
+const MORNING_WALK_SCORE = readFileSync(new URL("fixtures/morning-walk.abc", import.meta.url), "utf8");
+const MORNING_WALK_LYRICS = readFileSync(new URL("fixtures/request-lyrics.txt", import.meta.url), "utf8");
+
 const SCORE = `${HEADER}
 K:C
 % Intro
@@ -197,6 +201,11 @@ describe("syllables", () => {
     expect(lyricSyllables("hel-lo")).toEqual(["hel", "lo"]);
   });
 
+  it("counts quiet as the two syllables it is sung as, and the ticket line as eight", () => {
+    expect(lyricSyllables("quiet")).toEqual(["qui", "et"]);
+    expect(syllableCount("Coffee steam and a quiet song")).toBe(8);
+  });
+
   it("does not sing spaces or punctuation and counts digits one by one", () => {
     expect(syllableCount("你好，世界！")).toBe(4);
     expect(syllableCount("Hi, 2024!")).toBe(5);
@@ -256,6 +265,50 @@ describe("the legacy layout", () => {
     ]);
     expect(unalignedLyricLines(lines, score).map((line) => line.text)).toEqual(["v5", "m1", "m2"]);
     expect(lines.filter((line) => line.phrase?.firstBar === 0 || line.phrase?.firstBar === 1)).toEqual([]);
+  });
+
+  it("lays the ticket's request lyrics on its score though the labels differ in letter case", () => {
+    const score = parse(MORNING_WALK_SCORE);
+    const lines = layoutLyrics(score, MORNING_WALK_LYRICS);
+    expect(unalignedLyricLines(lines, score)).toEqual([]);
+    expect(joinLyrics(score, lines)).toBe(`[intro]
+[verse]
+Morning light on the station
+I wait for the first train
+Coffee steam and a quiet song
+Carry me along
+[chorus]
+Run with me, run with me
+Into the open sky
+Run with me, run with me
+We will learn to fly
+[outro]`);
+  });
+
+  it("matches a label without regard to letter case or spaces around the name", () => {
+    const text = `${HEADER}
+K:C
+% verse
+V: Vocal
+C16|D16|
+V: Ins
+Z2|
+% verse
+V: Vocal
+E16|F16|
+V: Ins
+Z2|
+% verse
+V: Vocal
+G16|A16|
+V: Ins
+Z2|`;
+    const lines = layoutLyrics(parse(text), "[Verse]\na\n[ verse ]\nb\n[VERSE]\nc");
+    expect(lines).toEqual([
+      { text: "a", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "b", phrase: { firstBar: 2, barCount: 1 } },
+      { text: "c", phrase: { firstBar: 4, barCount: 1 } },
+    ]);
   });
 
   it("puts lines before the first label in the unnamed opening section, and skips empty lines", () => {

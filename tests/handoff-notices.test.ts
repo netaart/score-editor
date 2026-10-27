@@ -46,6 +46,9 @@ C4D4E4F4|G16|`;
 /** Five Vocal notes but one syllable in one line: the whole song's counts are four apart. */
 const FEW_SYLLABLE_LINES: ReadonlyArray<LyricLine> = [{ text: "la", phrase: { firstBar: 0, barCount: 1 } }];
 
+/** Seven syllables over two lines under a label with no section: only the unaligned notice applies. */
+const UNALIGNED_LYRICS = "[Missing]\noh it is a long way\nlost";
+
 /** Five notes at B5 (83), above the singable range's top of 82. */
 const HIGH_SCORE = `${HEADER}
 K:C
@@ -70,6 +73,13 @@ V: Vocal
 const noticeCodes = (overrides: Partial<SongProject> = {}, language: "en" | "zh" = "en") =>
   preHandoffNotices(song2Dialect, project(overrides), language).map((notice) => notice.code);
 
+/** A project with no stored lines, so the legacy lyrics text is laid out against the score. */
+function legacyProject(lyrics: string): SongProject {
+  const base = { ...project({ lyrics }) } as Record<string, unknown>;
+  delete base.lyricLines;
+  return base as unknown as SongProject;
+}
+
 describe("the pre-handoff notices", () => {
   it("reports a score with no sections", () => {
     expect(noticeCodes({ score: SECTIONLESS_SCORE })).toEqual(["prehandoff-no-sections"]);
@@ -77,6 +87,21 @@ describe("the pre-handoff notices", () => {
 
   it("reports a whole song whose syllable count is far from its note count", () => {
     expect(noticeCodes({ lyricLines: FEW_SYLLABLE_LINES })).toEqual(["prehandoff-syllables-far"]);
+  });
+
+  it("reports a label with no section as lines in the unaligned area, with their number and first words", () => {
+    const legacy = legacyProject(UNALIGNED_LYRICS);
+    expect(preHandoffNotices(song2Dialect, legacy, "en").map((notice) => notice.code)).toEqual([
+      "prehandoff-lyrics-unaligned",
+    ]);
+    const en = preHandoffNotices(song2Dialect, legacy, "en");
+    const zh = preHandoffNotices(song2Dialect, legacy, "zh");
+    expect(en.map((notice) => notice.message)).toEqual([
+      "2 lyric lines are not aligned to a bar: “oh it is a…”, “lost”. Put them on bars or delete them; the joined lyrics leave them out.",
+    ]);
+    expect(zh.map((notice) => notice.message)).toEqual([
+      "有 2 行歌词没有对上小节：“oh it is a…”、“lost”。请把它们放到小节上或删掉；拼回的歌词里没有这些行。",
+    ]);
   });
 
   it("reports a Vocal median above the singable range", () => {

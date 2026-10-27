@@ -21,6 +21,7 @@ export type Language = "zh" | "en";
  * `prehandoff-syllables-far`: the whole song's syllable count is far from its note count.
  * `prehandoff-vocal-range`: Vocal's median pitch is outside the singable range 60-82.
  * `prehandoff-melody-chords`: a melody project carries chords.
+ * `prehandoff-lyrics-unaligned`: lyric lines have no bar to stand on, so the joined lyrics leave them out.
  */
 export const NOTICE_CODES = [
   "command-refused",
@@ -33,6 +34,7 @@ export const NOTICE_CODES = [
   "prehandoff-syllables-far",
   "prehandoff-vocal-range",
   "prehandoff-melody-chords",
+  "prehandoff-lyrics-unaligned",
 ] as const;
 
 /** Machine-readable reason of a notice. Hosts may key their own handling on it. */

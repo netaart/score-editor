@@ -175,9 +175,10 @@ export interface Messages {
   /** A handoff that was not sent, once for a conflict and once for a failed save. */
   handoffNotSentConflict: string;
   handoffNotSentFailed: string;
-  /** The four pre-handoff notices the review shows and the host is told once per opening. */
+  /** The five pre-handoff notices the review shows and the host is told once per opening. */
   prehandoffNoSections: string;
   prehandoffSyllablesFar(syllables: number, notes: number): string;
+  prehandoffLyricsUnaligned(count: number, firstWords: ReadonlyArray<string>): string;
   prehandoffVocalRange(medianName: string, high: boolean): string;
   /** The legend under the change log while an entry is marked by the last step. */
   changeLogMarked: string;
@@ -547,6 +548,8 @@ const en: Messages = {
     "This score has no sections, so the new song has no section names. Click the “Unnamed” bar above the notes and choose “Name this section”.",
   prehandoffSyllablesFar: (syllables, notes) =>
     `The lyrics have ${syllables} ${syllables === 1 ? "syllable" : "syllables"}, but the melody has ${notes} ${notes === 1 ? "note" : "notes"}. Check that each lyric line fits its notes.`,
+  prehandoffLyricsUnaligned: (count, firstWords) =>
+    `${count} lyric ${count === 1 ? "line is" : "lines are"} not aligned to a bar: ${firstWords.map((words) => `“${words}”`).join(", ")}. Put ${count === 1 ? "it" : "them"} on ${count === 1 ? "a bar" : "bars"} or delete ${count === 1 ? "it" : "them"}; the joined lyrics leave ${count === 1 ? "it" : "them"} out.`,
   prehandoffVocalRange: (medianName, high) =>
     `The vocal's middle note is ${medianName}, ${high ? "above" : "below"} its singable range (C4 to A#5). ${high ? "Lower" : "Raise"} it with the Voice octave tool.`,
   changeLogMarked: "Marked: changed by your last step.",
@@ -871,6 +874,8 @@ const zh: Messages = {
   prehandoffNoSections: "这份乐谱没有段落，新歌就没有段落名。点乐谱上方的“未命名”段落条，选“给这段命名”。",
   prehandoffSyllablesFar: (syllables, notes) =>
     `歌词有 ${syllables} 个音节，旋律有 ${notes} 个音。请检查每行歌词是否对上它的音符。`,
+  prehandoffLyricsUnaligned: (count, firstWords) =>
+    `有 ${count} 行歌词没有对上小节：${firstWords.map((words) => `“${words}”`).join("、")}。请把${count === 1 ? "它" : "它们"}放到小节上或删掉；拼回的歌词里没有${count === 1 ? "这一行" : "这些行"}。`,
   prehandoffVocalRange: (medianName, high) =>
     `人声的中间音是 ${medianName}，${high ? "高于" : "低于"}可唱范围（C4 至 A#5）。可用人声移八度工具${high ? "降下来" : "升上去"}。`,
   changeLogMarked: "带标记的条目是你上一步改动的。",
