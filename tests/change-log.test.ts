@@ -69,6 +69,17 @@ describe("the change log", () => {
     expect(log(changed({ score: SCORE_WITH_TITLE }))).toEqual(["Edited the score text directly."]);
     expect(log(changed({ score: SCORE_WITH_TITLE }), "zh")).toEqual(["直接修改了乐谱文本。"]);
   });
+
+  it("says the lyrics changed for a draft saved on the old one-bar layout", () => {
+    const oldDraft = changed({
+      lyricLines: [
+        { text: "la la", phrase: { firstBar: 0, barCount: 1 } },
+        { text: "ha ha", phrase: { firstBar: 2, barCount: 1 } },
+      ],
+    });
+    expect(log(oldDraft)).toEqual(["Lyrics changed."]);
+    expect(log(oldDraft, "zh")).toEqual(["歌词有改动。"]);
+  });
 });
 
 describe("section changes, read from the two scores", () => {

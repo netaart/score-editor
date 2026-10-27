@@ -976,7 +976,7 @@ test.describe("when the song changes under the track", () => {
     await expect(unaligned(page).getByRole("listitem")).toHaveText(["最后一句"]);
   });
 
-  test("a song that has lyrics only as text is laid out one line to a bar, and an edit names the right line", async ({
+  test("a song that has lyrics only as text lays them over phrases, and an edit names the right line", async ({
     page,
     harness,
     press,
@@ -989,6 +989,9 @@ test.describe("when the song changes under the track", () => {
     await expect(phrases(page).getByRole("listitem")).toHaveCount(3);
     await expect(phrase(page, 2)).toHaveAccessibleName(
       /^Line 2, bar 2, 4 syllables and 4 note starts, equal: 戊己庚辛$/,
+    );
+    await expect(phrase(page, 3)).toHaveAccessibleName(
+      /^Line 3, bars 3 to 6, 4 syllables and 16 note starts, they differ: 壬癸子丑$/,
     );
     await press(phrase(page, 2));
     await textbox(page).fill("戊己庚辛壬");
