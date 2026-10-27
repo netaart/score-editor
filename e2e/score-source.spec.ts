@@ -702,8 +702,8 @@ test.describe("a real score as a score file", () => {
 });
 
 test.describe("the handoff with a score file", () => {
-  const handoffButton = (page: Page) => page.getByRole("button", { name: "Regenerate…", exact: true });
-  const review = (page: Page) => page.getByRole("dialog", { name: "Check before regenerating", exact: true });
+  const handoffButton = (page: Page) => page.getByRole("button", { name: "Hand to agent…", exact: true });
+  const review = (page: Page) => page.getByRole("dialog", { name: "Check before you hand to agent", exact: true });
 
   test("a missing required input opens the Project panel on it; the title is the file name", async ({
     page,
@@ -732,7 +732,7 @@ test.describe("the handoff with a score file", () => {
     await expect(handoffButton(page)).toBeVisible();
     await press(handoffButton(page));
     await expect(review(page)).toBeVisible();
-    await press(review(page).getByRole("button", { name: "Regenerate with this version", exact: true }));
+    await press(review(page).getByRole("button", { name: "Hand to agent", exact: true }));
 
     await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
     const [handoff] = await harness.handoffs();
@@ -899,17 +899,17 @@ test.describe("the handoff with a score file", () => {
     await deleteD(page, press);
     await harness.externalScore(THEIR_SCORE);
     await press(handoffButton(page));
-    await press(review(page).getByRole("button", { name: "Regenerate with this version", exact: true }));
+    await press(review(page).getByRole("button", { name: "Hand to agent", exact: true }));
 
     await expect(conflictStrip(page)).toBeVisible();
     expect(await harness.handoffs()).toEqual([]);
     expect(await harness.notices()).toContainEqual({
       code: "handoff-not-sent",
       level: "warning",
-      message: "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
+      message: "Not sent: this score file was changed somewhere else. Choose a version, then hand to agent.",
     });
     await expect(page.locator(".sce-part-toolbar [role=status].sce-sr-only")).toHaveText(
-      "Not sent: this score file was changed somewhere else. Choose a version, then regenerate.",
+      "Not sent: this score file was changed somewhere else. Choose a version, then hand to agent.",
     );
 
     await press(chooseButton(page));
@@ -925,21 +925,21 @@ test.describe("the handoff with a score file", () => {
   }) => {
     const line = page.locator(".sce-handoff-source");
     await openFile(harness, { handoff: true });
-    await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
+    await press(page.getByRole("button", { name: "Hand to agent…", exact: true }));
     await expect(review(page)).toBeVisible();
-    await expect(line).toHaveText("tune.abc is saved. This sends the song.");
+    await expect(line).toHaveText("tune.abc is saved. The song goes into the chat box; you send it.");
     await page.keyboard.press("Escape");
 
     await deleteD(page, press);
-    await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
+    await press(page.getByRole("button", { name: "Hand to agent…", exact: true }));
     await expect(line).toBeVisible();
-    await expect(line).toHaveText("Saves tune.abc first, then sends the song.");
+    await expect(line).toHaveText("Saves tune.abc first, then puts the song in the chat box.");
     await page.keyboard.press("Escape");
 
     await harness.destroy();
     await harness.mount({ score: { text: QUARTERS }, handoff: true });
-    await press(page.getByRole("button", { name: "Regenerate…", exact: true }));
-    await expect(line).toHaveText("Your original is kept. This sends your edited version.");
+    await press(page.getByRole("button", { name: "Hand to agent…", exact: true }));
+    await expect(line).toHaveText("Your original is kept. Your edited version goes into the chat box; you send it.");
   });
 
   test("a failed save in a handoff says it was not sent", async ({ page, harness, press }) => {
@@ -947,16 +947,16 @@ test.describe("the handoff with a score file", () => {
     await deleteD(page, press);
     await harness.failScoreNext("save");
     await press(handoffButton(page));
-    await press(review(page).getByRole("button", { name: "Regenerate with this version", exact: true }));
+    await press(review(page).getByRole("button", { name: "Hand to agent", exact: true }));
 
     expect(await harness.handoffs()).toEqual([]);
     expect(await harness.notices()).toContainEqual({
       code: "handoff-not-sent",
       level: "warning",
-      message: "Not sent: the score file was not saved. Try again, then regenerate.",
+      message: "Not sent: the score file was not saved. Try again, then hand to agent.",
     });
     await expect(page.locator(".sce-part-toolbar [role=status].sce-sr-only")).toHaveText(
-      "Not sent: the score file was not saved. Try again, then regenerate.",
+      "Not sent: the score file was not saved. Try again, then hand to agent.",
     );
   });
 
@@ -964,7 +964,7 @@ test.describe("the handoff with a score file", () => {
     await openFile(harness, { handoff: true });
     await deleteD(page, press);
     await press(handoffButton(page));
-    await press(review(page).getByRole("button", { name: "Regenerate with this version", exact: true }));
+    await press(review(page).getByRole("button", { name: "Hand to agent", exact: true }));
 
     await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
     expect((await harness.scoreCalls()).map((call) => call.method)).toEqual(["save"]);

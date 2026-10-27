@@ -166,9 +166,9 @@ export function mountToolbar(el: HTMLElement, session: EditingSession, options: 
     live,
     ...(options.onRefused === undefined ? {} : { onRefused: options.onRefused }),
   });
-  // Restore original and Regenerate… are mounted by the editor into this slot, between the editing cluster and the song
+  // Restore original and Hand to agent… are mounted by the editor into this slot, between the editing cluster and the song
   // controls: a comment takes no box and keeps the DOM order the Tab order reads.
-  const restoreAnchor = doc.createComment("restore original and regenerate");
+  const restoreAnchor = doc.createComment("restore original and hand off");
   strip.appendChild(restoreAnchor);
   // The view switch ends the bar; the preview control follows it. Both are in sight at rest, and the strip's own width
   // can never move them: it takes a line of its own on a phone and shares one with the bar on a wide box.

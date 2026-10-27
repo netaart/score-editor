@@ -148,17 +148,17 @@ async function openEditor(harness: Harness, draft: string, options: Record<strin
 }
 
 const handoffButton = (page: Page, language: "en" | "zh" = "en") =>
-  page.getByRole("button", { name: language === "zh" ? "重新生成…" : "Regenerate…", exact: true });
+  page.getByRole("button", { name: language === "zh" ? "交给 agent…" : "Hand to agent…", exact: true });
 
 const dialog = (page: Page, language: "en" | "zh" = "en") =>
-  page.getByRole("dialog", { name: language === "zh" ? "重新生成前核对" : "Check before regenerating", exact: true });
+  page.getByRole("dialog", { name: language === "zh" ? "交给 agent 前核对" : "Check before you hand to agent", exact: true });
 
 const changeList = (page: Page, language: "en" | "zh" = "en") =>
   dialog(page, language).getByRole("list", { name: language === "zh" ? "改动记录" : "Changes", exact: true });
 
 const confirmButton = (page: Page, language: "en" | "zh" = "en") =>
   page.getByRole("button", {
-    name: language === "zh" ? "用这版重新生成" : "Regenerate with this version",
+    name: language === "zh" ? "交给 agent" : "Hand to agent",
     exact: true,
   });
 
@@ -546,7 +546,7 @@ test.describe("a slow handoff", () => {
 
     await releaseWrite(page);
     await expect.poll(async () => (await harness.handoffs()).length).toBe(1);
-    await expect(trigger).toHaveText("Regenerate…");
+    await expect(trigger).toHaveText("Hand to agent…");
     await expect(trigger).toHaveAttribute("aria-busy", "false");
     await expect(trigger).toBeEnabled();
   });

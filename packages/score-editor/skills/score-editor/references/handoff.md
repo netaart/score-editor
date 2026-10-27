@@ -67,7 +67,7 @@ review repeats them. The edge is `notice.code`: the editor sends each pre-handof
 once each time the review opens, not on every redraw, says the lead line once through the toolbar's live region, and
 shows no line and sends nothing when none applies. The review's first line says where the edits go: for a generated score
 the original is kept, for a saved score file the file is saved, and for a dirty file the review says `Saves <file> first,
-then sends the song.` The "far from" edge is one syllable per lyric line: a melisma or a held note may move the
+then puts the song in the chat box.` The "far from" edge is one syllable per lyric line: a melisma or a held note may move the
 count by that much, more than that per line means the lyrics were written for another melody.
 
 ## The handoff in `mount`
@@ -90,10 +90,10 @@ const editor = mount(el, {
 });
 ```
 
-The toolbar shows **Regenerate…** in the strip after Restore original and before the song controls, only while the editor is
+The toolbar shows **Hand to agent…** in the strip after Restore original and before the song controls, only while the editor is
 editable and `onHandoff` is given; read-only, or without the callback, there is no button. It opens a review headed
-**Check before regenerating**, whose first line names where the edits go, then the pre-handoff notices with their count
-lead, then the change log and the action **Regenerate with this version**. Pressing that action:
+**Check before you hand to agent**, whose first line names where the edits go, then the pre-handoff notices with their count
+lead, then the change log and the action **Hand to agent**. Pressing that action:
 
 1. takes the payload from the project the review showed;
 2. saves the draft through the keeper's `handoff()` at once, with the handoff hash of that project's joined lyrics and
@@ -109,7 +109,7 @@ is bounded by the window and scrolls a long change list, so the action stays rea
 in that review.
 
 With a score-file source the same trigger saves the file first when it is dirty (the review says `Saves <file> first,
-then sends the song.`), uses the last saved project as the change log's original, and does not call the host on a
+then puts the song in the chat box.`), uses the last saved project as the change log's original, and does not call the host on a
 conflict or a failed save. A conflict is answered by the conflict banner; a failed save draws a one-action notice in the
 chrome with the `handoffNotSentFailed` sentence and **Save again**, which goes through the same save path as the Save
 button and Ctrl/Cmd+S, so the live region says **Saved** after it, until the next successful save. Both

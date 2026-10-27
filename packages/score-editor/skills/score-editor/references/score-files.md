@@ -144,7 +144,7 @@ inputs…`); pressing it opens the Project panel on the first missing field, exc
 and open the lyric track's new-line editor on its text box, with the first row below the pinned head. A required empty
 field's hint starts `Required to regenerate.` Filling the field recomputes the state, and the ordinary trigger comes back.
 
-With a score file, the handoff saves first when the file is dirty (the review says `Saves <file> first, then sends the
+With a score file, the handoff saves first when the file is dirty (the review says `Saves <file> first, then puts the song in the
 song.`; conflict and failure keep the callback closed and send `handoff-not-sent` plus the toolbar live region), the
 change log compares with the last saved project, and the instruction's title is the file's name. With a generated
 score, the draft is saved first as [handoff.md](handoff.md) describes.
