@@ -2,23 +2,42 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
-## Unreleased
+## 0.4.5
+
+No export of 0.4.4 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
+`@neta-art/score-dialect-song2`, and all 146 type exports of the core are still exported. `tests/entries.test.ts` checks
+every runtime name with `in` (a removal or rename fails `pnpm test`) and lists every 0.4.4 type in tuples the type-check
+compiles (a removal or rename fails `pnpm typecheck`); both lists are taken from the `v0.4.4` tag. `git diff
+v0.4.4..origin/integration/v1 -- packages/*/src` shows no exported shape change: `Messages` in `i18n.ts` gained
+`draftConflictCancel`, `draftConflictOverwritten` and `draftConflictLoaded`, but `Messages` is not exported from either
+package entry (the entry exports no `Messages` name), so it is not a host-facing type. A `Score`, `SongProject`,
+`MountOptions`, `ScoreCommand` or `NoticeCode` written for 0.4.4 still type-checks and no exhaustive `switch` needs a new
+case. Three behaviours a 0.4.4 host can notice are listed under Changed and Fixed: the conflict banner's outcome
+sentences and Chinese label, the conflict dialog opening on Cancel, and the inherited draft after a score loses its last
+line break; the song2 writer also keeps a lowercase X5 tail.
 
 ### Changed
 
 - **The conflict banner says what a choice did.** After loading theirs the editor's live region says **Loaded the other
   version. Your changes in this window were replaced.** ("已载入对方的版本，这个窗口里的修改已被替换。"), and after
   overwriting it says **Saved your version over the other one.** ("已用你的版本覆盖。"). The Chinese button that opens
-  the choices is now **选择版本**, so it no longer shares its name with the toolbar's Select.
+  the choices is now **选择版本**, so it no longer shares its name with the toolbar's Select. (`c1ba754`)
 
 ### Fixed
 
-- **The conflict dialog opens on Cancel.** Its visible Cancel button takes the focus when the dialog opens, so Enter
-  pressed by habit closes it and writes nothing; Cancel, Escape and light dismiss return the focus to Choose. Both
-  conflict kinds share the banner.
+- **A lowercase X5 tail is left alone.** The writer's check for whether the cut tail still reads as unfinished matched
+  only uppercase note letters, so a lowercase tail such as `C16-|c` was rewritten even when nothing changed (for example
+  `C16-|=B,`): `serialize(parse(text))` did not give the text back, and `setTempo` changed the tail as well as the `Q:`
+  line. The check now reads lowercase letters with their octave and keeps the tail's bytes, restoring both. The
+  regression came with `a0ce468` (released in 0.4.3 and 0.4.4); a score saved with a rewritten tail under those versions
+  keeps that text, because nothing rewrites it back. (`7e196e8`)
 - **A regenerated song inherits the draft it was handed off from when the score comes back without its last line break.**
   The handoff hash now ignores trailing whitespace in the joined lyrics and the score, as song2 returns them, and the
   inheritance check compares the same way. A draft whose handoff hash is the old raw source hash is still accepted.
+  (`75d2c48`, `8273225`)
+- **The conflict dialog opens on Cancel.** Its visible Cancel button takes the focus when the dialog opens, so Enter
+  pressed by habit closes it and writes nothing; Cancel, Escape and light dismiss return the focus to Choose. Both
+  conflict kinds share the banner. (`c1ba754`)
 
 ## 0.4.4
 
