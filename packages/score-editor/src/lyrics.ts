@@ -77,11 +77,72 @@ interface LegacyGroup {
   readonly lines: string[];
 }
 
+/** One way to split a run of bars into one phrase per line: its misalignment cost and its lengths in line order. */
+interface PhraseSplit {
+  readonly cost: number;
+  readonly squareLengths: number;
+  readonly lengths: ReadonlyArray<number>;
+}
+
+/** The tie-break a phrase split needs: lowest cost, then most even lengths, then the earliest boundaries. */
+function comparePhraseSplits(left: PhraseSplit, right: PhraseSplit): number {
+  if (left.cost !== right.cost) return left.cost - right.cost;
+  if (left.squareLengths !== right.squareLengths) return left.squareLengths - right.squareLengths;
+  for (let index = 0; index < left.lengths.length; index += 1) {
+    const difference = (left.lengths[index] as number) - (right.lengths[index] as number);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
 /**
- * Lays a legacy `lyrics` text onto a score: a label selects the first unused section with that name, and its lines go
- * one per bar from the section's first bar. Lines before the first label go into the unnamed opening section, or into
- * the first section when the score has none. Lines that do not fit and lines under a label with no section go to the
- * unaligned area in text order.
+ * The phrase lengths for one section's lines, chosen over every way to split `firstBar` through `endBar - 1` into one
+ * non-empty run per line. Cost is the sum of |line syllables - phrase onsets|; ties prefer even lengths, then the
+ * earliest boundaries.
+ */
+function phraseLengths(
+  score: Score,
+  firstBar: number,
+  endBar: number,
+  lines: ReadonlyArray<string>,
+): ReadonlyArray<number> {
+  const count = lines.length;
+  const bars = endBar - firstBar;
+  if (count === 0) return [];
+  if (count > bars) return [];
+  const syllables = lines.map((text) => lyricSyllables(text).length);
+  const splits: (PhraseSplit | null)[][] = Array.from({ length: bars + 1 }, () =>
+    Array<PhraseSplit | null>(count + 1).fill(null),
+  );
+  (splits[0] as (PhraseSplit | null)[])[0] = { cost: 0, squareLengths: 0, lengths: [] };
+
+  for (let used = 1; used <= bars; used += 1) {
+    const row = splits[used] as (PhraseSplit | null)[];
+    for (let line = 1; line <= Math.min(used, count); line += 1) {
+      let best: PhraseSplit | null = null;
+      for (let length = 1; length <= used - (line - 1); length += 1) {
+        const previous = splits[used - length]?.[line - 1] ?? null;
+        if (previous === null) continue;
+        const phrase = { firstBar: firstBar + used - length, barCount: length };
+        const candidate: PhraseSplit = {
+          cost: previous.cost + Math.abs((syllables[line - 1] as number) - noteOnsets(score, phrase).length),
+          squareLengths: previous.squareLengths + length * length,
+          lengths: [...previous.lengths, length],
+        };
+        if (best === null || comparePhraseSplits(candidate, best) < 0) best = candidate;
+      }
+      row[line] = best;
+    }
+  }
+  return (splits[bars]?.[count] ?? null)?.lengths ?? [];
+}
+
+/**
+ * Lays a legacy `lyrics` text onto a score: a label selects the first unused section with that name, and its lines are
+ * spread phrase by phrase over the section's bars, minimising the syllable-to-onset gap the way `phraseLengths` says.
+ * Lines before the first label go into the unnamed opening section, or into the first section when the score has none.
+ * When a group has more lines than bars it keeps one bar per line for the first lines; those extras, lines that do not
+ * fit and lines under a label with no section go to the unaligned area in text order.
  */
 export function layoutLyrics(score: Score, lyrics: string): LyricLine[] {
   const groups: LegacyGroup[] = [{ name: null, lines: [] }];
@@ -100,15 +161,22 @@ export function layoutLyrics(score: Score, lyrics: string): LyricLine[] {
   const unaligned: LyricLine[] = [];
   const place = (sectionIndex: number, group: LegacyGroup): void => {
     const section = score.sections[sectionIndex] as Section;
-    let bar = cursors.get(sectionIndex) ?? section.firstBar;
+    const start = cursors.get(sectionIndex) ?? section.firstBar;
     const end = section.firstBar + section.barCount;
-    for (const text of group.lines) {
-      if (bar < end) {
-        lines.push({ text, phrase: { firstBar: bar, barCount: 1 } });
-        bar += 1;
-      } else {
-        unaligned.push({ text, phrase: null });
-      }
+    const available = end - start;
+    if (group.lines.length === 0) return;
+    if (group.lines.length > available) {
+      group.lines.forEach((text, index) => {
+        if (index < available) lines.push({ text, phrase: { firstBar: start + index, barCount: 1 } });
+        else unaligned.push({ text, phrase: null });
+      });
+      cursors.set(sectionIndex, end);
+      return;
+    }
+    let bar = start;
+    for (const [index, length] of phraseLengths(score, start, end, group.lines).entries()) {
+      lines.push({ text: group.lines[index] as string, phrase: { firstBar: bar, barCount: length } });
+      bar += length;
     }
     cursors.set(sectionIndex, bar);
   };

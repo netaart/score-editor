@@ -2,6 +2,12 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## Unreleased
+
+### Changed
+
+- **A song whose lyrics come as one text now spreads each section's lines over the section's bars by their syllables.** The editor chooses the phrases that fit each line's syllable count instead of putting one line on each bar, so a section's words reach its second half and its lines are no longer bunched at the start.
+
 ## 0.4.5
 
 No export of 0.4.4 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
