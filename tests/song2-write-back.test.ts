@@ -724,6 +724,15 @@ V: Vocal
     expect(score.truncation).toEqual({ voice: "Vocal", bar: 1, short: true });
   });
 
+  it("keeps a lowercase X5 tail byte for byte on an unchanged score", () => {
+    const input = `${H1}
+K:C
+V: Vocal
+C16-|c`;
+
+    expect(song2Dialect.serialize(parse(input))).toBe(input);
+  });
+
   it("deletes a bar before the cut and keeps the tie into the X5 tail", () => {
     const input = `${H1}
 K:C
