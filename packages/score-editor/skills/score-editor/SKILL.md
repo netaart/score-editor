@@ -61,13 +61,17 @@ and checking it before handing it over.
 - The editor is styled by `--sce-*` variables and isolated by its own style sheet; classes are internal. Theme only through the variables in [references/theme.md](references/theme.md).
 - `abcjs` is the package's one runtime dependency, for the staff view. It is loaded with `import()` when `mountStaffView` runs (the default editor does that the first time the staff is shown), never on import, so a host that does not mount the staff view loads none of it. See [references/view-parts.md](references/view-parts.md#the-text-view-the-staff-view-and-the-view-switch).
 - Dialects are passed in explicitly through `createDialectRegistry`; there is no global registry and no runtime dependency between the packages.
-- Make exactly the change the user asked for. A command rewrites only the bars it touches and refuses rather than half-applies; do not replace a whole score to change one note. If you must write text, keep every other bar note for note (same pitches, onsets and durations) and keep the lyric syllable count when a melody changes.
+- Make exactly the change the user asked for. A command rewrites only the bars it touches and refuses rather than half-applies; do not replace a whole score to change one note. If you must write text, keep every other bar note for note (same pitches, onsets and durations). When a melody under a lyric line changes, fitting the line again is a composition question; see [Composing](#composing).
 - Look identifiers and versions up. `modelId` must equal a registered dialect's `id`; note ids come from `noteId(voice, start)` or the parsed model; tool ids and parameter names come from the registry; command names and refusal codes come from [the package README](../../README.md#commands). The skill ships at the installed package version, so check that version before copying code from an example.
 - Before you return a score: it parses with no error diagnostics, it has no non-notice diagnostic, the dialect's `check` returns `[]`, every untouched bar and line is byte for byte the same, and the report names the change and any notices. If a check fails, return the diagnostics and the unchanged project.
 
 ## What this package does not do
 
 It edits and reads score text. It does not generate music, call a model or a network API, store drafts by itself, talk to a host's chat, manage files or permissions, export MIDI or PDF, or play a real instrument. The draft keeper is the headless half and the host supplies the store; the score-file keeper calls the host's versioned `save` and `read`, and the host maps them to its file. `onHandoff` only calls the host's callback with the attachment, instruction and project, and the host decides where they go. Choosing paths, chat and permissions belong to the host. The synth preview is a browser preview, not a render of the final song. If a request needs one of those, name the layer that owns it instead of looking for it here.
+
+## Composing
+
+This skill covers the editor and the score text, not songwriting. For song form, melody and range, fitting lyrics to phrases, harmony, the style description and when to revise or regenerate, install `@neta-art/song-composition` and read `node_modules/@neta-art/song-composition/skills/song-composition/SKILL.md`.
 
 ## Recipes, smallest first
 
