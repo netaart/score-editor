@@ -1,6 +1,6 @@
 {
   "name": "@neta-art/score-dialect-song2",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "The song2 score dialect for @neta-art/score-editor.",
   "keywords": [
     "score-editor",
