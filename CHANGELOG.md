@@ -2,6 +2,19 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
+## 0.4.7
+
+Documentation only. No source file changed since 0.4.6, so every export and type of 0.4.6 is still there with the same
+shape; 0.4.6 added none over 0.4.5, so the 0.4.5 lists in `tests/entries.test.ts` already cover them.
+
+### Changed
+
+- **The skill sends composing questions to `@neta-art/song-composition`.** A new **Composing** section names the package
+  and its skill for song form, melody and range, fitting lyrics to phrases, harmony, the style description and when to
+  revise or regenerate. The rule and `references/edit-a-score.md` no longer ask to keep a lyric line's syllable count
+  when its melody changes; they point at that section instead. (`92a380c`)
+- **`RULES.md` W16 says whose cut a bar command may state in `Ins`:** a boundary cut of `Vocal`. (`2489590`)
+
 ## 0.4.6
 
 No export of 0.4.5 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
