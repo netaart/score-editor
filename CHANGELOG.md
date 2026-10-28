@@ -2,12 +2,25 @@
 
 Both packages share one version. The README's [Publish](README.md#publish) section has the release steps.
 
-## Unreleased
+## 0.4.6
+
+No export of 0.4.5 was removed or renamed: all 81 runtime exports of `@neta-art/score-editor`, all 3 of
+`@neta-art/score-dialect-song2`, and all 146 type exports of the core are still exported. `tests/entries.test.ts` checks
+every runtime name with `in` (a removal or rename fails `pnpm test`) and lists every 0.4.5 type in tuples the type-check
+compiles (a removal or rename fails `pnpm typecheck`); both lists are taken from the `v0.4.5` tag. No export or type
+shape changed this round, so a `Score`, `SongProject`, `MountOptions`, `ScoreCommand`, `NoticeCode` or layout function
+written for 0.4.5 still type-checks and no exhaustive `switch` needs a new case. The behaviour a 0.4.5 host can notice is
+the new phrase layout for a song whose lyrics come as one text; a draft saved by 0.4.5 or earlier on the old one-bar
+layout lists **Lyrics changed.** on its first review after the update.
 
 ### Changed
 
-- **A song whose lyrics come as one text now spreads each section's lines over the section's bars by their syllables.** The editor chooses the phrases that fit each line's syllable count instead of putting one line on each bar, so a section's words reach its second half and its lines are no longer bunched at the start.
-- **A draft saved by 0.4.5 or earlier for a song whose lyrics came as one text keeps its lines on the old one-bar phrases.** The first review after the update therefore lists **Lyrics changed.** even though the words are the same.
+- **A song whose lyrics come as one text now spreads each section's lines over the section's bars by their syllables.**
+  The editor chooses the phrases that fit each line's syllable count instead of putting one line on each bar, so a
+  section's words reach its second half and its lines are no longer bunched at the start. (`13a66ae`, `c43baf2`)
+- **A draft saved by 0.4.5 or earlier for a song whose lyrics came as one text keeps its lines on the old one-bar
+  phrases.** The first review after the update therefore lists **Lyrics changed.** even though the words are the same.
+  (`13a66ae`)
 
 ## 0.4.5
 
