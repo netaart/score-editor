@@ -73,9 +73,9 @@ hand-written whole score over the file. The command already wrote the score and 
 
 The layer preserves what the command did not touch: an unchanged bar keeps its original bytes, and an untouched line
 stays byte for byte the same. That is the property to rely on for "only change this bar". If the request really needs
-`replaceScoreText`, keep every other bar note for note (same pitches, onsets and durations) and keep the syllable
-count of any lyric line whose melody changes; a silent whole-score rewrite is a different song, not a formatting
-change.
+`replaceScoreText`, keep every other bar note for note (same pitches, onsets and durations); a silent whole-score
+rewrite is a different song, not a formatting change. Fitting a lyric line to a melody that changed is a composition
+question: see [Composing](../SKILL.md#composing).
 
 Compare before handing it over, if your host can: exactly the requested bar should differ. If other lines changed, do
 not hand the result over as a one-bar edit.
