@@ -121,7 +121,7 @@ A score command through `applyProjectCommand` remaps the stored lines, or an old
 
 ## The multitrack part
 
-`SongProject.multitrack` is optional, so a project built before it existed still opens. A project without it reads as the default part: the three dialect voices in their default timbres (`lead` for `vocal`, `square-lead` for `instrumental`, `pad` for `chords`), each at unity volume and centred, with no score tracks, no audio tracks, no bindings, no base take and no time map. The part holds what the multitrack editor adds to a song and no audio: the recordings stay in the takes a song2 task produced. The score text does not change. It still writes only the dialect's voices and lyrics; the score tracks a person adds are kept in the part, in the package's own note structure, not through the dialect.
+`SongProject.multitrack` is optional, so a project built before it existed still opens. A project without it reads as the default part: the three dialect voices in their default timbres (`lead` for `vocal`, `square-lead` for `instrumental`, `pad` for `chords`), each at unity volume and centred, with no score tracks, no audio tracks, no bindings, no base take and no time map. The part holds what the multitrack editor adds to a song and no audio: the recordings stay in the takes a song2 task produced. The score text does not change. It still writes what it wrote before (the dialect's voices, chords, sections and lyrics); the score tracks a person adds are kept in the part, in the package's own note structure, not through the dialect.
 
 The fields, each plain data:
 
