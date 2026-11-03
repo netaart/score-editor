@@ -53,6 +53,9 @@ change. The tests in the repository check that the list stays complete.
 | `previewNote` | core | Sounds one MIDI pitch for a short time; resolves whether it sounded. Takes `PreviewNoteOptions`. |
 | `schedulePreview` | core | Turns a `Score` and a start tick into timed note and chord events: a `PreviewSchedule`. Pure. |
 | `tickAtSeconds` | core | The tick at a time from the score's start, following tempo changes and staying at the end past it. Pure. |
+| `createStretchNode` | core | Makes a `StretchNode` in an `AudioContext` or `OfflineAudioContext`: an `AudioWorkletNode` with two output channels that plays 16-bit stems through a time map, which `setSegments` replaces while it plays. Takes `StretchNodeOptions`; resolves once the processor is loaded. |
+| `renderStretch` | core | Renders stems through a time map offline, with the same processor as the node, and returns the two channels as `Float32Array`s. Takes `RenderStretchOptions`. |
+| `int16Stem` | core | Converts one channel of decoded audio to 16-bit samples (scaled by 32768, rounded, clamped), so a 16-bit file comes back exactly. Pure. |
 | `contentHash` | core | The lowercase SHA-256 of the UTF-8 bytes of `JSON.stringify([lyrics, score])`. |
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
 | `readDraft` | core | Reads a stored text as a `ScoreDraft`; a version 1 text reads with the default multitrack part, and another version or a malformed text is null. |
@@ -249,6 +252,15 @@ change. The tests in the repository check that the list stays complete.
 | `PreviewEvent` | A `PreviewNoteEvent` or a `PreviewChordEvent`. |
 | `PreviewNoteEvent` | `{ kind: "note", voice, midi, at, length }`. |
 | `PreviewChordEvent` | `{ kind: "chord", name, midis, at, length }`; `midis` is bass first. |
+
+## Time-stretch types
+
+| Export | What it is |
+| --- | --- |
+| `StretchSegment` | `{ output, input, rate, active }` in seconds: from `output` on, the stem plays from `input` at `rate`; `active: false` stops playback there. |
+| `StretchNode` | The `AudioWorkletNode` that `createStretchNode` returns, with `setSegments(segments)`, which replaces the map from the next processing block. |
+| `StretchNodeOptions` | `{ stems, segments, fixedOffsetSeconds? }`: one 16-bit array per channel at the context's rate, the map, and the engine's fixed output delay the node takes off (0.0029 s by default). |
+| `RenderStretchOptions` | `StretchNodeOptions` plus `sampleRate` and `seconds`, for `renderStretch`. |
 
 ## Draft types
 
