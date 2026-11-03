@@ -214,3 +214,6 @@ export type {
   DuplicateNotesCommand,
   PasteNotesCommand,
 } from "./commands-place";
+// Time stretch: the stems and the time map of a track, live and offline.
+export type { RenderStretchOptions, StretchNode, StretchNodeOptions, StretchSegment } from "./stretch";
+export { createStretchNode, int16Stem, renderStretch } from "./stretch";
