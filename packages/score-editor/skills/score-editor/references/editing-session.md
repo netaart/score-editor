@@ -51,9 +51,9 @@ const session = createEditingSession({
 
 | Method | Effect |
 | --- | --- |
-| `dispatch(command, origin?)` | Applies one command as one history step, recorded with `origin` (`EditOrigin`, see below). `command` is a `ScoreCommand`, a `ProjectCommand` or a `HistoryCommand`; a history command adds no step, and like an edit it is refused while its origin carries a stopped batch. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. A command that comes back with notices only (`isNoticeDiagnostic`) is taken: the result is `ok` with the notices in `diagnostics`. |
+| `dispatch(command, origin?)` | Applies one command as one history step, recorded with `origin` (`EditOrigin`, see below). `command` is a `ScoreCommand`, a `ProjectCommand` or a `HistoryCommand`; a history command adds no step, and like an edit it is refused while its origin carries a stopped batch, and an agent's `undoBatch` of a stopped batch is refused too. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. A command that comes back with notices only (`isNoticeDiagnostic`) is taken: the result is `ok` with the notices in `diagnostics`. |
 | `dispatchAll(commands, origin?)` | Applies a list of `ScoreCommand` and `ProjectCommand` as one history step through the same path as `dispatch`, all or none, and announces one change. Returns `DispatchResult`. One refusal refuses the whole list and changes nothing; the notices of the steps that were taken come back once each. An empty list adds no step. It is how one gesture that needs several commands (dragging a boundary two lyric lines share) stays one undo. |
-| `stopBatch(batch)` | Marks a batch as stopped by the user. Later edits, tool runs and history commands whose origin carries the batch are refused, and the edits already made stay. The rules are in the section below. |
+| `stopBatch(batch)` | Marks a batch as stopped by the user. Later edits, tool runs and history commands whose origin carries the batch are refused, and so is an agent's `undoBatch` of the batch; the edits already made stay. The rules are in the section below. |
 | `checkScoreText(text)` | What `dispatch` of `replaceScoreText` with `text` would say: the diagnostics it would be refused with, or the notices it would be taken with, the song-project rules included; a result with no diagnostic that `isNoticeDiagnostic` rejects is a text the session takes. Changes and announces nothing. |
 | `setActiveView(name)` | Shows another view. Throws `RangeError` for a name outside `VIEW_NAMES`. |
 | `setRejectedText(next \| null)` | Says which unreadable text the text view holds, or that it holds none. No-op for the same text. |
@@ -98,10 +98,10 @@ The history commands go through `dispatch` like an edit, and none of them adds a
 
 `stopBatch(batch)` is the user's stop. It marks the batch: from then on `dispatch`, `dispatchAll` and `runTool` refuse an edit
 that carries it with `batch-stopped`, whose text says the user stopped the batch, and `dispatch` refuses the history commands
-(`undo`, `redo`, `undoBatch`) whose origin carries it, the same way. The edits the batch already made stay. The user's own
-history commands carry no batch, so they still work, and the user takes the stopped batch back with `undoBatch`; the batch an
-`undoBatch` names is not checked, since the origin decides whose command it is. Other batches and the user's edits are not
-refused. The marks are kept when `replaceProject` starts a new document, since the history goes and the stop does not. A mark
+(`undo`, `redo`, `undoBatch`) whose origin carries it, the same way. An agent's `undoBatch` that names the stopped batch is
+refused with `batch-stopped` whatever batch the agent's origin carries, since a stop means the agent may no longer act on that
+batch. The edits the batch already made stay. The user's own history commands carry no batch and are not refused, so the user
+takes the stopped batch back with `undoBatch`. Other batches and the user's edits are not refused. The marks are kept when `replaceProject` starts a new document, since the history goes and the stop does not. A mark
 is announced once as the change `"batch-stop"`.
 
 The headless functions (`applyProjectCommand`, `applyScoreCommand`, `applyCommandList`) hold no history, so they do not take

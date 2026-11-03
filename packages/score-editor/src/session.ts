@@ -216,8 +216,9 @@ export interface EditingSession {
   readonly rewrittenBars: ReadonlyArray<number>;
   /**
    * Marks a batch as stopped by the user. From then on an edit, a tool run or a history command whose origin carries the
-   * batch is refused with `batch-stopped`, saying the user stopped it. The edits it already made stay. The user's own
-   * history commands still take them back, since they carry no batch.
+   * batch is refused with `batch-stopped`, saying the user stopped it, and so is an agent's `undoBatch` that names the
+   * batch, whatever batch the agent's origin carries. The edits it already made stay. The user's own history commands
+   * still take them back, since they carry no batch.
    */
   stopBatch(batch: string): void;
   /**
@@ -226,7 +227,8 @@ export interface EditingSession {
    * back with notices only is taken: the project changes as one step, and the result is `ok` with the notices in
    * `diagnostics`. `origin` says who made the edit, its batch and its sentence; without it the edit is the user's,
    * in no batch. A history command (`undo`, `redo`, `undoBatch`) moves the history instead and adds no step of its own;
-   * like an edit, it is refused while its origin carries a stopped batch.
+   * like an edit, it is refused while its origin carries a stopped batch, and an agent's `undoBatch` of a stopped batch is
+   * refused too.
    */
   dispatch(command: ScoreCommand | ProjectCommand | HistoryCommand, origin?: EditOrigin): DispatchResult;
   /**
@@ -632,13 +634,20 @@ export function createEditingSession(options: SessionOptions): EditingSession {
 
   /**
    * The history commands: a step back or forward, or a batch back to before its first step. They add no step of their
-   * own. As an edit is, one is refused while its origin carries a batch the user stopped. The batch it names is not
-   * checked, since the user takes a stopped batch back with exactly that command.
+   * own. As an edit is, one is refused while its origin carries a batch the user stopped. An agent's `undoBatch` is also
+   * refused for a stopped batch it names, whatever batch its origin carries: a stop means the agent may no longer act on
+   * that batch. The user's own `undoBatch` takes a stopped batch back.
    */
   function runHistoryCommand(command: HistoryCommand, origin: EditOrigin | undefined): DispatchResult {
     const stoppedBy = stoppedDiagnostic(origin);
     if (stoppedBy !== undefined) return { ok: false, project, diagnostics: [stoppedBy] };
-    if (command.type === "undoBatch") return undoBatch(command.batch, command.confirm === true);
+    if (command.type === "undoBatch") {
+      if (stepOf(origin).author !== "user" && stopped.has(command.batch)) {
+        const refusal = commandRefusal("batch-stopped", { batch: command.batch }).diagnostic;
+        return { ok: false, project, diagnostics: [refusal] };
+      }
+      return undoBatch(command.batch, command.confirm === true);
+    }
     if (command.type === "undo" ? undoStep() : redoStep()) return { ok: true, project, diagnostics: [] };
     const code = command.type === "undo" ? "nothing-to-undo" : "nothing-to-redo";
     return { ok: false, project, diagnostics: [commandRefusal(code, {}).diagnostic] };

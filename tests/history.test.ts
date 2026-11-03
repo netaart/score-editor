@@ -281,6 +281,29 @@ describe("stopping a batch", () => {
     expect(session.steps).toStrictEqual([{ ...origin, note: "Rested the E" }]);
   });
 
+  it("refuses an agent's undoBatch that names a stopped batch, whatever batch the agent's origin carries, and still lets the user take it back", () => {
+    const session = open();
+    session.dispatch(
+      { type: "toRest", noteId: "Vocal:512" },
+      { author: "agent-a", batch: "run-6", note: "Rested the E" },
+    );
+    session.stopBatch("run-6");
+    const before = session.project;
+
+    for (const origin of [{ author: "agent-b", batch: "run-7" }, { author: "agent-b" }]) {
+      const result = session.dispatch({ type: "undoBatch", batch: "run-6" }, origin);
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["batch-stopped"]);
+      expect(result.diagnostics[0]?.params).toStrictEqual({ batch: "run-6" });
+      expect(result.project).toBe(before);
+    }
+    expect(session.project.score).toBe(SCORE_WITHOUT_E);
+    expect(session.steps).toStrictEqual([{ author: "agent-a", batch: "run-6", note: "Rested the E" }]);
+
+    expect(session.dispatch({ type: "undoBatch", batch: "run-6" }).ok).toBe(true);
+    expect(session.project.score).toBe(SCORE);
+  });
+
   it("is kept on record, and is announced once as a change of its own", () => {
     const session = open();
     const changes: SessionChange[] = [];
