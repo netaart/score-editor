@@ -561,12 +561,22 @@ function writeBody(
 /** The header line song2 writes for Ins, used only when the model gained the voice. */
 const INS_HEADER = 'V: Ins clef=treble name="Ins Melody" snm="Inst."';
 
-/** The source header up to the key line, with an Ins voice line added when the model has one the source did not. */
+/**
+ * The source header up to the key line, with an Ins voice line added when the model has one the source did not. The key
+ * line states the model's first key, the header key the reader starts from, so a score that starts in another key keeps it.
+ */
 function headerLines(score: Score, facts: SourceFacts): string[] {
   const head = facts.lines.slice(0, facts.keyIndex);
-  const key = facts.lines.slice(facts.keyIndex, facts.keyIndex + 1);
+  const key = facts.lines.slice(facts.keyIndex, facts.keyIndex + 1).map((line) => headerKeyLine(score, line));
   if (!score.voices.includes("Ins") || head.some((line) => line.startsWith("V: Ins"))) return [...head, ...key];
   return [...head, INS_HEADER, ...key];
+}
+
+/** The header key line the model asks for; the source line is kept when it already states that key. */
+function headerKeyLine(score: Score, line: string): string {
+  const headerKey = score.keys[0]?.key;
+  if (headerKey === undefined || stripTrailingWhitespace(line).slice(2) === headerKey) return line;
+  return `K:${headerKey}`;
 }
 
 /** Writes a complete score whose bars moved: unchanged pieces keep their bytes. */
