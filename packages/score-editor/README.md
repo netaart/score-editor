@@ -277,6 +277,35 @@ const { events, length } = schedulePreview(score, 512); // notes and chords in s
 - `previewNote(midi, { duration })` is the single-note preview, for a view that sounds a note as the user draws or selects it: a whole MIDI number from 0 to 127 (a `RangeError` otherwise), for 0.35 seconds unless `duration` says otherwise, kept between 0.02 and 10 seconds. It resolves `true` once the note sounded.
 - `schedulePreview(score, fromTick = 0)` is the headless half: a pure function from a `Score` to `{ events, fromTick, secondsPerTick, length }`, where an event is a note (`voice`, `midi`) or a chord (`name`, `midis`, bass first) with `at` and `length` in seconds. `secondsPerTick` is the opening tempo's; `tickAtSeconds(score, seconds)` turns a host player's time back into a tick, tempo changes included, and stays at the end past the score's last second. Both run in Node and in a worker.
 
+## Time stretch
+
+A track's stems can be played through a time map that keeps their pitch: `createStretchNode` plays them in real time, and `renderStretch` renders the same stems through the same map offline. The engine is Signalsmith Stretch 1.3.2 (MIT; its notice is kept in the bundle), built into the package as WebAssembly and run in an AudioWorklet of its own.
+
+```ts
+import { createStretchNode, int16Stem, renderStretch } from "@neta-art/score-editor";
+import type { StretchSegment } from "@neta-art/score-editor";
+
+const context = new AudioContext();
+const decoded = await context.decodeAudioData(fileBytes);
+const stems = [int16Stem(decoded.getChannelData(0)), int16Stem(decoded.getChannelData(1))];
+const map: StretchSegment[] = [
+  { output: 0, input: 0, rate: 5 / 6, active: true }, // 4 s of input over 4.8 s of output
+  { output: 4.8, input: 4, rate: 1, active: false }, // then stops
+];
+const node = await createStretchNode(context, { stems, segments: map });
+node.connect(context.destination);
+node.setSegments(newMap); // takes effect from the next processing block, while it plays
+
+const [left, right] = await renderStretch({ stems, segments: map, sampleRate: context.sampleRate, seconds: 4.8 });
+```
+
+- `segments` are `{ output, input, rate, active }` in seconds: from `output` on, the stem plays from `input` at `rate` input seconds per output second. `active: false` ends playback. Before the first entry the node is silent. The table is the whole map: a shift before the first anchor or after the last is an entry of its own, at rate 1.
+- Stems are one `Int16Array` per channel at the context's sample rate, so decode in the context, which resamples to its rate. One array plays on both channels. `int16Stem` scales the decoded samples by 32768 and rounds them, so a 16-bit file comes back exactly.
+- The node reads ahead by the engine's latency and takes a fixed output delay off the read point, 0.0029 s by default: the delay the pulse self-check measured in Chromium. `fixedOffsetSeconds` replaces it, and `0` leaves the delay in.
+- `renderStretch` runs the same processor code in an `OfflineAudioContext` that the node runs in a real-time context.
+- `createStretchNode` loads `stretch-worklet.js` next to the package's `index.js`, by URL. A bundler must serve that file from the same folder as the package's JavaScript. Each node is one track; the package sets no limit on how many.
+- The engine, the browsers it was run in and the cost per track are in [DESIGN.md](../../DESIGN.md). The reference for agents is [the headless layer](skills/score-editor/references/headless-layer.md#time-stretch).
+
 ## Score files, save and save-as
 
 `MountOptions.source` tells the editor where the score came from. A **score file** is a host document, so its edits are
