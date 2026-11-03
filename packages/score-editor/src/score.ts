@@ -1,5 +1,6 @@
 // ABOUTME: The dialect-agnostic score and song-project model: plain immutable data with no behaviour and no DOM.
 // ABOUTME: Positions and lengths are integer ticks of 1/1024 note, so every value the song2 format permits is exact.
+import type { ChangeRecord } from "./change-records";
 import type { MultitrackPart } from "./multitrack";
 
 /** The tick unit of the score model. The song2 format's finest value, a 1/1024 note, is one tick. */
@@ -126,6 +127,9 @@ export interface LyricLine {
   readonly phrase: LyricPhrase | null;
 }
 
+/** How a song ends: its last bar leads back to the opening, or stops there. */
+export type SongEnding = "back-to-start" | "end-here";
+
 /**
  * The song project that carries a score. The lyric field and the multitrack part are optional, so a project built before
  * either existed still opens.
@@ -142,6 +146,16 @@ export interface SongProject {
   readonly lyricLines?: ReadonlyArray<LyricLine>;
   /** The multitrack part; absent means the default one, with no added score tracks and no audio tracks. */
   readonly multitrack?: MultitrackPart;
+  /** The mood the song was started with, by its name only: the mood's definition lives in the library. */
+  readonly mood?: string;
+  /** How the last bar ends. */
+  readonly ending?: SongEnding;
+  /** The batches the user stopped, in the order they were stopped; absent means none. */
+  readonly stoppedBatches?: ReadonlyArray<string>;
+  /** Milliseconds since the epoch of the last handoff of output; absent before the first one. */
+  readonly handedOutAt?: number;
+  /** The agent batches the editor has not seen yet, oldest first; absent means none. */
+  readonly changeRecords?: ReadonlyArray<ChangeRecord>;
 }
 
 export function noteId(voice: string, start: number): string {

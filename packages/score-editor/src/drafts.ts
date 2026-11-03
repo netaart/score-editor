@@ -1,7 +1,8 @@
 // ABOUTME: The draft document a host stores by source key: its JSON text, the content hash, and the reader that rejects other versions.
 // ABOUTME: Headless and dependency-free: the hash uses the Web Crypto subset found in browsers, Workers and Node.
+import type { ChangeRecord } from "./change-records";
 import { DEFAULT_MULTITRACK, type MultitrackPart } from "./multitrack";
-import type { LyricLine, LyricPhrase } from "./score";
+import type { LyricLine, LyricPhrase, SongEnding } from "./score";
 
 /**
  * The draft format this package writes. A later format bumps it and still reads the old one on purpose: version 1 has no
@@ -20,6 +21,16 @@ export interface DraftProject {
   readonly seed: number | null;
   /** The multitrack part, the same data a song project carries under the same name. */
   readonly multitrack: MultitrackPart;
+  /** The mood's name; absent when the song has none. */
+  readonly mood?: string;
+  /** How the last bar ends; absent when none was chosen. */
+  readonly ending?: SongEnding;
+  /** The batches the user stopped, in the order they were stopped; absent when none. */
+  readonly stoppedBatches?: ReadonlyArray<string>;
+  /** Milliseconds since the epoch of the last handoff of output; absent before the first one. */
+  readonly handedOutAt?: number;
+  /** The agent batches the editor has not seen yet, oldest first; absent when none. */
+  readonly changeRecords?: ReadonlyArray<ChangeRecord>;
 }
 
 /** The fields a version 1 draft keeps: a draft project before the multitrack part existed. */
@@ -187,10 +198,58 @@ function isMultitrack(value: unknown): value is MultitrackPart {
   );
 }
 
+/**
+ * A song project as a change record keeps it. It is the project's own fields and no change records of its own, so a
+ * record never holds another record inside it.
+ */
+function isSnapshot(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.style === "string" &&
+    typeof value.lyrics === "string" &&
+    typeof value.score === "string" &&
+    (value.scoreMode === "full" || value.scoreMode === "melody") &&
+    (value.seed === null || (typeof value.seed === "number" && Number.isInteger(value.seed))) &&
+    typeof value.modelId === "string" &&
+    typeof value.sourceKey === "string" &&
+    (value.lyricLines === undefined || (Array.isArray(value.lyricLines) && value.lyricLines.every(isLyricLine))) &&
+    (value.multitrack === undefined || isMultitrack(value.multitrack)) &&
+    value.changeRecords === undefined &&
+    hasOptionalFields(value)
+  );
+}
+
+function isChangeRecord(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.author === "string" &&
+    typeof value.batch === "string" &&
+    isNumber(value.at) &&
+    typeof value.note === "string" &&
+    Array.isArray(value.commands) &&
+    value.commands.every((command) => isRecord(command) && typeof command.type === "string") &&
+    isSnapshot(value.before)
+  );
+}
+
+/** The optional fields a draft project may carry: each is absent or of its kind, and a malformed one makes the text no draft. */
+function hasOptionalFields(value: Record<string, unknown>): boolean {
+  return (
+    (value.mood === undefined || typeof value.mood === "string") &&
+    (value.ending === undefined || value.ending === "back-to-start" || value.ending === "end-here") &&
+    (value.stoppedBatches === undefined ||
+      (Array.isArray(value.stoppedBatches) && value.stoppedBatches.every((batch) => typeof batch === "string"))) &&
+    (value.handedOutAt === undefined ||
+      (typeof value.handedOutAt === "number" && Number.isFinite(value.handedOutAt))) &&
+    (value.changeRecords === undefined ||
+      (Array.isArray(value.changeRecords) && value.changeRecords.every(isChangeRecord)))
+  );
+}
+
 /** The project of a stored text: version 1 has no multitrack part, so it reads as the default one. */
 function readProject(version: unknown, value: unknown): DraftProject | null {
   const part = isRecord(value) ? value.multitrack : undefined;
-  if (!isDraftProjectFields(value)) return null;
+  if (!isDraftProjectFields(value) || !hasOptionalFields(value)) return null;
   if (version === 1) return { ...value, multitrack: DEFAULT_MULTITRACK };
   if (version === DRAFT_FORMAT_VERSION && isMultitrack(part)) return { ...value, multitrack: part };
   return null;

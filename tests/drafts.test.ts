@@ -126,6 +126,16 @@ describe("the format versions", () => {
       updatedAt: 1_700_000_000_000,
     });
   });
+
+  it("opens an old draft with none of the mood, ending, change record, stop mark or handoff fields", () => {
+    for (const text of [VERSION_1_TEXT, draftText(draft)]) {
+      const found = readDraft(text);
+      expect(found).not.toBeNull();
+      for (const field of ["mood", "ending", "changeRecords", "stoppedBatches", "handedOutAt"] as const) {
+        expect(found?.project).not.toHaveProperty(field);
+      }
+    }
+  });
 });
 
 /** A part with an entry of every kind, written out here, so a round trip is checked against these literals. */
@@ -262,5 +272,57 @@ describe("a version 2 draft's multitrack part", () => {
 
   it.each(cases)("reads as no draft when %s", (_description, multitrack) => {
     expect(readDraft(JSON.stringify({ ...draft, project: { ...project, multitrack } }))).toBeNull();
+  });
+});
+
+/** The fields a song project keeps beside its score: each is absent, or a value of its kind; a malformed one makes the text no draft. */
+describe("the fields a song project keeps beside its score", () => {
+  it("reads a mood name back, and reads a mood that is not a name as no draft", () => {
+    expect(readDraft(JSON.stringify({ ...draft, project: { ...project, mood: "bright" } }))?.project.mood).toBe(
+      "bright",
+    );
+    expect(readDraft(JSON.stringify({ ...draft, project: { ...project, mood: 5 } }))).toBeNull();
+  });
+
+  it("reads an ending of either kind back, and any other ending as no draft", () => {
+    expect(
+      readDraft(JSON.stringify({ ...draft, project: { ...project, ending: "back-to-start" } }))?.project.ending,
+    ).toBe("back-to-start");
+    expect(readDraft(JSON.stringify({ ...draft, project: { ...project, ending: "end-here" } }))?.project.ending).toBe(
+      "end-here",
+    );
+    expect(readDraft(JSON.stringify({ ...draft, project: { ...project, ending: "fade" } }))).toBeNull();
+  });
+
+  it("reads the stopped batches back as their names, and a list of anything else as no draft", () => {
+    const stopped = { ...draft, project: { ...project, stoppedBatches: ["run-6"] } };
+    expect(readDraft(JSON.stringify(stopped))?.project.stoppedBatches).toStrictEqual(["run-6"]);
+    expect(readDraft(JSON.stringify({ ...draft, project: { ...project, stoppedBatches: [6] } }))).toBeNull();
+  });
+
+  it("reads the time of the last handoff of output back, and a time that is not a number as no draft", () => {
+    const handedOut = { ...draft, project: { ...project, handedOutAt: 1_700_000_100_000 } };
+    expect(readDraft(JSON.stringify(handedOut))?.project.handedOutAt).toBe(1_700_000_100_000);
+    expect(readDraft(JSON.stringify({ ...draft, project: { ...project, handedOutAt: "later" } }))).toBeNull();
+  });
+
+  it("reads the change records back as they were written, and a record without the project before its batch as no draft", () => {
+    const before = { ...project, modelId: "song2", sourceKey: "song-1" };
+    const record = {
+      author: "agent-a",
+      batch: "run-1",
+      at: 1_700_000_200_000,
+      note: "Rested the D",
+      commands: [{ type: "replaceScoreText", text: SCORE }],
+      before,
+    };
+    expect(
+      readDraft(JSON.stringify({ ...draft, project: { ...project, changeRecords: [record] } }))?.project.changeRecords,
+    ).toStrictEqual([record]);
+    expect(
+      readDraft(
+        JSON.stringify({ ...draft, project: { ...project, changeRecords: [{ ...record, before: undefined }] } }),
+      ),
+    ).toBeNull();
   });
 });
