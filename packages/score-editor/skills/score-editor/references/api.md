@@ -149,11 +149,14 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines` and `multitrack`. |
+| `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`, `multitrack`, `mood`, `ending`, `stoppedBatches`, `handedOutAt` and `changeRecords`. |
 | `Score` | A parsed score: tempo, optional `tempoChanges`, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, optional `drawingText`, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |
+| `SongEnding` | How the last bar ends: `"back-to-start"` or `"end-here"`. |
+| `ChangeRecord`, `ChangeBatch`, `ProjectSnapshot` | One batch of agent changes the editor has not seen, what an agent says about a batch, and the song project a batch started from. |
+| `changeRecordsOf`, `recordChangeBatch` | Lists a project's change records, oldest first; appends a batch an agent made to a project. |
 | `LyricAlignment`, `LyricSyllableNote` | A line's syllables, onsets and whether their counts are equal, and one syllable placed on its note. |
 
 ## Multitrack types

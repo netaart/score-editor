@@ -42,7 +42,7 @@ const session = createEditingSession({
 | `rejectedText` | `RejectedText \| null` (`{ text, diagnostics }`): text the text view holds that cannot be read, so the project kept the last score that could. Any change of the project, and `replaceProject`, drops it. |
 | `canUndo`, `canRedo` | Whether the history has a step in that direction. |
 | `steps` | `ReadonlyArray<HistoryStep>`: the steps `undo` would take back, oldest first. A `HistoryStep` is `{ author, batch?, note }`: who made it (`"user"`, or an agent's name), the batch it belongs to when it has one, and its sentence. Undo and redo move these records with the steps. |
-| `stoppedBatches` | `ReadonlyArray<string>`: the batches the user stopped, in the order they were stopped (see `stopBatch`). |
+| `stoppedBatches` | `ReadonlyArray<string>`: the batches the user stopped, in the order they were stopped (see `stopBatch`); the same marks are `project.stoppedBatches`. |
 
 `ScoreReading` is one of `{ kind: "score", score }`, `{ kind: "unreadable", diagnostics }`, or
 `{ kind: "no-dialect", modelId }`. Every view draws from this one reading.
@@ -72,7 +72,7 @@ const session = createEditingSession({
 
 `SessionChange` is `{ cause, project, selection, insertionPoint, view, command?, step?, gridDropped? }`. The four booleans say which state the
 change touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `step` is the `HistoryStep` the change made, undid or redid, so a view can say who made it and its sentence without reading `steps`: it is on a `"dispatch"` change that made a step (a command, a list or a tool run), on each `"undo"` change that took one back and on each `"redo"` change that brought one back, and a batch undo announces one `"undo"` change per step it takes back; it is absent on every other change. `gridDropped` is the grid put back to 1/4 because the project or the dialects could not write it, present on that one change only; `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"bar-selection"`, `"insertion-point"`, `"view"`,
-`"replace"`, `"active-view"`, `"rejected-text"`, `"grid"` or `"batch-stop"`; the last four and `"batch-stop"` touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
+`"replace"`, `"active-view"`, `"rejected-text"`, `"grid"` or `"batch-stop"`; `"bar-selection"`, `"active-view"`, `"rejected-text"` and `"grid"` touch none of the four booleans and are told by the cause alone; `"batch-stop"` sets `project`, since the mark is written into the project. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
 of the change; its error goes to `reportError`.
 
 `DispatchResult` is either `{ ok: true, project, diagnostics }` or `{ ok: false, project, diagnostics }`. The
@@ -101,8 +101,25 @@ that carries it with `batch-stopped`, whose text says the user stopped the batch
 (`undo`, `redo`, `undoBatch`) whose origin carries it, the same way. An agent's `undoBatch` that names the stopped batch is
 refused with `batch-stopped` whatever batch the agent's origin carries, since a stop means the agent may no longer act on that
 batch. The edits the batch already made stay. The user's own history commands carry no batch and are not refused, so the user
-takes the stopped batch back with `undoBatch`. Other batches and the user's edits are not refused. The marks are kept when `replaceProject` starts a new document, since the history goes and the stop does not. A mark
-is announced once as the change `"batch-stop"`.
+takes the stopped batch back with `undoBatch`. Other batches and the user's edits are not refused. The mark is written into `project.stoppedBatches`, so it is saved with the project and read back when a project opens. It is
+not a history step: undo and redo keep the marks the session holds. `replaceProject` takes the marks of the project it is
+given and keeps the ones the session already has. A mark is announced once, as the change `"batch-stop"`, which sets `project`.
+
+### Two batch undos
+
+Two commands take a batch back, and they act on different things:
+
+- `{ type: "undoBatch", batch }` (a history command) takes back the steps of the batch, and every step after its first, one
+  step of the history at a time. It works on the steps the session made, each with its author, so a step another author
+  made in between is asked for first (`batch-undo-confirm`). Each step can be redone.
+- `{ type: "undoChangeBatch", batch }` (a project command) replaces the project with the one saved before the batch's first
+  change record, as one history step. It works on the song project's change record, which holds the batches an agent made
+  while no editor was open, not on the session's steps. `undo` takes it back like any other step.
+
+Use `undoBatch` for a batch the session has been showing: every change is a step with its author, and the user can take the
+steps back one at a time. Use `undoChangeBatch` for a batch made while no editor was open: a host lists it from the record
+(`changeRecordsOf`), then keeps it (`clearChangeRecords`) or takes it back. What the record's undo keeps and replaces is in the
+package README's [Mood, ending, change records and stop marks](../../../README.md#mood-ending-change-records-and-stop-marks).
 
 The headless functions (`applyProjectCommand`, `applyScoreCommand`, `applyCommandList`) hold no history, so they do not take
 the history commands. Undo and redo are the session's.

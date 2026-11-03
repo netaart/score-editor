@@ -19,6 +19,11 @@ interface SongProject {
   sourceKey: string;
   lyricLines?: LyricLine[]; // absent: the layout comes from lyrics and the score
   multitrack?: MultitrackPart; // absent: the default part, with no added score tracks and no audio tracks
+  mood?: string; // the mood's name only
+  ending?: "back-to-start" | "end-here";
+  stoppedBatches?: string[]; // the batches the user stopped, in the order they were stopped
+  handedOutAt?: number; // milliseconds since the epoch of the last handoff of output
+  changeRecords?: ChangeRecord[]; // the agent batches the editor has not seen yet, oldest first
 }
 ```
 
@@ -26,6 +31,8 @@ interface SongProject {
 the unaligned area. Only that binding is stored; syllables, note onsets and whether their counts are equal are computed.
 
 `MultitrackPart` holds what the multitrack editor adds to a song: the settings of the three dialect voices, the added score tracks, the audio tracks placed from takes with their candidates, the bindings, the base take, the score-to-timeline map and each track's mixer. It holds no audio. Its fields, the default an absent part reads as, and the units are in the package README's [The multitrack part](../../../README.md#the-multitrack-part). The public types are `MultitrackPart`, `VoiceSettings`, `TrackMix`, `ScoreTrack`, `TrackNote`, `AudioTrack`, `Placement`, `Anchor`, `Span`, `StemName` and `TimePoint`.
+
+The mood, ending, stop marks, handed-out time and change records are optional fields of `SongProject`; their rules are in the package README's [Mood, ending, change records and stop marks](../../../README.md#mood-ending-change-records-and-stop-marks). `SongEnding` is `"back-to-start" | "end-here"`. A `ChangeRecord` is one batch of agent changes the editor has not seen: `author`, `batch`, `at` (milliseconds), `note`, `commands` and `before`, a `ProjectSnapshot` of the song project the batch started from. A `ChangeBatch` is what an agent says about a batch: a record without `before`. A `ProjectSnapshot` is a song project without its change records, stop marks and handed-out time. `recordChangeBatch(before, after, batch)` appends a batch to the project `after`, keeping `before` as the snapshot, and `changeRecordsOf(project)` lists the records, oldest first. The project commands `{ type: "undoChangeBatch", batch }` and `{ type: "clearChangeRecords" }` act on the record; the difference from a session's batch undo is in the [editing session reference](editing-session.md#two-batch-undos).
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, an optional `tempoChanges` of `{ at, tempo }` points, `voices`, `bars`, `keys`,
