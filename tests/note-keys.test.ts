@@ -317,7 +317,14 @@ describe("the inputs of a drag", () => {
     expect(session.project.score).toBe(score("z4D4z8|G16|"));
     expect(session.selection).toEqual(["Vocal:256"]);
     expect(changes).toEqual([
-      { cause: "dispatch", project: true, selection: true, insertionPoint: false, view: false },
+      {
+        cause: "dispatch",
+        project: true,
+        selection: true,
+        insertionPoint: false,
+        view: false,
+        step: { author: "user", note: "" },
+      },
     ]);
     session.undo();
     expect(session.project.score).toBe(LONE);

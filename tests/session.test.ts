@@ -267,7 +267,14 @@ describe("deleting the selection", () => {
     expect(result).toEqual({ handled: true, refused: [] });
     expect(session.project.score).toBe(SCORE_WITHOUT_D_AND_F);
     expect(changes).toEqual([
-      { cause: "dispatch", project: true, selection: false, insertionPoint: false, view: false },
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        step: { author: "user", note: "" },
+      },
     ]);
     expect(session.undo()).toBe(true);
     expect(session.project.score).toBe(SCORE);
@@ -321,7 +328,14 @@ describe("notifications", () => {
 
     session.dispatch({ type: "toRest", noteId: "Vocal:256" });
     expect(changes).toEqual([
-      { cause: "dispatch", project: true, selection: false, insertionPoint: false, view: false },
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        step: { author: "user", note: "" },
+      },
     ]);
 
     session.dispatch({ type: "toRest", noteId: "Vocal:999" });
@@ -510,7 +524,14 @@ describe("the selection", () => {
     expect(idsOf(session)).toEqual(idsBefore);
     expect(session.selection).toEqual(["Vocal:0", "Vocal:256", "Vocal:1024"]);
     expect(changes).toEqual([
-      { cause: "dispatch", project: true, selection: false, insertionPoint: false, view: false },
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        step: { author: "user", note: "" },
+      },
     ]);
 
     session.undo();
@@ -763,6 +784,7 @@ describe("a project command through the session", () => {
         insertionPoint: false,
         view: false,
         command: { type: "setStyle", style: "jazz" },
+        step: { author: "user", note: "" },
       },
     ]);
 
@@ -813,6 +835,7 @@ C4D4E4F4|G16|C16|`;
         insertionPoint: false,
         view: false,
         command: { type: "replaceScoreText", text: typed },
+        step: { author: "user", note: "" },
       },
     ]);
 

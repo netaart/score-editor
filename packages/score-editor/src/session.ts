@@ -139,6 +139,13 @@ export interface SessionChange {
    */
   readonly command?: ProjectCommand;
   /**
+   * The history step the change made, undid or redid: its author, its batch when it has one, and its sentence. It is on a
+   * `"dispatch"` change, which made the step, on each `"undo"` change, which took one back, and on each `"redo"` change,
+   * which brought one back. A batch undo announces one `"undo"` change per step it takes back. Absent on every other
+   * change.
+   */
+  readonly step?: HistoryStep;
+  /**
    * The grid that was dropped for the default because the project or the dialects no longer allow it. It is present on
    * the one change that dropped it, with `gridDropped` absent from every later change since the grid is then the
    * default already. A host can use it to say once what changed.
@@ -208,8 +215,9 @@ export interface EditingSession {
    */
   readonly rewrittenBars: ReadonlyArray<number>;
   /**
-   * Marks a batch as stopped by the user. From then on an edit that carries the batch is refused with `batch-stopped`,
-   * saying the user stopped it. The edits it already made stay; the history commands still take them back.
+   * Marks a batch as stopped by the user. From then on an edit, a tool run or a history command whose origin carries the
+   * batch is refused with `batch-stopped`, saying the user stopped it. The edits it already made stay. The user's own
+   * history commands still take them back, since they carry no batch.
    */
   stopBatch(batch: string): void;
   /**
@@ -217,7 +225,8 @@ export interface EditingSession {
    * diagnostics; a command that leaves the project as it was adds no step and announces nothing. A command that comes
    * back with notices only is taken: the project changes as one step, and the result is `ok` with the notices in
    * `diagnostics`. `origin` says who made the edit, its batch and its sentence; without it the edit is the user's,
-   * in no batch. A history command (`undo`, `redo`, `undoBatch`) moves the history instead and adds no step of its own.
+   * in no batch. A history command (`undo`, `redo`, `undoBatch`) moves the history instead and adds no step of its own;
+   * like an edit, it is refused while its origin carries a stopped batch.
    */
   dispatch(command: ScoreCommand | ProjectCommand | HistoryCommand, origin?: EditOrigin): DispatchResult;
   /**
@@ -455,12 +464,14 @@ export function createEditingSession(options: SessionOptions): EditingSession {
 
   /**
    * `following` is the selection to keep, when the change moved the notes it names to ids of their own; it replaces the
-   * current selection before ids that name no note are dropped.
+   * current selection before ids that name no note are dropped. `step` is the history step the change made, undid or
+   * redid, when it did one.
    */
   function projectChanged(
     cause: SessionChangeCause,
     command?: ProjectCommand,
     following?: ReadonlyArray<string>,
+    step?: HistoryStep,
   ): void {
     const kept = idsStillInScore(following ?? selection);
     const selectionChanged = !sameIds(kept, selection);
@@ -472,6 +483,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       project: true,
       selection: selectionChanged,
       ...(command === undefined ? {} : { command }),
+      ...(step === undefined ? {} : { step }),
       ...(gridDropped === undefined ? {} : { gridDropped }),
     });
   }
@@ -513,10 +525,13 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     futureSteps.length = 0;
     lastRewrite = rewritten;
     project = next;
-    projectChanged(cause, command, following);
+    projectChanged(cause, command, following, step);
   }
 
-  /** The refusal of an edit that carries a batch the user stopped; undefined when the edit may go on. */
+  /**
+   * The refusal of an edit, a tool run or a history command whose origin carries a batch the user stopped; undefined
+   * when it may go on.
+   */
   function stoppedDiagnostic(origin: EditOrigin | undefined): Diagnostic | undefined {
     const batch = origin?.batch;
     if (batch === undefined || !stopped.has(batch)) return undefined;
@@ -567,12 +582,13 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     const previous = past.pop();
     if (previous === undefined) return false;
     const rewritten = pastRewrite.pop() ?? [];
-    futureSteps.push(pastSteps.pop() ?? stepOf());
+    const step = pastSteps.pop() ?? stepOf();
+    futureSteps.push(step);
     future.push(project);
     futureRewrite.push(rewritten);
     lastRewrite = rewritten;
     project = previous;
-    projectChanged("undo", undefined, selectionBefore.get(previous));
+    projectChanged("undo", undefined, selectionBefore.get(previous), step);
     return true;
   }
 
@@ -583,12 +599,13 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     const next = future.pop();
     if (next === undefined) return false;
     const rewritten = futureRewrite.pop() ?? [];
-    pastSteps.push(futureSteps.pop() ?? stepOf());
+    const step = futureSteps.pop() ?? stepOf();
+    pastSteps.push(step);
     past.push(project);
     pastRewrite.push(rewritten);
     lastRewrite = rewritten;
     project = next;
-    projectChanged("redo", undefined, selectionAfter.get(next));
+    projectChanged("redo", undefined, selectionAfter.get(next), step);
     return true;
   }
 
@@ -615,9 +632,12 @@ export function createEditingSession(options: SessionOptions): EditingSession {
 
   /**
    * The history commands: a step back or forward, or a batch back to before its first step. They add no step of their
-   * own.
+   * own. As an edit is, one is refused while its origin carries a batch the user stopped. The batch it names is not
+   * checked, since the user takes a stopped batch back with exactly that command.
    */
-  function runHistoryCommand(command: HistoryCommand): DispatchResult {
+  function runHistoryCommand(command: HistoryCommand, origin: EditOrigin | undefined): DispatchResult {
+    const stoppedBy = stoppedDiagnostic(origin);
+    if (stoppedBy !== undefined) return { ok: false, project, diagnostics: [stoppedBy] };
     if (command.type === "undoBatch") return undoBatch(command.batch, command.confirm === true);
     if (command.type === "undo" ? undoStep() : redoStep()) return { ok: true, project, diagnostics: [] };
     const code = command.type === "undo" ? "nothing-to-undo" : "nothing-to-redo";
@@ -788,7 +808,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       announce("batch-stop", {});
     },
     dispatch(command, origin) {
-      if (isHistoryCommand(command)) return runHistoryCommand(command);
+      if (isHistoryCommand(command)) return runHistoryCommand(command, origin);
       return applyCommands([command], origin, isProjectCommand(command) ? command : undefined);
     },
     dispatchAll(commands, origin) {

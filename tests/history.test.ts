@@ -255,6 +255,32 @@ describe("stopping a batch", () => {
     expect(session.project.score).toBe(SCORE);
   });
 
+  it("refuses an agent's undo, redo and batch undo while its origin carries the stopped batch", () => {
+    const session = open();
+    session.dispatch(
+      { type: "toRest", noteId: "Vocal:512" },
+      { author: "agent-a", batch: "run-6", note: "Rested the E" },
+    );
+    session.dispatch({ type: "toRest", noteId: "Vocal:1024" }, { note: "Rested the G" });
+    session.dispatch({ type: "undo" });
+    session.stopBatch("run-6");
+    const before = session.project;
+    const origin = { author: "agent-a", batch: "run-6" };
+
+    for (const command of [{ type: "undo" }, { type: "redo" }, { type: "undoBatch", batch: "run-6" }] as const) {
+      const result = session.dispatch(command, origin);
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["batch-stopped"]);
+      expect(result.diagnostics[0]?.params).toStrictEqual({ batch: "run-6" });
+      expect(result.project).toBe(before);
+    }
+
+    expect(session.project).toBe(before);
+    expect(session.project.score).toBe(SCORE_WITHOUT_E);
+    expect(session.canRedo).toBe(true);
+    expect(session.steps).toStrictEqual([{ ...origin, note: "Rested the E" }]);
+  });
+
   it("is kept on record, and is announced once as a change of its own", () => {
     const session = open();
     const changes: SessionChange[] = [];
@@ -315,5 +341,93 @@ describe("the origin of a tool run and of a list of commands", () => {
 
     expect(result.ok).toBe(true);
     expect(session.steps).toStrictEqual([{ author: "agent-a", batch: "run-2", note: "Rested the D and the E" }]);
+  });
+});
+
+describe("the changes a step makes, undoes or redoes carry the step", () => {
+  it("a dispatch that makes a step carries the step its origin gives, and a user's step carries the user as its author", () => {
+    const session = open();
+    const changes: SessionChange[] = [];
+    session.subscribe((change) => changes.push(change));
+
+    session.dispatch(
+      { type: "toRest", noteId: "Vocal:256" },
+      { author: "agent-a", batch: "run-1", note: "Rested the D" },
+    );
+    session.dispatch({ type: "toRest", noteId: "Vocal:512" });
+
+    expect(changes).toStrictEqual([
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        step: { author: "agent-a", batch: "run-1", note: "Rested the D" },
+      },
+      {
+        cause: "dispatch",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        step: { author: "user", note: "" },
+      },
+    ]);
+  });
+
+  it("an undo and a redo carry the step they move, so a view can say which step went back or came forward", () => {
+    const session = open();
+    session.dispatch(
+      { type: "toRest", noteId: "Vocal:256" },
+      { author: "agent-a", batch: "run-3", note: "Rested the D" },
+    );
+    const changes: SessionChange[] = [];
+    session.subscribe((change) => changes.push(change));
+
+    session.dispatch({ type: "undo" });
+    session.dispatch({ type: "redo" });
+
+    const step = { author: "agent-a", batch: "run-3", note: "Rested the D" };
+    expect(changes).toStrictEqual([
+      { cause: "undo", project: true, selection: false, insertionPoint: false, view: false, step },
+      { cause: "redo", project: true, selection: false, insertionPoint: false, view: false, step },
+    ]);
+  });
+
+  it("a batch undo announces one undo change for each step it takes back, each carrying its own step", () => {
+    const session = open();
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" });
+    session.dispatch(
+      { type: "toRest", noteId: "Vocal:512" },
+      { author: "agent-a", batch: "run-4", note: "Rested the E" },
+    );
+    session.dispatch(
+      { type: "toRest", noteId: "Vocal:768" },
+      { author: "agent-a", batch: "run-4", note: "Rested the F" },
+    );
+    const changes: SessionChange[] = [];
+    session.subscribe((change) => changes.push(change));
+
+    session.dispatch({ type: "undoBatch", batch: "run-4" });
+
+    expect(changes).toStrictEqual([
+      {
+        cause: "undo",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        step: { author: "agent-a", batch: "run-4", note: "Rested the F" },
+      },
+      {
+        cause: "undo",
+        project: true,
+        selection: false,
+        insertionPoint: false,
+        view: false,
+        step: { author: "agent-a", batch: "run-4", note: "Rested the E" },
+      },
+    ]);
   });
 });
