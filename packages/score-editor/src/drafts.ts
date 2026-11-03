@@ -1,9 +1,13 @@
 // ABOUTME: The draft document a host stores by source key: its JSON text, the content hash, and the reader that rejects other versions.
 // ABOUTME: Headless and dependency-free: the hash uses the Web Crypto subset found in browsers, Workers and Node.
+import { DEFAULT_MULTITRACK, type MultitrackPart } from "./multitrack";
 import type { LyricLine, LyricPhrase } from "./score";
 
-/** The one draft format this package writes and reads. A later format bumps it and reads the old one on purpose. */
-export const DRAFT_FORMAT_VERSION = 1;
+/**
+ * The draft format this package writes. A later format bumps it and still reads the old one on purpose: version 1 has no
+ * multitrack part, so it reads as the default one.
+ */
+export const DRAFT_FORMAT_VERSION = 2;
 
 /** The song-project fields a draft keeps. The model ID and source key belong to the original, not to the draft. */
 export interface DraftProject {
@@ -14,12 +18,17 @@ export interface DraftProject {
   readonly score: string;
   readonly scoreMode: "full" | "melody";
   readonly seed: number | null;
+  /** The multitrack part, the same data a song project carries under the same name. */
+  readonly multitrack: MultitrackPart;
 }
+
+/** The fields a version 1 draft keeps: a draft project before the multitrack part existed. */
+type DraftProjectFields = Omit<DraftProject, "multitrack">;
 
 /** A saved edit of one source song. */
 export interface ScoreDraft {
-  /** The format version; only `DRAFT_FORMAT_VERSION` is a draft this package knows. */
-  readonly version: 1;
+  /** The format version this package writes; a version 1 text is read into this shape. */
+  readonly version: 2;
   /** The source project's key; the host maps it to its own storage. */
   readonly sourceKey: string;
   /** The content hash of the original's lyrics and score when the draft was started. */
@@ -67,7 +76,7 @@ function isLyricLine(value: unknown): value is LyricLine {
   return isRecord(value) && typeof value.text === "string" && (value.phrase === null || isPhrase(value.phrase));
 }
 
-function isDraftProject(value: unknown): value is DraftProject {
+function isDraftProjectFields(value: unknown): value is DraftProjectFields {
   return (
     isRecord(value) &&
     typeof value.style === "string" &&
@@ -80,9 +89,117 @@ function isDraftProject(value: unknown): value is DraftProject {
   );
 }
 
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** Positions and lengths of notes are whole ticks, and so is a MIDI number. */
+function isTick(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
+}
+
+function isMix(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isNumber(value.volumeDb) &&
+    isNumber(value.pan) &&
+    typeof value.mute === "boolean" &&
+    typeof value.solo === "boolean"
+  );
+}
+
+function isVoice(value: unknown): boolean {
+  return isRecord(value) && typeof value.timbre === "string" && isMix(value.mix);
+}
+
+function isTrackNote(value: unknown): boolean {
+  return isRecord(value) && isTick(value.start) && isTick(value.duration) && isTick(value.midi);
+}
+
+function isScoreTrack(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isVoice(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.drum === "boolean" &&
+    Array.isArray(value.notes) &&
+    value.notes.every(isTrackNote)
+  );
+}
+
+function isAnchor(value: unknown): boolean {
+  return isRecord(value) && isNumber(value.recording) && isNumber(value.timeline);
+}
+
+function isSpan(value: unknown): boolean {
+  return isRecord(value) && isNumber(value.start) && isNumber(value.end);
+}
+
+function isStem(value: unknown): boolean {
+  return value === null || value === "vocals" || value === "drums" || value === "bass" || value === "other";
+}
+
+function isPlacement(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.take === "string" &&
+    isStem(value.stem) &&
+    Array.isArray(value.anchors) &&
+    value.anchors.every(isAnchor) &&
+    Array.isArray(value.removed) &&
+    value.removed.every(isSpan) &&
+    typeof value.uncertain === "boolean" &&
+    Array.isArray(value.suspect) &&
+    value.suspect.every(isSpan)
+  );
+}
+
+function isAudioTrack(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isPlacement(value) &&
+    isMix(value.mix) &&
+    Array.isArray(value.candidates) &&
+    value.candidates.every(isPlacement)
+  );
+}
+
+function isTimePoint(value: unknown): boolean {
+  return isRecord(value) && isNumber(value.score) && isNumber(value.timeline);
+}
+
+function isMultitrack(value: unknown): value is MultitrackPart {
+  return (
+    isRecord(value) &&
+    isVoice(value.vocal) &&
+    isVoice(value.instrumental) &&
+    isVoice(value.chords) &&
+    Array.isArray(value.scoreTracks) &&
+    value.scoreTracks.every(isScoreTrack) &&
+    Array.isArray(value.audioTracks) &&
+    value.audioTracks.every(isAudioTrack) &&
+    Array.isArray(value.bindings) &&
+    value.bindings.every((group) => Array.isArray(group) && group.every((id) => typeof id === "string")) &&
+    (value.baseTake === null || typeof value.baseTake === "string") &&
+    (value.timeMap === null || (Array.isArray(value.timeMap) && value.timeMap.every(isTimePoint)))
+  );
+}
+
+/** The project of a stored text: version 1 has no multitrack part, so it reads as the default one. */
+function readProject(version: unknown, value: unknown): DraftProject | null {
+  const part = isRecord(value) ? value.multitrack : undefined;
+  if (!isDraftProjectFields(value)) return null;
+  if (version === 1) return { ...value, multitrack: DEFAULT_MULTITRACK };
+  if (version === DRAFT_FORMAT_VERSION && isMultitrack(part)) return { ...value, multitrack: part };
+  return null;
+}
+
 /**
- * Reads a stored text as a draft of the one version this package knows. Anything else, a later version included,
- * is no draft rather than an error: an old editor must not act on a document it does not understand.
+ * Reads a stored text as a draft of this package's format. Version 1 reads as the default multitrack part. Anything
+ * else, a later version included, is no draft rather than an error: an old editor must not act on a document it does not
+ * understand.
  */
 export function readDraft(text: string): ScoreDraft | null {
   let parsed: unknown;
@@ -93,21 +210,21 @@ export function readDraft(text: string): ScoreDraft | null {
   }
   if (
     !isRecord(parsed) ||
-    parsed.version !== DRAFT_FORMAT_VERSION ||
     typeof parsed.sourceKey !== "string" ||
     !isHash(parsed.sourceHash) ||
-    !isDraftProject(parsed.project) ||
     !(parsed.handoffHash === null || isHash(parsed.handoffHash)) ||
     typeof parsed.updatedAt !== "number" ||
     !Number.isFinite(parsed.updatedAt)
   ) {
     return null;
   }
+  const project = readProject(parsed.version, parsed.project);
+  if (project === null) return null;
   return {
     version: DRAFT_FORMAT_VERSION,
     sourceKey: parsed.sourceKey,
     sourceHash: parsed.sourceHash,
-    project: parsed.project,
+    project,
     handoffHash: parsed.handoffHash,
     updatedAt: parsed.updatedAt,
   };

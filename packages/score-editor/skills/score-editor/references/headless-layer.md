@@ -18,11 +18,14 @@ interface SongProject {
   modelId: string; // must match the dialect id, such as "song2"
   sourceKey: string;
   lyricLines?: LyricLine[]; // absent: the layout comes from lyrics and the score
+  multitrack?: MultitrackPart; // absent: the default part, with no added score tracks and no audio tracks
 }
 ```
 
 `LyricLine` is `{ text, phrase }`, where `LyricPhrase` is `{ firstBar, barCount }`; `phrase: null` puts the line in
 the unaligned area. Only that binding is stored; syllables, note onsets and whether their counts are equal are computed.
+
+`MultitrackPart` holds what the multitrack editor adds to a song: the settings of the three dialect voices, the added score tracks, the audio tracks placed from takes with their candidates, the bindings, the base take, the score-to-timeline map and each track's mixer. It holds no audio. Its fields, the default an absent part reads as, and the units are in the package README's [The multitrack part](../../../README.md#the-multitrack-part). The public types are `MultitrackPart`, `VoiceSettings`, `TrackMix`, `ScoreTrack`, `TrackNote`, `AudioTrack`, `Placement`, `Anchor`, `Span`, `StemName` and `TimePoint`.
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, an optional `tempoChanges` of `{ at, tempo }` points, `voices`, `bars`, `keys`,

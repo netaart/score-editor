@@ -789,6 +789,30 @@ describe("a project command through the session", () => {
   });
 });
 
+describe("the multitrack part through the history", () => {
+  it("is carried by a command, and undo and redo bring back each version of it as it was", () => {
+    const multitrack = {
+      vocal: { timbre: "lead", mix: { volumeDb: -3, pan: 0, mute: false, solo: false } },
+      instrumental: { timbre: "square-lead", mix: { volumeDb: 0, pan: 0, mute: false, solo: false } },
+      chords: { timbre: "pad", mix: { volumeDb: 0, pan: 0, mute: false, solo: false } },
+      scoreTracks: [],
+      audioTracks: [],
+      bindings: [],
+      baseTake: "task-base",
+      timeMap: null,
+    };
+    const session = open({ multitrack });
+
+    session.dispatch({ type: "setStyle", style: "jazz" });
+    expect(session.project).toEqual({ ...project, multitrack, style: "jazz" });
+
+    expect(session.undo()).toBe(true);
+    expect(session.project).toEqual({ ...project, multitrack });
+    expect(session.redo()).toBe(true);
+    expect(session.project).toEqual({ ...project, multitrack, style: "jazz" });
+  });
+});
+
 describe("replacing the score text", () => {
   const typed = `${HEADER}
 K:C

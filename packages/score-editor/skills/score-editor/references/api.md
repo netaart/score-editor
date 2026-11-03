@@ -55,7 +55,7 @@ change. The tests in the repository check that the list stays complete.
 | `tickAtSeconds` | core | The tick at a time from the score's start, following tempo changes and staying at the end past it. Pure. |
 | `contentHash` | core | The lowercase SHA-256 of the UTF-8 bytes of `JSON.stringify([lyrics, score])`. |
 | `draftText` | core | Writes a `ScoreDraft` as the JSON text a host stores. |
-| `readDraft` | core | Reads a stored text as a `ScoreDraft`; another version or a malformed text is null. |
+| `readDraft` | core | Reads a stored text as a `ScoreDraft`; a version 1 text reads with the default multitrack part, and another version or a malformed text is null. |
 | `createDraftKeeper` | core | Binds a session to a `DraftStore`: opens, inherits, debounces writes, resolves conflicts and restores. |
 | `sectionActions` | core | What one section offers a menu: rename, start a section at a bar, move earlier, move later, duplicate and delete, each with its command and, when the command layer would refuse it, the refusal. Asks without changing the session. |
 | `chordSlots` | core | The places a chord can go in a `Score`: the starts of notes and rests in voices the constraints allow chords on, as `ChordSlot`s. Pure. |
@@ -89,7 +89,7 @@ change. The tests in the repository check that the list stays complete.
 | `LYRICS_MAX_CHARACTERS` | core | 4000; the limit song2 generation accepts for the joined `lyrics` text. |
 | `SINGABLE_RANGE` | core | `{ min: 60, max: 82 }`: the inclusive MIDI range `vocalRange` and the pre-handoff notice share. |
 | `NOTICE_CODES` | core | The closed host message codes: `"command-refused"`, `"draft-source-changed"`, `"draft-save-failed"`, `"score-save-failed"`, `"score-load-failed"`, `"handoff-not-sent"`, `"prehandoff-no-sections"`, `"prehandoff-syllables-far"`, `"prehandoff-vocal-range"`, `"prehandoff-melody-chords"`, `"prehandoff-lyrics-unaligned"`. |
-| `DRAFT_FORMAT_VERSION` | core | 1; the draft format this package writes and reads. |
+| `DRAFT_FORMAT_VERSION` | core | 2; the draft format this package writes. Version 1 drafts are still read. |
 | `VIEW_NAMES` | core | `["arrangement", "staff", "text"]`: the views of the default editor, in the order its switch lists them. |
 | `NOTE_TOOLS` | core | The built-in note tools as `ScoreTool`s: split at the insertion point, chop on the grid, join same pitch, legato, reverse, flip, snap to key, length ×2 and ÷2, set length and fit into bars. |
 | `TOOL_GROUPS` | core | The four Tools panel groups: `["note", "quantize", "transform", "generate"]`. |
@@ -141,12 +141,28 @@ change. The tests in the repository check that the list stays complete.
 
 | Export | What it is |
 | --- | --- |
-| `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines`. |
+| `SongProject` | The document: lyrics, style, score text, score mode, seed, model id, source key, and optional `lyricLines` and `multitrack`. |
 | `Score` | A parsed score: tempo, optional `tempoChanges`, voices, bars, keys, sections, notes, chords, truncation, hasChords, unitTicks, optional `drawingText`, source. |
 | `Bar`, `Meter`, `Tempo`, `KeyChange` | The bar grid, meters, tempo and the key timeline. |
 | `Note`, `Chord`, `Section`, `Truncation` | Notes and rests, chords, sections and a cut score's incomplete tail. |
 | `LyricLine`, `LyricPhrase` | One lyric line with its text and phrase binding, and the run of bars the phrase covers. |
 | `LyricAlignment`, `LyricSyllableNote` | A line's syllables, onsets and whether their counts are equal, and one syllable placed on its note. |
+
+## Multitrack types
+
+| Export | What it is |
+| --- | --- |
+| `MultitrackPart` | The song project's multitrack part: the `vocal`, `instrumental` and `chords` voices, `scoreTracks`, `audioTracks`, `bindings`, `baseTake` and `timeMap`. |
+| `VoiceSettings` | A voice's timbre name and its `TrackMix`. |
+| `TrackMix` | `{ volumeDb, pan, mute, solo }`: volume in decibels from unity, pan from -1 to 1, and the two switches. |
+| `ScoreTrack` | An added score track: `id`, `name`, `timbre`, `drum`, `notes` and `mix`. |
+| `TrackNote` | `{ start, duration, midi }`: a note in integer ticks, with `midi` from 0 to 127. |
+| `AudioTrack` | A `Placement` with its `mix` and its `candidates`. |
+| `Placement` | One recording of a take on the base timeline: `id`, `take`, `stem`, `anchors`, `removed`, `uncertain` and `suspect`. |
+| `Anchor` | `{ recording, timeline }`, in seconds: a moment in a recording and the timeline moment it lands on. |
+| `Span` | `{ start, end }`, in seconds: a stretch of the base timeline. |
+| `StemName` | `"vocals" \| "drums" \| "bass" \| "other"`; a placement's `stem` is also `null` for the whole recording. |
+| `TimePoint` | `{ score, timeline }`, in seconds: a score time and its base-timeline time. |
 
 ## Diagnostics types
 
@@ -231,7 +247,7 @@ change. The tests in the repository check that the list stays complete.
 | Export | What it is |
 | --- | --- |
 | `ScoreDraft` | One saved edit: version, source key, source hash, `DraftProject`, handoff hash and update time. |
-| `DraftProject` | The project fields a draft keeps: style, joined `lyrics`, `lyricLines`, score text, score mode and seed. |
+| `DraftProject` | The project fields a draft keeps: style, joined `lyrics`, `lyricLines`, score text, score mode, seed and the multitrack part. |
 | `DraftStore` | The host's storage: `read`, versioned `write`, versioned `remove`, `list`. |
 | `DraftStoreEntry` | `{ text, version }`; the version is opaque and only handed back. |
 | `DraftWriteResult` | `{ ok: true, version }` or `{ ok: false, reason: "conflict" \| "failed" \| "no-access" }`; `no-access` is a score-file host's removed access, and a draft host may report the same thing as `failed`. |
