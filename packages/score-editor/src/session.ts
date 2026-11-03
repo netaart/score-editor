@@ -2,6 +2,7 @@
 // ABOUTME: Headless: it touches no DOM, so it imports and runs in Node and in a Worker like the rest of the headless layer.
 
 import { ZOOM_MAX, ZOOM_MIN } from "./arrangement";
+import { commandRefusal } from "./command-refusal";
 import type { ScoreCommand } from "./commands";
 import { type Grid, isGridAllowed, movedIds } from "./commands-notes";
 import { type PlacingCommand, placedSelection } from "./commands-place";
@@ -9,6 +10,14 @@ import { isProjectCommand, type ProjectCommand } from "./commands-project";
 import type { Diagnostic } from "./diagnostics";
 import type { DialectRegistry, ScoreDialect } from "./dialect";
 import { DEFAULT_GRID, normalizeGrid, sameGrid } from "./grid";
+import {
+  batchUndoOf,
+  type EditOrigin,
+  type HistoryCommand,
+  type HistoryStep,
+  isHistoryCommand,
+  stepOf,
+} from "./history";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolContext, ToolParameterValues, ToolResult } from "./tool";
 import { applyCommandList, applyToolRequest, previewTool as computePreview, noDialectDiagnostic } from "./tool";
@@ -91,6 +100,8 @@ export type DispatchResult =
       readonly project: SongProject;
       readonly diagnostics: ReadonlyArray<Diagnostic>;
       readonly rewrittenBars?: ReadonlyArray<number>;
+      /** A batch undo that asked first: the steps of other authors it would also take back, oldest first. */
+      readonly otherAuthorSteps?: ReadonlyArray<HistoryStep>;
     };
 
 /** What caused a change the session announces. */
@@ -105,11 +116,13 @@ export type SessionChangeCause =
   | "replace"
   | "active-view"
   | "rejected-text"
-  | "grid";
+  | "grid"
+  | "batch-stop";
 
 /**
  * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view, of
- * the rejected text or of the grid touches none of the four booleans and is told by its cause alone.
+ * the rejected text, of the grid or of a stopped batch touches none of the four booleans and is told by its cause
+ * alone.
  */
 export interface SessionChange {
   readonly cause: SessionChangeCause;
@@ -125,6 +138,13 @@ export interface SessionChange {
    * changed project alone.
    */
   readonly command?: ProjectCommand;
+  /**
+   * The history step the change made, undid or redid: its author, its batch when it has one, and its sentence. It is on a
+   * `"dispatch"` change, which made the step, on each `"undo"` change, which took one back, and on each `"redo"` change,
+   * which brought one back. A batch undo announces one `"undo"` change per step it takes back. Absent on every other
+   * change.
+   */
+  readonly step?: HistoryStep;
   /**
    * The grid that was dropped for the default because the project or the dialects no longer allow it. It is present on
    * the one change that dropped it, with `gridDropped` absent from every later change since the grid is then the
@@ -142,6 +162,10 @@ export interface EditingSession {
   readonly canUndo: boolean;
   /** Whether `redo` has a project to go forward to. */
   readonly canRedo: boolean;
+  /** The steps `undo` would take back, oldest first: who made each, its batch when it has one, and its sentence. */
+  readonly steps: ReadonlyArray<HistoryStep>;
+  /** The batches the user stopped, in the order they were stopped. */
+  readonly stoppedBatches: ReadonlyArray<string>;
   /**
    * The project's score as its dialect reads it. Every view part draws from this one reading, which stays the
    * same object until the score text, the model or the dialects change.
@@ -191,12 +215,22 @@ export interface EditingSession {
    */
   readonly rewrittenBars: ReadonlyArray<number>;
   /**
+   * Marks a batch as stopped by the user. From then on an edit, a tool run or a history command whose origin carries the
+   * batch is refused with `batch-stopped`, saying the user stopped it, and so is an agent's `undoBatch` that names the
+   * batch, whatever batch the agent's origin carries. The edits it already made stay. The user's own history commands
+   * still take them back, since they carry no batch.
+   */
+  stopBatch(batch: string): void;
+  /**
    * Applies one command to the project, as one step of the history. A refused command changes nothing and returns its
    * diagnostics; a command that leaves the project as it was adds no step and announces nothing. A command that comes
    * back with notices only is taken: the project changes as one step, and the result is `ok` with the notices in
-   * `diagnostics`.
+   * `diagnostics`. `origin` says who made the edit, its batch and its sentence; without it the edit is the user's,
+   * in no batch. A history command (`undo`, `redo`, `undoBatch`) moves the history instead and adds no step of its own;
+   * like an edit, it is refused while its origin carries a stopped batch, and an agent's `undoBatch` of a stopped batch is
+   * refused too.
    */
-  dispatch(command: ScoreCommand | ProjectCommand): DispatchResult;
+  dispatch(command: ScoreCommand | ProjectCommand | HistoryCommand, origin?: EditOrigin): DispatchResult;
   /**
    * Applies a list of commands as one step of the history, through the same path as `dispatch`: all of them apply, in
    * order, or none does, and the listeners hear one change. It is how a gesture that needs several commands, such as
@@ -204,7 +238,7 @@ export interface EditingSession {
    * steps that were taken come back once each; any other diagnostic refuses all of it. An empty list, or one that leaves
    * the project as it was, adds no step.
    */
-  dispatchAll(commands: ReadonlyArray<ScoreCommand | ProjectCommand>): DispatchResult;
+  dispatchAll(commands: ReadonlyArray<ScoreCommand | ProjectCommand>, origin?: EditOrigin): DispatchResult;
   /**
    * What `dispatch` of `replaceScoreText` with `text` would say, without changing or announcing anything: the
    * diagnostics it would be refused with, the notices it would be taken with, and none when it would take the text
@@ -218,7 +252,7 @@ export interface EditingSession {
    * history unchanged. A step that comes back with a notice does not fail the run: the run is `ok` and carries the
    * notices, each once.
    */
-  runTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
+  runTool(tool: ScoreTool, values?: ToolParameterValues, origin?: EditOrigin): ToolResult;
   /** The project a tool would make from the current project and selection, without changing or announcing anything. */
   previewTool(tool: ScoreTool, values?: ToolParameterValues): ToolResult;
   /** The UI state a tool may read: the grid, the insertion point, and the bars of the selected notes. */
@@ -298,6 +332,12 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   /** The bars each history step rewrote, in the same order as the two project lists. */
   const pastRewrite: Array<ReadonlyArray<number>> = [];
   const futureRewrite: Array<ReadonlyArray<number>> = [];
+  /** The step each entry of `past` was made by: `pastSteps[i]` took `past[i]` on to the next project. */
+  const pastSteps: HistoryStep[] = [];
+  /** The step each entry of `future` was made by, in the same order. */
+  const futureSteps: HistoryStep[] = [];
+  /** The batches the user stopped: an edit that carries one of them is refused. Kept across a replaced project. */
+  const stopped = new Set<string>();
   let lastRewrite: ReadonlyArray<number> = [];
   let dialects = options.dialects;
   let selection: ReadonlyArray<string> = [];
@@ -426,12 +466,14 @@ export function createEditingSession(options: SessionOptions): EditingSession {
 
   /**
    * `following` is the selection to keep, when the change moved the notes it names to ids of their own; it replaces the
-   * current selection before ids that name no note are dropped.
+   * current selection before ids that name no note are dropped. `step` is the history step the change made, undid or
+   * redid, when it did one.
    */
   function projectChanged(
     cause: SessionChangeCause,
     command?: ProjectCommand,
     following?: ReadonlyArray<string>,
+    step?: HistoryStep,
   ): void {
     const kept = idsStillInScore(following ?? selection);
     const selectionChanged = !sameIds(kept, selection);
@@ -443,6 +485,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       project: true,
       selection: selectionChanged,
       ...(command === undefined ? {} : { command }),
+      ...(step === undefined ? {} : { step }),
       ...(gridDropped === undefined ? {} : { gridDropped }),
     });
   }
@@ -467,9 +510,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   function commit(
     next: SongProject,
     cause: SessionChangeCause,
-    command?: ProjectCommand,
-    following?: ReadonlyArray<string>,
-    rewritten: ReadonlyArray<number> = [],
+    command: ProjectCommand | undefined,
+    following: ReadonlyArray<string> | undefined,
+    rewritten: ReadonlyArray<number>,
+    step: HistoryStep,
   ): void {
     if (following !== undefined) {
       selectionBefore.set(project, selection);
@@ -477,18 +521,33 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     }
     past.push(project);
     pastRewrite.push(rewritten);
+    pastSteps.push(step);
     future.length = 0;
     futureRewrite.length = 0;
+    futureSteps.length = 0;
     lastRewrite = rewritten;
     project = next;
-    projectChanged(cause, command, following);
+    projectChanged(cause, command, following, step);
+  }
+
+  /**
+   * The refusal of an edit, a tool run or a history command whose origin carries a batch the user stopped; undefined
+   * when it may go on.
+   */
+  function stoppedDiagnostic(origin: EditOrigin | undefined): Diagnostic | undefined {
+    const batch = origin?.batch;
+    if (batch === undefined || !stopped.has(batch)) return undefined;
+    return commandRefusal("batch-stopped", { batch }).diagnostic;
   }
 
   /** The one path a list of commands takes into the history: all apply, or none does. */
   function applyCommands(
     commands: ReadonlyArray<ScoreCommand | ProjectCommand>,
+    origin: EditOrigin | undefined,
     named?: ProjectCommand,
   ): DispatchResult {
+    const stoppedBy = stoppedDiagnostic(origin);
+    if (stoppedBy !== undefined) return { ok: false, project, diagnostics: [stoppedBy] };
     return withDialect<DispatchResult>(
       (dialect) => {
         const before = read();
@@ -507,7 +566,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
               following = placedSelection(before.score, after, only as PlacingCommand, dialect.constraints);
             }
           }
-          commit(applied.project, "dispatch", named, following, applied.rewrittenBars ?? []);
+          commit(applied.project, "dispatch", named, following, applied.rewrittenBars ?? [], stepOf(origin));
         }
         return {
           ok: true,
@@ -520,6 +579,80 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     );
   }
 
+  /** Goes back one step, moving its record to the redo side. False, and nothing changes, when there is no step. */
+  function undoStep(): boolean {
+    const previous = past.pop();
+    if (previous === undefined) return false;
+    const rewritten = pastRewrite.pop() ?? [];
+    const step = pastSteps.pop() ?? stepOf();
+    futureSteps.push(step);
+    future.push(project);
+    futureRewrite.push(rewritten);
+    lastRewrite = rewritten;
+    project = previous;
+    projectChanged("undo", undefined, selectionBefore.get(previous), step);
+    return true;
+  }
+
+  /**
+   * Goes forward one step, moving its record back to the history side. False, and nothing changes, when there is none.
+   */
+  function redoStep(): boolean {
+    const next = future.pop();
+    if (next === undefined) return false;
+    const rewritten = futureRewrite.pop() ?? [];
+    const step = futureSteps.pop() ?? stepOf();
+    pastSteps.push(step);
+    past.push(project);
+    pastRewrite.push(rewritten);
+    lastRewrite = rewritten;
+    project = next;
+    projectChanged("redo", undefined, selectionAfter.get(next), step);
+    return true;
+  }
+
+  /**
+   * Takes back every step from the batch's first one to the top. The other authors' steps among them go only when
+   * confirmed; without the confirmation the refusal lists them and nothing changes.
+   */
+  function undoBatch(batch: string, confirm: boolean): DispatchResult {
+    const plan = batchUndoOf(pastSteps, batch);
+    if (plan === undefined) {
+      return { ok: false, project, diagnostics: [commandRefusal("nothing-to-undo", { batch }).diagnostic] };
+    }
+    if (plan.otherAuthorSteps.length > 0 && !confirm) {
+      return {
+        ok: false,
+        project,
+        diagnostics: [commandRefusal("batch-undo-confirm", { batch, count: plan.otherAuthorSteps.length }).diagnostic],
+        otherAuthorSteps: plan.otherAuthorSteps,
+      };
+    }
+    for (let taken = 0; taken < plan.count; taken += 1) undoStep();
+    return { ok: true, project, diagnostics: [] };
+  }
+
+  /**
+   * The history commands: a step back or forward, or a batch back to before its first step. They add no step of their
+   * own. As an edit is, one is refused while its origin carries a batch the user stopped. An agent's `undoBatch` is also
+   * refused for a stopped batch it names, whatever batch its origin carries: a stop means the agent may no longer act on
+   * that batch. The user's own `undoBatch` takes a stopped batch back.
+   */
+  function runHistoryCommand(command: HistoryCommand, origin: EditOrigin | undefined): DispatchResult {
+    const stoppedBy = stoppedDiagnostic(origin);
+    if (stoppedBy !== undefined) return { ok: false, project, diagnostics: [stoppedBy] };
+    if (command.type === "undoBatch") {
+      if (stepOf(origin).author !== "user" && stopped.has(command.batch)) {
+        const refusal = commandRefusal("batch-stopped", { batch: command.batch }).diagnostic;
+        return { ok: false, project, diagnostics: [refusal] };
+      }
+      return undoBatch(command.batch, command.confirm === true);
+    }
+    if (command.type === "undo" ? undoStep() : redoStep()) return { ok: true, project, diagnostics: [] };
+    const code = command.type === "undo" ? "nothing-to-undo" : "nothing-to-redo";
+    return { ok: false, project, diagnostics: [commandRefusal(code, {}).diagnostic] };
+  }
+
   return {
     get project() {
       return project;
@@ -529,6 +662,9 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     },
     get canRedo() {
       return future.length > 0;
+    },
+    get steps() {
+      return [...pastSteps];
     },
     get reading() {
       return read();
@@ -550,6 +686,8 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       future.length = 0;
       pastRewrite.length = 0;
       futureRewrite.length = 0;
+      pastSteps.length = 0;
+      futureSteps.length = 0;
       lastRewrite = [];
       project = next;
       selection = [];
@@ -670,16 +808,27 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       barSelection = next;
       announce("bar-selection", {});
     },
-    dispatch(command) {
-      return applyCommands([command], isProjectCommand(command) ? command : undefined);
+    get stoppedBatches() {
+      return [...stopped];
     },
-    dispatchAll(commands) {
-      return applyCommands(commands);
+    stopBatch(batch) {
+      if (stopped.has(batch)) return;
+      stopped.add(batch);
+      announce("batch-stop", {});
     },
-    runTool(tool, values = {}) {
+    dispatch(command, origin) {
+      if (isHistoryCommand(command)) return runHistoryCommand(command, origin);
+      return applyCommands([command], origin, isProjectCommand(command) ? command : undefined);
+    },
+    dispatchAll(commands, origin) {
+      return applyCommands(commands, origin);
+    },
+    runTool(tool, values = {}, origin?: EditOrigin) {
+      const stoppedBy = stoppedDiagnostic(origin);
+      if (stoppedBy !== undefined) return { ok: false, project, diagnostics: [stoppedBy], commands: [] };
       const result = applyToolRequest(tool, { project, selection, values }, dialects, toolContext());
       if (result.ok && !sameProject(project, result.project)) {
-        commit(result.project, "dispatch", undefined, undefined, result.rewrittenBars ?? []);
+        commit(result.project, "dispatch", undefined, undefined, result.rewrittenBars ?? [], stepOf(origin));
       }
       return result;
     },
@@ -687,26 +836,10 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       return computePreview(tool, project, selection, values, dialects, toolContext());
     },
     undo() {
-      const previous = past.pop();
-      if (previous === undefined) return false;
-      const rewritten = pastRewrite.pop() ?? [];
-      future.push(project);
-      futureRewrite.push(rewritten);
-      lastRewrite = rewritten;
-      project = previous;
-      projectChanged("undo", undefined, selectionBefore.get(previous));
-      return true;
+      return undoStep();
     },
     redo() {
-      const next = future.pop();
-      if (next === undefined) return false;
-      const rewritten = futureRewrite.pop() ?? [];
-      past.push(project);
-      pastRewrite.push(rewritten);
-      lastRewrite = rewritten;
-      project = next;
-      projectChanged("redo", undefined, selectionAfter.get(next));
-      return true;
+      return redoStep();
     },
     subscribe(call) {
       const listener = { call, active: true };
