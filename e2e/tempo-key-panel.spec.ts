@@ -263,6 +263,8 @@ const lyricsRegion = (page: Page) => panel(page).getByRole("region", { name: "Ly
 async function openPanel(page: Page, press: (target: Locator) => Promise<void>) {
   await press(projectButton(page));
   await expect(panel(page)).toBeVisible();
+  // The panel takes the focus in its popover's toggle event, which runs after the popover is shown; a field focused before it is lost.
+  await expect(panel(page).locator(".sce-panel")).toBeFocused();
 }
 
 test.describe("the song project panel", () => {
