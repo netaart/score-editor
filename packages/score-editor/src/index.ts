@@ -214,3 +214,6 @@ export type {
   DuplicateNotesCommand,
   PasteNotesCommand,
 } from "./commands-place";
+// Comparing the bars of two scores.
+export type { BarCompareResult } from "./bar-compare";
+export { compareBars } from "./bar-compare";
