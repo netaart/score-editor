@@ -59,6 +59,24 @@ const ORIGINAL: SongProject = {
 /** The old song's one-bar line, which joins to ORIGINAL.lyrics ("la la"), so its arrangement belongs to the new song. */
 const INHERITED_LINES = [{ text: "la la", phrase: { firstBar: 0, barCount: 1 } }] as const;
 
+/** The default multitrack part, written out from the spec: the three dialect voices in their default timbres, nothing added. */
+const DEFAULT_PART = {
+  vocal: { timbre: "lead", mix: { volumeDb: 0, pan: 0, mute: false, solo: false } },
+  instrumental: { timbre: "square-lead", mix: { volumeDb: 0, pan: 0, mute: false, solo: false } },
+  chords: { timbre: "pad", mix: { volumeDb: 0, pan: 0, mute: false, solo: false } },
+  scoreTracks: [],
+  audioTracks: [],
+  bindings: [],
+  baseTake: null,
+  timeMap: null,
+};
+
+/** A part that differs from the default in one channel only: the Vocal voice is turned down and soloed. */
+const PART_WITH_MIX = {
+  ...DEFAULT_PART,
+  vocal: { timbre: "lead", mix: { volumeDb: -6, pan: 0, mute: false, solo: true } },
+};
+
 let clock = 1_000;
 
 type StoreCall =
@@ -175,12 +193,13 @@ function draftProject(project: SongProject): ScoreDraft["project"] {
     score: project.score,
     scoreMode: project.scoreMode,
     seed: project.seed,
+    multitrack: project.multitrack ?? DEFAULT_PART,
   };
 }
 
 async function makeDraft(project: SongProject = ORIGINAL, overrides: Partial<ScoreDraft> = {}): Promise<ScoreDraft> {
   return {
-    version: 1,
+    version: 2,
     sourceKey: project.sourceKey,
     sourceHash: expectedHash(ORIGINAL.lyrics, ORIGINAL.score),
     project: draftProject(project),
@@ -211,10 +230,29 @@ describe("opening a draft", () => {
     const { keeper, notices } = openKeeper(session);
     await keeper.ready;
 
-    expect(session.project).toEqual({ ...ORIGINAL, score: SCORE_WITHOUT_D, lyricLines: restored.project.lyricLines });
+    expect(session.project).toEqual({
+      ...ORIGINAL,
+      score: SCORE_WITHOUT_D,
+      lyricLines: restored.project.lyricLines,
+      multitrack: DEFAULT_PART,
+    });
     expect(notices).toEqual([]);
     expect(store.files.has(ORIGINAL.sourceKey)).toBe(true);
     expect(keeper.status).toBe("ready");
+  });
+
+  it("restores the multitrack part a draft holds, and the session carries it", async () => {
+    const restored = await makeDraft(ORIGINAL, {
+      project: { ...draftProject(ORIGINAL), multitrack: PART_WITH_MIX },
+    });
+    store.seed(ORIGINAL.sourceKey, JSON.stringify(restored));
+    const session = openSession();
+
+    const { keeper } = openKeeper(session);
+    await keeper.ready;
+
+    expect(session.project.multitrack).toEqual(PART_WITH_MIX);
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(true);
   });
 
   it("discards a draft whose source hash is stale and says the original changed", async () => {
@@ -263,7 +301,7 @@ describe("opening a draft", () => {
   });
 
   it("leaves a draft of a version it does not know alone, conflicts on the next write, and lets go only by overwrite", async () => {
-    const futureText = JSON.stringify({ ...(await makeDraft()), version: 2 });
+    const futureText = JSON.stringify({ ...(await makeDraft()), version: 3 });
     store.seed(ORIGINAL.sourceKey, futureText, "unknown-version");
     const session = openSession();
 
@@ -632,6 +670,23 @@ describe("keeping a draft", () => {
     expect(store.removes()).toEqual([{ method: "remove", key: ORIGINAL.sourceKey, expected: version }]);
   });
 
+  it("keeps a draft for a change of the multitrack part alone, and removes it when the part is the original's again", async () => {
+    const { keeper } = openKeeper();
+    await keeper.ready;
+    const session = keeperSession(keeper);
+
+    session.replaceProject({ ...session.project, multitrack: PART_WITH_MIX });
+    await vi.advanceTimersByTimeAsync(1000);
+    const writes = store.writes();
+    expect(writes).toHaveLength(1);
+    expect(readDraft(writes[0]?.text ?? "")?.project.multitrack).toEqual(PART_WITH_MIX);
+
+    session.replaceProject({ ...session.project, multitrack: DEFAULT_PART });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store.files.has(ORIGINAL.sourceKey)).toBe(false);
+    expect(store.removes()).toHaveLength(1);
+  });
+
   it("removes nothing when there is no draft and the change comes back inside the delay", async () => {
     const { keeper } = openKeeper();
     await keeper.ready;
@@ -826,7 +881,7 @@ describe("restoring the original", () => {
   });
 
   it("reads and removes a text it cannot read", async () => {
-    const futureText = JSON.stringify({ ...(await makeDraft()), version: 2 });
+    const futureText = JSON.stringify({ ...(await makeDraft()), version: 3 });
     store.seed(ORIGINAL.sourceKey, futureText, "unknown-version");
     const { keeper } = openKeeper();
     await keeper.ready;
