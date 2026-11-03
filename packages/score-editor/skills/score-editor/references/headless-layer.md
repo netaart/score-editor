@@ -269,6 +269,35 @@ if (score) {
   tempo change included, the last tick past the end and the first at or before zero. `secondsPerTick` is the opening
   tempo's, so use `tickAtSeconds` rather than dividing when a score has changes.
 
+## Time stretch
+
+`createStretchNode` plays a track's stems through a time map, and `renderStretch` renders them through the same map offline. The map says, for each stretch of output time, which input time plays and at what rate; the pitch is kept. `createStretchNode` takes `StretchNodeOptions` and returns a `StretchNode`; `renderStretch` takes `RenderStretchOptions`. The engine is Signalsmith Stretch 1.3.2 (MIT), bundled inside the package, so the host adds no dependency. Both functions need Web Audio and no DOM or view part; `renderStretch` needs an `OfflineAudioContext`.
+
+```ts
+import { createStretchNode, int16Stem, renderStretch } from "@neta-art/score-editor";
+import type { StretchSegment } from "@neta-art/score-editor";
+
+const context = new AudioContext();
+const decoded = await context.decodeAudioData(fileBytes); // decode in the context the node plays in
+const stems = [int16Stem(decoded.getChannelData(0)), int16Stem(decoded.getChannelData(1))];
+const map: StretchSegment[] = [
+  { output: 0, input: 0, rate: 1, active: true }, // identity from the start
+  { output: 10, input: 10, rate: 1, active: false }, // stops at 10 s
+];
+const node = await createStretchNode(context, { stems, segments: map });
+node.connect(context.destination);
+node.setSegments(laterMap); // from the next processing block, while it plays
+
+const [left, right] = await renderStretch({ stems, segments: map, sampleRate: context.sampleRate, seconds: 10 });
+```
+
+- `segments` are `{ output, input, rate, active }` in seconds; the node sorts them by `output` when it takes them. `rate` is how far the input moves per output second, so between two anchors it is `(input₂ − input₁) / (output₂ − output₁)`. Before the first entry the node is silent, and `active: false` stops it. The processor adds no shift-only region: before the first anchor and after the last, the table carries the rate-1 segments the host wants.
+- `stems` are one `Int16Array` per channel at the context's sample rate (decode in the context, or pass its `sampleRate` to `renderStretch`). One array plays on both channels. `int16Stem` scales the decoded float by 32768 and rounds, so a 16-bit file's samples come back exactly.
+- The node reads ahead by the engine's latency and takes a fixed output delay off the read point: 0.0029 s by default, the delay the pulse self-check measured in Chromium. Pass `fixedOffsetSeconds: 0` to hear the engine's delay as it is.
+- Playback is continuous. The node feeds the engine the samples the map has moved over and seeks only at a start, after silence, or on a jump its buffer cannot cover. A new map is read from the next processing block.
+- `createStretchNode` loads the processor by URL: `stretch-worklet.js`, next to the package's `index.js` (`new URL("./stretch-worklet.js", import.meta.url)`). A bundler has to serve that file from the same place as the package's JavaScript.
+- No track limit: each node is one track, and the package sets no count.
+
 ## Picking notes by conditions
 
 Use this when a note set is defined by what the notes are (the high ones, the short ones, the ones out of key, every

@@ -624,6 +624,43 @@ The synth preview is the one thing in the package that makes sound, so it has th
 
 **What the preview does about other sound.** It ignores it when it starts: it does not pause, duck or take over a host's audio, because that audio is the host's and an ambient, mixable sound is what the specification gives a context by default; and the evidence above is that the two go on side by side, neither paused (that they are heard together was not observed). It yields when another element starts: when an `<audio>` or `<video>` element in the page's document starts to play while the preview plays, the preview stops, because a media element is the stronger kind of audio in the specification ("playback" over "ambient"), a person who starts a track or a video did not mean the preview to go on over it, and a rough synthetic rendering is the one to give way. Escape also stops it, from wherever the focus is, so a person who hears it and has the focus in a lane does not have to find the toolbar again. The handler listens on the document, in the bubbling phase, and neither prevents the default nor stops the event, so a host's own Escape handler (a dialog it closes) still gets the key; a handler of the host's that stops the event below the document keeps it from the preview, which is then stopped by its button. A host whose audio is in a shadow root, an iframe or a detached `new Audio()` is not heard by the preview, and can call `previewPlayer(session).stop()` itself.
 
+### Time stretch
+
+Track playback and export share one stretch: an AudioWorklet processor per track holds the whole time map and the stems as 16-bit samples, and the offline render runs the same processor. It has no surface of its own, so this section records how it was checked, in which browsers, and what it costs. The API is in the [package README](packages/score-editor/README.md#time-stretch).
+
+**The engine.** Signalsmith Stretch 1.3.2 (MIT): the npm release's WebAssembly, unchanged, 64,494 bytes, sha256 `83869197…d8ca3`. It is embedded in `dist/index.js` as base64, and its MIT notice is kept as a legal comment, so the bundle carries the notice; the package adds no runtime dependency. The processor instantiates the module itself with the four imports it asks for and calls its exports directly; it does not use the npm package's `schedule()`.
+
+**Feeding and the map.** The processor reads its input continuously. Each block it feeds the engine only the samples the map has moved over since the last block, and seeks only at a start, after silence, or on a jump the engine's buffer cannot cover. A new map replaces the table from the next processing block. Before the first entry it is silent.
+
+**Latency and offset.** The engine's input latency at 44.1 kHz is 60 ms; the processor reads that far ahead (a run without the read-ahead moved every pulse by exactly 60 ms). The output has a fixed delay of 2.90 ms in Chromium, the same residual at rates 0.5, 1.0 and 1.5 (jitter about 0.03 ms, one sample), so the node subtracts 0.0029 s by default and the delay is read as an output-time shift along the map's rate.
+
+**Stems.** Decoded float × 32768, rounded and clamped to 16 bits. A 16-bit FLAC decodes and comes back exactly in Chromium.
+
+**Verified.** Seam 5 is `e2e/stretch.spec.ts`, on synthetic audio only.
+
+| Engine | Result |
+| --- | --- |
+| Chromium 156.0.8078.4, headless, Playwright 1.64.1, desktop project | 7 of 7 pass: identity, self-check, known map, changed map, FLAC decode exact, FLAC identity render, live swap |
+| Firefox 157.0 (Playwright 1.64.1) | Not run to a result: the browser does not complete its launch on this host (`browserType.launch` times out at 180 s; a 90 s probe times out too), so the six tests after it do not run |
+| WebKit 27.2 (Playwright, Windows) | 7 of 7 fail: the engine has no Web Audio (`OfflineAudioContext` and `AudioContext` are undefined), the same fact the synth preview section records |
+
+The breaks, each reverted and rerun in Chromium: the fixed offset removed (identity, changed and FLAC identity fail on the mean, 2.902 ms; known fails per pulse), the input read-ahead removed (every pulse 60 ms late; the live check fails), the int16 scale at 32767 (the exact FLAC test fails; the identity render does not, a one-LSB error moves no pulse), the segment lookup always using the first entry (known and changed fail on the pulse count; the live check does not, since its maps have one active entry), and the posted map ignored (the live check fails on its after grid).
+
+**The live check.** The swap and the end are timed on the audio clock. The recorder is an AudioWorklet, because a `ScriptProcessorNode` dropped blocks while the main thread was busy and drifted the recorded grid by up to 49 ms. The map is posted at 2 s and recording stops at 6 s of the same clock; the pulses before and after the post sit on their grids within 20 ms. The test allows 0.3 s after the post, which covers the message from the main thread to the processor; the block-exact timing of the switch is the processor's, and the test does not measure it.
+
+**Cost.** One run, measured here: headless Chromium 156.0.8078.4 on Windows 11, 32 logical CPUs with about 26 idle when started, 2.16 GiB of memory free. Synthetic 12 s stems, one fresh browser per count, real-time CPU over a 6 s playback window (the browser's process tree only), memory of the same tree while playing, and an offline render timed in the page.
+
+| Tracks | Real-time CPU (cores) | Memory of the tracks (MiB) | Offline render (time / audio time) |
+| --- | --- | --- | --- |
+| 1 | 0.030 | 28.9 | 0.0150 |
+| 4 | 0.063 | 44.7 | 0.0525 |
+| 8 | 0.137 | 70.6 | 0.1068 |
+| 16 | 0.239 | 84.2 | 0.2252 |
+
+Per track, from 1 to 16 tracks: about 0.014 of a core in real time and about 0.014 of render time per audio second, and about 3.7 MiB, of which 2.0 MiB is the stems at 12 s and about 1.7 MiB the engine. Extrapolated to a 161 s track: the stems take 27.1 MiB per track in int16 (two channels), so about 28.8 MiB per track and about 461 MiB for 16 tracks; the real-time CPU does not depend on the length; a 161 s render of 16 tracks takes about 36 s on the one render thread (0.2252 × 161). This is one run: the idle baseline varied by about 9 MiB between fresh browsers, so the memory figures are good to a few MiB.
+
+**Not started.** The beat check on real stems (ticket item 6) waits for the leader's test machine. Nothing here is measured on real stems.
+
 ### Chord editing
 
 **Where a chord can go.** A chord is written at the start of a note or a rest in a voice whose constraints allow chords (for `song2`, `Vocal`; `Ins` has no way in, and a start that only `Ins` has is never offered). A press on the chord row takes the start nearest to it, the earlier of two on a tie, so the person aims at a place on the time axis and does not have to hit a small target; the whole row answers, also in an empty track. A press on the name of a chord takes that chord instead, because a name is drawn a little to the right of its start and, where notes are short, another start can be nearer to its last letters; pressing a chord is asking to change it. Where a start already has a chord the picker offers Change and Remove, where it has none Place.

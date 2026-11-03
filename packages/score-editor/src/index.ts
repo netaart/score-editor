@@ -238,3 +238,6 @@ export type {
 export type { ChangeBatch, ChangeRecord, ProjectSnapshot } from "./change-records";
 export { changeRecordsOf, recordChangeBatch } from "./change-records";
 export type { SongEnding } from "./score";
+// Time stretch: the stems and the time map of a track, live and offline.
+export type { RenderStretchOptions, StretchNode, StretchNodeOptions, StretchSegment } from "./stretch";
+export { createStretchNode, int16Stem, renderStretch } from "./stretch";
