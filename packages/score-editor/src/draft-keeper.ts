@@ -3,6 +3,7 @@
 import { contentHash, DRAFT_FORMAT_VERSION, type DraftProject, draftText, readDraft, type ScoreDraft } from "./drafts";
 import { messagesFor } from "./i18n";
 import { joinLyrics, lyricLinesOf } from "./lyrics";
+import { multitrackOf, sameMultitrack } from "./multitrack";
 import type { LyricLine, SongProject } from "./score";
 import type { EditingSession, SessionChange } from "./session";
 import type { DraftStore, DraftStoreEntry, DraftWriteResult, Notice, NoticeCode } from "./types";
@@ -152,6 +153,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       score: project.score,
       scoreMode: project.scoreMode,
       seed: project.seed,
+      multitrack: multitrackOf(project),
     };
   }
 
@@ -164,6 +166,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       score: draft.project.score,
       scoreMode: draft.project.scoreMode,
       seed: draft.project.seed,
+      multitrack: draft.project.multitrack,
     };
   }
 
@@ -173,7 +176,8 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       project.lyrics !== original.lyrics ||
       project.score !== original.score ||
       project.scoreMode !== original.scoreMode ||
-      project.seed !== original.seed
+      project.seed !== original.seed ||
+      !sameMultitrack(multitrackOf(project), multitrackOf(original))
     ) {
       return false;
     }

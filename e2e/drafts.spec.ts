@@ -187,7 +187,7 @@ test.describe("a draft is written after the edits", () => {
     expect(write?.key).toBe("test-page");
     expect(write?.expected).toBeNull();
     const draft = draftOf(write);
-    expect(draft.version).toBe(1);
+    expect(draft.version).toBe(2);
     expect(draft.sourceKey).toBe("test-page");
     expect(draft.sourceHash).toBe(hashOf("", QUARTERS));
     expect(draft.project.score).toBe(WITHOUT_D);
