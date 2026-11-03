@@ -214,3 +214,17 @@ export type {
   DuplicateNotesCommand,
   PasteNotesCommand,
 } from "./commands-place";
+// The multitrack part of a song project: the data only; the audio stays with the take records.
+export type {
+  Anchor,
+  AudioTrack,
+  MultitrackPart,
+  Placement,
+  ScoreTrack,
+  Span,
+  StemName,
+  TimePoint,
+  TrackMix,
+  TrackNote,
+  VoiceSettings,
+} from "./multitrack";
