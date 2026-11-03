@@ -2,7 +2,10 @@
 // ABOUTME: Every case states hand-written scores and lyric lines; the expected bars and facts are written out by hand, not rerun from the code.
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  applyProjectCommand,
   compareBars,
+  createDialectRegistry,
+  createEditingSession,
   extractFragment,
   type LyricLine,
   type Score,
@@ -243,5 +246,268 @@ C16-|C16|D16|`;
       if (result.ok) return;
       expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["bar-out-of-range"]);
     }
+  });
+});
+
+/** The same bars 2-3 written differently: the Verse opens on A and B. */
+const OTHER_VERSE = `${HEADER}
+K:C
+% Intro
+V: Vocal
+C16|D16|
+V: Ins
+Z2|
+% Verse
+V: Vocal
+A16|B16|G16|A16|
+V: Ins
+Z4|`;
+
+/** Six bars with a Chorus of two bars after the Verse. */
+const OTHER_CHORUS = `${SIX}
+% Chorus
+V: Vocal
+B16|c16|
+V: Ins
+Z2|`;
+
+/** A Chorus that starts inside the Verse: bars 3-5 are the Chorus, bar 2 is the Verse. */
+const OTHER_CHORUS_IN_VERSE = `${HEADER}
+K:C
+% Intro
+V: Vocal
+C16|D16|
+V: Ins
+Z2|
+% Verse
+V: Vocal
+E16|
+V: Ins
+z16|
+% Chorus
+V: Vocal
+F16|G16|A16|
+V: Ins
+Z3|`;
+
+/** The Verse in 2/4 bars: the bars after the Intro are 2/4, the Verse's second line carries the meter on. */
+const OTHER_METER = `${HEADER}
+K:C
+% Intro
+V: Vocal
+C16|D16|
+V: Ins
+Z2|
+% Verse
+V: Vocal
+M:2/4
+E8-|E8|F8-|F8|
+V: Ins
+M:2/4
+z8|z8|z8|z8|
+V: Vocal
+G8-|G8|A8-|A8|
+V: Ins
+z8|z8|z8|z8|`;
+
+/** A score with no section markers: its bars are all in the unnamed opening section. */
+const UNNAMED = `${HEADER}
+K:C
+V: Vocal
+C16|D16|E16|F16|
+V: Ins
+Z4|`;
+
+/** The Verse whose first bar is tied into the bar after it. */
+const TIED_VERSE = `${HEADER}
+K:C
+% Intro
+V: Vocal
+C16|D16|
+V: Ins
+Z2|
+% Verse
+V: Vocal
+E16-|E16|F16|G16|
+V: Ins
+Z4|`;
+
+function vocalMidi(score: Score): Array<number | null> {
+  return score.notes.filter((note) => note.voice === "Vocal").map((note) => note.midi);
+}
+
+describe("adoptBars", () => {
+  const dialects = createDialectRegistry([song2Dialect]);
+
+  it("adopts a run of bars in place of the same bars, as one undoable step, and leaves the other bars and lines alone", () => {
+    const lines = [
+      { text: "one", phrase: { firstBar: 0, barCount: 1 } },
+      { text: "two", phrase: { firstBar: 2, barCount: 2 } },
+    ];
+    const session = createEditingSession({ project: project(SIX, lines), dialects });
+    const before = session.project;
+
+    const result = session.dispatch({ type: "adoptBars", other: OTHER_VERSE, bar: 2, count: 2 });
+
+    expect(result.ok).toBe(true);
+    const score = readScore(session.project.score);
+    expect(vocalMidi(score)).toEqual([60, 62, 69, 71, 67, 69]);
+    expect(song2Dialect.check(score)).toEqual([]);
+    expect(session.project.lyricLines).toEqual(lines);
+    expect(session.canUndo).toBe(true);
+    session.undo();
+    expect(session.project).toBe(before);
+    session.redo();
+    expect(readScore(session.project.score).notes.filter((note) => note.voice === "Vocal").length).toBe(6);
+  });
+
+  it("appends bars past the end of the score, with the other score's section for them", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: OTHER_CHORUS,
+      bar: 6,
+      count: 2,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    const score = readScore(result.project.score);
+    expect(score.sections.map((section) => [section.name, section.firstBar, section.barCount])).toEqual([
+      ["Intro", 0, 2],
+      ["Verse", 2, 4],
+      ["Chorus", 6, 2],
+    ]);
+    expect(vocalMidi(score)).toEqual([60, 62, 64, 65, 67, 69, 71, 72]);
+  });
+
+  it("keeps the other score's section marker where an adopted run starts one, and the Verse after it", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: OTHER_CHORUS_IN_VERSE,
+      bar: 3,
+      count: 2,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    const score = readScore(result.project.score);
+    expect(score.sections.map((section) => [section.name, section.firstBar, section.barCount])).toEqual([
+      ["Intro", 0, 2],
+      ["Verse", 2, 1],
+      ["Chorus", 3, 2],
+      ["Verse", 5, 1],
+    ]);
+    expect(vocalMidi(score)).toEqual([60, 62, 64, 65, 67, 69]);
+    expect(song2Dialect.check(score)).toEqual([]);
+  });
+
+  it("adopts a meter change and keeps the meter of the bars after it", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: OTHER_METER,
+      bar: 2,
+      count: 2,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    const score = readScore(result.project.score);
+    expect(score.bars.map((bar) => `${bar.meter.numerator}/${bar.meter.denominator}`)).toEqual([
+      "4/4",
+      "4/4",
+      "2/4",
+      "2/4",
+      "4/4",
+      "4/4",
+    ]);
+    expect(vocalMidi(score)).toEqual([60, 62, 64, 64, 67, 69]);
+    expect(song2Dialect.check(score)).toEqual([]);
+  });
+
+  it("states the key of the adopted bars and returns to the score's key after them", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: KEY_G,
+      bar: 2,
+      count: 2,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    const score = readScore(result.project.score);
+    expect(score.bars.map((bar) => bar.key)).toEqual(["C", "C", "G", "G", "C", "C"]);
+    expect(song2Dialect.check(score)).toEqual([]);
+  });
+
+  it("cuts a tie that leaves the adopted run at its end, since the other score's next bar is not adopted", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: TIED_VERSE,
+      bar: 2,
+      count: 1,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    const score = readScore(result.project.score);
+    const adopted = score.notes.filter((note) => note.voice === "Vocal" && note.bar === 2);
+    expect(adopted.map((note) => note.tie)).toEqual([false]);
+    expect(song2Dialect.check(score)).toEqual([]);
+  });
+
+  it("refuses a run the other score does not have, and leaves the score and its history unchanged", () => {
+    const session = createEditingSession({ project: project(SIX), dialects });
+    const before = session.project;
+
+    const result = session.dispatch({ type: "adoptBars", other: OTHER_VERSE, bar: 5, count: 3 });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["bar-out-of-range"]);
+    expect(session.project).toBe(before);
+    expect(session.canUndo).toBe(false);
+  });
+
+  it("refuses a run that starts past the end of the score", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: OTHER_CHORUS,
+      bar: 7,
+      count: 1,
+    });
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["bar-out-of-range"]);
+    expect(result.project.score).toBe(SIX);
+  });
+
+  it("refuses a run that reaches the score's cut", () => {
+    const result = applyProjectCommand(song2Dialect, project(CUT), {
+      type: "adoptBars",
+      other: SIX,
+      bar: 1,
+      count: 1,
+    });
+
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(["truncated-tail"]);
+    expect(result.project.score).toBe(CUT);
+  });
+
+  it("refuses a result the dialect cannot write, and leaves the score unchanged", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: UNNAMED,
+      bar: 2,
+      count: 1,
+    });
+
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.project.score).toBe(SIX);
+  });
+
+  it("refuses another score that cannot be read, with its reading diagnostics", () => {
+    const result = applyProjectCommand(song2Dialect, project(SIX), {
+      type: "adoptBars",
+      other: UNREADABLE_SCORE,
+      bar: 0,
+      count: 1,
+    });
+
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.project.score).toBe(SIX);
   });
 });
