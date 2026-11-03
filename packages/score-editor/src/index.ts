@@ -235,3 +235,6 @@ export type {
   TrackNote,
   VoiceSettings,
 } from "./multitrack";
+export type { ChangeBatch, ChangeRecord, ProjectSnapshot } from "./change-records";
+export { changeRecordsOf, recordChangeBatch } from "./change-records";
+export type { SongEnding } from "./score";

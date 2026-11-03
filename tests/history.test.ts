@@ -314,7 +314,7 @@ describe("stopping a batch", () => {
 
     expect(session.stoppedBatches).toStrictEqual(["run-6"]);
     expect(changes).toStrictEqual([
-      { cause: "batch-stop", project: false, selection: false, insertionPoint: false, view: false },
+      { cause: "batch-stop", project: true, selection: false, insertionPoint: false, view: false },
     ]);
   });
 
@@ -452,5 +452,48 @@ describe("the changes a step makes, undoes or redoes carry the step", () => {
         step: { author: "agent-a", batch: "run-4", note: "Rested the E" },
       },
     ]);
+  });
+});
+
+describe("the stop marks are kept in the song project", () => {
+  it("writes a stopped batch into the project, and announces it as a change of the project", () => {
+    const session = open();
+    const changes: SessionChange[] = [];
+    session.subscribe((change) => changes.push(change));
+
+    session.stopBatch("run-6");
+
+    expect(session.project.stoppedBatches).toStrictEqual(["run-6"]);
+    expect(changes.map((change) => change.project)).toStrictEqual([true]);
+  });
+
+  it("reads the stopped batches of a project it opens, and refuses an edit of such a batch", () => {
+    const session = createEditingSession({ project: { ...project, stoppedBatches: ["run-6"] }, dialects });
+
+    expect(session.stoppedBatches).toStrictEqual(["run-6"]);
+    const refused = session.dispatch({ type: "toRest", noteId: "Vocal:256" }, { batch: "run-6" });
+    expect(refused.ok).toBe(false);
+    expect(refused.diagnostics.map((diagnostic) => diagnostic.code)).toStrictEqual(["batch-stopped"]);
+  });
+
+  it("keeps the stop marks through undo and redo, since the history does not take them back", () => {
+    const session = open();
+    session.dispatch({ type: "toRest", noteId: "Vocal:256" }, { batch: "run-7" });
+    session.stopBatch("run-6");
+
+    expect(session.undo()).toBe(true);
+    expect(session.project.stoppedBatches).toStrictEqual(["run-6"]);
+    expect(session.redo()).toBe(true);
+    expect(session.project.stoppedBatches).toStrictEqual(["run-6"]);
+  });
+
+  it("takes the marks of a project replaced from outside, and keeps the ones the session already has", () => {
+    const session = open();
+    session.stopBatch("run-6");
+
+    session.replaceProject({ ...project, sourceKey: "history-test-2", stoppedBatches: ["run-8"] });
+
+    expect(session.stoppedBatches).toStrictEqual(["run-6", "run-8"]);
+    expect(session.project.stoppedBatches).toStrictEqual(["run-6", "run-8"]);
   });
 });

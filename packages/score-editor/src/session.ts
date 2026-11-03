@@ -17,6 +17,7 @@ import {
   type HistoryStep,
   isHistoryCommand,
   stepOf,
+  withStoppedBatches,
 } from "./history";
 import type { Score, SongProject } from "./score";
 import type { ScoreTool, ToolContext, ToolParameterValues, ToolResult } from "./tool";
@@ -121,8 +122,8 @@ export type SessionChangeCause =
 
 /**
  * One announced change: its cause, and which parts of the session's state it touched. A change of the shown view, of
- * the rejected text, of the grid or of a stopped batch touches none of the four booleans and is told by its cause
- * alone.
+ * the rejected text or of the grid touches none of the four booleans and is told by its cause alone. A stopped batch
+ * is written into the project, so its change touches the project.
  */
 export interface SessionChange {
   readonly cause: SessionChangeCause;
@@ -218,7 +219,8 @@ export interface EditingSession {
    * Marks a batch as stopped by the user. From then on an edit, a tool run or a history command whose origin carries the
    * batch is refused with `batch-stopped`, saying the user stopped it, and so is an agent's `undoBatch` that names the
    * batch, whatever batch the agent's origin carries. The edits it already made stay. The user's own history commands
-   * still take them back, since they carry no batch.
+   * still take them back, since they carry no batch. The mark is written into `project.stoppedBatches`, so it is saved
+   * with the project; it is not a history step.
    */
   stopBatch(batch: string): void;
   /**
@@ -336,8 +338,11 @@ export function createEditingSession(options: SessionOptions): EditingSession {
   const pastSteps: HistoryStep[] = [];
   /** The step each entry of `future` was made by, in the same order. */
   const futureSteps: HistoryStep[] = [];
-  /** The batches the user stopped: an edit that carries one of them is refused. Kept across a replaced project. */
-  const stopped = new Set<string>();
+  /**
+   * The batches the user stopped: an edit that carries one of them is refused. Kept across a replaced project, and written
+   * into the project the session holds, so the marks are saved with it and read back when it opens.
+   */
+  const stopped = new Set<string>(options.project.stoppedBatches ?? []);
   let lastRewrite: ReadonlyArray<number> = [];
   let dialects = options.dialects;
   let selection: ReadonlyArray<string> = [];
@@ -526,7 +531,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     futureRewrite.length = 0;
     futureSteps.length = 0;
     lastRewrite = rewritten;
-    project = next;
+    project = withStoppedBatches(next, [...stopped]);
     projectChanged(cause, command, following, step);
   }
 
@@ -589,7 +594,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     future.push(project);
     futureRewrite.push(rewritten);
     lastRewrite = rewritten;
-    project = previous;
+    project = withStoppedBatches(previous, [...stopped]);
     projectChanged("undo", undefined, selectionBefore.get(previous), step);
     return true;
   }
@@ -606,7 +611,7 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     past.push(project);
     pastRewrite.push(rewritten);
     lastRewrite = rewritten;
-    project = next;
+    project = withStoppedBatches(next, [...stopped]);
     projectChanged("redo", undefined, selectionAfter.get(next), step);
     return true;
   }
@@ -689,7 +694,8 @@ export function createEditingSession(options: SessionOptions): EditingSession {
       pastSteps.length = 0;
       futureSteps.length = 0;
       lastRewrite = [];
-      project = next;
+      for (const batch of next.stoppedBatches ?? []) stopped.add(batch);
+      project = withStoppedBatches(next, [...stopped]);
       selection = [];
       insertionPoint = null;
       barSelection = null;
@@ -814,7 +820,8 @@ export function createEditingSession(options: SessionOptions): EditingSession {
     stopBatch(batch) {
       if (stopped.has(batch)) return;
       stopped.add(batch);
-      announce("batch-stop", {});
+      project = withStoppedBatches(project, [...stopped]);
+      announce("batch-stop", { project: true });
     },
     dispatch(command, origin) {
       if (isHistoryCommand(command)) return runHistoryCommand(command, origin);

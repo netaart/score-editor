@@ -1,6 +1,7 @@
 // ABOUTME: The song-project commands and the song-project rules: style, score mode, seed, replacing the score text, the style BPM and melody chords.
 // ABOUTME: Only replaceScoreText and adoptBars read or write the score text, and only through the dialect; applyProjectCommand is the one entry that runs the rules.
 
+import { clearChangeRecords, undoChangeBatch } from "./change-records";
 import type { ScoreCommand } from "./commands";
 import { runAdoptBars } from "./commands-adopt";
 import { runLyricLineCommand } from "./commands-lyric-lines";
@@ -23,6 +24,8 @@ const PROJECT_COMMAND_TYPES = [
   "mergeLyricLines",
   "setLyricLinePhrase",
   "adoptBars",
+  "undoChangeBatch",
+  "clearChangeRecords",
 ] as const;
 
 /**
@@ -32,6 +35,8 @@ const PROJECT_COMMAND_TYPES = [
  * its index in the project's lines, and each keeps the lyric invariants or is refused with its own code.
  * `adoptBars` puts a run of bars of another score text in place of the same bars, as one edit. It is refused unless the
  * other text and the spliced score both pass the dialect's check.
+ * `undoChangeBatch` takes a batch of the change record back to the project saved before it, and `clearChangeRecords`
+ * drops the record once the editor has shown it and the user has kept it.
  */
 export type ProjectCommand =
   | { readonly type: "setStyle"; readonly style: string }
@@ -62,7 +67,9 @@ export type ProjectCommand =
       readonly bar: number;
       /** How many bars, at least one. */
       readonly count: number;
-    };
+    }
+  | { readonly type: "undoChangeBatch"; readonly batch: string }
+  | { readonly type: "clearChangeRecords" };
 
 export type ProjectCommandResult =
   | {
@@ -124,6 +131,10 @@ export function runProjectCommand(
       return runLyricLineCommand(dialect, project, command);
     case "adoptBars":
       return runAdoptBars(dialect, project, command);
+    case "undoChangeBatch":
+      return undoChangeBatch(project, command.batch);
+    case "clearChangeRecords":
+      return { ok: true, project: clearChangeRecords(project) };
   }
 }
 

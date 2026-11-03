@@ -36,6 +36,23 @@ export interface DraftProject {
 /** The fields a version 1 draft keeps: a draft project before the multitrack part existed. */
 type DraftProjectFields = Omit<DraftProject, "multitrack">;
 
+/** The optional fields a draft project keeps beside its core: each is absent, or the value the song project carries. */
+export type OptionalDraftFields = Pick<
+  DraftProject,
+  "mood" | "ending" | "stoppedBatches" | "handedOutAt" | "changeRecords"
+>;
+
+/** The optional fields of a song project or of a draft project, copied only where they are present. */
+export function optionalDraftFields(source: OptionalDraftFields): OptionalDraftFields {
+  return {
+    ...(source.mood === undefined ? {} : { mood: source.mood }),
+    ...(source.ending === undefined ? {} : { ending: source.ending }),
+    ...(source.stoppedBatches === undefined ? {} : { stoppedBatches: source.stoppedBatches }),
+    ...(source.handedOutAt === undefined ? {} : { handedOutAt: source.handedOutAt }),
+    ...(source.changeRecords === undefined ? {} : { changeRecords: source.changeRecords }),
+  };
+}
+
 /** A saved edit of one source song. */
 export interface ScoreDraft {
   /** The format version this package writes; a version 1 text is read into this shape. */
