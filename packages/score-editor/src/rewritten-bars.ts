@@ -2,8 +2,8 @@
 // ABOUTME: A bar counts as rewritten when its own content changed, and a tie change marks the bar on the other side of a barline.
 import type { Note, Score } from "./score";
 
-/** One note as a rewritten bar sees it, including whether the note before it ties into it. */
-function tiedFromPrevious(score: Score): ReadonlySet<string> {
+/** The ids of the notes that continue a tie from the note before them in their voice. */
+export function tiedFromPrevious(score: Score): ReadonlySet<string> {
   const tied = new Set<string>();
   for (const voice of score.voices) {
     const notes = score.notes.filter((note) => note.voice === voice).sort((left, right) => left.start - right.start);

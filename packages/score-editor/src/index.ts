@@ -124,6 +124,7 @@ export type {
 export { noteId, TICKS_PER_QUARTER } from "./score";
 export type { SectionAction, SectionActionName } from "./section-actions";
 export { sectionActions } from "./section-actions";
+export type { EditOrigin, HistoryCommand, HistoryStep } from "./history";
 export type {
   BarSelection,
   DispatchResult,
@@ -214,6 +215,26 @@ export type {
   DuplicateNotesCommand,
   PasteNotesCommand,
 } from "./commands-place";
+// Comparing the bars of two scores.
+export type { BarCompareResult } from "./bar-compare";
+export { compareBars } from "./bar-compare";
+// Extracting a run of whole bars as a song project of its own.
+export type { FragmentRange, FragmentResult } from "./fragment";
+export { extractFragment } from "./fragment";
+// The multitrack part of a song project: the data only; the audio stays with the take records.
+export type {
+  Anchor,
+  AudioTrack,
+  MultitrackPart,
+  Placement,
+  ScoreTrack,
+  Span,
+  StemName,
+  TimePoint,
+  TrackMix,
+  TrackNote,
+  VoiceSettings,
+} from "./multitrack";
 // Time stretch: the stems and the time map of a track, live and offline.
 export type { RenderStretchOptions, StretchNode, StretchNodeOptions, StretchSegment } from "./stretch";
 export { createStretchNode, int16Stem, renderStretch } from "./stretch";

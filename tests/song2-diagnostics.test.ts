@@ -78,6 +78,10 @@ const COMMAND_CODES: CommandDiagnosticCode[] = [
   "cut-other-voice-short",
   "voice-octave-range",
   "tool-result",
+  "nothing-to-undo",
+  "nothing-to-redo",
+  "batch-undo-confirm",
+  "batch-stopped",
 ];
 
 const NOTICE_CODES: NoticeDiagnosticCode[] = [

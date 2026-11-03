@@ -16,6 +16,7 @@ import {
 import { stripTrailingWhitespace } from "./text";
 import { cutBarHasEvent, serializeBarsSong2, serializeTruncatedBarsSong2 } from "./write-bars";
 import { keepsCutTail } from "./write-chords";
+import { keysFitSource } from "./write-keys";
 import { sectionsMatchSource } from "./write-sections";
 
 const TICKS_PER_QUARTER = 256;
@@ -355,6 +356,7 @@ function barGridNeedsWriting(score: Score, source: Song2Source): boolean {
   // A voice the source header does not have (the instrumental version adds Ins) needs the body built from the model.
   if (score.voices.includes("Ins") && !source.text.includes("\nV: Ins ")) return true;
   if (!sectionsMatchSource(score, source)) return true;
+  if (!keysFitSource(score, source)) return true;
   const content = sourceContentByBar(source);
   let oldCount = 0;
   for (const index of content.keys()) oldCount = Math.max(oldCount, index + 1);

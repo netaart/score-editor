@@ -18,11 +18,14 @@ interface SongProject {
   modelId: string; // must match the dialect id, such as "song2"
   sourceKey: string;
   lyricLines?: LyricLine[]; // absent: the layout comes from lyrics and the score
+  multitrack?: MultitrackPart; // absent: the default part, with no added score tracks and no audio tracks
 }
 ```
 
 `LyricLine` is `{ text, phrase }`, where `LyricPhrase` is `{ firstBar, barCount }`; `phrase: null` puts the line in
 the unaligned area. Only that binding is stored; syllables, note onsets and whether their counts are equal are computed.
+
+`MultitrackPart` holds what the multitrack editor adds to a song: the settings of the three dialect voices, the added score tracks, the audio tracks placed from takes with their candidates, the bindings, the base take, the score-to-timeline map and each track's mixer. It holds no audio. Its fields, the default an absent part reads as, and the units are in the package README's [The multitrack part](../../../README.md#the-multitrack-part). The public types are `MultitrackPart`, `VoiceSettings`, `TrackMix`, `ScoreTrack`, `TrackNote`, `AudioTrack`, `Placement`, `Anchor`, `Span`, `StemName` and `TimePoint`.
 
 A parsed **score** is dialect-agnostic plain data, with positions and lengths in integer ticks of a 1/1024 note
 (`TICKS_PER_QUARTER` is 256): `tempo`, an optional `tempoChanges` of `{ at, tempo }` points, `voices`, `bars`, `keys`,
@@ -333,3 +336,39 @@ if (score) {
 - `invert` takes the pitched notes of the whole score that the other conditions, `count` included, did not take. With no
   other condition it takes nothing; with conditions that take nothing it takes every note.
 - There is no cap on how many notes a filter takes.
+
+## Comparing, extracting and adopting bars
+
+Three tools work on the bars of song projects that one dialect reads. `compareBars` and `extractFragment` read and change
+nothing; `adoptBars` is a `ProjectCommand`, so `applyProjectCommand` and a session's `dispatch` take it.
+
+```ts
+import { applyProjectCommand, compareBars, extractFragment } from "@neta-art/score-editor";
+import { song2Dialect } from "@neta-art/score-dialect-song2";
+
+const diff = compareBars(song2Dialect, current, other); // two SongProjects
+if (diff.ok) console.log(diff.bars); // 0-based indices of the bars that differ, e.g. [2, 3]
+
+const piece = extractFragment(song2Dialect, current, { from: 2, count: 2 });
+if (piece.ok) save(piece.project); // a song project of its own; piece.diagnostics are its notices
+
+const adopted = applyProjectCommand(song2Dialect, current, { type: "adoptBars", other: otherText, bar: 2, count: 2 });
+```
+
+- `compareBars` reads both projects with the dialect and returns a `BarCompareResult`: `{ ok: true, bars }`, or `{ ok: false, diagnostics }` with
+  the reading diagnostics of the side that does not read. A bar differs when its meter, length, key, key changes, section
+  (its name, or whether a section starts there), notes (position, duration, pitch, tie), chords or a lyric line covering it
+  differ, or when only one of the two projects has that bar.
+- `extractFragment` takes a `FragmentRange` of whole bars (`from` is the 0-based first bar, `count` is at least 1) and returns
+  a `FragmentResult`. A range past the end is
+  refused with `bar-out-of-range`; a range that reaches the score's cut with `truncated-tail`. The fragment keeps the header,
+  sections, voices, notes and chords of those bars, and the project's style, score mode, seed, model and source key. A tie
+  whose next note is outside the range is cut at the range's edge. Lyric lines bound to bars in the range are kept, clipped
+  to it; the rest are left out. The dialect writes the fragment and reads it back, and a fragment that does not survive that
+  is refused with the dialect's diagnostics.
+- `adoptBars` (`other`, the text of another score; `bar`, the 0-based first bar; `count`, at least 1) puts the bars of `other`
+  at the same place in the project's score, replacing the bars there. A run that starts at the end of the score, or goes past
+  it, appends. It is refused, and the project and its history stay as they were, when `other` does not read, when the run
+  is not inside `other`, when it reaches a cut in either score, or when the dialect cannot write the result. The adopted bars
+  bring their keys, sections, meters and notes. The lyric lines keep their bars and are not taken from `other`. A tie that
+  would leave the run's last note is cut there. A successful adopt is one history step.

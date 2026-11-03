@@ -1,7 +1,8 @@
 // ABOUTME: The song-project commands and the song-project rules: style, score mode, seed, replacing the score text, the style BPM and melody chords.
-// ABOUTME: Only replaceScoreText reads or writes the score text, and only through the dialect; applyProjectCommand is the one entry that runs the rules.
+// ABOUTME: Only replaceScoreText and adoptBars read or write the score text, and only through the dialect; applyProjectCommand is the one entry that runs the rules.
 
 import type { ScoreCommand } from "./commands";
+import { runAdoptBars } from "./commands-adopt";
 import { runLyricLineCommand } from "./commands-lyric-lines";
 import type { Diagnostic } from "./diagnostics";
 import type { ScoreDialect } from "./dialect";
@@ -21,6 +22,7 @@ const PROJECT_COMMAND_TYPES = [
   "splitLyricLine",
   "mergeLyricLines",
   "setLyricLinePhrase",
+  "adoptBars",
 ] as const;
 
 /**
@@ -28,6 +30,8 @@ const PROJECT_COMMAND_TYPES = [
  * `replaceScoreText` replaces the whole score text with another one, and is how a person's typing reaches the project: a
  * readable text is taken, an unreadable one is refused with its first diagnostic. The lyric-line commands name a line by
  * its index in the project's lines, and each keeps the lyric invariants or is refused with its own code.
+ * `adoptBars` puts a run of bars of another score text in place of the same bars, as one edit. It is refused unless the
+ * other text and the spliced score both pass the dialect's check.
  */
 export type ProjectCommand =
   | { readonly type: "setStyle"; readonly style: string }
@@ -49,7 +53,16 @@ export type ProjectCommand =
       readonly bar?: number;
     }
   | { readonly type: "mergeLyricLines"; readonly line: number }
-  | { readonly type: "setLyricLinePhrase"; readonly line: number; readonly phrase: LyricPhrase | null };
+  | { readonly type: "setLyricLinePhrase"; readonly line: number; readonly phrase: LyricPhrase | null }
+  | {
+      readonly type: "adoptBars";
+      /** The score text the bars come from. */
+      readonly other: string;
+      /** 0-based index of the first bar; the score's bar count appends. */
+      readonly bar: number;
+      /** How many bars, at least one. */
+      readonly count: number;
+    };
 
 export type ProjectCommandResult =
   | {
@@ -109,6 +122,8 @@ export function runProjectCommand(
     case "mergeLyricLines":
     case "setLyricLinePhrase":
       return runLyricLineCommand(dialect, project, command);
+    case "adoptBars":
+      return runAdoptBars(dialect, project, command);
   }
 }
 

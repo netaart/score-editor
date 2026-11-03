@@ -23,7 +23,8 @@ export type ReadingDiagnosticCode = (typeof READING_DIAGNOSTIC_CODES)[number];
  * The codes a command is refused with: the dialect-agnostic headless layer reports the first three when a command cannot be
  * applied or checked, `session.dispatch` reports `no-dialect` for a model the registry has no dialect for, and a tool
  * run reports `tool-parameter` for a parameter of the wrong type or outside its declaration, or a tool with no builder,
- * and `setChord` reports the voice and the vocabulary failures.
+ * and `setChord` reports the voice and the vocabulary failures. The history commands report `nothing-to-undo`,
+ * `nothing-to-redo` and `batch-undo-confirm`, and an edit that carries a stopped batch is refused with `batch-stopped`.
  */
 export const COMMAND_DIAGNOSTIC_CODES = [
   "note-not-found",
@@ -77,6 +78,10 @@ export const COMMAND_DIAGNOSTIC_CODES = [
   "cut-other-voice-short",
   "voice-octave-range",
   "tool-result",
+  "nothing-to-undo",
+  "nothing-to-redo",
+  "batch-undo-confirm",
+  "batch-stopped",
 ] as const;
 
 export type CommandDiagnosticCode = (typeof COMMAND_DIAGNOSTIC_CODES)[number];
@@ -180,6 +185,10 @@ interface Catalog {
   readonly cutOtherVoiceShort: Text;
   readonly voiceOctaveRange: Text;
   readonly toolResult: Text;
+  readonly nothingToUndo: Text;
+  readonly nothingToRedo: Text;
+  readonly batchUndoConfirm: Text;
+  readonly batchStopped: Text;
 }
 
 function value(params: DiagnosticParams, key: string): string {
@@ -1035,6 +1044,42 @@ function chineseToolResult(params: DiagnosticParams): string {
   return `工具${tool}的结果会有音符落在网格外。乐谱没有改动，请换个参数或网格再试。`;
 }
 
+function englishNothingToUndo(params: DiagnosticParams): string {
+  if (params.batch === undefined) return "There is nothing to undo.";
+  return `There is no step of the batch${quoted(value(params, "batch"))} to undo.`;
+}
+
+function chineseNothingToUndo(params: DiagnosticParams): string {
+  if (params.batch === undefined) return "没有可撤销的步骤。";
+  return `批次${quoted(value(params, "batch"))}没有可撤销的步骤。`;
+}
+
+function englishBatchStopped(params: DiagnosticParams): string {
+  return `The user stopped the batch${quoted(value(params, "batch"))}, so this edit is refused. What it made before the stop stays.`;
+}
+
+function chineseBatchStopped(params: DiagnosticParams): string {
+  return `用户停下了批次${quoted(value(params, "batch"))}，所以这次编辑被拒。停下之前已经生效的改动保留。`;
+}
+
+function englishBatchUndoConfirm(params: DiagnosticParams): string {
+  const batch = quoted(value(params, "batch"));
+  return `Undoing the batch${batch} would also take back ${value(params, "count")} step(s) by someone else. Confirm to take them back too.`;
+}
+
+function chineseBatchUndoConfirm(params: DiagnosticParams): string {
+  const batch = quoted(value(params, "batch"));
+  return `撤销批次${batch}会连带撤掉别人的 ${value(params, "count")} 步改动，确认后再撤。`;
+}
+
+function englishNothingToRedo(): string {
+  return "There is nothing to redo.";
+}
+
+function chineseNothingToRedo(): string {
+  return "没有可重做的步骤。";
+}
+
 const en: Catalog = {
   header: englishHeader,
   voiceOrder: (params) => `Expected${quoted(value(params, "expected"))} here.`,
@@ -1102,6 +1147,10 @@ const en: Catalog = {
   cutOtherVoiceShort: englishCutOtherVoiceShort,
   voiceOctaveRange: englishVoiceOctaveRange,
   toolResult: englishToolResult,
+  nothingToUndo: englishNothingToUndo,
+  nothingToRedo: englishNothingToRedo,
+  batchUndoConfirm: englishBatchUndoConfirm,
+  batchStopped: englishBatchStopped,
 };
 
 const zh: Catalog = {
@@ -1171,6 +1220,10 @@ const zh: Catalog = {
   cutOtherVoiceShort: chineseCutOtherVoiceShort,
   voiceOctaveRange: chineseVoiceOctaveRange,
   toolResult: chineseToolResult,
+  nothingToUndo: chineseNothingToUndo,
+  nothingToRedo: chineseNothingToRedo,
+  batchUndoConfirm: chineseBatchUndoConfirm,
+  batchStopped: chineseBatchStopped,
 };
 
 const catalogs: Record<Language, Catalog> = { en, zh };
@@ -1310,6 +1363,14 @@ function textFor(diagnostic: Diagnostic, language: Language): string {
       return catalog.voiceOctaveRange(diagnostic.params);
     case "tool-result":
       return catalog.toolResult(diagnostic.params);
+    case "nothing-to-undo":
+      return catalog.nothingToUndo(diagnostic.params);
+    case "nothing-to-redo":
+      return catalog.nothingToRedo(diagnostic.params);
+    case "batch-undo-confirm":
+      return catalog.batchUndoConfirm(diagnostic.params);
+    case "batch-stopped":
+      return catalog.batchStopped(diagnostic.params);
     default:
       return "";
   }
