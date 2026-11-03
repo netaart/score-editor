@@ -1,6 +1,14 @@
 // ABOUTME: The draft keeper binds one editing session to a host store: it restores, inherits, debounces writes, and resolves conflicts.
 // ABOUTME: Headless like the session: it touches no DOM, calls the store only by source key, and never changes the original project.
-import { contentHash, DRAFT_FORMAT_VERSION, type DraftProject, draftText, readDraft, type ScoreDraft } from "./drafts";
+import {
+  contentHash,
+  DRAFT_FORMAT_VERSION,
+  type DraftProject,
+  draftText,
+  optionalDraftFields,
+  readDraft,
+  type ScoreDraft,
+} from "./drafts";
 import { messagesFor } from "./i18n";
 import { joinLyrics, lyricLinesOf } from "./lyrics";
 import { multitrackOf, sameMultitrack } from "./multitrack";
@@ -154,6 +162,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       scoreMode: project.scoreMode,
       seed: project.seed,
       multitrack: multitrackOf(project),
+      ...optionalDraftFields(project),
     };
   }
 
@@ -167,6 +176,7 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       scoreMode: draft.project.scoreMode,
       seed: draft.project.seed,
       multitrack: draft.project.multitrack,
+      ...optionalDraftFields(draft.project),
     };
   }
 
@@ -177,7 +187,8 @@ export function createDraftKeeper(options: DraftKeeperOptions): DraftKeeper {
       project.score !== original.score ||
       project.scoreMode !== original.scoreMode ||
       project.seed !== original.seed ||
-      !sameMultitrack(multitrackOf(project), multitrackOf(original))
+      !sameMultitrack(multitrackOf(project), multitrackOf(original)) ||
+      JSON.stringify(optionalDraftFields(project)) !== JSON.stringify(optionalDraftFields(original))
     ) {
       return false;
     }

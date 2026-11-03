@@ -1,5 +1,6 @@
 // ABOUTME: The history's step records and the batch rules: who made an edit, which batch it belongs to, and which steps a batch undo reaches.
 // ABOUTME: Pure and headless. The editing session keeps the stacks; this file says what a step records and what a batch undo takes back.
+import type { SongProject } from "./score";
 
 /** Who made an edit, the batch of the agent run it belongs to, and one sentence about it. Every field is optional. */
 export interface EditOrigin {
@@ -50,6 +51,16 @@ export function batchUndoOf(steps: ReadonlyArray<HistoryStep>, batch: string): B
     count: reached.length,
     otherAuthorSteps: reached.filter((step) => step.batch !== batch && !authors.has(step.author)),
   };
+}
+
+/**
+ * The project with the stop marks the session holds: the batches the user stopped, in the order they were stopped. A
+ * project that already carries exactly them is returned as it is, so a project with no marks stays without the field.
+ */
+export function withStoppedBatches(project: SongProject, stopped: ReadonlyArray<string>): SongProject {
+  const current = project.stoppedBatches ?? [];
+  if (current.length === stopped.length && current.every((batch, at) => batch === stopped[at])) return project;
+  return { ...project, stoppedBatches: stopped };
 }
 
 /**

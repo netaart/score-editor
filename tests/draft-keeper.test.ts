@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { song2Dialect } from "@neta-art/score-dialect-song2";
 import {
+  changeRecordsOf,
   createDialectRegistry,
   createDraftKeeper,
   createEditingSession,
@@ -14,6 +15,7 @@ import {
   lyricLinesOf,
   type Notice,
   readDraft,
+  recordChangeBatch,
   type ScoreDraft,
   type SongProject,
 } from "@neta-art/score-editor";
@@ -1044,6 +1046,54 @@ describe("the original", () => {
     expect(keyedCalls.length).toBeGreaterThan(0);
     expect(keyedCalls.every((call) => call.key === ORIGINAL.sourceKey)).toBe(true);
     expect(store.calls.some((call) => call.method === "read" && call.key === "old-song")).toBe(true);
+  });
+});
+
+describe("the fields a song project keeps beside its score", () => {
+  it("writes a stopped batch into the draft, and a session opened on that draft holds the stop", async () => {
+    const { keeper } = openKeeper();
+    await keeper.ready;
+    keeperSession(keeper).stopBatch("run-6");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(readDraft(store.writes()[0]?.text ?? "")?.project.stoppedBatches).toStrictEqual(["run-6"]);
+
+    const reopened = openSession();
+    const { keeper: again } = openKeeper(reopened);
+    await again.ready;
+
+    expect(reopened.stoppedBatches).toStrictEqual(["run-6"]);
+  });
+
+  it("keeps the mood, ending, handed-out time and change records through the draft, unchanged", async () => {
+    const recorded = recordChangeBatch(
+      ORIGINAL,
+      { ...ORIGINAL, score: SCORE_WITHOUT_D },
+      {
+        author: "agent-a",
+        batch: "run-1",
+        at: 1_700_000_200_000,
+        note: "Rested the D",
+        commands: [{ type: "replaceScoreText", text: SCORE_WITHOUT_D }],
+      },
+    );
+    const { keeper } = openKeeper();
+    await keeper.ready;
+    keeperSession(keeper).replaceProject({
+      ...recorded,
+      mood: "bright",
+      ending: "end-here",
+      handedOutAt: 1_700_000_300_000,
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+
+    const reopened = openSession();
+    const { keeper: again } = openKeeper(reopened);
+    await again.ready;
+
+    expect(reopened.project.mood).toBe("bright");
+    expect(reopened.project.ending).toBe("end-here");
+    expect(reopened.project.handedOutAt).toBe(1_700_000_300_000);
+    expect(changeRecordsOf(reopened.project)).toStrictEqual(changeRecordsOf(recorded));
   });
 });
 

@@ -172,6 +172,12 @@ const ownerGroups = {
     "Span",
     "StemName",
     "TimePoint",
+    "SongEnding",
+    "ChangeRecord",
+    "ChangeBatch",
+    "ProjectSnapshot",
+    "changeRecordsOf",
+    "recordChangeBatch",
   ],
   "references/editing-session.md": [
     "createEditingSession",
