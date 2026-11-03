@@ -113,13 +113,16 @@ change. The tests in the repository check that the list stays complete.
 | `VocalRange` | `{ medianMidi, singable }`, the register measure `vocalRange` and the pre-handoff notice read. |
 | `SourceLabelOptions`, `SourceLabelPart` | What `mountSourceLabel` reads (`{ source, readOnly?, before?, say? }`) and returns (`refresh()` and `destroy()`); `readOnly` adds "Score file (read only)", and `say` gets the new label once when it changes. |
 | `SessionOptions` | `{ project, dialects, language?, editable?, activeView?, grid? }` for `createEditingSession`. |
-| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, the last edit's rewritten bars, dispatch, tools, history, subscribe. |
+| `EditingSession` | The headless editing session: project, reading, selection, insertion point, bar selection, view, shown view, rejected text, constraints, grid, the last edit's rewritten bars, dispatch, tools, history (its steps, the batch stops and the history commands), subscribe. |
+| `EditOrigin` | `{ author?, batch?, note? }`: who made an edit (`"user"` by default), the agent run's batch it belongs to, and one sentence. The origin argument of `dispatch`, `dispatchAll` and `runTool`. |
+| `HistoryStep` | `{ author, batch?, note }`: one history step as the session records it; `steps` lists them. |
+| `HistoryCommand` | `{ type: "undo" }`, `{ type: "redo" }` or `{ type: "undoBatch", batch, confirm? }`: the commands that move the history through `dispatch`. |
 | `ViewState` | `{ zoom, scrollLeft, language, editable }`, shared by parts and outside the history. |
 | `BarSelection` | A chosen run of bars: `{ from, count }`, `from` base 0. UI state, outside the history. |
 | `InsertionPoint` | `{ tick }` or null. |
 | `ScoreReading` | A readable score, unreadable text with diagnostics, or a model with no dialect. |
-| `DispatchResult` | The project after a command plus its notices when `ok`, or the untouched project and a refusal. |
-| `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, the `ProjectCommand` a dispatch made if any, and the `gridDropped` a project or registry change put back to 1/4), its causes, and the listener type. |
+| `DispatchResult` | The project after a command plus its notices when `ok`, or the untouched project and a refusal (with `otherAuthorSteps` when a batch undo asks first). |
+| `SessionChange`, `SessionChangeCause`, `SessionListener` | The notification shape (its flags, its cause, the `ProjectCommand` a dispatch made if any, the `HistoryStep` a change made, undid or redid if any, and the `gridDropped` a project or registry change put back to 1/4), its causes, and the listener type. |
 | `ViewName` | `"arrangement" \| "staff" \| "text"`: which view is shown. |
 | `RejectedText` | `{ text, diagnostics }`: text the text view holds that the session did not take. |
 | `ScoreCommand` | The dialect-agnostic edit union; each command and its refusal codes are listed in the package README. |

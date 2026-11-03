@@ -188,6 +188,9 @@ const ownerGroups = {
     "RejectedText",
     "ViewName",
     "VIEW_NAMES",
+    "EditOrigin",
+    "HistoryCommand",
+    "HistoryStep",
   ],
   "references/view-parts.md": [
     "AxisPartOptions",
