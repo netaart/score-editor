@@ -90,7 +90,8 @@ declaration is still refused. A host gets the panel with `mount({ tools })`, `mo
 
 Without a session, `previewTool(tool, project, selection, values, dialects)` returns a `ToolResult` computed against
 the given project and selection. With a session, `session.previewTool(tool, values?)` does the same against the
-session's state and `session.runTool(tool, values?)` applies it.
+session's state and `session.runTool(tool, values?, origin?)` applies it as one history step, recorded with the origin
+(see [the editing session reference](editing-session.md#authors-batches-and-the-history-commands)).
 
 `ToolResult` is `{ ok, project, diagnostics, commands }` in both cases. A preview changes nothing, adds no history
 step and notifies nobody. A run applies all commands as one history step: one undo goes back to the project before the

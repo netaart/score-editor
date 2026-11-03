@@ -41,6 +41,8 @@ const session = createEditingSession({
 | `activeView` | `ViewName` (`"arrangement"`, `"staff"` or `"text"`, listed in `VIEW_NAMES`): which view is shown. UI state like the selection, outside the history and not a field of `view`. The default editor shows this view; a host with its own layout reads it, or sets it from its own switch. |
 | `rejectedText` | `RejectedText \| null` (`{ text, diagnostics }`): text the text view holds that cannot be read, so the project kept the last score that could. Any change of the project, and `replaceProject`, drops it. |
 | `canUndo`, `canRedo` | Whether the history has a step in that direction. |
+| `steps` | `ReadonlyArray<HistoryStep>`: the steps `undo` would take back, oldest first. A `HistoryStep` is `{ author, batch?, note }`: who made it (`"user"`, or an agent's name), the batch it belongs to when it has one, and its sentence. Undo and redo move these records with the steps. |
+| `stoppedBatches` | `ReadonlyArray<string>`: the batches the user stopped, in the order they were stopped (see `stopBatch`). |
 
 `ScoreReading` is one of `{ kind: "score", score }`, `{ kind: "unreadable", diagnostics }`, or
 `{ kind: "no-dialect", modelId }`. Every view draws from this one reading.
@@ -49,14 +51,15 @@ const session = createEditingSession({
 
 | Method | Effect |
 | --- | --- |
-| `dispatch(command: ScoreCommand \| ProjectCommand)` | Applies one command as one history step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. A command that comes back with notices only (`isNoticeDiagnostic`) is taken: the result is `ok` with the notices in `diagnostics`. |
-| `dispatchAll(commands)` | Applies a list of `ScoreCommand` and `ProjectCommand` as one history step through the same path as `dispatch`, all or none, and announces one change. Returns `DispatchResult`. One refusal refuses the whole list and changes nothing; the notices of the steps that were taken come back once each. An empty list adds no step. It is how one gesture that needs several commands (dragging a boundary two lyric lines share) stays one undo. |
+| `dispatch(command, origin?)` | Applies one command as one history step, recorded with `origin` (`EditOrigin`, see below). `command` is a `ScoreCommand`, a `ProjectCommand` or a `HistoryCommand`; a history command adds no step. Returns `DispatchResult`: `{ ok, project, diagnostics }`. A refused command changes nothing and returns its diagnostics. A command that comes back with notices only (`isNoticeDiagnostic`) is taken: the result is `ok` with the notices in `diagnostics`. |
+| `dispatchAll(commands, origin?)` | Applies a list of `ScoreCommand` and `ProjectCommand` as one history step through the same path as `dispatch`, all or none, and announces one change. Returns `DispatchResult`. One refusal refuses the whole list and changes nothing; the notices of the steps that were taken come back once each. An empty list adds no step. It is how one gesture that needs several commands (dragging a boundary two lyric lines share) stays one undo. |
+| `stopBatch(batch)` | Marks a batch as stopped by the user. Later edits that carry the batch are refused, and the edits already made stay. The rules are in the section below. |
 | `checkScoreText(text)` | What `dispatch` of `replaceScoreText` with `text` would say: the diagnostics it would be refused with, or the notices it would be taken with, the song-project rules included; a result with no diagnostic that `isNoticeDiagnostic` rejects is a text the session takes. Changes and announces nothing. |
 | `setActiveView(name)` | Shows another view. Throws `RangeError` for a name outside `VIEW_NAMES`. |
 | `setRejectedText(next \| null)` | Says which unreadable text the text view holds, or that it holds none. No-op for the same text. |
-| `runTool(tool, values?)` | Validates a tool's parameters, builds its commands once and applies them as one history step. Returns `ToolResult`. One failing step refuses the whole run; a step that comes back with a notice does not, and the notices are in the result. |
+| `runTool(tool, values?, origin?)` | Validates a tool's parameters, builds its commands once and applies them as one history step, recorded with `origin`. Returns `ToolResult`. One failing step refuses the whole run; a step that comes back with a notice does not, and the notices are in the result. |
 | `previewTool(tool, values?)` | Returns what the tool would produce without dispatching, changing the history or notifying anyone. |
-| `undo()` / `redo()` | Move one whole project step. Return false when there is none. |
+| `undo()` / `redo()` | Move one whole project step. Return false when there is none. The same moves are the commands `{ type: "undo" }` and `{ type: "redo" }` through `dispatch`, and a refusal `nothing-to-undo` or `nothing-to-redo` when there is none. |
 | `select(noteIds)` | Selects exactly these notes; ids that name no note are left out. It works while the session is read-only, so a host's own control can select when the parts refuse to. |
 | `setBarSelection(range \| null)` | Chooses a run of bars, or clears it with null. A run beyond the score is trimmed to the bars that exist; a run that names none is null. Like `select`, it works while the session is read-only. |
 | `setInsertionPoint(point \| null)` | Sets the insertion point; `tick` is a whole number, zero or more. Throws `RangeError` otherwise. |
@@ -69,14 +72,38 @@ const session = createEditingSession({
 
 `SessionChange` is `{ cause, project, selection, insertionPoint, view, command?, gridDropped? }`. The four booleans say which state the
 change touched; `command` is the `ProjectCommand` that made a `"dispatch"` change, so that `{ type: "replaceScoreText" }` can be told from the other edits (it is absent on every other change, and on a dispatch of a score command or a tool run); `gridDropped` is the grid put back to 1/4 because the project or the dialects could not write it, present on that one change only; `SessionChangeCause` is `"dispatch"`, `"undo"`, `"redo"`, `"select"`, `"bar-selection"`, `"insertion-point"`, `"view"`,
-`"replace"`, `"active-view"`, `"rejected-text"` or `"grid"`; the last four touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
+`"replace"`, `"active-view"`, `"rejected-text"`, `"grid"` or `"batch-stop"`; the last four and `"batch-stop"` touch none of the four booleans and are told by the cause alone. `SessionListener` is `(change: SessionChange) => void`. A listener that throws does not reach the caller
 of the change; its error goes to `reportError`.
 
 `DispatchResult` is either `{ ok: true, project, diagnostics }` or `{ ok: false, project, diagnostics }`. The
 project is the one the session is left with: the untouched project for a refusal. A successful dispatch may carry
 notices in `diagnostics` (`isNoticeDiagnostic`; for example `style-no-bpm` after a tempo change, or
 `melody-with-chords` in a melody project that has chords): the project is changed and usable, so show a notice as a
-notice, and do not undo the change or treat it as an error. Test `ok`, not `diagnostics.length`, to tell a refusal.
+notice, and do not undo the change or treat it as an error. Test `ok`, not `diagnostics.length`, to tell a refusal. A batch
+undo that asks first is a refusal too: `ok` is false, its diagnostic is `batch-undo-confirm`, and `otherAuthorSteps` lists the
+steps it would also take back.
+
+## Authors, batches and the history commands
+
+`EditOrigin` is `{ author?, batch?, note? }`, the third argument of `dispatch`, the second of `dispatchAll` and the third of
+`runTool`. Without it an edit is the user's (`author` `"user"`), in no batch, with an empty `note`. An agent's run is one
+`batch`: every edit of the run carries the same name, and the steps it made are the ones a batch undo reaches.
+
+The history commands go through `dispatch` like an edit, and none of them adds a step:
+
+| Command | Effect |
+| --- | --- |
+| `{ type: "undo" }`, `{ type: "redo" }` | One step back or forward, as `undo()` and `redo()`. Refused with `nothing-to-undo` or `nothing-to-redo` when there is none. |
+| `{ type: "undoBatch", batch, confirm? }` | Takes back every step from the batch's first step to the top of the history, so the project returns to what it was before that step. Among those steps, the ones another author made (an author that is not one of the batch's authors) are asked for first: without `confirm: true` the command is refused with `batch-undo-confirm`, its `otherAuthorSteps` lists them oldest first, and nothing changes. A batch with no step in the history is refused with `nothing-to-undo`, naming the batch. Each taken step can be redone with `redo`; there is no skipping, so a step of another author between the batch's steps goes with them. |
+
+`stopBatch(batch)` is the user's stop. It marks the batch: from then on `dispatch`, `dispatchAll` and `runTool` refuse an edit
+that carries it with `batch-stopped`, whose text says the user stopped the batch. The edits the batch already made stay, and
+the history commands still work on it, so the user can take the stopped batch back with `undoBatch`. Other batches and the
+user's edits are not refused. The marks are kept when `replaceProject` starts a new document, since the history goes and the
+stop does not. A mark is announced once as the change `"batch-stop"`.
+
+The headless functions (`applyProjectCommand`, `applyScoreCommand`, `applyCommandList`) hold no history, so they do not take
+the history commands. Undo and redo are the session's.
 
 ## Usage
 
