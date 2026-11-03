@@ -289,6 +289,20 @@ A view part of its own (`mountToolPanel`), and the one place the built-in tools 
 
 **Verified and not.** Seam 5 (`e2e/tools-panel.spec.ts`) covers every built-in note tool opening, previewing, applying and undoing on the desktop and phone projects, a custom tool doing the same, a breaking tool refused with the score unchanged, the language, read-only, the bottom sheet, touch, and the panel as a part of a host's layout whose destroy leaves no node and no outline. Seam 1 (`tests/note-tools.test.ts`, `tests/tools.test.ts`) covers the hand-written results, the three common assertions, the tool context and the `tool-result` refusal. Not checked: a real phone's keyboard over the sheet (Chromium's emulation only), a screen reader's reading of the panel, Safari and Firefox, and the panel inside a host's own modal.
 
+## Bar tools
+
+The bar comparison, the fragment and adopting bars have no view of their own; the headless layer is their whole surface,
+and a host builds the view it wants on top. These are the decisions a host would otherwise have to guess.
+
+- Results of the headless layer count bars from 0. The 1-based numbers are the ones a person reads: `rewrittenBars` and
+  the change log's `bars` use them.
+- A tie that leaves a fragment or an adopted run is cut at its edge. The other score's next bar is not part of what was
+  taken, so a tie into it would make the bar say something its source did not.
+- A range that reaches a cut is refused, not shortened. A fragment that stops partway through a bar is a different piece
+  of music.
+- Adopting goes through the same dispatch path as every other edit: one history step, undone as a whole, and a refusal
+  leaves the project and its history as they were.
+
 ## Components
 
 ### View parts

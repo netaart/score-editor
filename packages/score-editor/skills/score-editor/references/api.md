@@ -63,6 +63,8 @@ change. The tests in the repository check that the list stays complete.
 | `chordChoices` | core | What a chord picker may offer from a `ChordVocabulary`: letters with their spellings, the types the grammar can write, and whether a bass note is allowed, as `ChordChoices`. Pure. |
 | `splitChordName` | core | Splits a chord name into `ChordNameParts` by a vocabulary; null when the vocabulary does not allow the name. The grammar `setChord` checks. Pure. |
 | `filterNotes` | core | The ids of the notes that satisfy a `NoteFilter` (pitch, time, length, in or out of key, one in every N, invert) in a `Score`. Pure. |
+| `compareBars` | core | The 0-based indices of the bars that differ between two song projects read by one dialect (meter, key, section, notes, chords, and the lyric lines that cover the bar), or the reading diagnostics of the side that does not read. Pure. |
+| `extractFragment` | core | A run of whole bars of a song project as a song project of its own, which the dialect must write and read back; refused when the run reaches the cut or leaves the score. Pure. |
 | `mountToolPanel` | core | Mounts the Tools button and its panel on `(el, session, { tools? })`: lists the built-in note tools and the host's, draws a control per declaration, previews and applies as one history step; takes `ToolPanelOptions`. |
 | `mountFilterPanel` | core | Mounts the Filter button and its panel on `(el, session)`: selects notes by condition through `session.select`; shown in read-only mode too. |
 | `lyricRows` | core | Each lyric line with its place in the list, the phrase it sits on (null in the unaligned area) and its alignment; pass the score so a stale phrase is unaligned. |
@@ -127,7 +129,10 @@ change. The tests in the repository check that the list stays complete.
 | `AddNoteCommand`, `PasteNotesCommand`, `DuplicateNotesCommand`, `CopyNotesCommand`, `CopiedNote` | The placing commands (a new note, a paste at the insertion point, a repeat after the selection, and the Alt-drag copy) and the copied note they take; members of `ScoreCommand`. |
 | `Grid`, `GridValue` | A time grid and the note values it offers: 4, 8, 16 or 32, with an optional dotted step. The session holds the one in force (`session.grid`, `setGrid`, `allowsGrid`); see [editing-session.md](editing-session.md). |
 | `CommandListResult` | `{ ok, project, diagnostics }` from `applyCommandList`: the applied project, or the untouched one with the refusal. |
-| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`); each command is listed in the package README. |
+| `ProjectCommand` | The song-project edit union `applyProjectCommand` accepts besides `ScoreCommand` (`setStyle`, `setScoreMode`, `setSeed`, `replaceScoreText`, `setLyricLineText`, `insertLyricLine`, `deleteLyricLine`, `splitLyricLine`, `mergeLyricLines`, `setLyricLinePhrase`, `adoptBars`); each command is listed in the package README. |
+| `BarCompareResult` | The result of `compareBars`: `{ ok: true, bars }` with the 0-based indices, or `{ ok: false, diagnostics }`. |
+| `FragmentRange` | The run `extractFragment` takes: `from`, the 0-based index of its first bar, and `count`, at least 1. |
+| `FragmentResult` | The result of `extractFragment`: `{ ok: true, project, diagnostics }` with the new project and its notices, or `{ ok: false, diagnostics }`. |
 
 ## Change log and handoff types
 

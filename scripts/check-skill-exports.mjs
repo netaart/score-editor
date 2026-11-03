@@ -156,6 +156,11 @@ const ownerGroups = {
     "VoiceOctaveReport",
     "InstrumentalReport",
     "CommandReport",
+    "compareBars",
+    "BarCompareResult",
+    "extractFragment",
+    "FragmentRange",
+    "FragmentResult",
   ],
   "references/editing-session.md": [
     "createEditingSession",
