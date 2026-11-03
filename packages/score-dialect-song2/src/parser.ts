@@ -236,6 +236,8 @@ export interface Song2Source {
   readonly keyFields: ReadonlyArray<Song2SourceKeyField>;
   /** The sections this text stated, so an edit that changes them can force the bar-grid writer. */
   readonly sections: ReadonlyArray<Section>;
+  /** The key changes this text stated, so an edit that moves one can force the bar-grid writer. */
+  readonly keys: ReadonlyArray<KeyChange>;
 }
 
 interface PendingBar {
@@ -1321,6 +1323,7 @@ class Song2Parser {
       truncation,
       keyFields: this.keyFields,
       sections,
+      keys: [...this.vocal.timeline],
       musicLines: this.sourceLines.map((line) => ({
         line: line.line,
         blockStart: line.blockStart,
