@@ -1,5 +1,7 @@
 // ABOUTME: The dialect-agnostic score and song-project model: plain immutable data with no behaviour and no DOM.
 // ABOUTME: Positions and lengths are integer ticks of 1/1024 note, so every value the song2 format permits is exact.
+import type { MultitrackPart } from "./multitrack";
+
 /** The tick unit of the score model. The song2 format's finest value, a 1/1024 note, is one tick. */
 export const TICKS_PER_QUARTER = 256;
 
@@ -124,7 +126,10 @@ export interface LyricLine {
   readonly phrase: LyricPhrase | null;
 }
 
-/** The song project that carries a score. The lyric field is optional so a project built by 0.1.0 still opens. */
+/**
+ * The song project that carries a score. The lyric field and the multitrack part are optional, so a project built before
+ * either existed still opens.
+ */
 export interface SongProject {
   readonly style: string;
   readonly lyrics: string;
@@ -135,6 +140,8 @@ export interface SongProject {
   readonly sourceKey: string;
   /** The stored lyric lines and their phrase bindings; absent means the layout is computed from `lyrics`. */
   readonly lyricLines?: ReadonlyArray<LyricLine>;
+  /** The multitrack part; absent means the default one, with no added score tracks and no audio tracks. */
+  readonly multitrack?: MultitrackPart;
 }
 
 export function noteId(voice: string, start: number): string {

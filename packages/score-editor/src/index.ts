@@ -220,3 +220,17 @@ export { compareBars } from "./bar-compare";
 // Extracting a run of whole bars as a song project of its own.
 export type { FragmentRange, FragmentResult } from "./fragment";
 export { extractFragment } from "./fragment";
+// The multitrack part of a song project: the data only; the audio stays with the take records.
+export type {
+  Anchor,
+  AudioTrack,
+  MultitrackPart,
+  Placement,
+  ScoreTrack,
+  Span,
+  StemName,
+  TimePoint,
+  TrackMix,
+  TrackNote,
+  VoiceSettings,
+} from "./multitrack";
