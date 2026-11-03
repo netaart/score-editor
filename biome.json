@@ -8,6 +8,9 @@
       "!.pnpm-store",
       "!.corepack",
       "!.port",
+      "!**/.impeccable/hook.cache.json",
+      "!**/.impeccable/hook.pending.json",
+      "!**/.impeccable/config.local.json",
       "!test-results",
       "!playwright-report",
       "!e2e/page/skill"
