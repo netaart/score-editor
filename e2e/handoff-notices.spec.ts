@@ -323,7 +323,8 @@ test.describe("the pre-handoff notices in the review", () => {
     await page.keyboard.press("Escape");
     await handoffButton(page).click();
     await expect(noticeLines(page)).toHaveCount(1);
-    expect(await prehandoffCodes(harness)).toEqual(["prehandoff-vocal-range"]);
+    // The lines were drawn by the edit and stayed in the closed review, so the count passes before the opening sends the code.
+    await expect.poll(() => prehandoffCodes(harness)).toEqual(["prehandoff-vocal-range"]);
   });
 });
 
@@ -334,9 +335,13 @@ test.describe("the review's announcements and actions", () => {
   }) => {
     await mountProject(harness, ALL_FOUR, { lyricLines: FEW_LINES, scoreMode: "melody" });
     await handoffButton(page).click();
-    const described = (await dialog(page).getAttribute("aria-describedby"))?.split(" ") ?? [];
     const noticeId = await dialog(page).locator(".sce-handoff-notices").getAttribute("id");
     const emptyId = await dialog(page).locator(".sce-handoff-empty").getAttribute("id");
+    // The review writes its description in its toggle event, which runs after the click returns: wait until it names both.
+    await expect
+      .poll(async () => (await dialog(page).getAttribute("aria-describedby"))?.split(" ") ?? [])
+      .toEqual(expect.arrayContaining([noticeId, emptyId]));
+    const described = (await dialog(page).getAttribute("aria-describedby"))?.split(" ") ?? [];
     expect(described).toContain(noticeId);
     expect(described).toContain(emptyId);
     await expect(toolbarLive(page)).toHaveText("4 things to check before you hand to agent");

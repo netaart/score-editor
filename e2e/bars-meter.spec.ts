@@ -387,6 +387,8 @@ test.describe("bars, meter and the cut tail", () => {
 
       await expect(meterButton(page)).toHaveText(/Meter/);
       await meterButton(page).click();
+      // The popover takes the focus on its toggle event, after the click; the Tab has to wait for that.
+      await expect(page.locator(".sce-meter-popover").getByRole("radio", { checked: true })).toBeFocused();
       await page.keyboard.press("Tab");
       await expect(page.getByLabel("Beats per bar")).toBeFocused();
       await expect(page.getByLabel("Beats per bar")).toHaveCSS("outline-width", "2px");
