@@ -20,6 +20,9 @@ export default defineConfig({
   },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
-    { name: "phone", use: { ...devices["Pixel 7"] } },
+    // The stretch spec runs in the three engines the ticket names (Chromium, Firefox, WebKit); the phone profile leaves it out.
+    { name: "phone", use: { ...devices["Pixel 7"] }, testIgnore: /stretch\.spec\.ts$/ },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] }, testMatch: /stretch\.spec\.ts$/ },
+    { name: "webkit", use: { ...devices["Desktop Safari"] }, testMatch: /stretch\.spec\.ts$/ },
   ],
 });
